@@ -94,13 +94,16 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     `source_capsule_id` is that report's own citation of the case record it
     judged (evaluation-report/v1's `source_capsule_id`, always a book capsule's
     own content-addressed id, which doubles as its digest in this system) --
-    added as an evidence[] entry after the report digest(s), when known and not
-    already one of them. A Result
-    is sealed only over evidence the book holds (capsule-cli's `result build`),
-    so citing the case record here is what lets `capsulectl disclose
-    --attach-input-originals` later find and attach that case's transcript (the
-    case capsule's own agent_input original) with no further, by-hand step.
-    Never fabricated: omitted when the report didn't carry one.
+    appended to evidence[] after `report_digest`'s own entry (or entries), when
+    both are known (in practice a report always carries both or neither), and
+    not repeated when it is already one of those digests. Never fabricated:
+    omitted when the report didn't carry one, and -- pathological, never the
+    real shape -- it is evidence[]'s only entry if `report_digest` is absent
+    while this is given. A Result is sealed only over evidence the book holds
+    (capsule-cli's `result build`), so citing the case record here is what lets
+    `capsulectl disclose --attach-input-originals` later find and attach that
+    case's transcript (the case capsule's own agent_input original) with no
+    further, by-hand step.
 
     `claim_id` overrides the claim's own `id` (default: `criterion_id`) -- the
     day-level merge needs `<case_id>::<criterion_id>` so many cases' claims can
