@@ -82,6 +82,25 @@ class ClaimFor(unittest.TestCase):
         with self.assertRaisesRegex(RollupError, "not a verdict"):
             claim_for("x", "maybe", CONTRACT_REF, "judged", None)
 
+    def test_source_capsule_id_is_a_second_evidence_entry_after_the_report(self):
+        c = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", "ab" * 32,
+                      source_capsule_id="case-capsule")
+        self.assertEqual(c["evidence"], [
+            {"digest_alg": "SHA-256", "digest": "ab" * 32},
+            {"digest_alg": "SHA-256", "digest": "case-capsule"},
+        ])
+
+    def test_no_source_capsule_id_means_no_second_entry_never_fabricated(self):
+        c = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", "ab" * 32)
+        self.assertEqual(c["evidence"], [{"digest_alg": "SHA-256", "digest": "ab" * 32}])
+
+    def test_a_source_capsule_id_with_no_report_digest_still_cites_it_alone(self):
+        # Pathological (a report always carries both or neither in practice),
+        # but claim_for never invents the first entry to hold the second.
+        c = claim_for("policy_compliance.confirmed_before_acting", "not_evaluable", CONTRACT_REF, "judged",
+                      None, source_capsule_id="case-capsule")
+        self.assertEqual(c["evidence"], [{"digest_alg": "SHA-256", "digest": "case-capsule"}])
+
     def test_tier_is_reported_as_given_never_hardcoded_to_judged(self):
         # tier is a required parameter, never a silent "judged" default -- a
         # criterion later flipped to tier: recomputed (scripts/pack_compile.py)
@@ -148,6 +167,19 @@ class BuildResultV0(unittest.TestCase):
         judged = next(c for c in doc["claims"] if c["id"] == "policy_compliance.confirmed_before_acting")
         self.assertEqual(judged["tier"], "judged")
 
+    def test_evidence_cites_the_case_record_second_when_given(self):
+        digests = {"policy_compliance.confirmed_before_acting": "ab" * 32}
+        sources = {"policy_compliance.confirmed_before_acting": "case-capsule"}
+        doc, _ = build_result_v0("case", ALL_MET, digests, "2026-09-30T00:00:00Z",
+                                  ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED, source_capsule_ids=sources)
+        claim = next(c for c in doc["claims"] if c["id"] == "policy_compliance.confirmed_before_acting")
+        self.assertEqual(claim["evidence"], [
+            {"digest_alg": "SHA-256", "digest": "ab" * 32},
+            {"digest_alg": "SHA-256", "digest": "case-capsule"},
+        ])
+        other = next(c for c in doc["claims"] if c["id"] != "policy_compliance.confirmed_before_acting")
+        self.assertEqual(other["evidence"], [])
+
     def test_a_different_pack_shape_builds_its_own_contract_ref_and_count(self):
         clauses = [{"id": "a.one", "check_id": "a"}, {"id": "a.two", "check_id": "a"}]
         all_criteria = all_criteria_from_clauses(clauses)
@@ -178,6 +210,24 @@ class BuildResultV0ForDay(unittest.TestCase):
         self.assertTrue(all(c["requirement_ref"] in ALL_CRITERIA for c in doc["claims"]))
         self.assertEqual(doc["aggregate"]["coverage"]["evaluated_population"], 18)
         self.assertEqual(sorted(doc["aggregate"]["buckets"]["met"]), sorted(ids))
+
+    def test_each_cases_claims_cite_that_cases_own_source_capsule_keyed_by_case_id(self):
+        case_rollups = [
+            ("case-a", ALL_MET, {}, self.TIERS),
+            ("case-b", ALL_MET, {}, self.TIERS),
+        ]
+        clause = "policy_compliance.confirmed_before_acting"
+        source_capsule_ids = {"case-a": {clause: "capsule-a"}, "case-b": {clause: "capsule-b"}}
+        doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
+                                       ALL_CRITERIA, CONTRACT_REF, source_capsule_ids=source_capsule_ids)
+        claim_a = next(c for c in doc["claims"] if c["id"] == f"case-a::{clause}")
+        claim_b = next(c for c in doc["claims"] if c["id"] == f"case-b::{clause}")
+        self.assertEqual(claim_a["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-a"}])
+        self.assertEqual(claim_b["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-b"}])
+        # a case missing from source_capsule_ids is never fabricated a citation
+        other_claim = next(c for c in doc["claims"]
+                           if c["id"] == f"case-a::{next(c2 for c2 in ALL_CRITERIA if c2 != clause)}")
+        self.assertEqual(other_claim["evidence"], [])
 
     def test_buckets_still_partition_every_claim_exactly_once_across_cases(self):
         mixed = dict(self.TIERS)

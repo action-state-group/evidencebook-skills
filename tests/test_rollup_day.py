@@ -35,7 +35,7 @@ CHECKS = checks_from_clauses(CLAUSES)
 ALL_CRITERIA = all_criteria_from_clauses(CLAUSES)
 TIERS = {c["id"]: c["tier"] for c in CLAUSES}
 CONTRACT_REF = "airline-support-outcomes@1.3.0"
-ALL_MET_WITH_DIGESTS = {c: ("met", f"{i:064x}") for i, c in enumerate(ALL_CRITERIA)}
+ALL_MET_WITH_DIGESTS = {c: ("met", f"{i:064x}", None) for i, c in enumerate(ALL_CRITERIA)}
 
 
 class SafeFilename(unittest.TestCase):
@@ -50,10 +50,10 @@ class SafeFilename(unittest.TestCase):
 class GroupReports(unittest.TestCase):
     CONTRACT = "tau2-airline-outcomes/v1"
 
-    def _report(self, case_id, clause_id, verdict, contract=None, judge_pin_digest=None):
+    def _report(self, case_id, clause_id, verdict, contract=None, judge_pin_digest=None, source_capsule_id=None):
         return {"record_type": "evaluation-report/v1", "case_id": case_id,
                 "clause_id": clause_id, "verdict": verdict, "contract": contract or self.CONTRACT,
-                "judge_pin_digest": judge_pin_digest}
+                "judge_pin_digest": judge_pin_digest, "source_capsule_id": source_capsule_id}
 
     def test_groups_by_case_and_clause(self):
         bodies = [
@@ -62,9 +62,22 @@ class GroupReports(unittest.TestCase):
             ("cap3", self._report("case-b", "policy_compliance.confirmed_before_acting", "not_evaluable")),
         ]
         grouped = group_reports(bodies, self.CONTRACT)
-        self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"], ("met", "cap1"))
-        self.assertEqual(grouped["case-a"]["task_resolution.right_change"], ("not_met", "cap2"))
-        self.assertEqual(grouped["case-b"]["policy_compliance.confirmed_before_acting"], ("not_evaluable", "cap3"))
+        self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"], ("met", "cap1", None))
+        self.assertEqual(grouped["case-a"]["task_resolution.right_change"], ("not_met", "cap2", None))
+        self.assertEqual(grouped["case-b"]["policy_compliance.confirmed_before_acting"],
+                         ("not_evaluable", "cap3", None))
+
+    def test_the_report_s_own_source_capsule_id_is_carried_into_the_group(self):
+        # run_daily.py's build_report always names the case capsule it judged
+        # as source_capsule_id -- this is what lets a claim later cite the case
+        # record (result_v0.claim_for) with no by-hand step.
+        bodies = [
+            ("cap1", self._report("case-a", "policy_compliance.confirmed_before_acting", "met",
+                                  source_capsule_id="case-a-capsule")),
+        ]
+        grouped = group_reports(bodies, self.CONTRACT)
+        self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"],
+                         ("met", "cap1", "case-a-capsule"))
 
     def test_a_different_contracts_reports_never_mix_into_the_same_case(self):
         # Same case_id, same clause_id, two different contracts (e.g. the original
@@ -93,7 +106,8 @@ class GroupReports(unittest.TestCase):
                                       judge_pin_digest="new-pin")),
         ]
         grouped = group_reports(bodies, self.CONTRACT, expected_pin="new-pin")
-        self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"], ("not_met", "cap-new"))
+        self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"],
+                         ("not_met", "cap-new", None))
 
     def test_a_disagreeing_rejudgment_under_one_pin_is_a_conflict_never_last_wins(self):
         clause = "policy_compliance.confirmed_before_acting"
@@ -117,7 +131,7 @@ class GroupReports(unittest.TestCase):
     def test_an_agreeing_duplicate_keeps_the_first_capsule_id(self):
         clause = "policy_compliance.confirmed_before_acting"
         bodies = [("cap-b", self._report("case-a", clause, "met")), ("cap-a", self._report("case-a", clause, "met"))]
-        self.assertEqual(group_reports(bodies, self.CONTRACT)["case-a"][clause], ("met", "cap-a"))
+        self.assertEqual(group_reports(bodies, self.CONTRACT)["case-a"][clause], ("met", "cap-a", None))
 
     def test_a_recomputed_report_is_scoped_by_pack_source_digest(self):
         # A recomputed report carries no judge pin; it counts only under the
@@ -144,15 +158,15 @@ class GroupReports(unittest.TestCase):
 class GroupReportsByDay(unittest.TestCase):
     CONTRACT = "tau2-airline-outcomes/v1"
 
-    def _report(self, case_id, clause_id, verdict, period, contract=None):
+    def _report(self, case_id, clause_id, verdict, period, contract=None, source_capsule_id=None):
         return {"record_type": "evaluation-report/v1", "case_id": case_id,
                 "clause_id": clause_id, "verdict": verdict, "period": period,
-                "contract": contract or self.CONTRACT}
+                "contract": contract or self.CONTRACT, "source_capsule_id": source_capsule_id}
 
     def test_groups_by_period_then_case_then_clause(self):
         bodies = [
             ("cap1", self._report("case-a", "policy_compliance.confirmed_before_acting",
-                                   "met", "day:2026-09-23")),
+                                   "met", "day:2026-09-23", source_capsule_id="case-a-capsule")),
             ("cap2", self._report("case-b", "policy_compliance.confirmed_before_acting",
                                    "not_met", "day:2026-09-24")),
         ]
@@ -160,11 +174,11 @@ class GroupReportsByDay(unittest.TestCase):
         self.assertEqual(sorted(grouped), ["day:2026-09-23", "day:2026-09-24"])
         self.assertEqual(
             grouped["day:2026-09-23"]["case-a"]["policy_compliance.confirmed_before_acting"],
-            ("met", "cap1"),
+            ("met", "cap1", "case-a-capsule"),
         )
         self.assertEqual(
             grouped["day:2026-09-24"]["case-b"]["policy_compliance.confirmed_before_acting"],
-            ("not_met", "cap2"),
+            ("not_met", "cap2", None),
         )
 
     def test_a_different_contracts_reports_never_mix_into_the_same_day(self):
@@ -234,7 +248,7 @@ class PartitionStale(unittest.TestCase):
         # never defines it. It must never appear in `current` (which rollup_case
         # treats as this case's full verdict set) and must be reported, not
         # silently dropped.
-        verdicts = dict(ALL_MET_WITH_DIGESTS, **{"policy_compliance.old_removed_one": ("met", "ff" * 32)})
+        verdicts = dict(ALL_MET_WITH_DIGESTS, **{"policy_compliance.old_removed_one": ("met", "ff" * 32, None)})
         current, stale = partition_stale(verdicts, ALL_CRITERIA)
         self.assertEqual(stale, ["policy_compliance.old_removed_one"])
         self.assertNotIn("policy_compliance.old_removed_one", current)
@@ -254,7 +268,7 @@ class RollupCase(unittest.TestCase):
 
     def test_one_not_met_is_not_resolved(self):
         verdicts = dict(ALL_MET_WITH_DIGESTS)
-        verdicts["grounded_communication.prices_from_system"] = ("not_met", "ab" * 32)
+        verdicts["grounded_communication.prices_from_system"] = ("not_met", "ab" * 32, None)
         out = rollup_case("case", verdicts, "2026-09-23T23:59:59Z", CHECKS, ALL_CRITERIA, CONTRACT_REF, TIERS)
         self.assertFalse(out["resolved"])
         self.assertEqual(out["check_verdicts"]["grounded_communication"], "not_met")
@@ -268,7 +282,7 @@ class RollupCase(unittest.TestCase):
         checks = checks_from_clauses(clauses)
         all_criteria = all_criteria_from_clauses(clauses)
         tiers = dict(TIERS, **{"extra_check.new_one": "judged"})
-        verdicts = dict(ALL_MET_WITH_DIGESTS, **{"extra_check.new_one": ("not_met", "ff" * 32)})
+        verdicts = dict(ALL_MET_WITH_DIGESTS, **{"extra_check.new_one": ("not_met", "ff" * 32, None)})
         out = rollup_case("case", verdicts, "2026-09-23T23:59:59Z", checks, all_criteria, CONTRACT_REF, tiers)
         self.assertFalse(out["resolved"])
         self.assertEqual(out["check_verdicts"]["extra_check"], "not_met")
@@ -284,18 +298,45 @@ class RollupCase(unittest.TestCase):
                       if c["id"] == "policy_compliance.confirmed_before_acting")
         self.assertEqual(judged["tier"], "judged")
 
+    def test_a_claim_cites_its_case_record_second_so_disclose_can_find_the_transcript(self):
+        # Every report named the same case capsule (run_daily.py judges all nine
+        # criteria of one case against one source capsule) -- the claim's
+        # evidence[] must carry the report digest first and the case record
+        # second, so capsulectl disclose --attach-input-originals, walking the
+        # Result-root's citations, finds the conversation with no by-hand step.
+        clause = "policy_compliance.confirmed_before_acting"
+        verdicts = {cid: (v, d, "case-capsule-id") for cid, (v, d, _) in ALL_MET_WITH_DIGESTS.items()}
+        out = rollup_case("tau2:airline:task-1:trial-0", verdicts, "2026-09-23T23:59:59Z",
+                          CHECKS, ALL_CRITERIA, CONTRACT_REF, TIERS)
+        claim = next(c for c in out["result_v0"]["claims"] if c["id"] == clause)
+        self.assertEqual(claim["evidence"], [
+            {"digest_alg": "SHA-256", "digest": verdicts[clause][1]},
+            {"digest_alg": "SHA-256", "digest": "case-capsule-id"},
+        ])
+
+    def test_a_report_with_no_source_capsule_id_cites_only_its_own_digest(self):
+        # Never fabricated: a report that didn't name a case record (e.g. a book
+        # sealed before run_daily.py started setting source_capsule_id) leaves
+        # the claim with only the report citation, same shape as before this
+        # feature existed.
+        out = rollup_case("case", ALL_MET_WITH_DIGESTS, "2026-09-23T23:59:59Z",
+                          CHECKS, ALL_CRITERIA, CONTRACT_REF, TIERS)
+        claim = next(c for c in out["result_v0"]["claims"]
+                     if c["id"] == "policy_compliance.confirmed_before_acting")
+        self.assertEqual(len(claim["evidence"]), 1)
+
 
 class DayDocument(unittest.TestCase):
     PERIOD = "day:2026-09-23"
 
     def _day(self):
         not_met = dict(ALL_MET_WITH_DIGESTS)
-        not_met["task_resolution.right_change"] = ("not_met", "f" * 64)
+        not_met["task_resolution.right_change"] = ("not_met", "f" * 64, None)
         some_na = dict(ALL_MET_WITH_DIGESTS)
-        some_na["task_resolution.right_change"] = ("out_of_scope", "e" * 64)
-        all_na = {c: ("out_of_scope", d) for c, (_, d) in ALL_MET_WITH_DIGESTS.items()}
+        some_na["task_resolution.right_change"] = ("out_of_scope", "e" * 64, None)
+        all_na = {c: ("out_of_scope", d, None) for c, (_, d, _) in ALL_MET_WITH_DIGESTS.items()}
         never_na_broken = dict(ALL_MET_WITH_DIGESTS)
-        never_na_broken["task_resolution.done_in_full"] = ("out_of_scope", "d" * 64)
+        never_na_broken["task_resolution.done_in_full"] = ("out_of_scope", "d" * 64, None)
         incomplete = {c: v for c, v in list(ALL_MET_WITH_DIGESTS.items())[:3]}
         return {"case-met": ALL_MET_WITH_DIGESTS, "case-not-met": not_met, "case-some-na": some_na,
                 "case-all-na": all_na, "case-never-na": never_na_broken, "case-incomplete": incomplete}
@@ -321,10 +362,25 @@ class DayDocument(unittest.TestCase):
                                     CONTRACT_REF, TIERS, True, self.NEVER_NA)
         left_out = {s["case_id"] for s in skipped}
         expected = sum(1 for case_id, verdicts in day.items() if case_id not in left_out
-                       and all_required_met({c: v for c, (v, _) in verdicts.items()}, ALL_CRITERIA, True,
+                       and all_required_met({c: v for c, (v, _, _) in verdicts.items()}, ALL_CRITERIA, True,
                                             self.NEVER_NA))
         self.assertEqual(headline_from_result(doc), {"cases": 3, "resolved": expected})
         self.assertEqual(expected, 2, "case-met and case-some-na resolve; case-not-met does not")
+
+    def test_each_case_s_claims_cite_that_case_s_own_source_capsule(self):
+        # Two cases in one day document must never cross-cite each other's case
+        # record -- each case's claims carry only its own source_capsule_id.
+        day = {
+            "case-a": {cid: (v, d, "capsule-a") for cid, (v, d, _) in ALL_MET_WITH_DIGESTS.items()},
+            "case-b": {cid: (v, d, "capsule-b") for cid, (v, d, _) in ALL_MET_WITH_DIGESTS.items()},
+        }
+        doc, skipped = day_document(self.PERIOD, day, "2026-09-23T23:59:59Z", ALL_CRITERIA, CONTRACT_REF, TIERS)
+        self.assertEqual(skipped, [])
+        clause = "policy_compliance.confirmed_before_acting"
+        claim_a = next(c for c in doc["claims"] if c["id"] == f"case-a::{clause}")
+        claim_b = next(c for c in doc["claims"] if c["id"] == f"case-b::{clause}")
+        self.assertEqual(claim_a["evidence"][-1], {"digest_alg": "SHA-256", "digest": "capsule-a"})
+        self.assertEqual(claim_b["evidence"][-1], {"digest_alg": "SHA-256", "digest": "capsule-b"})
 
 
 if __name__ == "__main__":

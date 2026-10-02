@@ -73,7 +73,10 @@ def _in_scope(body, contract, expected_pin, expected_pack):
 
 def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key):
     """key(body) -> grouping key tuple prefix; returns nested dicts of
-    {clause_id: (verdict, capsule_id)}. Two in-scope reports for one slot with the
+    {clause_id: (verdict, capsule_id, source_capsule_id)}. `source_capsule_id` is
+    the report's own citation of the case record it judged (run_daily.py's
+    build_report always sets it); absent on a malformed or pre-citation report,
+    never fabricated here. Two in-scope reports for one slot with the
     same verdict keep the lexicographically first capsule id (deterministic); with
     different verdicts the slot is a conflict: recorded in `conflicts`
     (case_id -> {clause_id: sorted verdicts}) when given, else RollupError."""
@@ -86,10 +89,11 @@ def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key
             verdict = body["verdict"]
         except (KeyError, TypeError) as e:
             raise RollupError(f"report {capsule_id} is malformed: missing or mistyped {e}")
-        slots.setdefault(slot, []).append((verdict, capsule_id))
+        source_capsule_id = body.get("source_capsule_id")
+        slots.setdefault(slot, []).append((verdict, capsule_id, source_capsule_id))
     grouped = {}
     for slot, entries in slots.items():
-        verdicts = sorted({v for v, _ in entries})
+        verdicts = sorted({v for v, _, _ in entries})
         *prefix, case_id, clause_id = slot
         if len(verdicts) > 1:
             if conflicts is None:
@@ -122,7 +126,7 @@ def _period_key(body):
 
 
 def group_reports(capsule_bodies, contract, expected_pin=None, expected_pack=None, conflicts=None):
-    """Pure: case_id -> {clause_id: (verdict, capsule_id)}, over evaluation-report/v1
+    """Pure: case_id -> {clause_id: (verdict, capsule_id, source_capsule_id)}, over evaluation-report/v1
     bodies FOR THIS CONTRACT ONLY -- `capsule_bodies` is an iterable of
     (capsule_id, body) pairs, already read from the book by collect_reports().
 
@@ -140,7 +144,7 @@ def group_reports(capsule_bodies, contract, expected_pin=None, expected_pack=Non
 
 
 def collect_reports(capsulectl, profile, contract, expected_pin=None, expected_pack=None, conflicts=None):
-    """case_id -> {clause_id: (verdict, capsule_id)}, over every evaluation-report/v1
+    """case_id -> {clause_id: (verdict, capsule_id, source_capsule_id)}, over every evaluation-report/v1
     capsule the profile's book carries for this contract -- not scoped to one day: a
     case's clauses may have been judged and sealed across more than one run."""
     bodies = [(e["capsule_id"], payload(capsulectl, profile, e["capsule_id"]))
@@ -166,7 +170,7 @@ def resolve_expected_pin(capsulectl, spec, judge_model_id, judge_cmd, root, work
 
 def group_reports_by_day(capsule_bodies, contract, expected_pin=None, expected_pack=None, conflicts=None):
     """period ('day:YYYY-MM-DD', run_daily.py's own value) -> case_id ->
-    {clause_id: (verdict, capsule_id)}, same contract, pin and conflict rules as
+    {clause_id: (verdict, capsule_id, source_capsule_id)}, same contract, pin and conflict rules as
     group_reports(). The report records are the only source for which cases share
     a day: each carries the `period` it was sealed under."""
     return _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, _period_key)
@@ -182,7 +186,7 @@ def clause_tiers(spec):
 
 
 def partition_stale(clause_verdicts, all_criteria):
-    """Split a case's {clause_id: (verdict, capsule_id)} into (current, stale).
+    """Split a case's {clause_id: (verdict, capsule_id, source_capsule_id)} into (current, stale).
     `stale` is every clause id the current contract no longer defines --
     necessarily left over from an earlier compiled version of this same
     contract id (a pack recompiled with a criterion removed or renamed,
@@ -198,12 +202,14 @@ def partition_stale(clause_verdicts, all_criteria):
 
 def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, contract_ref, tiers,
                 allow_out_of_scope=False, never_out_of_scope=frozenset()):
-    verdicts = {cid: v for cid, (v, _) in clause_verdicts.items()}
-    digests = {cid: cap_id for cid, (_, cap_id) in clause_verdicts.items()}
+    verdicts = {cid: v for cid, (v, _, _) in clause_verdicts.items()}
+    digests = {cid: cap_id for cid, (_, cap_id, _) in clause_verdicts.items()}
+    source_capsule_ids = {cid: src for cid, (_, _, src) in clause_verdicts.items() if src}
     check_results = check_verdicts(verdicts, checks, allow_out_of_scope)
     resolved = all_required_met(verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
     result_v0, resolved_again = build_result_v0(case_id, verdicts, digests, generated_at, all_criteria, contract_ref,
-                                                 tiers, allow_out_of_scope, never_out_of_scope)
+                                                 tiers, allow_out_of_scope, never_out_of_scope,
+                                                 source_capsule_ids=source_capsule_ids)
     assert resolved == resolved_again  # same rollup, computed twice on purpose: must agree
     return {
         "case_id": case_id,
@@ -219,26 +225,30 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
     """Pure: one day's Result v0 over every case that can be rolled up, plus the
     list of cases left out and why -- nothing is dropped silently. Returns
     (document or None, skipped)."""
-    case_rollups, skipped = [], []
+    case_rollups, skipped, source_capsule_ids = [], [], {}
     for case_id, clause_verdicts in sorted(day_cases.items()):
         current, stale = partition_stale(clause_verdicts, all_criteria)
         missing = [c for c in all_criteria if c not in current]
         if missing:
             skipped.append({"case_id": case_id, "reason": "incomplete on this day", "missing": missing})
             continue
-        verdicts = {cid: v for cid, (v, _) in current.items()}
-        digests = {cid: cap_id for cid, (_, cap_id) in current.items()}
+        verdicts = {cid: v for cid, (v, _, _) in current.items()}
+        digests = {cid: cap_id for cid, (_, cap_id, _) in current.items()}
+        case_sources = {cid: src for cid, (_, _, src) in current.items() if src}
         try:
             build_result_v0_for_day(period, [(case_id, verdicts, digests, tiers)], generated_at, all_criteria,
-                                    contract_ref, allow_out_of_scope, never_out_of_scope)
+                                    contract_ref, allow_out_of_scope, never_out_of_scope,
+                                    source_capsule_ids={case_id: case_sources})
         except RollupError as e:
             skipped.append({"case_id": case_id, "reason": str(e)})
             continue
         case_rollups.append((case_id, verdicts, digests, tiers))
+        source_capsule_ids[case_id] = case_sources
     if not case_rollups:
         return None, skipped
     return build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
-                                   allow_out_of_scope, never_out_of_scope), skipped
+                                   allow_out_of_scope, never_out_of_scope,
+                                   source_capsule_ids=source_capsule_ids), skipped
 
 
 def main(argv):
