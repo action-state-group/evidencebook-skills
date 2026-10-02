@@ -334,9 +334,12 @@ class DisclosureBeforeFirstTurn(unittest.TestCase):
 
 
 class AllowedActionRules(unittest.TestCase):
-    """Art 26(1)'s compiled rule row: no modifying a basic-economy reservation
-    (policy.md "Modify flight"), explicit confirmation before any write
-    (policy.md line 7), one tool call at a time (policy.md line 11)."""
+    """Art 26(1)'s compiled rule row, five sub-rules: cancellation only within
+    policy.md's "Cancel flight" eligibility conditions, compensation gestures
+    only within their own "Refunds and Compensation" conditions, no modifying
+    a basic-economy reservation ("Modify flight"), explicit confirmation
+    before any write (policy.md line 7), one tool call at a time (policy.md
+    line 11)."""
 
     def _req(self, messages):
         return {"agent_interaction": {"messages": messages}, "policy": POLICY_PATH, "booking_db": DB_PATH}
