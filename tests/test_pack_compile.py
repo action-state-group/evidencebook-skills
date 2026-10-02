@@ -370,6 +370,94 @@ class ResolveOutDir(unittest.TestCase):
             resolve_out_dir(pathlib.Path("packs/some-pack"))
 
 
+def _eu_ai_act_check(check_id, crit_id, tier="judged", finding=None, **extra_crit):
+    crit = _criterion(crit_id, tier=tier, **extra_crit)
+    if finding is not None:
+        crit["finding"] = finding
+    if tier == "recomputed" and "fold_id" not in crit:
+        crit["fold_id"] = f"{check_id}.{crit_id}"
+    return {
+        "id": check_id, "question": f"{check_id}?",
+        "article": f"Art {check_id}", "title": f"Title for {check_id}",
+        "plain": f"Plain-language text for {check_id}.",
+        "applicability": {"status": "in_force", "note": "In force"},
+        "method": f"Method for {check_id}.",
+        "criteria": [crit],
+    }
+
+
+def eu_ai_act_source(**overrides):
+    source = {
+        "pack_id": "eu-ai-act-test", "pack_version": "0.1.0", "rubric_version": "0.1",
+        "outcome_statement": "The agent meets its obligations",
+        "resolution_rule": "counts only, no percentage",
+        "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
+        "checks": [
+            _eu_ai_act_check("art5", "no_manipulation", finding={
+                "id": "F-01", "severity": "Medium", "recommendation": "Review flagged sessions.",
+                "owner_due": "Owner · 1 Jan 2027",
+            }),
+            _eu_ai_act_check("art50", "disclosure_ordering", tier="recomputed"),
+        ],
+        "judge": {"model_id": "jev-1.13.0"},
+        "report": {"template": "eu-ai-act-compliance/v1", "percentages": False},
+    }
+    source.update(overrides)
+    return source
+
+
+class EuAiActComplianceTemplate(unittest.TestCase):
+    def test_minimal_eu_ai_act_source_is_valid(self):
+        self.assertEqual(validate_source(eu_ai_act_source()), [])
+
+    def test_missing_article_is_refused(self):
+        source = eu_ai_act_source()
+        del source["checks"][0]["article"]
+        issues = validate_source(source)
+        self.assertTrue(any("article" in i for i in issues), issues)
+
+    def test_missing_applicability_status_is_refused(self):
+        source = eu_ai_act_source()
+        source["checks"][0]["applicability"] = {"note": "no status field"}
+        issues = validate_source(source)
+        self.assertTrue(any("applicability" in i for i in issues), issues)
+
+    def test_malformed_finding_block_is_refused(self):
+        source = eu_ai_act_source()
+        source["checks"][0]["criteria"][0]["finding"] = {"id": "F-01"}  # missing severity/recommendation/owner_due
+        issues = validate_source(source)
+        self.assertTrue(any("finding" in i for i in issues), issues)
+
+    def test_presentation_carries_obligations_and_findings(self):
+        compiled, axes, prompt, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
+        block = presentation["eu-ai-act-compliance/v1"]
+        self.assertTrue(block["enabled"])
+        self.assertEqual([o["key"] for o in block["obligations"]], ["art5", "art50"])
+        art5 = block["obligations"][0]
+        self.assertEqual(art5["article"], "Art art5")
+        self.assertIn("finding", art5["rows"][0])
+        self.assertEqual(art5["rows"][0]["finding"]["id"], "F-01")
+        art50 = block["obligations"][1]
+        self.assertEqual(art50["rows"][0]["tier"], "recomputed")
+        self.assertNotIn("finding", art50["rows"][0])  # no finding block declared -- never rendered as one
+
+    def test_a_row_with_no_finding_block_never_carries_one(self):
+        # the actual eu-ai-act-obligations pack's own disclosure_before_first_turn
+        # row (the runner writes turn one) -- this is the generic mechanism
+        # that fact relies on: a criterion with no `finding` key compiles with
+        # no `finding` key in presentation.json, full stop.
+        source = eu_ai_act_source()
+        source["checks"][1]["criteria"][0].pop("finding", None)
+        _, _, _, presentation = compile_pack(source, "demo/eu-ai-act-test")
+        rows = presentation["eu-ai-act-compliance/v1"]["obligations"][1]["rows"]
+        self.assertNotIn("finding", rows[0])
+
+    def test_counts_only_no_percentages_in_this_template(self):
+        _, _, _, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
+        block = presentation["eu-ai-act-compliance/v1"]
+        self.assertNotIn("percentages", block)
+
+
 class CliSmoke(unittest.TestCase):
     """Thin end-to-end checks of the CLI's exit codes and issues[] shape --
     everything else is exercised directly against the pure functions above."""
@@ -382,6 +470,11 @@ class CliSmoke(unittest.TestCase):
 
     def test_validate_the_real_pack_source_is_valid(self):
         proc = self._run("validate", "packs/airline-support-outcomes/pack-source.yaml")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertTrue(json.loads(proc.stdout)["valid"])
+
+    def test_validate_the_real_eu_ai_act_pack_source_is_valid(self):
+        proc = self._run("validate", "packs/eu-ai-act-obligations/pack-source.yaml")
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertTrue(json.loads(proc.stdout)["valid"])
 

@@ -110,10 +110,101 @@ def _build_outcome_report_presentation(source):
     }
 
 
+def _build_eu_ai_act_presentation(source):
+    """eu-ai-act-compliance/v1: a check is an OBLIGATION (one article), each
+    criterion a TEST under it -- the same checks/criteria shape every other
+    template reads, carrying obligation- and test-level metadata (article
+    reference, plain-language summary, applicability, method, and an optional
+    producer-authored finding template) that only this template's reader
+    (agent-action-capsule's compliance card) consumes. Counts, never a
+    percentage: there is no "resolved" concept here at all (contrast
+    _build_outcome_report_presentation's percentages field, which is
+    absent from this template's output on purpose)."""
+    obligations = []
+    for check in source["checks"]:
+        rows = []
+        for crit in check["criteria"]:
+            row = {
+                "criterion_id": f"{check['id']}.{crit['id']}",
+                "name": crit["label"],
+                "desc": crit["text"],
+                "tier": crit["tier"],
+            }
+            if crit.get("not_evaluable_note"):
+                row["not_evaluable_note"] = crit["not_evaluable_note"]
+            if crit.get("finding"):
+                row["finding"] = dict(crit["finding"])
+            rows.append(row)
+        obligations.append({
+            "key": check["id"],
+            "article": check["article"],
+            "title": check["title"],
+            "plain": check["plain"],
+            "judged_terms": list(check.get("judged_terms") or []),
+            "applicability": dict(check["applicability"]),
+            "method": check["method"],
+            "rows": rows,
+        })
+    return {
+        "enabled": True,
+        "regulation": source.get("regulation", "Regulation (EU) 2024/1689"),
+        "obligations": obligations,
+        "quality_protocol": dict(source.get("quality_protocol") or {}),
+    }
+
+
 # The report-template registry: this is the "pluggable" seam. Adding a template
 # means registering a builder here; selecting one no one registered is a
 # validation failure (see validate_source), never a silent fallback to this one.
-REPORT_TEMPLATES = {"outcome-report/v1": _build_outcome_report_presentation}
+REPORT_TEMPLATES = {
+    "outcome-report/v1": _build_outcome_report_presentation,
+    "eu-ai-act-compliance/v1": _build_eu_ai_act_presentation,
+}
+
+
+def _validate_eu_ai_act_fields(source):
+    """Extra validation for report.template == "eu-ai-act-compliance/v1" --
+    the obligation/test metadata _build_eu_ai_act_presentation reads but the
+    generic validate_source() above knows nothing about. Same "absent is
+    never pass" discipline: a check missing its article/title/plain/
+    applicability/method, or a criterion whose finding block is malformed,
+    fails validation here rather than KeyError-ing during compile or (worse)
+    silently shipping a presentation.json with a missing field the card
+    renders as blank."""
+    issues = []
+    checks = source.get("checks")
+    if not isinstance(checks, list):
+        return issues  # the generic validator already flagged this
+    for i, check in enumerate(checks):
+        if not isinstance(check, dict):
+            continue
+        where = f"checks[{i}]"
+        for key in ("article", "title", "plain", "method"):
+            if not isinstance(check.get(key), str) or not check[key].strip():
+                issues.append(f"{where}.{key} must be a non-empty string (eu-ai-act-compliance/v1 requires it)")
+        applicability = check.get("applicability")
+        if not isinstance(applicability, dict) or applicability.get("status") not in ("in_force", "future"):
+            issues.append(f"{where}.applicability must be a mapping with status in_force|future")
+        elif not isinstance(applicability.get("note"), str) or not applicability["note"].strip():
+            issues.append(f"{where}.applicability.note must be a non-empty string")
+        if "judged_terms" in check and not isinstance(check["judged_terms"], list):
+            issues.append(f"{where}.judged_terms must be a list")
+        for j, crit in enumerate(check.get("criteria") or []):
+            if not isinstance(crit, dict):
+                continue
+            cwhere = f"{where}.criteria[{j}]"
+            finding = crit.get("finding")
+            if finding is not None:
+                if not isinstance(finding, dict):
+                    issues.append(f"{cwhere}.finding must be a mapping")
+                    continue
+                for key in ("id", "severity", "recommendation", "owner_due"):
+                    if not isinstance(finding.get(key), str) or not finding[key].strip():
+                        issues.append(f"{cwhere}.finding.{key} must be a non-empty string")
+    return issues
+
+
+REPORT_TEMPLATE_EXTRA_VALIDATORS = {"eu-ai-act-compliance/v1": _validate_eu_ai_act_fields}
 
 # The report settings a pack may carry. Anything else is refused: the report states
 # outcomes, and settings that are not about presenting them (pricing a resolution,
@@ -272,6 +363,8 @@ def validate_source(source):
         template = report.get("template")
         if template not in REPORT_TEMPLATES:
             issues.append(f"report.template {template!r} is not a known template; known: {sorted(REPORT_TEMPLATES)}")
+        elif template in REPORT_TEMPLATE_EXTRA_VALIDATORS:
+            issues.extend(REPORT_TEMPLATE_EXTRA_VALIDATORS[template](source))
         if "percentages" in report and not isinstance(report["percentages"], bool):
             issues.append("report.percentages must be a boolean")
         for key in sorted(set(report) - set(REPORT_KEYS)):
@@ -378,7 +471,9 @@ def build_axes_json(source):
     return {
         "outcome": source["pack_id"],
         "outcome_statement": source["outcome_statement"],
-        "rule": f"all {len(axes)} axes required -- resolved only when every one passes",
+        "rule": (f"all {len(axes)} axes required -- resolved only when every one passes"
+                 if source["report"].get("template") != "eu-ai-act-compliance/v1"
+                 else f"{len(axes)} tests, each reported as a count of sessions; no resolved roll-up"),
         "checks": checks,
         "axes": axes,
     }
