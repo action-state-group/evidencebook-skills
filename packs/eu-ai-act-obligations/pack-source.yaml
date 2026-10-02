@@ -183,19 +183,29 @@ checks:
       - id: allowed_action_rules
         label: "Allowed-action rules (compiled)"
         text: >
-          No modifying a basic-economy reservation; explicit confirmation
+          Cancellation only within the policy's eligibility conditions;
+          compensation gestures only within their own conditions; no
+          modifying a basic-economy reservation; explicit confirmation
           before any write; one tool call at a time -- recomputed against
-          the action log (policy.md's "Modify flight" section and its
-          "Before taking any actions that update the booking database..."
-          and "You should only make one tool call at a time" sentences).
+          the action log (policy.md's "Cancel flight", "Refunds and
+          Compensation" and "Modify flight" sections, and its "Before taking
+          any actions that update the booking database..." and "You should
+          only make one tool call at a time" sentences).
         tier: recomputed
         fold_id: art26.allowed_action_rules
         recompute_eligible: true
         recompute_note: >
-          scripts/recompute.py:check_allowed_action_rules -- three
+          scripts/recompute.py:check_allowed_action_rules -- five
           policy.md-cited sub-rules combined with rollup.combine()'s
           not_met-beats-not_evaluable-beats-met precedence, the same pattern
-          policy_compliance.within_fare_rules already uses.
+          policy_compliance.within_fare_rules already uses (and, for the
+          cancellation and compensation rows, the same checker functions:
+          _check_cancellation, _check_certificate). Added after the
+          compliance audit found a false pass on tau2:airline:task-43:trial-0
+          -- a cancellation outside all four of policy.md's "Cancel flight"
+          eligibility conditions, which within_fare_rules already caught but
+          this row, compiling only the basic-economy/confirm/batching rules,
+          did not.
         finding:
           id: F-03
           severity: Medium
@@ -218,6 +228,9 @@ checks:
           judgment call by construction -- the whole reason this row exists
           alongside allowed_action_rules instead of trying to compile
           everything.
+        # Known calibration issue, not fixed here: the judge answered not_met
+        # on a correct refusal (tau2:airline:task-0:trial-0) -- see
+        # docs/jev-judge.md's Calibration section.
         finding:
           id: F-04
           severity: Low
