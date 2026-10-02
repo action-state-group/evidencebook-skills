@@ -163,6 +163,10 @@ def resolve_expected_pin(capsulectl, spec, judge_model_id, judge_cmd, root, work
     if not judge_cmd:
         raise EvidenceUnavailable("--judge-cmd is required to recompute the judge pin "
                                   "(the pin covers the instruction template the judge reports)")
+    judge = spec.get("judge")
+    if not isinstance(judge, dict) or not judge.get("prompt") or not judge.get("axes"):
+        raise EvidenceUnavailable("a judge model id was given, but the contract has no judge prompt and axes "
+                                  "to pin it against")
     pin_path = work / "judge-pin.json"
     pin_path.write_text(json.dumps(pin_input(spec, root, judge_model_id, describe_judge(judge_cmd, timeout))))
     return run(capsulectl, "judge", "pin", str(pin_path))["judge_pin_digest"]
@@ -251,6 +255,15 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
                                    source_capsule_ids=source_capsule_ids), skipped
 
 
+def resolve_judge_model_id(cli_judge_model_id, spec):
+    """--judge-model-id, or spec["judge"]["model_id"] when present -- fails
+    closed to None (never scoped by pin, same as before this flag existed)
+    rather than raising, since a hand-authored contract may carry no "judge"
+    key at all (run_daily.py's own sibling lookup, min_confidence, already
+    defends this the same way)."""
+    return cli_judge_model_id or (spec.get("judge") or {}).get("model_id")
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--profile", required=True)
@@ -286,7 +299,7 @@ def main(argv):
     work = args.out / "work"
     work.mkdir(parents=True, exist_ok=True)
 
-    judge_model_id = args.judge_model_id or spec["judge"].get("model_id")
+    judge_model_id = resolve_judge_model_id(args.judge_model_id, spec)
     expected_pack = spec.get("pack_source_digest")
     conflicts = {}
     try:

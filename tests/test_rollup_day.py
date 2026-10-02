@@ -18,7 +18,8 @@ from capsulectl_calls import EvidenceUnavailable  # noqa: E402
 from result_v0 import headline_from_result  # noqa: E402
 from rollup import RollupError, all_criteria_from_clauses, all_required_met, checks_from_clauses  # noqa: E402
 from rollup_day import (clause_tiers, day_document, group_reports, group_reports_by_day,  # noqa: E402
-                        partition_stale, resolve_expected_pin, rollup_case, safe_filename)
+                        partition_stale, resolve_expected_pin, resolve_judge_model_id, rollup_case,
+                        safe_filename)
 
 CLAUSES = [
     {"id": "policy_compliance.confirmed_before_acting", "check_id": "policy_compliance", "tier": "judged"},
@@ -220,6 +221,22 @@ class ClauseTiers(unittest.TestCase):
         self.assertEqual(tiers["grounded_communication.prices_from_system"], "recomputed")
 
 
+class ResolveJudgeModelId(unittest.TestCase):
+    def test_cli_flag_wins_over_the_spec(self):
+        self.assertEqual(resolve_judge_model_id("jev-1.13.0", {"judge": {"model_id": "other"}}), "jev-1.13.0")
+
+    def test_falls_back_to_the_spec_s_judge_model_id(self):
+        self.assertEqual(resolve_judge_model_id(None, {"judge": {"model_id": "jev-1.13.0"}}), "jev-1.13.0")
+
+    def test_no_judge_key_at_all_fails_closed_to_none_not_a_crash(self):
+        # A hand-authored contract predating judge.model_id may carry no
+        # "judge" key at all -- spec["judge"] would KeyError; this must not.
+        self.assertIsNone(resolve_judge_model_id(None, {}))
+
+    def test_a_judge_key_with_no_model_id_is_also_none(self):
+        self.assertIsNone(resolve_judge_model_id(None, {"judge": {}}))
+
+
 class ResolveExpectedPin(unittest.TestCase):
     def test_no_model_id_means_no_pin_scoping(self):
         # Never calls capsulectl at all when there's no model id to pin against
@@ -233,6 +250,16 @@ class ResolveExpectedPin(unittest.TestCase):
         # judge command it cannot be recomputed, so the rollup refuses.
         with self.assertRaisesRegex(EvidenceUnavailable, "--judge-cmd is required"):
             resolve_expected_pin("capsulectl-should-not-run", {"judge": {}}, "jev-1.13.0", None, None, None)
+
+    def test_a_model_id_against_a_contract_with_no_judge_section_is_refused(self):
+        # --judge-model-id given, but the contract carries no judge prompt/axes
+        # to pin: refused as unavailable evidence, never a KeyError, and the
+        # judge command is never run.
+        for spec in ({}, {"judge": {}}, {"judge": {"prompt": "judge-prompt.md"}}):
+            with self.subTest(spec=spec):
+                with self.assertRaisesRegex(EvidenceUnavailable, "no judge prompt and axes"):
+                    resolve_expected_pin("capsulectl-should-not-run", spec, "jev-1.13.0",
+                                         "judge-cmd-should-not-run", None, None)
 
 
 class PartitionStale(unittest.TestCase):
