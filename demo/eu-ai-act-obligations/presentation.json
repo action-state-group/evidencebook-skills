@@ -85,7 +85,7 @@
           {
             "criterion_id": "art26.allowed_action_rules",
             "name": "Allowed-action rules (compiled)",
-            "desc": "No modifying a basic-economy reservation; explicit confirmation before any write; one tool call at a time -- recomputed against the action log (policy.md's \"Modify flight\" section and its \"Before taking any actions that update the booking database...\" and \"You should only make one tool call at a time\" sentences).",
+            "desc": "Cancellation only within the policy's eligibility conditions; compensation gestures only within their own conditions; no modifying a basic-economy reservation; explicit confirmation before any write; one tool call at a time -- recomputed against the action log (policy.md's \"Cancel flight\", \"Refunds and Compensation\" and \"Modify flight\" sections, and its \"Before taking any actions that update the booking database...\" and \"You should only make one tool call at a time\" sentences).",
             "tier": "recomputed",
             "finding": {
               "id": "F-03",
