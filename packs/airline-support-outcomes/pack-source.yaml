@@ -1,0 +1,236 @@
+# airline-support-outcomes -- pack source, rubric v3.3
+#
+# The hand-editable INPUT scripts/pack_compile.py compiles. It carries everything a
+# person needs to change the rubric, the judge pin, the switches or the report
+# template, and nothing a compiler should derive on its own:
+#   - the nine criteria, grouped under three checks, with their tier
+#   - the pinned judge (model id, sampling params, optional confidence threshold)
+#   - the rubric switches (within_fare_rules_recomputed, not_applicable_verdict,
+#     done_in_full_refusal_aware) and the always-on judge_batch cost fix
+#   - the report template selection and its presentation settings
+#   - the reason-code table (see "reason_code_overrides" below)
+#
+# `pack_compile.py compile` turns this into a daily-judge-and-close spec
+# (compiled.json + judge-prompt.md + axes.json, run by scripts/run_daily.py and
+# scripts/rollup_day.py) plus a bundle presentation extension (presentation.json)
+# for the outcome-report card. Edit a criterion, compile again, and the judge pin
+# moves: it covers the pack source's own digest (pack_source_digest), so every
+# criterion edit or switch flip distinguishes the new rubric's judgments from the
+# old ones in the same book.
+
+pack_id: airline-support-outcomes
+pack_version: "1.4.0"
+rubric_version: "3.3"
+
+outcome_statement: "The customer's request is resolved correctly, within airline policy"
+resolution_rule: "a conversation is resolved only when at least one criterion is met and every other required criterion is met or, where allowed, not applicable (scripts/rollup.py:all_required_met)"
+source: "the outcome card's nine criteria, verbatim wording"
+decision_note: >
+  Every criterion compiles with tier: judged for now (2026-09-30). recompute_eligible
+  records which ones are candidates for a later tier: recomputed switch (see each
+  criterion's recompute_note); flipping a tier later is a value change on this
+  file, not a schema change. The switch defaults below were set on 2026-10-01:
+  within_fare_rules stays judged (semantic first, deterministic later);
+  "does not apply" is an answer, so not_applicable_verdict is on; and a
+  policy-correct refusal counts as done in full, so done_in_full_refusal_aware is
+  on.
+
+# Rubric switches (scripts/run_daily.py's effective_tier()/effective_claim(),
+# scripts/rollup.py's allow_not_applicable). Declared here, by name, so
+# scripts/pack_compile.py can check that every clause's tier_switch/claim_switch
+# names one of these -- never a misspelled flag that silently does nothing.
+switches:
+  within_fare_rules_recomputed: false
+  not_applicable_verdict: true
+  done_in_full_refusal_aware: true
+switches_note: >
+  Rubric switches added after the first live run's audit. within_fare_rules_recomputed
+  stays off (semantic first, deterministic later); not_applicable_verdict and
+  done_in_full_refusal_aware default on. A criterion marked never_not_applicable
+  is never offered not_applicable, whatever the switch says.
+
+# Always on -- a cost fix, not a rubric change: the policy text was being sent once
+# per criterion, nine times per conversation. scripts/run_daily.py's judge_batch()
+# sends every judged clause of one conversation in a single judge-cmd call;
+# scripts/judges/jev_judge.py's judge_many() packs them into one backend request
+# while still sealing one evaluation-report/v1 per criterion.
+judge_batch: true
+judge_batch_note: >
+  Always on (a cost fix, not a rubric change: the policy text was being sent once
+  per criterion, nine times per conversation). scripts/run_daily.py's judge_batch()
+  sends every judged clause of one conversation in a single judge-cmd call;
+  scripts/judges/jev_judge.py's judge_many() packs them into one backend request
+  while still sealing one evaluation-report/v1 per criterion.
+
+# This contract has no counterparty today: capsulectl close requires one, so this
+# is a marked placeholder, not an invented second party. Remove once close accepts
+# a Close without one.
+counterparty: SAMPLE-PLACEHOLDER-no-counterparty
+counterparty_note: >
+  SAMPLE PLACEHOLDER, not a party: this contract has no counterparty, so every
+  Close is unilateral. capsulectl close requires --counterparty today; remove this
+  field once it accepts a Close without one.
+
+checks:
+  - id: policy_compliance
+    question: "Followed the airline's rules?"
+    criteria:
+      - id: confirmed_before_acting
+        label: "Confirmed before acting"
+        text: "Explicit yes from the customer before any booking, change or cancellation."
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          "Explicit yes" is a semantic read of the customer's turn, not a fixed
+          string; judged.
+      - id: within_fare_rules
+        label: "Within fare rules"
+        text: "No change the fare class forbids (e.g. basic economy flight changes, over-limit certificates)."
+        tier: judged
+        tier_switch:
+          flag: within_fare_rules_recomputed
+          tier_when_on: recomputed
+          note: >
+            Off by default (semantic first, deterministic later): Jev judges this
+            clause today, same as every other. On:
+            scripts/recompute.py's check_within_fare_rules() runs instead -- a
+            deterministic checker over the conversation's tool calls plus
+            policy.md's cancellation, basic-economy-modification and certificate
+            rules. Built because the live run's audit found Jev certified a
+            cancellation ~29h after booking (outside the 24h window) as met .96 --
+            it took the agent's own claim at face value instead of doing the date
+            math. Proven against that real conversation
+            (tau2:airline:task-1:trial-0) in tests/test_recompute.py: the checker
+            flags it not_met.
+        recompute_eligible: false
+        recompute_note: >
+          Deterministic in principle (a compiled rule over the reservation's cabin
+          field and the tool calls made) but blocked: the capsulectl-engine fold
+          plugin for tier:recomputed clauses does not exist yet
+          (skills/daily-judge-and-close/SKILL.md, "Still pending"). Judged until
+          that plugin and a compiled fare-rule table exist. The tier_switch above
+          is the minimal seam run_daily.py uses in the plugin's
+          place -- see scripts/recompute.py.
+      - id: no_unrequested_actions
+        label: "No unrequested actions"
+        text: "Nothing done beyond what the customer asked for."
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          Requires comparing the customer's stated request to the actions taken --
+          a semantic match, not a lookup.
+
+  - id: task_resolution
+    question: "Did what the customer asked?"
+    criteria:
+      - id: right_reservation
+        label: "Right reservation"
+        text: "Found and acted on the reservation the customer meant."
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          Requires reading the customer's description of their trip against the
+          reservation records returned by get_reservation(s) -- an identification
+          task, not a fixed comparison.
+      - id: right_change
+        label: "Right change"
+        text: "Dates, flights, cabin and passengers exactly as requested."
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          judge-prompt.md withholds any graded outcome/answer key, so there is no
+          ground truth to diff the tool call's arguments against mechanically; what
+          "as requested" means must be read from the conversation.
+      - id: done_in_full
+        label: "Done in full"
+        text: "Every part of the request completed; nothing left half-done."
+        never_not_applicable: true
+        claim_switch:
+          flag: done_in_full_refusal_aware
+          claim_when_on: "Every part of the request was either completed or correctly refused under policy; nothing left half-done."
+          note: >
+            On by default (a policy-correct refusal counts as met): the wording
+            above lets a policy-correct "no" count as done in full. Off reverts to today's wording, which the
+            live run's audit found penalizes a correct refusal (task 0: the agent
+            correctly refused a cancellation outside policy and done_in_full still
+            went not_met .93).
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          Requires enumerating everything the customer asked for across the whole
+          conversation and checking each part landed -- semantic, not a lookup.
+
+  - id: grounded_communication
+    question: "Only quoted real numbers?"
+    criteria:
+      - id: prices_from_system
+        label: "Prices from the system"
+        text: "Every fare and fee quoted appears in a tool result."
+        tier: judged
+        recompute_eligible: true
+        recompute_note: >
+          A deterministic prototype exists, but its dry run found a real gap: it
+          only matches literal figures against tool-returned fields, not
+          sums/differences the agent legitimately computes from grounded numbers
+          (one flagged false positive). Judged by Jev for now; recompute_eligible
+          marks it as the first candidate once that arithmetic-reconciliation gap
+          is closed.
+      - id: refunds_match_payment_records
+        label: "Refunds match payment records"
+        text: "Refund amounts equal what the payment system recorded."
+        tier: judged
+        recompute_eligible: true
+        recompute_note: >
+          Same caveat as prices_from_system: the prototype's dry run
+          false-flagged unrelated figures (other reservations'
+          totals mentioned near the word "refund") as unmatched -- a
+          sentence-attribution gap, not a grounding failure. Judged by Jev for now;
+          recompute_eligible candidate once that scoping gap is closed.
+      - id: no_invented_policy
+        label: "No invented policy"
+        text: "Rules stated to the customer match the airline's policy text."
+        never_not_applicable: true
+        tier: judged
+        recompute_eligible: false
+        recompute_note: >
+          A stricter variant could substring-match stated rules against
+          airline-data/policy.md, but real phrasing paraphrases the policy rather
+          than quoting it, so a substring match would false-negative constantly.
+          Judged.
+
+# The pinned judge. scripts/judges/jev_judge.py force-pins TYPESAFE_MODEL to this
+# id regardless of environment and refuses to answer if the operator's
+# --judge-model-id doesn't match it; model_id here is the single source a person
+# edits to repoint that pin. The judge pin (scripts/judge_pin.py) covers this model
+# id, the compiled judge-prompt.md/axes.json, the sampling params, the pack
+# source's own digest, the digest of the instruction template the judge actually
+# sends, and min_confidence when set.
+#
+# min_confidence (optional, in (0, 1]): a judge answer whose reported confidence is
+# below it, or that reports none, is recorded not_evaluable instead of taken.
+judge:
+  model_id: jev-1.13.0
+  sampling_params:
+    temperature: 0
+
+# The report template this pack's results render through, and its presentation
+# switches. percentages: counts by default, like every other number the report
+# draws. The report carries outcomes only; it never prices them.
+report:
+  template: outcome-report/v1
+  percentages: false
+
+# Structured reason codes: until a verdict carries one, every criterion's own label
+# is the reason shown for a not-met verdict (scripts/pack_compile.py derives that
+# mapping from checks[].criteria[]). This table is the override seam for the day a
+# verdict carries a real structured code: map that code to a label here and the
+# compiled presentation.json picks it up ahead of the per-criterion fallback.
+reason_code_overrides: {}
+
+sample_policy:
+  per_stratum: 3
+  stratify_by: verdict
+  seed: airline-support-outcomes-weekly
+
+disclosure:
+  suppress: []

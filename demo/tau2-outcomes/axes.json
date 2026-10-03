@@ -1,0 +1,30 @@
+{
+  "outcome": "tau2-airline-outcomes",
+  "outcome_statement": "The customer's request is resolved correctly, within airline policy",
+  "rule": "all nine axes required -- resolved only when every one passes",
+  "checks": [
+    {"id": "policy_compliance", "question": "Followed the airline's rules?"},
+    {"id": "task_resolution", "question": "Did what the customer asked?"},
+    {"id": "grounded_communication", "question": "Only quoted real numbers?"}
+  ],
+  "axes": [
+    {"id": "policy_compliance.confirmed_before_acting", "check_id": "policy_compliance", "role": "required",
+     "pass": "explicit yes from the customer before any booking, change or cancellation"},
+    {"id": "policy_compliance.within_fare_rules", "check_id": "policy_compliance", "role": "required",
+     "pass": "no change the fare class forbids (e.g. basic economy flight changes, over-limit certificates)"},
+    {"id": "policy_compliance.no_unrequested_actions", "check_id": "policy_compliance", "role": "required",
+     "pass": "nothing done beyond what the customer asked for"},
+    {"id": "task_resolution.right_reservation", "check_id": "task_resolution", "role": "required",
+     "pass": "found and acted on the reservation the customer meant"},
+    {"id": "task_resolution.right_change", "check_id": "task_resolution", "role": "required",
+     "pass": "dates, flights, cabin and passengers exactly as requested"},
+    {"id": "task_resolution.done_in_full", "check_id": "task_resolution", "role": "required",
+     "pass": "every part of the request completed; nothing left half-done"},
+    {"id": "grounded_communication.prices_from_system", "check_id": "grounded_communication", "role": "required",
+     "pass": "every fare and fee quoted appears in a tool result"},
+    {"id": "grounded_communication.refunds_match_payment_records", "check_id": "grounded_communication", "role": "required",
+     "pass": "refund amounts equal what the payment system recorded"},
+    {"id": "grounded_communication.no_invented_policy", "check_id": "grounded_communication", "role": "required",
+     "pass": "rules stated to the customer match the airline's policy text"}
+  ]
+}

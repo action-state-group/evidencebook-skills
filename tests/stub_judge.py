@@ -10,7 +10,14 @@ import hashlib
 import json
 import sys
 
+# What the stub "sends" is fixed: it reads no instructions at all. Its describe
+# answer pins that, as scripts/judge_pin.py requires of every judge command.
+TEMPLATE = "stub judge: verdict derived from the case id; no instructions, no model"
+
 request = json.load(sys.stdin)
+if request.get("describe") is True:
+    json.dump({"instruction_template_digest": hashlib.sha256(TEMPLATE.encode()).hexdigest()}, sys.stdout)
+    sys.exit(0)
 case = request["case"]
 h = int(hashlib.sha256(f"judge:{case['task_id']}".encode()).hexdigest(), 16)
 verdict = "not_evaluable" if h % 7 == 0 else ("met" if h % 2 == 0 else "not_met")
