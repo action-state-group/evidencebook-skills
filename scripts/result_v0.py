@@ -345,10 +345,18 @@ def merge_result_v0_documents(docs, title, generated_at):
     both computed a verdict for what the schema's own closed id space treats
     as the same claim, or if they don't all share one contract_ref, which
     would mean mixing results from two different contracts/specs into one
-    document) and recomputes aggregate.coverage/buckets from the merged
-    claims list directly -- never by summing the inputs' own aggregate
-    blocks, so a bug in how an input computed its own aggregate can't survive
-    into the merge undetected."""
+    document) and recomputes aggregate.buckets and
+    aggregate.coverage.evaluated_population from the merged claims list
+    directly, never by trusting the inputs' own buckets/evaluated_population
+    verbatim -- a bug in how an input computed those can't survive into the
+    merge undetected. The one exception, by necessity rather than choice:
+    aggregate.coverage.excluded_not_applicable is SUMMED from the inputs'
+    own values, because a not_applicable criterion gets NO claim object at
+    all (scripts/result_v0.py's own module docstring) -- there is nothing
+    in claims[] for this function to recompute that count FROM. A bad
+    excluded_not_applicable in one input's own aggregate does survive into
+    the merge; recomputing it would need each input's original
+    criterion_verdicts, which this function is never given."""
     docs = list(docs)
     if not docs:
         raise RollupError("merge_result_v0_documents needs at least one document")

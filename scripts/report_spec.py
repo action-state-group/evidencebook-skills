@@ -295,7 +295,11 @@ def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None
                 row["__has_offset_match"] = (
                     value is not None and any(j != i and amounts[j] == -value for j in range(len(amounts)))
                 )
-            if where is None or eval_expr(where, row):
+            try:
+                keep = where is None or eval_expr(where, row)
+            except ExprError as e:
+                raise ReportSpecError(f"flatten source {path!r}: where {where!r}: {e}") from e
+            if keep:
                 out.append(row)
     return out
 
@@ -303,7 +307,7 @@ def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None
 def build_rows(spec, capsulectl, profile, date_from=None, date_to=None):
     """name -> list of rows, for every source the spec declares, in order
     (a source may name an earlier source as its own `from`)."""
-    rows_by_name = {}
+    rows_by_name, kind_by_name = {}, {}
     for source in spec["sources"]:
         kind = source["kind"]
         if kind == "case":
@@ -316,6 +320,15 @@ def build_rows(spec, capsulectl, profile, date_from=None, date_to=None):
             parent = rows_by_name.get(source["from"])
             if parent is None:
                 raise ReportSpecError(f"source {source['name']!r}: unknown `from` source {source['from']!r}")
+            if kind_by_name.get(source["from"]) != "case":
+                # tool_result reads __messages, a field only a `kind: case` row carries
+                # (select_case_rows' own built-in) -- any other parent kind silently
+                # yields zero rows forever (desk-review finding, this job), never an
+                # error, which looks exactly like "no matching tool calls" instead of
+                # "this spec is wrong."
+                raise ReportSpecError(
+                    f"source {source['name']!r}: `from: {source['from']!r}` must be a `kind: case` "
+                    f"source (it is {kind_by_name.get(source['from'])!r})")
             rows_by_name[source["name"]] = extract_tool_result_rows(parent, source["tool_name"], source.get("fields"))
         elif kind == "flatten":
             parent = rows_by_name.get(source["from"])
@@ -325,11 +338,21 @@ def build_rows(spec, capsulectl, profile, date_from=None, date_to=None):
                 parent, source["path"], source.get("match_offsets_field"), source.get("where"))
         else:
             raise ReportSpecError(f"source {source['name']!r}: unknown kind {kind!r}")
+        kind_by_name[source["name"]] = kind
     return rows_by_name
 
 
+def metric_rows(metric, rows):
+    """The rows a metric actually aggregates over -- its own `where` applied,
+    nothing else. The single place both compute_metric() and a threshold
+    claim's own evidence (evaluate_group()) go through, so a claim citing
+    "the records it was computed from" (this module's own docstring promise)
+    can never cite a row the metric's where clause filtered out."""
+    return [r for r in rows if metric.get("where") is None or eval_expr(metric["where"], r)]
+
+
 def compute_metric(metric, rows):
-    rows = [r for r in rows if metric.get("where") is None or eval_expr(metric["where"], r)]
+    rows = metric_rows(metric, rows)
     if metric["op"] == "count":
         return len(rows)
     if metric["op"] == "sum":
@@ -347,7 +370,15 @@ def evaluate_group(spec, group_key, rows_by_name, group_field):
     """One group's (criterion_verdicts, report_digests, metric_values) --
     every claim in the spec, evaluated over only this group's own rows."""
     group_rows = {name: [r for r in rows if r.get(group_field) == group_key] for name, rows in rows_by_name.items()}
-    metric_values = {m["name"]: compute_metric(m, group_rows.get(m["source"], [])) for m in spec.get("metrics", [])}
+
+    metric_values = {}
+    for m in spec.get("metrics", []):
+        if m["source"] not in group_rows:
+            raise ReportSpecError(f"metric {m['name']!r}: unknown source {m['source']!r}")
+        try:
+            metric_values[m["name"]] = compute_metric(m, group_rows[m["source"]])
+        except ExprError as e:
+            raise ReportSpecError(f"metric {m['name']!r}: where {m.get('where')!r}: {e}") from e
 
     verdicts, digests = {}, {}
     for claim in spec["claims"]:
@@ -359,19 +390,25 @@ def evaluate_group(spec, group_key, rows_by_name, group_field):
                 raise ReportSpecError(f"claim {cid!r}: unknown metric {metric_name!r}")
             left = metric_values[metric_name]
             value = claim["value"]
-            right = value if isinstance(value, (int, float)) else eval_expr(value, metric_values)
+            try:
+                right = value if isinstance(value, (int, float)) else eval_expr(value, metric_values)
+            except ExprError as e:
+                raise ReportSpecError(f"claim {cid!r}: value {value!r}: {e}") from e
             op = claim["op"]
             if op not in _OPS:
                 raise ReportSpecError(f"claim {cid!r}: unknown op {op!r}")
-            source_rows = group_rows.get(spec_metric_source(spec, metric_name), [])
+            metric = spec_metric(spec, metric_name)
+            source_rows = metric_rows(metric, group_rows[metric["source"]])
             verdicts[cid] = "met" if _OPS[op](left, right) else "not_met"
             digests[cid] = sorted({r["__capsule_id"] for r in source_rows if "__capsule_id" in r})
         elif kind == "forall":
-            source_rows = group_rows.get(claim["source"], [])
+            if claim["source"] not in group_rows:
+                raise ReportSpecError(f"claim {cid!r}: unknown source {claim['source']!r}")
+            source_rows = group_rows[claim["source"]]
             try:
                 ok = all(eval_expr(claim["assert"], r) for r in source_rows)
             except ExprError as e:
-                raise ReportSpecError(f"claim {cid!r}: {e}") from e
+                raise ReportSpecError(f"claim {cid!r}: assert {claim['assert']!r}: {e}") from e
             verdicts[cid] = "met" if ok else "not_met"
             digests[cid] = sorted({r["__capsule_id"] for r in source_rows if "__capsule_id" in r})
         else:
@@ -379,10 +416,10 @@ def evaluate_group(spec, group_key, rows_by_name, group_field):
     return verdicts, digests, metric_values
 
 
-def spec_metric_source(spec, metric_name):
+def spec_metric(spec, metric_name):
     for m in spec.get("metrics", []):
         if m["name"] == metric_name:
-            return m["source"]
+            return m
     raise ReportSpecError(f"unknown metric: {metric_name!r}")
 
 
@@ -394,7 +431,11 @@ def render_title(spec, group_key, metric_values):
     template = (spec.get("presentation") or {}).get("title_template")
     if not template:
         return f"{spec.get('title', spec['id'])} -- {group_key}"
-    return template.format(title=spec.get("title", spec["id"]), period=group_key, **metric_values)
+    try:
+        return template.format(title=spec.get("title", spec["id"]), period=group_key, **metric_values)
+    except (KeyError, IndexError) as e:
+        raise ReportSpecError(f"presentation.title_template {template!r} names a field this spec "
+                               f"doesn't compute: {e}") from e
 
 
 def safe_filename(value):
@@ -417,6 +458,11 @@ def build_documents(spec, rows_by_name, generated_at):
     tiers = {c: "recomputed" for c in all_claims}
     cref = contract_ref(spec)
 
+    # The FIRST listed source decides which groups exist at all (desk-review
+    # finding: undocumented) -- a claim/metric over a later source only ever
+    # narrows an already-existing group's rows, it can never add a new group.
+    # tau2-airline-no-judge.yaml and mesh-llm-settlement-draft.yaml both list
+    # their base conversation/exchange source first for exactly this reason.
     base_source = spec["sources"][0]["name"]
     group_keys = sorted({r.get(group_field) for r in rows_by_name.get(base_source, []) if r.get(group_field) is not None})
 
@@ -460,8 +506,13 @@ def build_report_from_records(spec, capsulectl, profile, generated_at, out_dir, 
 def load_spec(path):
     import yaml
     spec = yaml.safe_load(pathlib.Path(path).read_text())
+    if not isinstance(spec, dict):
+        raise ReportSpecError(f"{path}: must be a YAML mapping, got {type(spec).__name__}")
     if spec.get("spec_version") != "report-spec/v1":
         raise ReportSpecError(f"{path}: spec_version must be report-spec/v1, got {spec.get('spec_version')!r}")
+    for key in ("id", "version", "sources", "claims"):
+        if not spec.get(key):
+            raise ReportSpecError(f"{path}: missing or empty required key {key!r}")
     return spec
 
 

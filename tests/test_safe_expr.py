@@ -48,6 +48,18 @@ class Comparisons(unittest.TestCase):
         self.assertFalse(eval_expr("amount in [1, 2, 3]", {"amount": 9}))
         self.assertTrue(eval_expr("amount not in [1, 2, 3]", {"amount": 9}))
 
+    def test_in_against_a_missing_field_raises_exprerror_not_a_bare_typeerror(self):
+        # desk-review finding: "x in y" where y is a missing (None) field used
+        # to raise an uncaught TypeError instead of this module's own ExprError.
+        with self.assertRaises(ExprError):
+            eval_expr("x in y", {"x": 1})
+        with self.assertRaises(ExprError):
+            eval_expr("x not in y", {"x": 1})
+
+    def test_in_against_a_non_container_value_raises_exprerror(self):
+        with self.assertRaises(ExprError):
+            eval_expr("x in y", {"x": 1, "y": 5})
+
     def test_chained_comparison_is_refused(self):
         with self.assertRaises(ExprError):
             eval_expr("0 < amount < 10", {"amount": 5})
