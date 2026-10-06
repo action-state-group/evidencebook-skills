@@ -71,8 +71,11 @@ mkdir -p "$WORK"
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'report.sh: FAIL -- %s\n' "$*" >&2; exit 1; }
 
-# the day range this report covers
-mapfile -t DATES < <(python3 -c "
+# the day range this report covers. A plain command-substitution assignment
+# (not `mapfile < <(...)`, whose own exit status -- not the process
+# substitution's -- is what `set -e` would see, silently losing a failure
+# from the Python below) so a bad --date/--to actually stops the script here.
+DATES_RAW=$(python3 -c "
 import datetime as d, sys
 a = d.date.fromisoformat(sys.argv[1])
 b = d.date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2] else a
@@ -83,6 +86,7 @@ while cur <= b:
     print(cur.isoformat())
     cur += d.timedelta(days=1)
 " "$DATE" "${TO:-}")
+mapfile -t DATES <<< "$DATES_RAW"
 [[ ${#DATES[@]} -ge 1 ]] || fail "empty date range"
 GENERATED_AT="${DATES[-1]}T23:59:59Z"
 
@@ -141,8 +145,20 @@ if [[ ${#DAY_RESULTS[@]} -eq 1 ]]; then
   RESULT_V0="${DAY_RESULTS[0]}"
 else
   step "merge_results.py: combine ${#DAY_RESULTS[@]} days into one Result v0"
-  TITLE=$(python3 -c "import yaml,sys; print(yaml.safe_load(open(sys.argv[1])).get('title', sys.argv[1]))" "$SPEC" 2>/dev/null \
-    || python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('contract', sys.argv[1]))" "$SPEC")
+  # $MODE (already known, not re-sniffed) picks the field: a report-spec/v1
+  # YAML's own `title`, or a compiled pack contract's `contract` id -- yaml.safe_load
+  # parses well-formed JSON without error (JSON is a YAML subset), so trying the
+  # YAML read first and falling back to JSON on a parse failure never reaches the
+  # JSON branch for a compiled pack (its title key is simply absent, not a parse
+  # error), which silently fell back to the literal $SPEC path. Branching on $MODE
+  # reads the field that actually exists for each kind instead of guessing from
+  # which parse happened not to throw.
+  if [[ "$MODE" == "no-judge" ]]; then
+    # same fallback scripts/report_spec.py's own render_title() uses: title, else id.
+    TITLE=$(python3 -c "import yaml,sys; s=yaml.safe_load(open(sys.argv[1])); print(s.get('title', s['id']))" "$SPEC")
+  else
+    TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
+  fi
   RESULT_V0="$WORK/rollup/result-v0-merged.json"
   python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to ${DATES[-1]}" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
@@ -164,19 +180,28 @@ uncheckpointed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); pr
 BUNDLE="$WORK/bundle.json"
 
 if [[ "$MODE" == "judged" ]]; then
+  # The pack-compiler convention (scripts/pack_compile.py): a compiled.json
+  # always has a presentation.json beside it. `${SPEC/compiled.json/presentation.json}`
+  # is a no-op (equals $SPEC itself) for any --spec not literally named
+  # "compiled.json" -- guarded explicitly rather than relying on an unlikely
+  # coincidence, so a differently-named contract skips this step cleanly
+  # instead of trying to read its own compiled.json as a presentation file.
   PRESENTATION_JSON="${SPEC/compiled.json/presentation.json}"
-  if [[ -f "$PRESENTATION_JSON" ]]; then
+  if [[ "$PRESENTATION_JSON" != "$SPEC" && -f "$PRESENTATION_JSON" ]]; then
     step "wire the pack's own outcome-invoice/v1 presentation extension into the bundle"
     BUNDLE="$WORK/bundle-with-invoice.json"
     python3 -c "
 import json, sys
 bundle_path, pres_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
 bundle = json.load(open(bundle_path))
-presentation = json.load(open(pres_path))['outcome-invoice/v1']
-bundle.setdefault('extensions', {})['outcome-invoice/v1'] = {
-    'enabled': True, 'percentages': presentation['percentages'],
-    'price_per_resolved': presentation['price_per_resolved'],
-}
+presentation = (json.load(open(pres_path)) or {}).get('outcome-invoice/v1')
+if presentation is None:
+    print(f'report.sh: {pres_path} carries no outcome-invoice/v1 block -- skipping', file=sys.stderr)
+else:
+    bundle.setdefault('extensions', {})['outcome-invoice/v1'] = {
+        'enabled': True, 'percentages': presentation['percentages'],
+        'price_per_resolved': presentation['price_per_resolved'],
+    }
 json.dump(bundle, open(out_path, 'w'))
 " "$WORK/bundle.json" "$PRESENTATION_JSON" "$BUNDLE"
   fi

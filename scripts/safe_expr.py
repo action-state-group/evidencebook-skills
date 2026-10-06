@@ -51,6 +51,8 @@ def _node_eval(node, row):
         left, right = _node_eval(node.left, row), _node_eval(node.right, row)
         if left is None or right is None:
             raise ExprError("arithmetic over a field this row does not carry (None)")
+        if isinstance(node.op, (ast.Div, ast.Mod)) and right == 0:
+            raise ExprError(f"division by zero ({left!r} {'%' if isinstance(node.op, ast.Mod) else '/'} 0)")
         ops = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
                ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b, ast.Mod: lambda a, b: a % b}
         return ops[type(node.op)](left, right)
@@ -65,10 +67,18 @@ def _node_eval(node, row):
             return left == right
         if isinstance(op, ast.NotEq):
             return left != right
-        if isinstance(op, ast.In):
-            return left in right
-        if isinstance(op, ast.NotIn):
-            return left not in right
+        if isinstance(op, (ast.In, ast.NotIn)):
+            # right is the container (a List/Tuple literal in practice, so
+            # usually safe) -- but a row-derived `right` (e.g. a missing field
+            # evaluating to None, or a non-container value) makes `in` raise a
+            # bare, uncaught TypeError instead of this module's own ExprError,
+            # breaking the "a spec bug fails the run closed" promise every
+            # caller relies on (desk-review finding, this job).
+            try:
+                found = left in right
+            except TypeError as e:
+                raise ExprError(f"'in'/'not in' against a non-container value ({right!r}): {e}") from e
+            return found if isinstance(op, ast.In) else not found
         if left is None or right is None:
             raise ExprError("ordering comparison over a field this row does not carry (None)")
         if isinstance(op, ast.Lt):
