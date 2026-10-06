@@ -59,8 +59,8 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from capsulectl_calls import (EvidenceUnavailable, committed_on, list_capsules, payload,  # noqa: E402
-                              publish, run, seal_request, verify)
+from capsulectl_calls import (EvidenceUnavailable, case_id_of, committed_on, list_capsules,  # noqa: E402
+                              payload, publish, run, seal_request, verify)
 from judge_pin import DEFAULT_JUDGE_TIMEOUT, describe_judge, pin_input as build_pin_input  # noqa: E402
 from recompute import RECOMPUTE_CHECKS, RECOMPUTE_PRECHECKS  # noqa: E402
 from rollup import RETIRED_NOT_APPLICABLE, RETIRED_NOT_APPLICABLE_REASON  # noqa: E402
@@ -336,8 +336,7 @@ def main(argv):
         stamp = f"{day}T23:59:59Z"
         for capsule_id, body in cases:
             verify(ctl, profile, capsule_id, work)
-            c = body["case"]
-            case_id = f"{c['benchmark']}:{c['domain']}:task-{c['task_id']}:trial-{c['trial']}"
+            case_id = case_id_of(body["case"])
 
             answers, prechecked = case_answers(body, spec, switches, root, args.judge_cmd, args.judge_model_id,
                                                allow_out_of_scope, judge_batch_mode, min_confidence,

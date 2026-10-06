@@ -1,0 +1,99 @@
+# report-spec/v1 -- tau2 airline support, report from records, NO JUDGE.
+#
+# Every claim below is computed deterministically from the sealed conversation
+# records themselves (tool calls and their results) -- no rubric, no Jev, no
+# mock judge backend. Run with:
+#
+#   python3 scripts/report_spec.py --profile NAME \
+#       --spec scripts/specs/tau2-airline-no-judge.yaml \
+#       --capsulectl capsulectl --generated-at <RFC3339> --out RUN_DIR/rollup
+#
+# See scripts/report_spec.py's own module docstring for the full spec shape.
+spec_version: report-spec/v1
+id: tau2-airline-no-judge
+version: 1
+title: "Tau2 airline support -- report from records, no judge"
+group_by: day
+
+sources:
+  # One row per sealed conversation.
+  - name: conversations
+    kind: case
+    fields:
+      domain: case.domain
+
+  # One row per cancel_reservation tool call in those conversations, carrying
+  # the result's own fields (reservation_id, cabin, insurance, payment_history,
+  # ...) verbatim.
+  - name: cancel_results
+    kind: tool_result
+    from: conversations
+    tool_name: cancel_reservation
+
+  # One row per payment_history entry on a cancelled reservation that is
+  # itself a refund (amount < 0), each carrying __has_offset_match: whether
+  # some OTHER entry in that SAME reservation's payment_history carries the
+  # exact charge this refund offsets.
+  - name: refund_entries
+    kind: flatten
+    from: cancel_results
+    path: payment_history
+    match_offsets_field: amount
+    where: "amount < 0"
+
+metrics:
+  - name: conversation_count
+    source: conversations
+    op: count
+  - name: cancellation_count
+    source: cancel_results
+    op: count
+  - name: refund_count
+    source: refund_entries
+    op: count
+  - name: total_refunded
+    source: refund_entries
+    op: sum
+    field: amount
+    abs: true
+  - name: tool_call_count
+    source: conversations
+    op: sum
+    field: tool_call_count
+
+claims:
+  # A threshold claim, referencing two metrics computed for the same group.
+  - id: cancellation_volume_bounded
+    description: >-
+      no more conversations end in a cancellation than there were
+      conversations that day
+    kind: threshold
+    metric: cancellation_count
+    op: "<="
+    value: conversation_count
+
+  # A forall claim over the base conversation rows.
+  - id: every_conversation_has_tool_activity
+    description: "every conversation recorded at least one tool call"
+    kind: forall
+    source: conversations
+    assert: "tool_call_count > 0"
+
+  # A forall claim over a cross-record (ledger-reconciliation) derived field:
+  # "every refund amount stated equals the payment record" -- every refund
+  # entry a cancellation produced exactly offsets an earlier charge of the
+  # same amount in that reservation's own payment_history.
+  - id: refund_amount_matches_payment_record
+    description: >-
+      every refund recorded in a reservation's payment_history exactly
+      offsets an earlier charge of the same amount in that same reservation
+    kind: forall
+    source: refund_entries
+    assert: __has_offset_match
+
+presentation:
+  card: outcome
+  title_template: >-
+    {title} -- {period}: {conversation_count} conversations,
+    {cancellation_count} cancellations, {refund_count} refunds totaling
+    ${total_refunded}, {tool_call_count} tool calls
