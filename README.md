@@ -31,6 +31,37 @@ way.
   and `demo/backfill/` (operator-side data-prep mapping shipped tau2 runs into
   seal requests). The compiler ignores this folder when compiling.
 
+## Report from records: one command to `report.html`
+
+`scripts/report.sh` is the single entry point for turning an already-set-up
+book into a rendered report — either a **judged** report (Jev against a
+compiled pack's rubric) or a **no-judge** report (every claim computed
+deterministically from the sealed records themselves, via a declarative
+`report-spec/v1` YAML, `scripts/report_spec.py`). `--spec`'s own content
+picks the path; nothing else to choose:
+
+```console
+# no judge -- a report-spec/v1 YAML, e.g. scripts/specs/tau2-airline-no-judge.yaml
+$ scripts/report.sh --spec scripts/specs/tau2-airline-no-judge.yaml \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
+
+# judged -- a compiled pack contract, e.g. demo/airline-support-outcomes/compiled.json
+$ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
+```
+
+Both converge on the same tail (`capsulectl result build` → checkpoint →
+`disclose` → `report build`). `--date`/`--to` take a day range; more than one
+day's `result-v0-*.json` is merged into one Result v0
+(`scripts/merge_results.py`) before the tail runs. See
+`scripts/report_spec.py`'s own module docstring for the full report-spec
+shape (sources, grouping, metrics, threshold/forall claims), and
+`scripts/specs/tau2-airline-no-judge.yaml` /
+`scripts/specs/mesh-llm-settlement-draft.yaml` (a labelled DRAFT, pending
+mesh-llm's own export format) for two worked examples. `--profile` names an
+already set-up book (`scripts/outcomes_setup.sh` builds one from this repo's
+own tau2 demo data); `report.sh` only builds the report from it.
+
 ## Boundaries
 
 The compiler is the only editable source of evaluation instructions. Generated

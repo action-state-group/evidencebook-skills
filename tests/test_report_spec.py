@@ -9,16 +9,18 @@ evaluation, isolated from I/O).
 """
 import datetime
 import pathlib
+import shutil
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
 from report_spec import (ReportSpecError, apply_field_projections, build_documents,  # noqa: E402
-                          compute_metric, contract_ref, evaluate_group, extract_flatten_rows,
-                          extract_tool_result_rows, get_path, render_title, safe_filename,
-                          select_record_rows)
+                          build_rows, compute_metric, contract_ref, evaluate_group,
+                          extract_flatten_rows, extract_tool_result_rows, get_path, load_spec,
+                          render_title, safe_filename, select_record_rows)
 from safe_expr import ExprError  # noqa: E402
 
 
@@ -302,6 +304,64 @@ class EvaluateGroup(unittest.TestCase):
         with self.assertRaises(ReportSpecError):
             evaluate_group(spec, "d1", {"conversations": []}, "day")
 
+    def test_threshold_claim_digests_exclude_rows_the_metrics_own_where_filtered_out(self):
+        # desk-review finding: a threshold claim over a `where`-filtered metric
+        # must cite only the rows the metric actually aggregated, not every row
+        # of that source in the group -- the module's own docstring promises
+        # claims "cite the capsule ids of the records it was computed from."
+        spec = {
+            "sources": [{"name": "exchanges", "kind": "record"}],
+            "metrics": [
+                {"name": "served_count", "source": "exchanges", "op": "count",
+                 "where": "direction == 'served'"},
+                {"name": "all_count", "source": "exchanges", "op": "count"},
+            ],
+            "claims": [{"id": "bounded", "kind": "threshold", "metric": "served_count", "op": "<=",
+                        "value": "all_count"}],
+        }
+        rows_by_name = {
+            "exchanges": [
+                {"day": "d1", "__capsule_id": "served-1", "direction": "served"},
+                {"day": "d1", "__capsule_id": "consumed-1", "direction": "consumed"},
+            ],
+        }
+        _, digests, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(digests["bounded"], ["served-1"])
+
+    def test_a_misspelled_metric_source_fails_closed_not_silently_zero(self):
+        # desk-review finding: group_rows.get(m["source"], []) let a typo'd
+        # source name silently compute over zero rows -- indistinguishable
+        # from a real "no data" finding. Every other name reference in this
+        # engine (from:, claim source/metric, claim kind) already fails closed.
+        spec = dict(self.SPEC, metrics=[{"name": "x", "source": "conversaton", "op": "count"}])
+        with self.assertRaisesRegex(ReportSpecError, "unknown source"):
+            evaluate_group(spec, "d1", {"conversations": []}, "day")
+
+    def test_an_unknown_forall_source_fails_closed(self):
+        spec = dict(self.SPEC, claims=[{"id": "x", "kind": "forall", "source": "nope", "assert": "True"}])
+        with self.assertRaisesRegex(ReportSpecError, "unknown source"):
+            evaluate_group(spec, "d1", {"conversations": []}, "day")
+
+    def test_division_by_zero_in_a_threshold_value_expression_fails_closed(self):
+        spec = {
+            "sources": [{"name": "conversations", "kind": "case"}],
+            "metrics": [
+                {"name": "total", "source": "conversations", "op": "count"},
+                {"name": "zero", "source": "conversations", "op": "count", "where": "False"},
+            ],
+            "claims": [{"id": "x", "kind": "threshold", "metric": "total", "op": "<=",
+                        "value": "total / zero"}],
+        }
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1"}]}
+        with self.assertRaises(ReportSpecError):
+            evaluate_group(spec, "d1", rows_by_name, "day")
+
+    def test_a_bad_where_clause_on_a_metric_fails_closed_with_context(self):
+        spec = dict(self.SPEC, metrics=[{"name": "x", "source": "conversations", "op": "count",
+                                          "where": "tool_call_count["}])
+        with self.assertRaisesRegex(ReportSpecError, "where"):
+            evaluate_group(spec, "d1", {"conversations": [{"day": "d1"}]}, "day")
+
 
 class BuildDocuments(unittest.TestCase):
     SPEC = {
@@ -366,6 +426,69 @@ class SafeFilename(unittest.TestCase):
 
     def test_ordinary_group_key_is_readable(self):
         self.assertEqual(safe_filename("2026-09-23"), "2026-09-23")
+
+
+class BuildRowsToolResultKindValidation(unittest.TestCase):
+    """desk-review finding: a `tool_result` source chained off a non-`case`
+    `from:` used to silently yield zero rows forever (no __messages field to
+    read) instead of failing closed."""
+
+    def test_tool_result_from_a_record_source_fails_closed(self):
+        spec = {
+            "sources": [
+                {"name": "exchanges", "kind": "record"},
+                {"name": "calls", "kind": "tool_result", "from": "exchanges", "tool_name": "x"},
+            ],
+        }
+        with mock.patch("report_spec.select_record_rows", return_value=[{"day": "d1", "__capsule_id": "c1"}]):
+            with self.assertRaisesRegex(ReportSpecError, "kind: case"):
+                build_rows(spec, "capsulectl", "profile")
+
+    def test_tool_result_from_a_case_source_is_accepted(self):
+        spec = {
+            "sources": [
+                {"name": "conversations", "kind": "case"},
+                {"name": "calls", "kind": "tool_result", "from": "conversations", "tool_name": "x"},
+            ],
+        }
+        with mock.patch("report_spec.select_case_rows",
+                         return_value=[{"day": "d1", "__capsule_id": "c1", "__messages": []}]):
+            rows = build_rows(spec, "capsulectl", "profile")
+        self.assertEqual(rows["calls"], [])
+
+
+class LoadSpec(unittest.TestCase):
+    def _write(self, tmp_path, text):
+        path = tmp_path / "spec.yaml"
+        path.write_text(text)
+        return path
+
+    def test_missing_required_keys_fail_closed(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-load-spec-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = self._write(tmp, "spec_version: report-spec/v1\nid: x\nversion: 1\n")
+        with self.assertRaisesRegex(ReportSpecError, "missing or empty required key"):
+            load_spec(path)
+
+    def test_non_mapping_yaml_fails_closed(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-load-spec-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = self._write(tmp, "- a\n- b\n")
+        with self.assertRaisesRegex(ReportSpecError, "must be a YAML mapping"):
+            load_spec(path)
+
+    def test_a_complete_spec_loads(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-load-spec-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = self._write(tmp, """
+spec_version: report-spec/v1
+id: x
+version: 1
+sources: [{name: conversations, kind: case}]
+claims: [{id: has_activity, kind: forall, source: conversations, assert: "True"}]
+""")
+        spec = load_spec(path)
+        self.assertEqual(spec["id"], "x")
 
 
 if __name__ == "__main__":
