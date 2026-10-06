@@ -1,0 +1,92 @@
+# report-spec/v1 -- mesh-llm node settlement/accounting, DRAFT.
+#
+# *** DRAFT, pending mesh-llm's real export format. ***
+#
+# This is the shape a mesh-llm settlement report would take over this engine
+# -- what a node served, what it earned, what it paid other peers, grouped by
+# peer and by day -- NOT a working spec against real data: mesh-llm has no
+# shipped sealed-record schema yet, so every field name and the `record_type`
+# value below (`mesh-settlement-exchange/v1`) is this job's own placeholder,
+# invented to give the shape something concrete to read, not a name mesh-llm
+# has committed to. Nothing in evidencebook-skills' tests runs this spec
+# against a live book; scripts/report_spec.py's own engine (select_record_rows,
+# the `fields:`/`join` projection, evaluate_group) is exercised instead with
+# synthetic rows shaped like this draft's own record (tests/test_report_spec.py,
+# and this job's BUILD.md section on the mesh-llm draft), which is as far as
+# "it fits the format" can be demonstrated before a real export exists.
+#
+# What this draft assumes a node's own sealed exchange record carries, once
+# mesh-llm has one (each exchange sealed on BOTH sides -- a node's own book
+# carries its half; the counterparty's digest, when known, is the link to the
+# other side's own sealed copy, the bilateral-seal the auditor/CFO relying
+# party is checking for):
+#
+#   record_type: mesh-settlement-exchange/v1
+#   peer: {id: <counterparty node id>}
+#   direction: served | consumed       # this node served the peer (earned),
+#                                      # or consumed the peer's service (paid)
+#   amount_cents: <int>                # earned (direction: served) or paid
+#                                      # (direction: consumed), minor units
+#   tokens_served: <int, present only when direction: served>
+#   counterparty_seal_digest: <sha256 hex, or null if not yet linked>
+#
+spec_version: report-spec/v1
+id: mesh-llm-settlement-draft
+version: 1
+title: "Mesh-llm node settlement -- served / earned / paid per peer per day (DRAFT)"
+group_by: peer_day
+
+sources:
+  - name: exchanges
+    kind: record
+    match:
+      record_type: mesh-settlement-exchange/v1
+    fields:
+      peer_id: peer.id
+      direction: direction
+      amount_cents: amount_cents
+      tokens_served: tokens_served
+      counterparty_seal_digest: counterparty_seal_digest
+      # "day" is this engine's own built-in (the day the exchange was sealed
+      # on this node's book) -- peer_id must be projected above it in this
+      # mapping so the join below can read it back.
+      peer_day: {join: [peer_id, day], sep: "/"}
+
+metrics:
+  - name: exchange_count
+    source: exchanges
+    op: count
+  - name: tokens_served_total
+    source: exchanges
+    op: sum
+    field: tokens_served
+    where: "direction == 'served'"
+  - name: earned_cents
+    source: exchanges
+    op: sum
+    field: amount_cents
+    where: "direction == 'served'"
+  - name: paid_cents
+    source: exchanges
+    op: sum
+    field: amount_cents
+    where: "direction == 'consumed'"
+
+claims:
+  # The settlement-specific deterministic claim this use case needs: every
+  # exchange this node sealed names the counterparty's own matching seal --
+  # the bilateral link an auditor/CFO relying party checks for, computed
+  # purely from the record's own counterparty_seal_digest field, no judgment.
+  - id: bilateral_seal_present
+    description: >-
+      every settlement exchange this node sealed names the digest of the
+      counterparty's own matching seal on their side of the same exchange
+    kind: forall
+    source: exchanges
+    assert: "counterparty_seal_digest != None"
+
+presentation:
+  card: settlement
+  title_template: >-
+    {title} -- {period}: {exchange_count} exchanges, {tokens_served_total}
+    tokens served, ${earned_cents} earned (cents), ${paid_cents} paid (cents)
