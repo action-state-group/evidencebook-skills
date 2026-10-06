@@ -268,15 +268,43 @@ def extract_tool_result_rows(parent_rows, tool_name, fields=None):
     return out
 
 
+_NUMERIC_TYPES = (int, float)
+
+
+def _offset_matches(amounts):
+    """One bool per entry of `amounts`: whether it pairs one-to-one with some
+    OTHER entry carrying its negation, each entry consumed by at most one
+    pairing. A greedy bipartite match, not a mere existence check: an
+    existence check (claude-security finding, this job, CWE-697 -- a real,
+    panel-confirmed bug in an earlier version of this function) let TWO
+    refunds of the same magnitude both "match" a single charge, since each
+    independently found the same unconsumed charge entry. Non-numeric or
+    bool entries (JSON permits either where a ledger amount is expected) are
+    never matched, never compared with `-`, and never crash the match --
+    they simply read as unreconciled, consistent with "absent is never
+    pass": a malformed ledger entry is not reconciled evidence."""
+    numeric = [isinstance(a, _NUMERIC_TYPES) and not isinstance(a, bool) for a in amounts]
+    matched = [False] * len(amounts)
+    for i in range(len(amounts)):
+        if matched[i] or not numeric[i]:
+            continue
+        for j in range(len(amounts)):
+            if j == i or matched[j] or not numeric[j]:
+                continue
+            if amounts[j] == -amounts[i]:
+                matched[i] = matched[j] = True
+                break
+    return matched
+
+
 def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None):
     """One row per entry of the list at `path` on each parent row, carrying
     the parent's scalar fields plus the entry's own. `match_offsets_field`,
-    when given, computes __has_offset_match: true when some OTHER entry in
-    THE SAME parent list carries the negated value of this entry's own
-    `match_offsets_field` -- a generic ledger-reconciliation primitive, not
-    specific to any one domain's field names. `where` (a safe_expr string,
-    evaluated per candidate row, AFTER __has_offset_match is set so it can
-    read it) keeps only matching entries."""
+    when given, computes __has_offset_match via _offset_matches() -- a
+    generic ledger-reconciliation primitive, not specific to any one
+    domain's field names. `where` (a safe_expr string, evaluated per
+    candidate row, AFTER __has_offset_match is set so it can read it) keeps
+    only matching entries."""
     out = []
     for prow in parent_rows:
         items = prow.get(path)
@@ -285,16 +313,14 @@ def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None
         carried = _scalars_only(prow)
         amounts = [it.get(match_offsets_field) if isinstance(it, dict) else None for it in items] \
             if match_offsets_field else None
+        offset_matches = _offset_matches(amounts) if match_offsets_field is not None else None
         for i, item in enumerate(items):
             if not isinstance(item, dict):
                 continue
             row = dict(carried)
             row.update(_scalars_only(item))
             if match_offsets_field is not None:
-                value = item.get(match_offsets_field)
-                row["__has_offset_match"] = (
-                    value is not None and any(j != i and amounts[j] == -value for j in range(len(amounts)))
-                )
+                row["__has_offset_match"] = offset_matches[i]
             try:
                 keep = where is None or eval_expr(where, row)
             except ExprError as e:

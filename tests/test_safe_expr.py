@@ -91,6 +91,25 @@ class Arithmetic(unittest.TestCase):
         with self.assertRaises(ExprError):
             eval_expr("a + 1", {})
 
+    def test_arithmetic_over_incompatible_types_raises_exprerror_not_typeerror(self):
+        # claude-security finding, this job: a sealed record's field can be
+        # any JSON scalar type -- "amount": "n/a" where a spec expects a
+        # number used to crash with a bare TypeError.
+        with self.assertRaises(ExprError):
+            eval_expr("a + 1", {"a": "n/a"})
+        with self.assertRaises(ExprError):
+            eval_expr("a / 2", {"a": "n/a"})
+
+    def test_ordering_over_incompatible_types_raises_exprerror_not_typeerror(self):
+        with self.assertRaises(ExprError):
+            eval_expr("a < 1", {"a": "n/a"})
+        with self.assertRaises(ExprError):
+            eval_expr("a >= 1", {"a": "n/a"})
+
+    def test_unary_minus_over_a_non_numeric_value_raises_exprerror(self):
+        with self.assertRaises(ExprError):
+            eval_expr("-a", {"a": "n/a"})
+
 
 class Refusals(unittest.TestCase):
     def test_calls_are_refused(self):
