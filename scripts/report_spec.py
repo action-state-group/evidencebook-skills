@@ -383,7 +383,10 @@ def compute_metric(metric, rows):
         return len(rows)
     if metric["op"] == "sum":
         field = metric["field"]
-        total = sum((r.get(field) or 0) for r in rows)
+        try:
+            total = sum((r.get(field) or 0) for r in rows)
+        except TypeError as e:
+            raise ReportSpecError(f"metric {metric['name']!r}: field {field!r} is not numeric on some row: {e}") from e
         return abs(total) if metric.get("abs") else total
     raise ReportSpecError(f"metric {metric['name']!r}: unknown op {metric['op']!r}")
 
