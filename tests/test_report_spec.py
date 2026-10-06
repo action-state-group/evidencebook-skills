@@ -17,10 +17,10 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
-from report_spec import (ReportSpecError, apply_field_projections, build_documents,  # noqa: E402
-                          build_rows, compute_metric, contract_ref, evaluate_group,
-                          extract_flatten_rows, extract_tool_result_rows, get_path, load_spec,
-                          render_title, safe_filename, select_record_rows)
+from report_spec import (ReportSpecError, _offset_matches, apply_field_projections,  # noqa: E402
+                          build_documents, build_rows, compute_metric, contract_ref,
+                          evaluate_group, extract_flatten_rows, extract_tool_result_rows,
+                          get_path, load_spec, render_title, safe_filename, select_record_rows)
 from safe_expr import ExprError  # noqa: E402
 
 
@@ -196,6 +196,51 @@ class ExtractFlattenRows(unittest.TestCase):
         rows = extract_flatten_rows(parent, "payment_history")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["amount"], 3)
+
+    def test_two_refunds_of_the_same_amount_do_not_both_match_one_charge(self):
+        # claude-security finding, this job (CWE-697): the offset-match used
+        # to be a pure existence check, so two -100 refunds against a single
+        # +100 charge both independently "found" it and both read as matched.
+        # Only one may actually be legitimately offset by that one charge.
+        parent = [{"__capsule_id": "cap1",
+                   "payment_history": [{"payment_id": "p1", "amount": 100},
+                                       {"payment_id": "p2", "amount": -100},
+                                       {"payment_id": "p3", "amount": -100}]}]
+        rows = extract_flatten_rows(parent, "payment_history", match_offsets_field="amount")
+        matched = [r["__has_offset_match"] for r in rows]
+        self.assertEqual(matched.count(True), 2)  # the one charge + the one refund it covers
+        self.assertEqual(matched.count(False), 1)  # the second, unmatched refund
+
+    def test_two_charges_and_two_refunds_all_pair_off(self):
+        parent = [{"__capsule_id": "cap1",
+                   "payment_history": [{"amount": 100}, {"amount": 50},
+                                       {"amount": -100}, {"amount": -50}]}]
+        rows = extract_flatten_rows(parent, "payment_history", match_offsets_field="amount")
+        self.assertTrue(all(r["__has_offset_match"] for r in rows))
+
+    def test_non_numeric_amount_never_matches_and_never_crashes(self):
+        parent = [{"__capsule_id": "cap1",
+                   "payment_history": [{"amount": "n/a"}, {"amount": -100}]}]
+        rows = extract_flatten_rows(parent, "payment_history", match_offsets_field="amount")
+        self.assertEqual([r["__has_offset_match"] for r in rows], [False, False])
+
+
+class OffsetMatches(unittest.TestCase):
+    def test_simple_pair(self):
+        self.assertEqual(_offset_matches([100, -100]), [True, True])
+
+    def test_one_to_one_not_many_to_one(self):
+        self.assertEqual(_offset_matches([100, -100, -100]).count(True), 2)
+
+    def test_unmatched_entry_is_false(self):
+        self.assertEqual(_offset_matches([100, -50]), [False, False])
+
+    def test_bool_is_never_treated_as_numeric(self):
+        # isinstance(True, int) is True in Python -- explicitly excluded.
+        self.assertEqual(_offset_matches([True, -1]), [False, False])
+
+    def test_empty_list(self):
+        self.assertEqual(_offset_matches([]), [])
 
 
 class ComputeMetric(unittest.TestCase):
