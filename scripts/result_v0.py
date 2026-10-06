@@ -329,3 +329,55 @@ def headline_from_result(document):
         by_case.setdefault(case_id, []).append(claim["verdict"])
     return {"cases": len(by_case),
             "resolved": sum(1 for verdicts in by_case.values() if all(v == "met" for v in verdicts))}
+
+
+def merge_result_v0_documents(docs, title, generated_at):
+    """Combine several already-built Result v0 documents (e.g. one per day
+    over a --date/--to range, from either scripts/rollup_day.py's judged path
+    or scripts/report_spec.py's no-judge path -- this function does not care
+    which) into ONE Result v0 document spanning all of them: `report build`
+    takes exactly one sealed Result as its bundle's root, so a multi-day
+    report needs its days combined before `result build` ever sees them, not
+    multiple separate bundles.
+
+    Concatenates every document's claims[] (fails closed -- RollupError -- if
+    two documents share a claim id, which would mean two different inputs
+    both computed a verdict for what the schema's own closed id space treats
+    as the same claim, or if they don't all share one contract_ref, which
+    would mean mixing results from two different contracts/specs into one
+    document) and recomputes aggregate.coverage/buckets from the merged
+    claims list directly -- never by summing the inputs' own aggregate
+    blocks, so a bug in how an input computed its own aggregate can't survive
+    into the merge undetected."""
+    docs = list(docs)
+    if not docs:
+        raise RollupError("merge_result_v0_documents needs at least one document")
+    contract_refs = {c["contract_ref"] for d in docs for c in d["claims"]}
+    if len(contract_refs) > 1:
+        raise RollupError(f"documents carry more than one contract_ref: {sorted(contract_refs)!r}")
+    claims = [c for d in docs for c in d["claims"]]
+    seen = set()
+    dupes = sorted({c["id"] for c in claims if c["id"] in seen or seen.add(c["id"])})
+    if dupes:
+        raise RollupError(f"documents share claim id(s): {dupes!r}")
+    buckets = {"met": [], "not_met": [], "not_evaluable": []}
+    for c in claims:
+        buckets[c["verdict"]].append(c["id"])
+    excluded_not_applicable = sum(d["aggregate"]["coverage"]["excluded_not_applicable"] for d in docs)
+    return {
+        "result_version": "evidence-result-v0",
+        "generated_at": generated_at,
+        "claims": claims,
+        "aggregate": {
+            "coverage": {
+                "evaluated_population": len(claims),
+                "excluded_not_applicable": excluded_not_applicable,
+                "unknown_count": 0,
+            },
+            "buckets": buckets,
+        },
+        "view": {
+            "spec_version": "presentation/v1",
+            "title": title,
+        },
+    }
