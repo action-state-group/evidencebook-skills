@@ -73,7 +73,10 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     criterion, when known -- cited in evidence[] but never inline. Either one
     digest (a string, every existing caller's shape) or several (a list/tuple --
     scripts/judge_bundle.py's whole-bundle mode, which judges every disclosed
-    record in one request and cites every one it actually used, not just one).
+    record in one request and cites every one it actually used, not just one;
+    and scripts/report_spec.py's deterministic (tier: recomputed) claims over a
+    GROUP of records, which cite every contributing capsule). A set is accepted
+    too (ordered as given by iteration).
 
     `judge_pin_digest`/`judge_pin` are the model identity a judged claim carries
     (a `judged` claim needs a code/model identity, not only the policy digest a
@@ -120,7 +123,12 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         raise RollupError(f"not a verdict: {verdict!r}")
     sufficiency = "GAP" if verdict == "not_evaluable" else "SATISFIED"
     disclosure_status = "INSUFFICIENT" if verdict == "not_evaluable" else "SATISFIED"
-    digests = report_digest if isinstance(report_digest, (list, tuple)) else ([report_digest] if report_digest else [])
+    if not report_digest:
+        digests = []
+    elif isinstance(report_digest, (list, tuple, set)):
+        digests = list(report_digest)
+    else:
+        digests = [report_digest]
     evidence = [_digest_ref(d) for d in digests if d]
     if source_capsule_id and source_capsule_id not in digests:
         evidence.append(_digest_ref(source_capsule_id))
