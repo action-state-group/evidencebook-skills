@@ -249,10 +249,12 @@ def select_record_rows(capsulectl, profile, match=None, fields=None, date_from=N
 
 def extract_tool_result_rows(parent_rows, tool_name, fields=None):
     """One row per matching tool call in each parent (case) row: the parsed
-    result's own fields, plus the parent's carried scalars (case_id, day,
-    __capsule_id) and `__messages` (needed only so a further `flatten` source
-    can still see this row's own raw list fields; stripped by `_scalars_only`
-    before anything reaches a safe_expr claim)."""
+    result's own fields, plus the parent's carried SCALARS ONLY (case_id,
+    day, __capsule_id) -- `_scalars_only` drops the parent's own
+    `__messages` (and any other list/dict field) before it ever reaches this
+    row, so a safe_expr claim never sees it. A further `flatten` source
+    reads its own raw list fields straight out of `result`/`row`, not from
+    a carried `__messages`."""
     fields = fields or {}
     out = []
     for i, prow in enumerate(parent_rows):
