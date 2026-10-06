@@ -40,7 +40,10 @@ def _node_eval(node, row):
         if isinstance(node.op, ast.Not):
             return not operand
         if isinstance(node.op, ast.USub):
-            return -operand
+            try:
+                return -operand
+            except TypeError as e:
+                raise ExprError(f"unary '-' over a non-numeric value ({operand!r}): {e}") from e
         raise ExprError(f"unsupported unary operator: {type(node.op).__name__}")
     if isinstance(node, ast.BoolOp):
         values = [_node_eval(v, row) for v in node.values]
@@ -55,7 +58,14 @@ def _node_eval(node, row):
             raise ExprError(f"division by zero ({left!r} {'%' if isinstance(node.op, ast.Mod) else '/'} 0)")
         ops = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b,
                ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b, ast.Mod: lambda a, b: a % b}
-        return ops[type(node.op)](left, right)
+        try:
+            return ops[type(node.op)](left, right)
+        except TypeError as e:
+            # A sealed record's field can be any JSON scalar type -- a row
+            # value this arithmetic expects numeric but finds a str/list/dict
+            # (claude-security finding, this job, CWE-754) must fail closed
+            # as ExprError, not an uncaught TypeError.
+            raise ExprError(f"arithmetic over incompatible types ({left!r}, {right!r}): {e}") from e
     if isinstance(node, ast.Compare):
         if len(node.ops) != 1 or len(node.comparators) != 1:
             raise ExprError("chained comparisons are not supported")
@@ -81,14 +91,14 @@ def _node_eval(node, row):
             return found if isinstance(op, ast.In) else not found
         if left is None or right is None:
             raise ExprError("ordering comparison over a field this row does not carry (None)")
-        if isinstance(op, ast.Lt):
-            return left < right
-        if isinstance(op, ast.LtE):
-            return left <= right
-        if isinstance(op, ast.Gt):
-            return left > right
-        if isinstance(op, ast.GtE):
-            return left >= right
+        ordering = {ast.Lt: lambda a, b: a < b, ast.LtE: lambda a, b: a <= b,
+                    ast.Gt: lambda a, b: a > b, ast.GtE: lambda a, b: a >= b}
+        try:
+            return ordering[type(op)](left, right)
+        except TypeError as e:
+            # Same incompatible-types gap as the BinOp branch above, for
+            # <, <=, >, >= (claude-security finding, this job, CWE-754).
+            raise ExprError(f"ordering comparison over incompatible types ({left!r}, {right!r}): {e}") from e
     raise ExprError(f"unsupported expression node: {type(node).__name__}")
 
 
