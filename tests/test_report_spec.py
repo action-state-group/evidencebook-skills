@@ -267,6 +267,11 @@ class ComputeMetric(unittest.TestCase):
         with self.assertRaises(ReportSpecError):
             compute_metric({"name": "n", "op": "average"}, self.ROWS)
 
+    def test_sum_over_a_non_numeric_field_fails_closed(self):
+        rows = [{"amount": 10}, {"amount": "n/a"}]
+        with self.assertRaises(ReportSpecError):
+            compute_metric({"name": "n", "op": "sum", "field": "amount"}, rows)
+
 
 class EvaluateGroup(unittest.TestCase):
     SPEC = {
