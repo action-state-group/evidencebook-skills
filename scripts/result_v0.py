@@ -351,7 +351,7 @@ def merge_result_v0_documents(docs, title, generated_at):
     verbatim -- a bug in how an input computed those can't survive into the
     merge undetected. The one exception, by necessity rather than choice:
     aggregate.coverage.excluded_not_applicable is SUMMED from the inputs'
-    own values, because a not_applicable criterion gets NO claim object at
+    own values, because an out_of_scope criterion gets NO claim object at
     all (scripts/result_v0.py's own module docstring) -- there is nothing
     in claims[] for this function to recompute that count FROM. A bad
     excluded_not_applicable in one input's own aggregate does survive into
