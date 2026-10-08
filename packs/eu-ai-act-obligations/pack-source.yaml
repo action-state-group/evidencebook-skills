@@ -49,9 +49,11 @@ judge:
 
 judge_batch: true
 judge_batch_note: >
-  One judge-cmd call per session for its judged clauses (art5, art50j,
-  art26j) -- the same batching packs/airline-support-outcomes/pack-source.yaml
-  turns on: one request per conversation, not one per criterion.
+  One judge-cmd call per session for its judged clauses (art5's
+  no_manipulation_or_deception, art50's disclosure_clear_or_obvious, art26's
+  consequential_actions_vs_instructions) -- the same batching
+  packs/airline-support-outcomes/pack-source.yaml turns on: one request per
+  conversation, not one per criterion.
 
 checks:
   - id: art5
