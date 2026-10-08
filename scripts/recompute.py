@@ -45,7 +45,10 @@ wrong in a conversation that never touched a cancellation, a basic-economy chang
 certificate.
 
 Known, flagged gaps -- real limits of what tau2's tool-call shapes carry, not bugs in
-the logic over what they do carry:
+the logic over what they do carry. Both gaps below live in _check_cancellation and
+_check_certificate, so they apply equally to check_allowed_action_rules's
+art26.allowed_action_rules row, which calls those same two functions rather than
+re-deriving them (see check_allowed_action_rules's own docstring):
 
 - The fourth cancellation condition ("the user has travel insurance and the reason for
   cancellation is covered") needs the stated reason classified as health/weather or
