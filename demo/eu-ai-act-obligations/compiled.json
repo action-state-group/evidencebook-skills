@@ -76,7 +76,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "f3c093207b2ca407d2de94349d5a9d5ebab883dcf2139db184bc4107316e2497",
+  "pack_source_digest": "291e9d1c05eb8ad4ddc3e84b8aa4855f499a1ffdeaa4ede1f8e7e7b08c0300fc",
   "judge_batch": true,
-  "judge_batch_note": "One judge-cmd call per session for its judged clauses (art5, art50j, art26j) -- the same batching packs/airline-support-outcomes/pack-source.yaml turns on: one request per conversation, not one per criterion."
+  "judge_batch_note": "One judge-cmd call per session for its judged clauses (art5's no_manipulation_or_deception, art50's disclosure_clear_or_obvious, art26's consequential_actions_vs_instructions) -- the same batching packs/airline-support-outcomes/pack-source.yaml turns on: one request per conversation, not one per criterion."
 }
