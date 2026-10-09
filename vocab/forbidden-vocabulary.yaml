@@ -1,0 +1,161 @@
+# A plain list of terms this pack's and this script's own output strings must
+# never contain: text a user of a personal-agent purchase skill and its CLI
+# plugin reads (skill specs, plugin output, generated reports). Checked by
+# tests/test_forbidden_vocabulary.py. Original to this repo, not a copy of any
+# other repo's list: this pack's own output surfaces (rationale strings,
+# report reasons) are a different vocabulary than any other project's queue
+# or workflow terms, so there is nothing to vendor from elsewhere.
+#
+# Entry fields:
+#   pattern   RE2, case rules explicit inside it. If it has one capture group,
+#             the group is the matched word (used for line/quote checks).
+#   allow     RE2 contexts; a match lying wholly inside an allow match is not a
+#             hit. Every context rule is listed here, never in code.
+#   quoted_mention_allowed
+#             true: the word wrapped in matching quotes or backticks names a
+#             wire value rather than claiming the property (the claims gate's
+#             own rule). Queue vocabulary is never excused by quoting.
+#   hit / pass  examples that MUST and MUST NOT trip this entry; the gate's own
+#             test checks every one, so each context rule is demonstrated.
+# Prefer a precise pattern to a blanket ban. To admit a new legitimate sense,
+# add an allow context here with a pass example; never suppress a hit inline.
+entries:
+  # --- internal queue vocabulary -------------------------------------------
+  - id: batch
+    category: queue
+    why: a unit of queued work; no consumer sense on these surfaces
+    pattern: '(?i)\bbatch(?:es)?\b'
+    hit: ["the batch brief names seven verbs", "other Batch 5 item's verb"]
+    pass: ["batched", "a database"]
+  - id: brief
+    category: queue
+    why: >-
+      a task brief. The noun after a determiner or a queue word is the process
+      sense; the adjective ("a brief summary", "keep it brief") and "briefly"
+      are ordinary English and pass.
+    pattern: '(?i)\b(?:the|this|that|its|our|original|batch|task|kickoff|coder|em|manager)\s+brief\b|\bbriefs\b'
+    hit: ["this item's original brief", "the brief says", "the coder briefs"]
+    pass: ["a brief summary", "keep it brief", "briefly"]
+  - id: kickoff
+    category: queue
+    why: >-
+      a task kickoff (the launch prompt or file). The noun has no consumer
+      sense here; the verb "kick off" (two words) and "kicked off" pass.
+    pattern: '(?i)\bkick-?offs?\b'
+    hit: ["Per the kickoff", "the kick-off file", "two kickoffs"]
+    pass: ["kick off the check", "kicked off"]
+  - id: tranche
+    category: queue
+    why: a slice of queued work
+    pattern: '(?i)\btranches?\b'
+    hit: ["second tranche"]
+    pass: ["trench"]
+  - id: lane
+    category: queue
+    why: a queue lane; no consumer sense on these surfaces
+    pattern: '(?i)\blanes?\b'
+    hit: ["the proprietary lane", "two lanes"]
+    pass: ["planes", "laneway"]
+  - id: rc-digit
+    category: queue
+    why: >-
+      a release candidate used as a work label ("works like rc4"). A full
+      semantic version naming a published release (v0.1.0-rc6) is a version,
+      not queue vocabulary, and passes.
+    pattern: '(?i)\brc[0-9]+\b'
+    allow: ['\bv?[0-9]+\.[0-9]+\.[0-9]+-rc[0-9]+\b']
+    hit: ["works like rc4", "tested on RC6"]
+    pass: ["capsulectl v0.1.0-rc6", "release 0.2.0-rc1", "src2"]
+  - id: queue-id
+    category: queue
+    why: a bracketed queue item id ([some-internal-id]). Markdown link text followed by a link target passes.
+    pattern: '\[[a-z0-9]+(?:-[a-z0-9]+)+\]'
+    allow: ['\[[a-z0-9]+(?:-[a-z0-9]+)+\]\(']
+    hit: ["see [some-internal-id]", "per [other-queue-item]"]
+    pass: ["[clean-machine-test](scripts/clean-machine-test.sh)", "[x]", "[]string"]
+  - id: item-process
+    category: queue
+    why: >-
+      a queue item. Only the process senses are banned: an item's brief, DONE,
+      acceptance, scope, verb or stanza; a batch/queue/inbox/outbox/work/parent
+      item; an item id. "item" in a list of items or a shopping cart passes.
+    pattern: '(?i)\bitem''s\s+(?:original\s+)?(?:brief|done|acceptance|scope|verb|stanza)\b|\b(?:batch\s+[0-9]+|queue|inbox|outbox|work|parent)\s+items?\b|\bitem\s+ids?\b'
+    hit: ["this item's DONE", "other Batch 5 item's verb", "the parent item", "an item id"]
+    pass: ["a list of items", "this item costs 20 EUR", "cart item", "items match the request"]
+  - id: done-process
+    category: queue
+    why: the uppercase DONE status word. Lowercase "done" is ordinary English and passes.
+    pattern: '\bDONE\b'
+    hit: ["reported DONE", "the real CI gate this item's DONE"]
+    pass: ["when you are done", "Done."]
+  # --- claims boundary: the five sentences never written on any surface -----
+  # A deny-list has to name them; this file is the one place that does.
+  - id: claim-must-follow
+    category: claims-boundary
+    why: the skill is advisory; nothing compels the AI
+    pattern: '(?i)\byour\s+ai\s+must\s+follow\s+action\s+state\b'
+    hit: ["Your AI must follow Action State from now on."]
+    pass: ["Your AI is asked to follow your rules."]
+  - id: claim-prevents-fraud
+    category: claims-boundary
+    why: no fraud-prevention claim
+    pattern: '(?i)\baction\s+state\s+prevents\s+fraud\b'
+    hit: ["Action State prevents fraud on every purchase."]
+    pass: ["Action State records each check."]
+  - id: claim-stops-agent
+    category: claims-boundary
+    why: the skill does not stop the agent
+    pattern: '(?i)\baction\s+state\s+stops\s+your\s+agent\b'
+    hit: ["Action State stops your agent before it pays."]
+    pass: ["Action State asks before your agent pays."]
+  - id: claim-witnessed-proves
+    category: claims-boundary
+    why: a witnessed record shows when something was recorded, not that it is true
+    pattern: '(?i)\ba\s+witnessed\s+record\s+proves\s+the\s+event\s+is\s+true\b'
+    hit: ["A witnessed record proves the event is true."]
+    pass: ["A log-witnessed record shows when it was registered."]
+  - id: claim-jev-proves-violation
+    category: claims-boundary
+    why: no claim that a judgment proves a violation
+    pattern: '(?i)\bjev\s+proves\s+your\s+agent\s+violated\s+your\s+instructions\b'
+    hit: ["Jev proves your agent violated your instructions."]
+    pass: ["Jev reports what it found in the record."]
+  # --- claims (mirrors capsule-engine word discipline) ----------------------
+  - id: contemporaneous
+    category: claims
+    why: a registration claim is written "registered <= T", never contemporaneous
+    pattern: '(?i)\b(contemporaneous)\b'
+    quoted_mention_allowed: true
+    hit: ["this verdict is contemporaneous with the action"]
+    pass: ["the mode is `contemporaneous`", "mode \"contemporaneous\""]
+  - id: non-repudiation
+    category: claims
+    why: not a property this product claims
+    pattern: '(?i)\b(non-repudiation)\b'
+    quoted_mention_allowed: true
+    hit: ["this offers non-repudiation of the claim"]
+    pass: ["'non-repudiation' is not claimed"]
+  - id: witnessed-bare
+    category: claims
+    why: >-
+      bare "witnessed" over-claims; a hyphenated qualifier says what witnessed
+      it (log-witnessed). Go regexp has no lookbehind, so the engine's
+      (?<![\w-]) is written as a non-capturing prefix and the word is group 1.
+    pattern: '(?i)(?:^|[^\w-])(witnessed)\b'
+    quoted_mention_allowed: true
+    hit: ["this checkpoint was witnessed by the anchor", "witnessed at start"]
+    pass: ["the time is log-witnessed", "grade 'witnessed'", "continuity-witnessed"]
+  - id: complete-history
+    category: claims
+    why: not a property this product claims
+    pattern: '(?i)\b(complete history)\b'
+    quoted_mention_allowed: true
+    hit: ["the ledger shows a complete history of the range"]
+    pass: ["`complete history`"]
+  - id: trust-ladder
+    category: claims
+    why: retired vocabulary
+    pattern: '(?i)\b(trust ladder)\b'
+    quoted_mention_allowed: true
+    hit: ["read the trust ladder first"]
+    pass: ["\"trust ladder\""]
