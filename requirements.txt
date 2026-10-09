@@ -2,5 +2,11 @@
 rfc8785  # JCS (RFC 8785) for JSON-DIGESTs: scripts/skill_record.py
 pyyaml>=6.0       # pack sources (scripts/pack_compile.py)
 jevals==0.1.4     # the Jev judge backend (scripts/judges/jev_judge.py)
-jsonschema>=4.0   # tests only: validates scripts/external_check.py's output against
-                  # the vendored capsule-cli schemas (tests/fixtures/capsule-cli/)
+# tests only, optional: capsule-engine itself at the commit PR #96 landed on,
+# so tests/test_judge_pin_capsule_engine_96.py's RealLoaderAccepts can run
+# every judge_pin this repo builds through capsule-engine's own, real,
+# unmodified loader instead of the portable reimplementation
+# (tests/fixtures/capsule-engine/judge_pin_validate.py). Requires Python
+# >= 3.11 (capsule-engine's own dependency chain uses typing.NotRequired).
+# Those tests skip themselves, not the whole suite, when this is absent.
+capsule-engine @ git+https://github.com/action-state-group/capsule-engine.git@9069cf70aa562b42c9983d7277ec1ce2e1e34ce5

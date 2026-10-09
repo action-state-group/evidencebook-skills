@@ -1,8 +1,5 @@
-"""The judged-instrument pin: the model identity a verdict carries on both the
-semantic-row call sites -- scripts/judge_bundle.py's Result v0 claims (the
-backward call site) and scripts/external_check.py's sidecar (the forward call
-site, capsule-cli's external-check-result/v0, which has no member to carry a
-pin inline).
+"""The judged-instrument pin: the model identity a verdict carries on
+scripts/judge_bundle.py's Result v0 claims.
 
 The key set matches capsule-engine's `judge_pin` (capsule-engine PR #96,
 "judge_pin for mode: judged obligations", head commit
@@ -36,7 +33,7 @@ The key set matches capsule-engine's `judge_pin` (capsule-engine PR #96,
     record or capsule_id, and never derived from which records a particular
     bundle happened to disclose. Record/capsule ids that actually contributed
     facts to a verdict stay where they always have: each Result v0 claim's
-    own `evidence[]` (and the forward call site's `findings[]`), built from
+    own `evidence[]`, built from
     the same target_ids this module never sees. A call whose selected clauses
     declare no normalized field at all cannot honestly populate this list;
     scripts/judge_bundle.py refuses to seal a pin in that case (see its own
