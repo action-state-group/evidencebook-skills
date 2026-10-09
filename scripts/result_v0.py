@@ -60,7 +60,8 @@ def resolve_contract_ref(spec):
     return spec.get("contract_ref") or f"{spec['contract']}@1"
 
 
-def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, claim_id=None):
+def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, claim_id=None,
+             judge_pin_digest=None, judge_pin=None, rule_id=None):
     """One requirement-type claim (PR #19's ClaimType default: absent == requirement)
     for one criterion. `tier` is that criterion's own tier ("judged" or
     "recomputed") from the compiled contract's clause -- required, never
@@ -69,7 +70,26 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     relabelled "judged".
 
     `report_digest` is the sealed evaluation-report/v1 capsule's digest for this
-    criterion, when known -- cited in evidence[] but never inline.
+    criterion, when known -- cited in evidence[] but never inline. Either one
+    digest (a string, every existing caller's shape) or several (a list/tuple --
+    scripts/judge_bundle.py's whole-bundle mode, which judges every disclosed
+    record in one request and cites every one it actually used, not just one).
+
+    `judge_pin_digest`/`judge_pin` are the model identity a judged claim carries
+    (a `judged` claim needs a code/model identity, not only the policy digest a
+    `recomputed` one has) -- sealed only when `tier == "judged"`, same
+    rule scripts/run_daily.py's build_report() follows for its own
+    evaluation-report/v1 record: a recomputed clause was never judged, and citing
+    a judge's identity on it would misstate what produced the verdict. `rule_id`,
+    `judge_pin_digest`, and `judge_pin` are additional keys on the claim beyond
+    the vendored evidence-result-v0 schema's own fields -- named here as a known
+    extension, never assumed schema-valid against that schema's own
+    additionalProperties rule.
+
+    `rule_id` is the bare source-rule number (packs/everyday-rules/pack-source.yaml's
+    `rule_id`), when the compiled contract's clause carries one -- `requirement_ref`
+    stays the compound `<check_id>.<criterion_id>` clause id; this is the separate,
+    human-facing rule number a reader of the rule doc would recognize.
 
     `claim_id` overrides the claim's own `id` (default: `criterion_id`) -- the
     day-level merge needs `<case_id>::<criterion_id>` so many cases' claims can
@@ -86,8 +106,9 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         raise RollupError(f"not a verdict: {verdict!r}")
     sufficiency = "GAP" if verdict == "not_evaluable" else "SATISFIED"
     disclosure_status = "INSUFFICIENT" if verdict == "not_evaluable" else "SATISFIED"
-    evidence = [_digest_ref(report_digest)] if report_digest else []
-    return {
+    digests = report_digest if isinstance(report_digest, (list, tuple)) else ([report_digest] if report_digest else [])
+    evidence = [_digest_ref(d) for d in digests if d]
+    claim = {
         "id": claim_id if claim_id is not None else criterion_id,
         "contract_ref": contract_ref,
         "requirement_ref": criterion_id,
@@ -99,10 +120,18 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         "proofs": [],
         "presentation": {"kind": "disclosure", "status": disclosure_status, "evidence": evidence},
     }
+    if rule_id is not None:
+        claim["rule_id"] = rule_id
+    if tier == "judged" and judge_pin_digest is not None:
+        claim["judge_pin_digest"] = judge_pin_digest
+        if judge_pin is not None:
+            claim["judge_pin"] = dict(judge_pin)
+    return claim
 
 
 def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, all_criteria, contract_ref, tiers,
-                     allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                     allow_out_of_scope=False, never_out_of_scope=frozenset(), judge_pin_digests=None,
+                     judge_pins=None, rule_ids=None):
     """criterion_verdicts: dict[criterion_id -> verdict]. report_digests: dict
     [criterion_id -> sealed evaluation-report capsule digest], may omit entries.
     `all_criteria`: tuple of every criterion id the compiled contract defines
@@ -115,6 +144,12 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     rollup.all_required_met -- exactly that contract's known criteria, nothing
     missing, nothing unrecognized -- so a malformed call fails closed here too,
     not just in the rollup.
+
+    `judge_pin_digests`/`judge_pins`/`rule_ids`: optional dict[criterion_id -> ...],
+    threaded straight to claim_for() for each evaluated criterion -- see its own
+    docstring. All three default to omitted so an existing caller (nothing in this
+    module's own tests, or scripts/rollup_day.py) that never names them gets
+    exactly the claims it always has.
 
     allow_out_of_scope: the out_of_scope_verdict switch (off by default, so the
     document's shape is unchanged unless a caller opts in). When on, an
@@ -138,8 +173,11 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     if not evaluated:
         raise RollupError(f"case {case_id!r}: every criterion is out_of_scope; nothing was evaluated")
     excluded_not_applicable = len(all_criteria) - len(evaluated)
+    judge_pin_digests, judge_pins, rule_ids = judge_pin_digests or {}, judge_pins or {}, rule_ids or {}
     claims = [
-        claim_for(cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid))
+        claim_for(cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid),
+                 judge_pin_digest=judge_pin_digests.get(cid), judge_pin=judge_pins.get(cid),
+                 rule_id=rule_ids.get(cid))
         for cid in evaluated
     ]
     buckets = {"met": [], "not_met": [], "not_evaluable": []}

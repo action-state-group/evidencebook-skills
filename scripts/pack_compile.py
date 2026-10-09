@@ -61,6 +61,41 @@ import yaml
 
 TIERS = {"judged", "recomputed"}
 
+# capsule-engine's own closed vocabulary for judge_pin.input_refs (PR #96,
+# "judge_pin for mode: judged obligations", `capsule_engine/packs/schema.py`'s
+# `NORMALIZED_ACTION_FIELDS`, commit 9069cf70aa562b42c9983d7277ec1ce2e1e34ce5).
+# Vendored as a flat constant, not imported: capsule-engine is a separate repo
+# this one does not depend on at runtime, only in the cross-check test
+# (tests/test_judge_pin_capsule_engine_96.py, tests/fixtures/capsule-engine/).
+# A judged criterion's own `judge_input_refs` (below) must be drawn from this
+# set -- the same "unregistered is a typo" doctrine this file already applies
+# to TIERS/MEASURABILITY -- so a typo'd field name is refused at compile time,
+# long before it would reach capsule-engine's own loader.
+NORMALIZED_ACTION_FIELDS = frozenset(
+    {
+        "amount_minor",
+        "currency",
+        "target",
+        "cited_mandate_capsule_id",
+        "equivalence_key",
+        "model_id",
+        "provider",
+        "rail",
+        "counterparty_account_ref",
+        "outgoing_content",
+        "recurrence",
+    }
+)
+
+# Orthogonal to tier (docs/jev-judge.md): tier is checkability (recomputed = a
+# stranger can re-run it, judged = trust the model), measurability is corpus
+# coverage (is the signal this row needs actually present here at all). A
+# semantic row is normally measurability: measured, mode: judged -- declaring
+# a judged row declared_not_measured is a category error ("this corpus carries
+# no signal for it"), not a description of "we judge it instead of computing
+# it deterministically".
+MEASURABILITY = {"measured", "declared_not_measured"}
+
 # Rubric switches (scripts/run_daily.py's effective_tier()/effective_claim()):
 # a pack source MAY declare a top-level `switches: {flag: bool, ...}` block (passed
 # through to compiled.json verbatim -- run_daily.py reads it generically, by
@@ -168,7 +203,7 @@ def validate_source(source):
         issues.append("checks must be a non-empty list")
         checks = []
 
-    seen_check_ids, seen_clause_ids = set(), set()
+    seen_check_ids, seen_clause_ids, seen_rule_ids = set(), set(), set()
     for i, check in enumerate(checks):
         where = f"checks[{i}]"
         if not isinstance(check, dict):
@@ -220,6 +255,45 @@ def validate_source(source):
                 issues.append(f"{cwhere}.never_out_of_scope must be a boolean")
             if "never_not_applicable" in crit:
                 issues.append(f"{cwhere}.never_not_applicable is a retired name: use never_out_of_scope")
+            # Source-rule provenance, for a pack whose criteria are rows of some
+            # outside rule set (e.g. packs/everyday-rules) rather than hand-authored
+            # outcome criteria: optional, generic, never airline-specific.
+            if "rule_id" in crit and (not isinstance(crit["rule_id"], str) or not crit["rule_id"].strip()):
+                issues.append(f"{cwhere}.rule_id must be a non-empty string")
+            elif crit.get("rule_id") in seen_rule_ids:
+                # Two judged clauses sharing a rule_id would collapse to one entry
+                # in scripts/judge_bundle.py's select_clauses() by_rule_id lookup,
+                # silently dropping whichever criterion lost the collision.
+                issues.append(f"duplicate rule_id across the pack: {crit['rule_id']!r}")
+            elif crit.get("rule_id"):
+                seen_rule_ids.add(crit["rule_id"])
+            if "measurability" in crit and crit["measurability"] not in MEASURABILITY:
+                issues.append(f"{cwhere}.measurability must be one of {sorted(MEASURABILITY)}, "
+                              f"got {crit['measurability']!r}")
+            if "rule_half" in crit and not isinstance(crit["rule_half"], bool):
+                issues.append(f"{cwhere}.rule_half must be a boolean")
+            if "scope_note" in crit and (not isinstance(crit["scope_note"], str) or not crit["scope_note"].strip()):
+                issues.append(f"{cwhere}.scope_note must be a non-empty string")
+            # The normalized action fields this criterion's own judge prompt
+            # declares it reads -- capsule-engine #96's input_refs vocabulary
+            # (NORMALIZED_ACTION_FIELDS, above). Optional: a criterion whose
+            # prompt reads nothing in that closed vocabulary (most of this
+            # pack's rows -- see packs/everyday-rules/pack-source.yaml's own
+            # note) declares none; scripts/judge_bundle.py's
+            # declared_input_refs() unions whatever the clauses actually
+            # judged in one call declare, and refuses to seal a judge_pin
+            # when that union is empty rather than inventing a field name.
+            if "judge_input_refs" in crit:
+                refs = crit["judge_input_refs"]
+                if not isinstance(refs, list) or not refs or not all(isinstance(r, str) for r in refs):
+                    issues.append(f"{cwhere}.judge_input_refs must be a non-empty list of strings")
+                else:
+                    bad = sorted(set(refs) - NORMALIZED_ACTION_FIELDS)
+                    if bad:
+                        issues.append(f"{cwhere}.judge_input_refs names {bad!r}, not in capsule-engine's own "
+                                      f"normalized action fields {sorted(NORMALIZED_ACTION_FIELDS)}")
+                    if len(set(refs)) != len(refs):
+                        issues.append(f"{cwhere}.judge_input_refs lists a field more than once")
             tier_switch = crit.get("tier_switch")
             if tier_switch is not None:
                 if not isinstance(tier_switch, dict):
@@ -269,6 +343,33 @@ def validate_source(source):
         if min_conf is not None and (isinstance(min_conf, bool) or not isinstance(min_conf, (int, float))
                                      or not 0 < min_conf <= 1):
             issues.append(f"judge.min_confidence must be a number in (0, 1], or absent; got {min_conf!r}")
+        # Pack-source-authored evidence description: build_judge_prompt() names exactly
+        # what the judge is given here, never a hardcoded assumption (e.g. a
+        # transcript, an airline policy file) -- a pack whose judge reads something
+        # else entirely (a disclosed-facts bundle, no transcript at all) names its own
+        # evidence and citation wording instead. All three are optional: a pack that
+        # names none of them (airline's own pack-source.yaml, unchanged since before
+        # these fields existed) gets _LEGACY_JUDGE_PROMPT_FIELDS' airline wording from
+        # build_judge_prompt() instead -- so airline's compiled judge-prompt.md, and
+        # the pin that hashes it, never move. A pack that names any of the three must
+        # name all three (never a silent partial default).
+        named = {k for k in ("subject", "evidence", "citation_note") if k in judge}
+        if named and named != {"subject", "evidence", "citation_note"}:
+            issues.append("judge.subject/evidence/citation_note must be named together or not at all "
+                          f"(named only {sorted(named)!r}); omit all three to use the legacy wording")
+        elif named:
+            if not isinstance(judge.get("subject"), str) or not judge.get("subject", "").strip():
+                issues.append("judge.subject must be a non-empty string: what the judge is given one of per "
+                              "request (e.g. 'one recorded conversation', 'one disclosed evidence bundle')")
+            evidence = judge.get("evidence")
+            if not isinstance(evidence, list) or not evidence or not all(
+                    isinstance(e, str) and e.strip() for e in evidence):
+                issues.append("judge.evidence must be a non-empty list of non-empty strings naming what the "
+                              "judge is given to decide from")
+            if not isinstance(judge.get("citation_note"), str) or not judge.get("citation_note", "").strip():
+                issues.append("judge.citation_note must be a non-empty string: what the judge should cite, "
+                              "in this pack's own evidence vocabulary (turns and tool results, disclosed "
+                              "bundle records, ...)")
 
     report = source.get("report")
     if not isinstance(report, dict):
@@ -324,6 +425,16 @@ def build_clauses(source):
             }
             if crit.get("never_out_of_scope"):
                 clause["never_out_of_scope"] = True
+            if crit.get("rule_id"):
+                clause["rule_id"] = crit["rule_id"]
+            if crit.get("measurability"):
+                clause["measurability"] = crit["measurability"]
+            if crit.get("rule_half"):
+                clause["rule_half"] = True
+            if crit.get("scope_note"):
+                clause["scope_note"] = crit["scope_note"]
+            if crit.get("judge_input_refs"):
+                clause["judge_input_refs"] = list(crit["judge_input_refs"])
             if crit.get("tier_switch"):
                 clause["tier_switch"] = dict(crit["tier_switch"])
             if crit.get("claim_switch"):
@@ -389,14 +500,57 @@ def build_axes_json(source):
     }
 
 
+def _join_evidence(evidence):
+    """"a, b and c" -- the same house join style build_eval()'s callers expect
+    read as prose, for any count of evidence items a pack source names."""
+    if len(evidence) == 1:
+        return evidence[0]
+    return ", ".join(evidence[:-1]) + " and " + evidence[-1]
+
+
+# What a pack source gets when it names none of judge.subject/evidence/citation_note
+# -- airline-support-outcomes' own pack-source.yaml, unchanged since before these
+# fields existed. The verdict bullets ride along as one set with these three: a
+# pack that is transcript-shaped also gets "the transcript" wording there, never a
+# generic "the evidence" that a transcript-reading judge never actually said.
+# Changing any of these moves airline's judge-prompt.md, and the judge pin that
+# hashes it (scripts/judge_pin.py's prompt_digest) -- see tests/test_judge_pin_airline.py.
+_LEGACY_JUDGE_SUBJECT = "one recorded conversation"
+_LEGACY_JUDGE_EVIDENCE = [
+    "the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their "
+    "results, in order)",
+    "the airline policy (`airline-data/policy.md`, passed to you as text)",
+]
+_LEGACY_JUDGE_CITATION_NOTE = "Cite the specific turns and tool results you relied on."
+_LEGACY_VERDICT_BULLETS = (
+    "- `met` -- the transcript shows the criterion was satisfied.",
+    "- `not_met` -- the transcript shows it was not.",
+    "- `not_evaluable` -- the transcript does not contain enough evidence to decide either "
+    "way. Use this only when the evidence genuinely is not there, not as a hedge.",
+)
+_GENERIC_VERDICT_BULLETS = (
+    "- `met` -- the evidence shows the criterion was satisfied.",
+    "- `not_met` -- the evidence shows it was not.",
+    "- `not_evaluable` -- the evidence does not contain enough information to decide either "
+    "way. Use this only when the evidence genuinely is not there, not as a hedge.",
+)
+
+
 def build_judge_prompt(source, out_rel):
     checks = source["checks"]
     n = sum(len(c["criteria"]) for c in checks)
     pack_label = f"{source['pack_id']} rubric v{source['rubric_version']}"
     resolution_rule = source["resolution_rule"]
     resolution_rule = resolution_rule[:1].upper() + resolution_rule[1:]
+    judge = source["judge"]
+    if "subject" in judge:
+        subject, evidence, citation_note = judge["subject"], judge["evidence"], judge["citation_note"]
+        verdict_bullets = _GENERIC_VERDICT_BULLETS
+    else:
+        subject, evidence, citation_note = _LEGACY_JUDGE_SUBJECT, _LEGACY_JUDGE_EVIDENCE, _LEGACY_JUDGE_CITATION_NOTE
+        verdict_bullets = _LEGACY_VERDICT_BULLETS
     lines = [
-        f"You judge one recorded conversation against one criterion, one of the {n} that make up "
+        f"You judge {subject} against one criterion, one of the {n} that make up "
         f"{pack_label} (`{out_rel}/compiled.json`). The overall outcome these {n} exist to test: "
         f'"{source["outcome_statement"]}". {resolution_rule} -- you are answering for exactly one of '
         "them, never the whole outcome.",
@@ -413,19 +567,14 @@ def build_judge_prompt(source, out_rel):
         "Your request names one clause (`clause.id`, `clause.check_id`, `clause.claim`) from "
         f"`{out_rel}/axes.json`'s {n} axes -- judge that claim, and that claim only.",
         "",
-        "Evidence you may use: the conversation (`agent_interaction.messages` -- customer and "
-        "agent turns, tool calls and their results, in order) and the airline policy "
-        "(`airline-data/policy.md`, passed to you as text). You are not given, and must not look "
-        "for, any graded outcome or answer key.",
+        f"Evidence you may use: {_join_evidence(evidence)}. You are not given, "
+        "and must not look for, any graded outcome or answer key.",
         "",
         "Answer with exactly one verdict:",
         "",
-        "- `met` -- the transcript shows the criterion was satisfied.",
-        "- `not_met` -- the transcript shows it was not.",
-        "- `not_evaluable` -- the transcript does not contain enough evidence to decide either "
-        "way. Use this only when the evidence genuinely is not there, not as a hedge.",
+        *verdict_bullets,
         "",
-        "Cite the specific turns and tool results you relied on.",
+        citation_note,
         "",
     ]
     return "\n".join(lines)
@@ -459,10 +608,16 @@ def write_pack(source, out_dir, out_rel):
 
 
 def resolve_out_dir(out_arg):
-    """--out must be exactly `demo/<name>`, resolved under this repo's root:
-    scripts/run_daily.py derives its own repo root as
-    `args.spec.resolve().parents[2]` from wherever --spec sits, which only lands
-    on the real root when the compiled spec is exactly two directories deep.
+    """--out must resolve inside this repo's root. A path under `demo/` must be
+    exactly `demo/<name>` (two segments): scripts/run_daily.py derives its own repo
+    root as `args.spec.resolve().parents[2]` from wherever --spec sits, which only
+    lands on the real root at that exact depth -- a pack compiled for run_daily.py
+    keeps that constraint. A pack compiled anywhere else carries no such depth rule:
+    nothing outside demo/ derives a repo root from the compiled spec's own path
+    (scripts/judge_bundle.py, for one, takes --pack as a plain path and never
+    does that derivation), so a pack that is not airline's -- and not meant for
+    run_daily.py at all -- compiles to wherever its own source names, e.g.
+    packs/everyday-rules/compiled/.
     Returns (out_dir_abs, out_rel) or raises ValueError with the reason."""
     root = pathlib.Path(__file__).resolve().parents[1]
     out_abs = (root / out_arg) if not out_arg.is_absolute() else out_arg
@@ -470,11 +625,20 @@ def resolve_out_dir(out_arg):
         out_rel = out_abs.resolve().relative_to(root).as_posix()
     except ValueError:
         raise ValueError(f"--out must be inside the repo root ({root})")
+    if out_rel == ".":
+        raise ValueError(f"--out must not be the repo root itself ({root}): a compiled pack's four files "
+                         "would land directly among the repo's own top-level files")
     parts = out_rel.split("/")
-    if len(parts) != 2 or parts[0] != "demo":
+    if parts[0] == "demo" and len(parts) != 2:
         raise ValueError(
-            f"--out must be exactly demo/<name> (got {out_rel!r}): scripts/run_daily.py resolves "
-            "its repo root as --spec.resolve().parents[2], which assumes this exact depth"
+            f"a demo/ pack's --out must be exactly demo/<name> (got {out_rel!r}): scripts/run_daily.py "
+            "resolves its repo root as --spec.resolve().parents[2], which assumes this exact depth"
+        )
+    if len(parts) < 2:
+        raise ValueError(
+            f"--out must be at least two path segments deep (got {out_rel!r}): write_pack() always writes "
+            "its four files directly into --out, so a single top-level segment would write them straight "
+            "into (and over anything already in) one of this repo's own top-level directories"
         )
     return out_abs, out_rel
 

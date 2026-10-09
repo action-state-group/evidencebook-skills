@@ -1,2 +1,6 @@
 # The scripts are stdlib Python apart from these.
 rfc8785  # JCS (RFC 8785) for JSON-DIGESTs: scripts/skill_record.py
+pyyaml>=6.0       # pack sources (scripts/pack_compile.py)
+jevals==0.1.4     # the Jev judge backend (scripts/judges/jev_judge.py)
+jsonschema>=4.0   # tests only: validates scripts/external_check.py's output against
+                  # the vendored capsule-cli schemas (tests/fixtures/capsule-cli/)

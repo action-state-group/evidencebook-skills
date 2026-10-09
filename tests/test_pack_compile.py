@@ -14,9 +14,11 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
+import yaml  # noqa: E402
+
 import pack_compile  # noqa: E402
-from pack_compile import (build_clauses, build_compiled_json, compile_pack, resolve_out_dir,  # noqa: E402
-                          source_digest, validate_source, write_pack)
+from pack_compile import (_strip_strings, build_clauses, build_compiled_json, compile_pack,  # noqa: E402
+                          resolve_out_dir, source_digest, validate_source, write_pack)
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -41,7 +43,8 @@ def minimal_source():
             {"id": "a", "question": "A?", "criteria": [_criterion("one"), _criterion("two")]},
             {"id": "b", "question": "B?", "criteria": [_criterion("three"), _criterion("four")]},
         ],
-        "judge": {"model_id": "jev-1.13.0", "sampling_params": {"temperature": 0}},
+        "judge": {"model_id": "jev-1.13.0", "subject": "one test case", "evidence": ["the test fixture"],
+                 "citation_note": "Cite what you relied on.", "sampling_params": {"temperature": 0}},
         "report": {"template": "outcome-report/v1", "percentages": False},
         "sample_policy": {"per_stratum": 1, "stratify_by": "verdict", "seed": "test"},
         "disclosure": {"suppress": []},
@@ -88,6 +91,13 @@ class ValidateSource(unittest.TestCase):
         issues = validate_source(source)
         self.assertTrue(any("duplicate check id" in i for i in issues))
 
+    def test_duplicate_rule_id_across_the_pack_is_refused(self):
+        source = minimal_source()
+        source["checks"][0]["criteria"][0]["rule_id"] = "9"
+        source["checks"][1]["criteria"][0]["rule_id"] = "9"
+        issues = validate_source(source)
+        self.assertTrue(any("duplicate rule_id" in i for i in issues), issues)
+
     def test_duplicate_criterion_id_across_the_pack_is_refused(self):
         source = minimal_source()
         source["checks"][1]["id"] = "a"  # same check id as checks[0]
@@ -118,6 +128,20 @@ class ValidateSource(unittest.TestCase):
         del source["judge"]["model_id"]
         issues = validate_source(source)
         self.assertTrue(any("judge.model_id" in i for i in issues))
+
+    def test_judge_subject_evidence_citation_note_are_optional_together(self):
+        source = minimal_source()
+        del source["judge"]["subject"]
+        del source["judge"]["evidence"]
+        del source["judge"]["citation_note"]
+        self.assertEqual(validate_source(source), [])
+
+    def test_naming_only_some_of_subject_evidence_citation_note_is_refused(self):
+        source = minimal_source()
+        del source["judge"]["evidence"]
+        del source["judge"]["citation_note"]
+        issues = validate_source(source)
+        self.assertTrue(any("named together or not at all" in i for i in issues))
 
     def test_unknown_report_template_is_refused(self):
         source = minimal_source()
@@ -252,6 +276,52 @@ class BuildClauses(unittest.TestCase):
         self.assertEqual(clauses[0]["check_question"], "A?")
         self.assertEqual(clauses[0]["tier"], "judged")
 
+    def test_judge_input_refs_passes_through_when_declared(self):
+        source = minimal_source()
+        source["checks"][0]["criteria"][0] = _criterion("one", judge_input_refs=["amount_minor", "currency"])
+        clauses = build_clauses(source)
+        self.assertEqual(clauses[0]["judge_input_refs"], ["amount_minor", "currency"])
+
+    def test_judge_input_refs_absent_when_not_declared(self):
+        clauses = build_clauses(minimal_source())
+        self.assertNotIn("judge_input_refs", clauses[0])
+
+
+class JudgeInputRefs(unittest.TestCase):
+    """judge_input_refs: the normalized action fields (capsule-engine PR #96's
+    own closed vocabulary) a criterion's own judge prompt declares it reads --
+    see pack_compile.NORMALIZED_ACTION_FIELDS and packs/everyday-rules/
+    pack-source.yaml's own use of this field."""
+
+    def _source_with(self, **crit_kwargs):
+        source = minimal_source()
+        source["checks"][0]["criteria"][0] = _criterion("one", **crit_kwargs)
+        return source
+
+    def test_a_valid_input_ref_is_accepted(self):
+        self.assertEqual(validate_source(self._source_with(judge_input_refs=["outgoing_content"])), [])
+
+    def test_several_valid_input_refs_are_accepted(self):
+        self.assertEqual(
+            validate_source(self._source_with(judge_input_refs=["amount_minor", "currency", "recurrence"])), []
+        )
+
+    def test_a_field_outside_the_closed_vocabulary_is_refused(self):
+        issues = validate_source(self._source_with(judge_input_refs=["not_a_real_field"]))
+        self.assertTrue(any("judge_input_refs" in i and "not_a_real_field" in i for i in issues), issues)
+
+    def test_an_empty_list_is_refused(self):
+        issues = validate_source(self._source_with(judge_input_refs=[]))
+        self.assertTrue(any("judge_input_refs must be a non-empty list" in i for i in issues), issues)
+
+    def test_a_duplicate_is_refused(self):
+        issues = validate_source(self._source_with(judge_input_refs=["amount_minor", "amount_minor"]))
+        self.assertTrue(any("judge_input_refs lists a field more than once" in i for i in issues), issues)
+
+    def test_a_non_string_entry_is_refused(self):
+        issues = validate_source(self._source_with(judge_input_refs=[123]))
+        self.assertTrue(any("judge_input_refs must be a non-empty list of strings" in i for i in issues), issues)
+
 
 class CompilePack(unittest.TestCase):
     def test_deterministic(self):
@@ -347,6 +417,39 @@ class CompilePack(unittest.TestCase):
             self.assertNotEqual(build_compiled_json(changed, "demo/test-pack")["pack_source_digest"], base)
 
 
+class AirlinePinUnchanged(unittest.TestCase):
+    """Airline-support-outcomes names none of judge.subject/evidence/citation_note
+    (it predates them) -- so build_judge_prompt() must fall back to the exact
+    airline wording these were extracted from, and compiled.json/judge-prompt.md
+    must compile byte-for-byte identical to what is already committed under
+    demo/airline-support-outcomes/. A later pack naming its own subject/evidence/
+    citation_note (packs/everyday-rules) never touches this path."""
+
+    def _load(self):
+        path = REPO_ROOT / "packs" / "airline-support-outcomes" / "pack-source.yaml"
+        return _strip_strings(yaml.safe_load(path.read_text()))
+
+    def test_pack_source_names_no_judge_prompt_fields(self):
+        source = self._load()
+        self.assertNotIn("subject", source["judge"])
+        self.assertNotIn("evidence", source["judge"])
+        self.assertNotIn("citation_note", source["judge"])
+
+    def test_compiled_json_matches_the_committed_copy_byte_for_byte(self):
+        source = self._load()
+        compiled, _axes, _prompt, _presentation = compile_pack(source, "demo/airline-support-outcomes")
+        committed = json.loads((REPO_ROOT / "demo" / "airline-support-outcomes" / "compiled.json").read_text())
+        self.assertEqual(compiled, committed)
+
+    def test_judge_prompt_matches_the_committed_copy_byte_for_byte(self):
+        source = self._load()
+        _compiled, _axes, prompt, _presentation = compile_pack(source, "demo/airline-support-outcomes")
+        committed = (REPO_ROOT / "demo" / "airline-support-outcomes" / "judge-prompt.md").read_text()
+        self.assertEqual(prompt, committed)
+        self.assertIn("the transcript shows the criterion was satisfied", prompt)
+        self.assertNotIn("the evidence shows the criterion was satisfied", prompt)
+
+
 class WritePack(unittest.TestCase):
     def test_write_pack_produces_the_four_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -373,9 +476,27 @@ class ResolveOutDir(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve_out_dir(pathlib.Path("/tmp/somewhere-else"))
 
-    def test_rejects_wrong_top_level_dir(self):
+    def test_accepts_a_non_demo_path_of_any_depth(self):
+        # Generalization: a pack not consumed by run_daily.py (e.g. scripts/
+        # judge_bundle.py's packs) carries none of demo/'s depth-2 assumption.
+        out_abs, out_rel = resolve_out_dir(pathlib.Path("packs/some-pack/compiled"))
+        self.assertEqual(out_rel, "packs/some-pack/compiled")
+        self.assertEqual(out_abs, REPO_ROOT / "packs" / "some-pack" / "compiled")
+
+    def test_rejects_the_repo_root_itself(self):
         with self.assertRaises(ValueError):
-            resolve_out_dir(pathlib.Path("packs/some-pack"))
+            resolve_out_dir(pathlib.Path("."))
+        with self.assertRaises(ValueError):
+            resolve_out_dir(REPO_ROOT)
+
+    def test_rejects_a_single_top_level_segment_outside_demo(self):
+        # write_pack() always writes its four files directly into --out; a
+        # bare top-level name (e.g. "scripts", "tests") would write them
+        # straight into one of this repo's own existing directories.
+        with self.assertRaises(ValueError):
+            resolve_out_dir(pathlib.Path("scripts"))
+        with self.assertRaises(ValueError):
+            resolve_out_dir(pathlib.Path("some-new-top-level-pack"))
 
 
 class CliSmoke(unittest.TestCase):
