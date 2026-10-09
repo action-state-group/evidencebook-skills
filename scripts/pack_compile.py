@@ -409,6 +409,27 @@ def source_digest(source):
     return hashlib.sha256(json.dumps(source, sort_keys=True, default=str).encode()).hexdigest()
 
 
+
+def judge_claim(crit):
+    """The text the judge reads for one criterion: the rule text verbatim, then,
+    when the pack gives one, a single explicit question and what met / not_met
+    mean for it. Rule texts are often written as obligations ("Ask when X"), so
+    without the question a judge can answer two different questions -- "did X
+    happen?" or "was the obligation honored?" -- and "met" then means opposite
+    things. Packs without judge_question (airline) keep the plain rule text, so
+    their compiled output is unchanged."""
+    q = crit.get("judge_question")
+    if not q:
+        return crit["text"]
+    parts = [crit["text"].strip(), "", "Question: " + q.strip()]
+    if crit.get("met_means"):
+        parts.append("Answer met when: " + crit["met_means"].strip() + ".")
+    if crit.get("not_met_means"):
+        parts.append("Answer not_met when: " + crit["not_met_means"].strip() + ".")
+    if crit.get("scope_note"):
+        parts.append("Scope: " + " ".join(crit["scope_note"].split()))
+    return "\n".join(parts)
+
 def build_clauses(source):
     clauses = []
     for check in source["checks"]:
@@ -418,7 +439,7 @@ def build_clauses(source):
                 "check_id": check["id"],
                 "check_question": check["question"],
                 "label": crit["label"],
-                "claim": crit["text"],
+                "claim": judge_claim(crit),
                 "tier": crit["tier"],
                 "recompute_eligible": bool(crit.get("recompute_eligible", False)),
                 "recompute_note": crit.get("recompute_note", ""),
