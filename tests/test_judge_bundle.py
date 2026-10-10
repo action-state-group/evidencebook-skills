@@ -98,6 +98,17 @@ def fixed_backend(verdict):
     return jevals.MockBackend(fn=lambda qid, q, state: verdict)
 
 
+def rule9_clauses():
+    return judge_bundle.select_clauses(compiled_pack(), ["9"])
+
+
+def pin_for(model_id, input_refs):
+    """judge_bundle.build_judge_pin() over rule 9's compiled clause: the pin's
+    prompt_template_hash depends on which questions were sent, so every pin
+    built here names the clauses it covers."""
+    return judge_bundle.build_judge_pin(model_id, input_refs, rule9_clauses())
+
+
 class PackSource(unittest.TestCase):
     def test_pack_source_is_valid(self):
         source = pack_compile._strip_strings(yaml.safe_load(PACK_SOURCE.read_text()))
@@ -456,20 +467,21 @@ class WholeBundleDefault(unittest.TestCase):
 
 class JudgePin(unittest.TestCase):
     def test_pin_is_present_and_stable(self):
-        pin_a, digest_a = judge_bundle.build_judge_pin("jev-1.13.0", ["outgoing_content"])
-        pin_b, digest_b = judge_bundle.build_judge_pin("jev-1.13.0", ["outgoing_content"])
+        pin_a, digest_a = pin_for("jev-1.13.0", ["outgoing_content"])
+        pin_b, digest_b = pin_for("jev-1.13.0", ["outgoing_content"])
         self.assertEqual(pin_a, pin_b)
         self.assertEqual(digest_a, digest_b)
         self.assertEqual(set(pin_a), set(instrument_pin.PIN_KEYS))
         self.assertEqual(pin_a["model_id"], "jev-1.13.0")
         self.assertEqual(pin_a["input_refs"], ["outgoing_content"])
         self.assertEqual(pin_a["model_hosting"], "hosted")
-        self.assertEqual(pin_a["prompt_template_hash"], jev_judge.instruction_template_digest(mode="disclosed_facts"))
+        self.assertEqual(pin_a["prompt_template_hash"], jev_judge.compiled_prompt_digest(
+            judge_bundle.request_clauses(rule9_clauses()), judge_bundle.ALLOW_OUT_OF_SCOPE, mode="disclosed_facts"))
         self.assertEqual(pin_a["schema_hash"], jev_judge.answer_schema_digest())
 
     def test_pin_moves_with_input_refs(self):
-        pin_a, digest_a = judge_bundle.build_judge_pin("jev-1.13.0", ["outgoing_content"])
-        pin_b, digest_b = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor"])
+        pin_a, digest_a = pin_for("jev-1.13.0", ["outgoing_content"])
+        pin_b, digest_b = pin_for("jev-1.13.0", ["amount_minor"])
         self.assertNotEqual(pin_a, pin_b)
         self.assertNotEqual(digest_a, digest_b)
 

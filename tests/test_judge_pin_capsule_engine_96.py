@@ -57,6 +57,10 @@ FACTS = {"action": "pay", "action_class": "money.transfer", "amount_minor": 4500
 # this test, never a silent side effect of an unrelated change.
 DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH = "6fdab8f50fac6a98420f5092d328bab4e91caeacb0006c0e74f1be62a3a37102"
 ANSWER_SCHEMA_HASH = "69fa84e81389a9544d456b189411048e32ab5b36071ef3d0136accd1db465434"
+# The pin's prompt_template_hash for a call judging rule 9 alone: the template
+# above plus rule 9's compiled question (jev_judge.compiled_prompt_digest).
+# Rewording rule 9's question moves this literal, by design.
+RULE9_PROMPT_TEMPLATE_HASH = "4e46cb45cc7f34edab9d495ff394073a3ae97cd22790faec34a1c0bc535b3262"
 
 
 def compiled_pack():
@@ -67,6 +71,17 @@ def compiled_pack():
 
 def fixed_backend(verdict):
     return jevals.MockBackend(fn=lambda qid, q, state: verdict)
+
+
+def rule9_clauses():
+    return judge_bundle.select_clauses(compiled_pack(), ["9"])
+
+
+def pin_for(model_id, input_refs):
+    """judge_bundle.build_judge_pin() over rule 9's compiled clause: the pin's
+    prompt_template_hash depends on which questions were sent, so every pin
+    built here names the clauses it covers."""
+    return judge_bundle.build_judge_pin(model_id, input_refs, rule9_clauses())
 
 
 
@@ -94,8 +109,47 @@ class LiteralPinHashes(unittest.TestCase):
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
         pin = document["claims"][0]["judge_pin"]
-        self.assertEqual(pin["prompt_template_hash"], DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH)
+        self.assertEqual(pin["prompt_template_hash"], RULE9_PROMPT_TEMPLATE_HASH)
         self.assertEqual(pin["schema_hash"], ANSWER_SCHEMA_HASH)
+
+
+class PinCoversTheQuestions(unittest.TestCase):
+    """prompt_template_hash covers each judged clause's compiled question, not
+    the template alone: before this, rewording r9/r10's questions left the pin
+    unchanged."""
+
+    def _pin_hash(self, clauses):
+        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor"], clauses)
+        return pin["prompt_template_hash"]
+
+    def test_a_one_word_change_to_a_question_moves_the_pin(self):
+        clauses = rule9_clauses()
+        reworded = [dict(c) for c in clauses]
+        words = reworded[0]["claim"].split(" ")
+        words[0] = words[0] + "x"
+        reworded[0]["claim"] = " ".join(words)
+        self.assertNotEqual(self._pin_hash(clauses), self._pin_hash(reworded))
+
+    def test_the_template_digest_alone_is_unchanged(self):
+        self.assertEqual(jev_judge.instruction_template_digest(mode="disclosed_facts"),
+                         DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH)
+        self.assertNotEqual(self._pin_hash(rule9_clauses()), DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH)
+
+    def test_clause_order_does_not_move_the_pin(self):
+        clauses = judge_bundle.select_clauses(compiled_pack(), ["9", "10"])
+        self.assertEqual(self._pin_hash(clauses), self._pin_hash(list(reversed(clauses))))
+
+    def test_the_evidence_never_enters_the_pin(self):
+        pack = compiled_pack()
+        pins = []
+        for facts in (FACTS, {**FACTS, "note": "different evidence"}):
+            document = judge_bundle.run(pack, {
+                "bundle_kind": judge_bundle.BUNDLE_KIND, "root": "evidence-independence",
+                "records": [{"capsule_id": CAPSULE_ID}],
+                "disclosures": {CAPSULE_ID: facts}, "completeness": {"payloads_mode": "selected", "missing": []},
+            }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
+            pins.append(document["claims"][0]["judge_pin"]["prompt_template_hash"])
+        self.assertEqual(pins[0], pins[1])
 
 
 @unittest.skipIf(_CAPSULE_ENGINE_IMPORT_ERROR is not None,
@@ -128,7 +182,7 @@ class RealLoaderAccepts(unittest.TestCase):
             self._assert_real_loader_accepts(claim["judge_pin"])
 
     def test_judge_bundle_rule9_pin_is_accepted(self):
-        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", judge_bundle.declared_input_refs(
+        pin, _digest = pin_for("jev-1.13.0", judge_bundle.declared_input_refs(
             judge_bundle.select_clauses(compiled_pack(), ["9"])
         ))
         self._assert_real_loader_accepts(pin)
@@ -136,7 +190,7 @@ class RealLoaderAccepts(unittest.TestCase):
 
 
     def test_an_auditor_rerun_under_a_different_model_id_is_still_accepted(self):
-        pin, _digest = judge_bundle.build_judge_pin("jev-2.0.0", judge_bundle.declared_input_refs(
+        pin, _digest = pin_for("jev-2.0.0", judge_bundle.declared_input_refs(
             judge_bundle.select_clauses(compiled_pack(), ["9"])
         ))
         self._assert_real_loader_accepts(pin)
@@ -159,13 +213,13 @@ class RealPinsAreAccepted(unittest.TestCase):
     loader -- runs even where capsule-engine itself is not installed."""
 
     def test_judge_bundle_pin_is_accepted(self):
-        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor", "currency", "recurrence"])
+        pin, _digest = pin_for("jev-1.13.0", ["amount_minor", "currency", "recurrence"])
         assert_accepted(pin)
 
 
 
     def test_an_auditor_rerun_under_a_different_model_id_is_still_accepted(self):
-        pin, _digest = judge_bundle.build_judge_pin("jev-2.0.0", judge_bundle.declared_input_refs(
+        pin, _digest = pin_for("jev-2.0.0", judge_bundle.declared_input_refs(
             judge_bundle.select_clauses(compiled_pack(), ["9"])
         ))
         assert_accepted(pin)
@@ -178,7 +232,7 @@ class MalformedPinsAreRefused(unittest.TestCase):
     parametrization."""
 
     def _pin(self, **overrides):
-        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor"])
+        pin, _digest = pin_for("jev-1.13.0", ["amount_minor"])
         pin.update(overrides)
         return pin
 
@@ -243,13 +297,13 @@ class KeySetAndHostingMatchCapsuleEngine96(unittest.TestCase):
 
     def test_jev_is_always_hosted_never_self_hosted(self):
         self.assertEqual(jev_judge.MODEL_HOSTING, "hosted")
-        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor"])
+        pin, _digest = pin_for("jev-1.13.0", ["amount_minor"])
         self.assertEqual(pin["model_hosting"], "hosted")
 
     def test_no_prompt_named_key_other_than_prompt_template_hash(self):
         """#96's loader refuses any judge_pin key named "...prompt..." other
         than prompt_template_hash outright -- confirm a real built pin never
         carries one."""
-        pin, _digest = judge_bundle.build_judge_pin("jev-1.13.0", ["amount_minor"])
+        pin, _digest = pin_for("jev-1.13.0", ["amount_minor"])
         prompt_named = [key for key in pin if "prompt" in key.lower()]
         self.assertEqual(prompt_named, ["prompt_template_hash"])

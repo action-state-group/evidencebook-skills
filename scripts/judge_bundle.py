@@ -253,6 +253,17 @@ def not_evaluable_answers(clauses, reason):
     return {c["id"]: {"verdict": "not_evaluable", "rationale": reason} for c in clauses}
 
 
+ALLOW_OUT_OF_SCOPE = True
+
+
+def request_clauses(clauses):
+    """The clause objects one judge_many() request carries: exactly what
+    build_judge_pin() hashes, so the pin covers the questions the judge was
+    actually sent."""
+    return [{"id": c["id"], "check_id": c["check_id"], "claim": c["claim"],
+             "never_out_of_scope": c.get("never_out_of_scope", False)} for c in clauses]
+
+
 def judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=None):
     """The fail-closed decision tree: withheld bundle first (whatever
     --capsule-id says), then -- narrowed to one record or not -- a
@@ -279,11 +290,10 @@ def judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=None):
 
     target_ids = sorted(facts_by_id)
     request = {
-        "clauses": [{"id": c["id"], "check_id": c["check_id"], "claim": c["claim"],
-                    "never_out_of_scope": c.get("never_out_of_scope", False)} for c in clauses],
+        "clauses": request_clauses(clauses),
         "disclosed_facts": {"records": facts_by_id, "extensions": bundle.get("extensions") or {}},
         "judge_model_id": judge_model_id,
-        "allow_out_of_scope": True,
+        "allow_out_of_scope": ALLOW_OUT_OF_SCOPE,
     }
     try:
         answers = jev_judge.judge_many(request, backend=backend)
@@ -306,14 +316,16 @@ def declared_input_refs(clauses):
     return sorted(refs)
 
 
-def build_judge_pin(judge_model_id, input_refs):
+def build_judge_pin(judge_model_id, input_refs, clauses):
     """The judged-instrument pin (instrument_pin.build_pin) for a batch of
     disclosed_facts-mode rows: the model id this call used, the digest of the
-    prompt template and of the answer schema jev_judge actually sends/expects
-    for that mode, input_refs (declared_input_refs() above -- never a record
-    or capsule_id), and model_hosting (always "hosted" --
-    jev_judge.MODEL_HOSTING)."""
-    prompt_template_hash = jev_judge.instruction_template_digest(mode="disclosed_facts")
+    prompt the judge is sent for these clauses -- the instruction template plus
+    each clause's compiled question (jev_judge.compiled_prompt_digest), never
+    the evidence -- and of the answer schema it must return, input_refs
+    (declared_input_refs() above -- never a record or capsule_id), and
+    model_hosting (always "hosted" -- jev_judge.MODEL_HOSTING)."""
+    prompt_template_hash = jev_judge.compiled_prompt_digest(
+        request_clauses(clauses), ALLOW_OUT_OF_SCOPE, mode="disclosed_facts")
     schema_hash = jev_judge.answer_schema_digest()
     return instrument_pin.build_pin(
         judge_model_id, prompt_template_hash, schema_hash, input_refs, jev_judge.MODEL_HOSTING
@@ -353,7 +365,7 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
         # a named model actually produced this verdict, never sealed when no
         # model was ever consulted.
         report_digests = {cid: target_ids for cid in all_criteria}
-        pin, pin_digest = build_judge_pin(judge_model_id, input_refs)
+        pin, pin_digest = build_judge_pin(judge_model_id, input_refs, clauses)
         judge_pin_digests = {cid: pin_digest for cid in all_criteria}
         judge_pins = {cid: pin for cid in all_criteria}
     else:

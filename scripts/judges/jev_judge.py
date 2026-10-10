@@ -317,6 +317,22 @@ def instruction_template_digest(mode="transcript"):
     return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()
 
 
+def compiled_prompt_digest(clauses, allow_out_of_scope, mode):
+    """SHA-256 over everything build_eval() puts in front of the model for this
+    batch of clauses, besides the evidence: this mode's
+    instruction_template_digest() plus, per clause (sorted by id), the rendered
+    instructions -- which carry the clause's own compiled question -- and the
+    answer options it is offered. A one-word change to any judged clause's
+    question moves this digest; the evidence never enters it. A separate digest,
+    not a change to instruction_template_digest(), whose basis the airline
+    path's own pin depends on byte-for-byte."""
+    evals = [build_eval(clause, allow_out_of_scope, mode=mode) for clause in clauses]
+    questions = sorted(({"id": ev.name, "instructions": ev.instructions, "options": ev.options} for ev in evals),
+                       key=lambda q: q["id"])
+    basis = {"instruction_template_digest": instruction_template_digest(mode), "questions": questions}
+    return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()
+
+
 class JudgeError(Exception):
     """Any reason this judge refuses to answer. Fail closed: caught only at the CLI edge."""
 

@@ -10,10 +10,11 @@ The key set matches capsule-engine's `judge_pin` (capsule-engine PR #96,
 
   - model_id: the judge model id this run actually used (overridable by an
     auditor's re-run under a different model id; same input, same clauses).
-  - prompt_template_hash: jev_judge.instruction_template_digest(mode=...) --
-    the SHA-256 hex digest of the prompt TEMPLATE actually sent (never a
-    prompt with a record's own content interpolated into it), matching #96's
-    own definition of this field.
+  - prompt_template_hash: jev_judge.compiled_prompt_digest(clauses, ...) --
+    the SHA-256 hex digest of the prompt actually sent for the judged clauses:
+    the instruction template plus each clause's compiled question and answer
+    options (never a record's own content), so rewording a question moves the
+    pin.
   - schema_hash: jev_judge.answer_schema_digest() -- the SHA-256 hex digest of
     the canonical JSON answer schema the judge must return. #96 fixes this
     field's FORMAT (64 lowercase hex characters, `loader.py`'s
