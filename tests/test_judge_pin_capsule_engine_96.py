@@ -60,7 +60,7 @@ ANSWER_SCHEMA_HASH = "69fa84e81389a9544d456b189411048e32ab5b36071ef3d0136accd1db
 # The pin's prompt_template_hash for a call judging rule 9 alone: the template
 # above plus rule 9's compiled question (jev_judge.compiled_prompt_digest).
 # Rewording rule 9's question moves this literal, by design.
-RULE9_PROMPT_TEMPLATE_HASH = "4e46cb45cc7f34edab9d495ff394073a3ae97cd22790faec34a1c0bc535b3262"
+RULE9_PROMPT_TEMPLATE_HASH = "c7a000b03f57c2021314813f78f2ee72b397075fcf6e84d6ddabda0bc5696358"
 
 
 def compiled_pack():
