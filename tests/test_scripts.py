@@ -8,7 +8,9 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
-from capsulectl_calls import EvidenceUnavailable  # noqa: E402
+import datetime  # noqa: E402
+
+from capsulectl_calls import EvidenceUnavailable, committed_on, parse_rfc3339  # noqa: E402
 from run_daily import checked_answer  # noqa: E402
 from run_weekly import PACKET_FIELDS, blind_packet, checked_ratings  # noqa: E402
 
@@ -52,6 +54,31 @@ class CheckedRatings(unittest.TestCase):
     def test_a_rating_that_is_not_a_verdict_is_refused(self):
         with self.assertRaisesRegex(ValueError, "not met, not_met or not_evaluable"):
             checked_ratings([{"case_id": "a", "rating": "yes"}], self.SAMPLE)
+
+
+class ParseRfc3339(unittest.TestCase):
+    """capsulectl's real appended_at timestamps carry Go's trailing-zero-trimmed
+    fractional seconds -- any digit count, not just the 3 or 6 Python's
+    fromisoformat (pre-3.11) accepts. Found via tests/fresh_env_outcomes.sh's 50-case
+    run: a Close capsule's real wall-clock append time (5 fractional digits)
+    crashed a second daily-judge-and-close run."""
+
+    def test_no_fraction_parses(self):
+        self.assertEqual(parse_rfc3339("2026-09-23T12:00:00Z").date(), datetime.date(2026, 9, 23))
+
+    def test_six_digit_fraction_parses(self):
+        self.assertEqual(parse_rfc3339("2026-09-30T23:12:51.781403Z").date(), datetime.date(2026, 9, 30))
+
+    def test_five_digit_fraction_parses(self):
+        self.assertEqual(parse_rfc3339("2026-09-30T23:21:38.01987+00:00").date(), datetime.date(2026, 9, 30))
+
+    def test_one_digit_fraction_parses(self):
+        self.assertEqual(parse_rfc3339("2026-09-30T23:12:54.3Z").date(), datetime.date(2026, 9, 30))
+
+    def test_committed_on_uses_the_same_tolerant_parse(self):
+        entry = {"appended_at": "2026-09-30T23:21:38.01987+00:00"}
+        self.assertTrue(committed_on(entry, datetime.date(2026, 9, 30)))
+        self.assertFalse(committed_on(entry, datetime.date(2026, 9, 29)))
 
 
 class CheckedAnswer(unittest.TestCase):

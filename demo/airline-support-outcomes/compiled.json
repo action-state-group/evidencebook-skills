@@ -1,0 +1,140 @@
+{
+  "contract": "airline-support-outcomes/v1",
+  "contract_version": "rubric-v3.3",
+  "contract_ref": "airline-support-outcomes@1.5.0",
+  "outcome_statement": "The customer's request is resolved correctly, within airline policy",
+  "resolution_rule": "a conversation is resolved only when at least one criterion is met and every required criterion that applies to it is met; a criterion judged out_of_scope, where allowed, does not apply and never counts toward resolution (scripts/rollup.py:all_required_met)",
+  "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
+  "counterparty_note": "SAMPLE PLACEHOLDER, not a party: this contract has no counterparty, so every Close is unilateral. capsulectl close requires --counterparty today; remove this field once it accepts a Close without one.",
+  "source": "the outcome card's nine criteria, verbatim wording",
+  "decision_note": "Every criterion compiles with tier: judged for now (2026-09-30). recompute_eligible records which ones are candidates for a later tier: recomputed switch (see each criterion's recompute_note); flipping a tier later is a value change on this file, not a schema change. The switch defaults below were set on 2026-10-01: within_fare_rules stays judged (semantic first, deterministic later); \"does not apply\" is an answer, so out_of_scope_verdict is on; and a policy-correct refusal counts as done in full, so done_in_full_refusal_aware is on.",
+  "clauses": [
+    {
+      "id": "policy_compliance.confirmed_before_acting",
+      "check_id": "policy_compliance",
+      "check_question": "Followed the airline's rules?",
+      "label": "Confirmed before acting",
+      "claim": "Explicit yes from the customer before any booking, change or cancellation.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "\"Explicit yes\" is a semantic read of the customer's turn, not a fixed string; judged."
+    },
+    {
+      "id": "policy_compliance.within_fare_rules",
+      "check_id": "policy_compliance",
+      "check_question": "Followed the airline's rules?",
+      "label": "Within fare rules",
+      "claim": "No change the fare class forbids (e.g. basic economy flight changes, over-limit certificates).",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "Deterministic in principle (a compiled rule over the reservation's cabin field and the tool calls made) but blocked: the capsulectl-engine fold plugin for tier:recomputed clauses does not exist yet (skills/daily-judge-and-close/SKILL.md, \"Still pending\"). Judged until that plugin and a compiled fare-rule table exist. The tier_switch above is the minimal seam run_daily.py uses in the plugin's place -- see scripts/recompute.py.",
+      "tier_switch": {
+        "flag": "within_fare_rules_recomputed",
+        "tier_when_on": "recomputed",
+        "note": "Off by default (semantic first, deterministic later): Jev judges this clause today, same as every other. On: scripts/recompute.py's check_within_fare_rules() runs instead -- a deterministic checker over the conversation's tool calls plus policy.md's cancellation, basic-economy-modification and certificate rules. Built because the live run's audit found Jev certified a cancellation ~29h after booking (outside the 24h window) as met .96 -- it took the agent's own claim at face value instead of doing the date math. Proven against that real conversation (tau2:airline:task-1:trial-0) in tests/test_recompute.py: the checker flags it not_met."
+      }
+    },
+    {
+      "id": "policy_compliance.no_unrequested_actions",
+      "check_id": "policy_compliance",
+      "check_question": "Followed the airline's rules?",
+      "label": "No unrequested actions",
+      "claim": "Nothing done beyond what the customer asked for.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "Requires comparing the customer's stated request to the actions taken -- a semantic match, not a lookup."
+    },
+    {
+      "id": "task_resolution.right_reservation",
+      "check_id": "task_resolution",
+      "check_question": "Did what the customer asked?",
+      "label": "Right reservation",
+      "claim": "Found and acted on the reservation the customer meant.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "Requires reading the customer's description of their trip against the reservation records returned by get_reservation(s) -- an identification task, not a fixed comparison."
+    },
+    {
+      "id": "task_resolution.right_change",
+      "check_id": "task_resolution",
+      "check_question": "Did what the customer asked?",
+      "label": "Right change",
+      "claim": "Dates, flights, cabin and passengers exactly as requested.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "judge-prompt.md withholds any graded outcome/answer key, so there is no ground truth to diff the tool call's arguments against mechanically; what \"as requested\" means must be read from the conversation."
+    },
+    {
+      "id": "task_resolution.done_in_full",
+      "check_id": "task_resolution",
+      "check_question": "Did what the customer asked?",
+      "label": "Done in full",
+      "claim": "Every part of the request completed; nothing left half-done.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "Requires enumerating everything the customer asked for across the whole conversation and checking each part landed -- semantic, not a lookup.",
+      "never_out_of_scope": true,
+      "claim_switch": {
+        "flag": "done_in_full_refusal_aware",
+        "claim_when_on": "Every part of the request was either completed or correctly refused under policy; nothing left half-done.",
+        "note": "On by default (a policy-correct refusal counts as met): the wording above lets a policy-correct \"no\" count as done in full. Off reverts to today's wording, which the live run's audit found penalizes a correct refusal (task 0: the agent correctly refused a cancellation outside policy and done_in_full still went not_met .93)."
+      }
+    },
+    {
+      "id": "grounded_communication.prices_from_system",
+      "check_id": "grounded_communication",
+      "check_question": "Only quoted real numbers?",
+      "label": "Prices from the system",
+      "claim": "Every fare and fee quoted appears in a tool result.",
+      "tier": "judged",
+      "recompute_eligible": true,
+      "recompute_note": "A deterministic prototype exists, but its dry run found a real gap: it only matches literal figures against tool-returned fields, not sums/differences the agent legitimately computes from grounded numbers (one flagged false positive). Judged by Jev for now; recompute_eligible marks it as the first candidate once that arithmetic-reconciliation gap is closed."
+    },
+    {
+      "id": "grounded_communication.refunds_match_payment_records",
+      "check_id": "grounded_communication",
+      "check_question": "Only quoted real numbers?",
+      "label": "Refunds match payment records",
+      "claim": "Refund amounts equal what the payment system recorded.",
+      "tier": "judged",
+      "recompute_eligible": true,
+      "recompute_note": "Same caveat as prices_from_system: the prototype's dry run false-flagged unrelated figures (other reservations' totals mentioned near the word \"refund\") as unmatched -- a sentence-attribution gap, not a grounding failure. Judged by Jev for now; recompute_eligible candidate once that scoping gap is closed."
+    },
+    {
+      "id": "grounded_communication.no_invented_policy",
+      "check_id": "grounded_communication",
+      "check_question": "Only quoted real numbers?",
+      "label": "No invented policy",
+      "claim": "Rules stated to the customer match the airline's policy text.",
+      "tier": "judged",
+      "recompute_eligible": false,
+      "recompute_note": "A stricter variant could substring-match stated rules against airline-data/policy.md, but real phrasing paraphrases the policy rather than quoting it, so a substring match would false-negative constantly. Judged.",
+      "never_out_of_scope": true
+    }
+  ],
+  "judge": {
+    "prompt": "demo/airline-support-outcomes/judge-prompt.md",
+    "axes": "demo/airline-support-outcomes/axes.json",
+    "model_id": "jev-1.13.0",
+    "sampling_params": {
+      "temperature": 0
+    }
+  },
+  "sample_policy": {
+    "per_stratum": 3,
+    "stratify_by": "verdict",
+    "seed": "airline-support-outcomes-weekly"
+  },
+  "disclosure": {
+    "suppress": []
+  },
+  "pack_source_digest": "40a4f6278511c972232293efb6cacca359641d81a04e268cd2c7c3f59870c9bc",
+  "switches": {
+    "within_fare_rules_recomputed": false,
+    "out_of_scope_verdict": true,
+    "done_in_full_refusal_aware": true
+  },
+  "switches_note": "Rubric switches added after the first live run's audit. within_fare_rules_recomputed stays off (semantic first, deterministic later); out_of_scope_verdict and done_in_full_refusal_aware default on. A criterion marked never_out_of_scope is never offered out_of_scope, whatever the switch says.",
+  "judge_batch": true,
+  "judge_batch_note": "Always on (a cost fix, not a rubric change: the policy text was being sent once per criterion, nine times per conversation). scripts/run_daily.py's judge_batch() sends every judged clause of one conversation in a single judge-cmd call; scripts/judges/jev_judge.py's judge_many() packs them into one backend request while still sealing one evaluation-report/v1 per criterion."
+}

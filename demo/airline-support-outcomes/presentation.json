@@ -1,0 +1,107 @@
+{
+  "outcome-report/v1": {
+    "enabled": true,
+    "percentages": false,
+    "terms": {
+      "checks": [
+        {
+          "id": "policy_compliance",
+          "question": "Followed the airline's rules?"
+        },
+        {
+          "id": "task_resolution",
+          "question": "Did what the customer asked?"
+        },
+        {
+          "id": "grounded_communication",
+          "question": "Only quoted real numbers?"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "policy_compliance.confirmed_before_acting",
+          "label": "Confirmed before acting",
+          "text": "Explicit yes from the customer before any booking, change or cancellation.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "policy_compliance.within_fare_rules",
+          "label": "Within fare rules",
+          "text": "No change the fare class forbids (e.g. basic economy flight changes, over-limit certificates).",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "policy_compliance.no_unrequested_actions",
+          "label": "No unrequested actions",
+          "text": "Nothing done beyond what the customer asked for.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "task_resolution.right_reservation",
+          "label": "Right reservation",
+          "text": "Found and acted on the reservation the customer meant.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "task_resolution.right_change",
+          "label": "Right change",
+          "text": "Dates, flights, cabin and passengers exactly as requested.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "task_resolution.done_in_full",
+          "label": "Done in full",
+          "text": "Every part of the request completed; nothing left half-done.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": true
+        },
+        {
+          "id": "grounded_communication.prices_from_system",
+          "label": "Prices from the system",
+          "text": "Every fare and fee quoted appears in a tool result.",
+          "tier": "judged",
+          "recompute_eligible": true,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "grounded_communication.refunds_match_payment_records",
+          "label": "Refunds match payment records",
+          "text": "Refund amounts equal what the payment system recorded.",
+          "tier": "judged",
+          "recompute_eligible": true,
+          "never_out_of_scope": false
+        },
+        {
+          "id": "grounded_communication.no_invented_policy",
+          "label": "No invented policy",
+          "text": "Rules stated to the customer match the airline's policy text.",
+          "tier": "judged",
+          "recompute_eligible": false,
+          "never_out_of_scope": true
+        }
+      ]
+    },
+    "reason_codes": {
+      "policy_compliance.confirmed_before_acting": "Confirmed before acting",
+      "policy_compliance.within_fare_rules": "Within fare rules",
+      "policy_compliance.no_unrequested_actions": "No unrequested actions",
+      "task_resolution.right_reservation": "Right reservation",
+      "task_resolution.right_change": "Right change",
+      "task_resolution.done_in_full": "Done in full",
+      "grounded_communication.prices_from_system": "Prices from the system",
+      "grounded_communication.refunds_match_payment_records": "Refunds match payment records",
+      "grounded_communication.no_invented_policy": "No invented policy"
+    }
+  }
+}

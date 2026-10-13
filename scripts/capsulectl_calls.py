@@ -4,7 +4,27 @@ import datetime
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
+
+_FRACTIONAL_SECONDS = re.compile(r"\.(\d+)")
+
+
+def parse_rfc3339(timestamp):
+    """capsulectl stamps appended_at with Go's RFC3339Nano, which trims trailing
+    zeros from the fractional seconds -- so the digit count varies record to
+    record (".39222" as readily as ".781403"). Python's fromisoformat before 3.11
+    only accepts exactly 0, 3 or 6 fractional digits and raises on anything else
+    (seen in practice: a Close capsule's real wall-clock append time, 5 digits,
+    crashed a second daily-judge-and-close run that lists every published capsule
+    including it). Pad or truncate to 6 digits so any valid RFC3339 timestamp
+    parses, whatever the producer trimmed."""
+    ts = timestamp.replace("Z", "+00:00")
+    m = _FRACTIONAL_SECONDS.search(ts)
+    if m:
+        frac = (m.group(1) + "000000")[:6]
+        ts = ts[:m.start()] + "." + frac + ts[m.end():]
+    return datetime.datetime.fromisoformat(ts)
 
 
 class EvidenceUnavailable(Exception):
@@ -56,8 +76,7 @@ def verify(capsulectl, profile, capsule_id, workdir):
 
 
 def committed_on(entry, day):
-    at = datetime.datetime.fromisoformat(entry["appended_at"].replace("Z", "+00:00"))
-    return at.date() == day
+    return parse_rfc3339(entry["appended_at"]).date() == day
 
 
 def publish(capsulectl, profile, request, workdir, name):
