@@ -9,12 +9,13 @@ Pack-driven: the check groupings, the full criteria set, each clause's EFFECTIVE
 tier (its tier_switch applied) and the never_out_of_scope set all come from
 --spec's own clauses[] and switches, never from code here.
 
-Pin-scoped whenever a judge model id is available (--judge-model-id, or
-spec["judge"]["model_id"]): a judged report counts only under the CURRENT judge pin
-(scripts/judge_pin.py, recomputed here exactly as run_daily.py builds it, which
-needs --judge-cmd to report its instruction template), and a recomputed report
-only under the current pack_source_digest. A clause reworded but kept at the same
-id is therefore never combined with an older judgment of it.
+Pin-scoped: a judged report counts only under the CURRENT judge pin
+(scripts/judge_pin.py, recomputed here exactly as run_daily.py builds it from
+--judge-model-id, required here as it is there, and --judge-cmd, which reports its
+instruction template), and a recomputed report only under the current
+pack_source_digest. A clause reworded but kept at the same id is therefore never
+combined with an older judgment of it. Every report of this contract that scoping
+leaves out is counted in the summary's "reports_excluded", by reason.
 
 Conflicts are refused, not resolved by order: two reports under one pin for the
 same case and clause with different verdicts (a re-judgment that disagrees) put
@@ -26,7 +27,7 @@ This script SEALS NOTHING: it is a read of the book plus a pure computation,
 written to --out as plain files.
 
     python3 scripts/rollup_day.py --profile tau2 --spec demo/tau2-outcomes/compiled.json \\
-        --capsulectl CTL --judge-cmd "python3 scripts/judges/jev_judge.py" \\
+        --capsulectl CTL --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id MODEL \\
         --generated-at 2026-09-23T23:59:59Z --out RUN_DIR/rollup
 
 Writes one JSON file per fully-judged case (rollup + the Result v0 document), one
@@ -69,6 +70,21 @@ def _in_scope(body, contract, expected_pin, expected_pack):
     if "judge_pin_digest" in body:
         return expected_pin is None or body["judge_pin_digest"] == expected_pin
     return expected_pack is None or body.get("pack_source_digest") == expected_pack
+
+
+def count_excluded(capsule_bodies, contract, expected_pin, expected_pack):
+    """How many of this contract's evaluation-report/v1 records scoping left
+    out, by reason: a judged report under another judge pin, a recomputed
+    report under another pack source. Reported in the summary so a rollup that
+    finds nothing current says what it set aside, never a bare zero."""
+    counts = {"judge_pin_mismatch": 0, "pack_source_mismatch": 0}
+    for _capsule_id, body in capsule_bodies:
+        if not isinstance(body, dict) or body.get("record_type") != "evaluation-report/v1":
+            continue
+        if body.get("contract") != contract or _in_scope(body, contract, expected_pin, expected_pack):
+            continue
+        counts["judge_pin_mismatch" if "judge_pin_digest" in body else "pack_source_mismatch"] += 1
+    return counts
 
 
 def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key):
@@ -150,12 +166,13 @@ def collect_reports(capsulectl, profile, contract, expected_pin=None, expected_p
 
 def resolve_expected_pin(capsulectl, spec, judge_model_id, judge_cmd, root, work, timeout=DEFAULT_JUDGE_TIMEOUT):
     """The current compiled spec's judge_pin_digest, built exactly as
-    scripts/run_daily.py builds it (scripts/judge_pin.py) -- or None when no model
-    id is available (a hand-authored contract predating judge.model_id), in which
-    case the rollup runs unscoped by pin. Needs the judge command, which reports
-    the instruction template it sends."""
-    if not judge_model_id:
-        return None
+    scripts/run_daily.py builds it (scripts/judge_pin.py). Needs the judge
+    command, which reports the instruction template it sends. An empty or
+    blank model id is refused, never read as "no pin": that would admit every
+    judged report of the contract whatever pin it was sealed under."""
+    if not judge_model_id or not judge_model_id.strip():
+        raise RollupError("a judge model id is required to scope the rollup by judge pin; "
+                          "an empty one would admit reports sealed under any pin")
     if not judge_cmd:
         raise EvidenceUnavailable("--judge-cmd is required to recompute the judge pin "
                                   "(the pin covers the instruction template the judge reports)")
@@ -214,12 +231,20 @@ def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, co
     }
 
 
+REASON_CONFLICTING = "conflicting verdicts under one pin"
+
+
 def day_document(period, day_cases, generated_at, all_criteria, contract_ref, tiers,
-                 allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                 allow_out_of_scope=False, never_out_of_scope=frozenset(), conflicting=None):
     """Pure: one day's Result v0 over every case that can be rolled up, plus the
-    list of cases left out and why -- nothing is dropped silently. Returns
+    list of cases left out and why -- nothing is dropped silently. `conflicting`
+    (case_id -> {clause_id: sorted verdicts}) names the cases this day carried
+    reports for that were kept out of every rollup for a conflict (see _group);
+    each is listed in `skipped` too, with the conflicting clauses. Returns
     (document or None, skipped)."""
     case_rollups, skipped = [], []
+    for case_id, clauses in sorted((conflicting or {}).items()):
+        skipped.append({"case_id": case_id, "reason": REASON_CONFLICTING, "clauses": clauses})
     for case_id, clause_verdicts in sorted(day_cases.items()):
         current, stale = partition_stale(clause_verdicts, all_criteria)
         missing = [c for c in all_criteria if c not in current]
@@ -241,6 +266,37 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
                                    allow_out_of_scope, never_out_of_scope), skipped
 
 
+def conflicting_cases_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts):
+    """period -> {case_id: conflicting clauses} for every in-scope report of a
+    case in `conflicts`: the days a conflicting case was pruned from, whichever
+    grouping (per case across days, or per day) found the conflict."""
+    out = {}
+    for _capsule_id, body in capsule_bodies:
+        if not _in_scope(body, contract, expected_pin, expected_pack):
+            continue
+        case_id = body.get("case_id")
+        if case_id in conflicts:
+            out.setdefault(body.get("period"), {})[case_id] = conflicts[case_id]
+    return out
+
+
+def day_results(capsule_bodies, contract, expected_pin, expected_pack, conflicts, generated_at, all_criteria,
+                contract_ref, tiers, allow_out_of_scope=False, never_out_of_scope=frozenset()):
+    """Pure: [(period, day document or None, cases_skipped)] for every period
+    the book carries an in-scope report for. `conflicts` is the record
+    collect_reports() already filled (per case, across days); the per-day
+    grouping adds to it. A conflicting case is pruned from every day document
+    and listed in each affected day's cases_skipped."""
+    by_day = group_reports_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts)
+    conflicted = conflicting_cases_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts)
+    out = []
+    for period in sorted(set(by_day) | set(conflicted), key=lambda p: (p is None, p)):
+        doc, skipped = day_document(period, by_day.get(period, {}), generated_at, all_criteria, contract_ref,
+                                    tiers, allow_out_of_scope, never_out_of_scope, conflicted.get(period))
+        out.append((period, doc, skipped))
+    return out
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--profile", required=True)
@@ -255,13 +311,15 @@ def main(argv):
                     help="the judge command run_daily.py used; asked to describe its instruction template so "
                          "the judge pin can be recomputed (required whenever a judge model id is available)")
     ap.add_argument("--judge-timeout", type=int, default=DEFAULT_JUDGE_TIMEOUT)
-    ap.add_argument("--judge-model-id", default=None,
-                     help="the pinned judge's model id, as given to run_daily.py --judge-model-id. "
-                          "Defaults to spec['judge']['model_id'] when present (every "
-                          "scripts/pack_compile.py-compiled contract carries one). When neither is "
-                          "available, the rollup is not pin-scoped: reports are combined by contract "
-                          "and clause id alone, as before this flag existed.")
+    ap.add_argument("--judge-model-id", required=True,
+                     help="the pinned judge's model id, exactly as given to run_daily.py --judge-model-id "
+                          "(required there too). Never defaulted from spec['judge']['model_id']: a run "
+                          "sealed under any other id would roll up as zero cases. Judged reports under "
+                          "any other pin are excluded and counted in the summary's reports_excluded.")
     args = ap.parse_args(argv)
+    if not args.judge_model_id.strip():
+        ap.error("--judge-model-id must name the judge's model id; an empty one would admit "
+                 "reports sealed under any pin")
 
     spec = json.loads(args.spec.read_text())
     root = args.spec.resolve().parents[2]
@@ -276,7 +334,7 @@ def main(argv):
     work = args.out / "work"
     work.mkdir(parents=True, exist_ok=True)
 
-    judge_model_id = args.judge_model_id or spec["judge"].get("model_id")
+    judge_model_id = args.judge_model_id
     expected_pack = spec.get("pack_source_digest")
     conflicts = {}
     try:
@@ -284,7 +342,8 @@ def main(argv):
                                             args.judge_timeout)
         by_case, bodies = collect_reports(args.capsulectl, args.profile, contract, expected_pin, expected_pack,
                                           conflicts)
-        by_day = group_reports_by_day(bodies, contract, expected_pin, expected_pack, conflicts)
+        days = day_results(bodies, contract, expected_pin, expected_pack, conflicts, args.generated_at,
+                           all_criteria, contract_ref, tiers, allow_out_of_scope, never_oos)
     except (EvidenceUnavailable, RollupError) as e:
         print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
         return 2
@@ -312,10 +371,8 @@ def main(argv):
 
     # One Result v0 per day/period, over every case that day that rolls up, beside
     # the per-case documents above. Built from the same sealed reports and tiers.
-    day_results = []
-    for period, day_cases in sorted(by_day.items(), key=lambda kv: (kv[0] is None, kv[0])):
-        day_doc, skipped = day_document(period, day_cases, args.generated_at, all_criteria, contract_ref, tiers,
-                                        allow_out_of_scope, never_oos)
+    day_entries = []
+    for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
@@ -323,7 +380,7 @@ def main(argv):
             out_path.write_text(json.dumps(day_doc, indent=2))
             entry.update(cases=headline_from_result(day_doc)["cases"], claims=len(day_doc["claims"]),
                          headline=headline_from_result(day_doc), out=str(out_path))
-        day_results.append(entry)
+        day_entries.append(entry)
 
     summary = {
         "cases_judged": len(by_case),
@@ -331,7 +388,8 @@ def main(argv):
         "cases_complete": len(complete),
         "cases_incomplete": incomplete,
         "cases_conflicting": [{"case_id": c, "clauses": v} for c, v in sorted(conflicts.items())],
-        "day_results": day_results,
+        "reports_excluded": count_excluded(bodies, contract, expected_pin, expected_pack),
+        "day_results": day_entries,
         "judge_pin_digest": expected_pin,
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2))

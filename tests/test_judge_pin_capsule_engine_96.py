@@ -51,16 +51,16 @@ FACTS = {"action": "pay", "action_class": "money.transfer", "amount_minor": 4500
 # Literal, pinned values (item 5): these two digests seal every judge_pin
 # this repo's "disclosed_facts" mode call sites build. A change to either
 # one -- jev_judge.ANSWER_SCHEMA, or the disclosed_facts instruction
-# template -- is a real behavior change to what the judge is asked and what
+# template, options, sample builder or state() layout -- is a real behavior change to what the judge is asked and what
 # it must answer, so these tests pin the literal hex, not merely "it's some
 # 64-char hex string": a change here should be a deliberate, reviewed edit to
 # this test, never a silent side effect of an unrelated change.
-DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH = "6fdab8f50fac6a98420f5092d328bab4e91caeacb0006c0e74f1be62a3a37102"
+DISCLOSED_FACTS_PROMPT_TEMPLATE_HASH = "2b06e12ffb2537fb0a5d7ceb9226919c108dbb28421bd6cf8aa6b79887d4425d"
 ANSWER_SCHEMA_HASH = "69fa84e81389a9544d456b189411048e32ab5b36071ef3d0136accd1db465434"
 # The pin's prompt_template_hash for a call judging rule 9 alone: the template
 # above plus rule 9's compiled question (jev_judge.compiled_prompt_digest).
 # Rewording rule 9's question moves this literal, by design.
-RULE9_PROMPT_TEMPLATE_HASH = "a7320aab85eff2270c967c4e264481e42bc6ef2aa31e487a00ad11b4f9a05ae5"
+RULE9_PROMPT_TEMPLATE_HASH = "357fc0d77465b84abab8106c69c692195fcad63aa92f248f0fc08fdd5a28b97a"
 
 
 def compiled_pack():

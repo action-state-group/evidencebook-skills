@@ -105,6 +105,22 @@ class ValidateSource(unittest.TestCase):
         issues = validate_source(source)
         self.assertTrue(any("duplicate criterion id" in i for i in issues), issues)
 
+    def test_a_case_separator_in_a_criterion_or_check_id_is_refused(self):
+        # A day document's claim id is <case_id>::<clause_id>, regrouped by
+        # scripts/result_v0.py's headline_from_result() on the LAST "::": a
+        # clause id carrying "::" would put part of itself into the case id,
+        # so one case would count as two.
+        for where in ("criterion", "check"):
+            source = minimal_source()
+            if where == "criterion":
+                source["checks"][0]["criteria"][0]["id"] = "one::two"
+            else:
+                source["checks"][0]["id"] = "a::b"
+            issues = validate_source(source)
+            self.assertTrue(any("'::'" in i for i in issues), (where, issues))
+        import result_v0
+        self.assertEqual(pack_compile.CASE_SEPARATOR, result_v0.CASE_SEPARATOR)
+
     def test_bad_tier_is_refused(self):
         source = minimal_source()
         source["checks"][0]["criteria"][0]["tier"] = "vibes"
@@ -189,6 +205,33 @@ class ValidateSource(unittest.TestCase):
             (REPO_ROOT / "packs/airline-support-outcomes/pack-source.yaml").read_text()))
         never = {c["id"] for c in build_clauses(source) if c.get("never_out_of_scope")}
         self.assertEqual(never, {"task_resolution.done_in_full", "grounded_communication.no_invented_policy"})
+
+
+class OutOfScopeMeans(unittest.TestCase):
+    """out_of_scope_means: what a row's out_of_scope answer means, compiled into
+    the claim beside met/not_met -- only where out_of_scope can be answered."""
+
+    def _source(self, value="the situation never came up", switch=True, never=False):
+        source = minimal_source()
+        source["switches"] = {"out_of_scope_verdict": switch}
+        crit = source["checks"][0]["criteria"][0]
+        crit.update(judge_question="Was it done?", met_means="it was done", not_met_means="it was not",
+                    out_of_scope_means=value)
+        if never:
+            crit["never_out_of_scope"] = True
+        return source
+
+    def test_it_compiles_into_the_claim(self):
+        source = self._source()
+        self.assertEqual(validate_source(source), [])
+        claim = build_clauses(source)[0]["claim"]
+        self.assertIn("Answer out_of_scope when: the situation never came up.", claim)
+
+    def test_it_is_refused_where_out_of_scope_cannot_be_answered(self):
+        for kwargs in ({"switch": False}, {"never": True}, {"value": ""}, {"value": 7}):
+            with self.subTest(**kwargs):
+                issues = validate_source(self._source(**kwargs))
+                self.assertTrue(any("out_of_scope_means" in i for i in issues), issues)
 
 
 class Switches(unittest.TestCase):
@@ -448,6 +491,32 @@ class AirlinePinUnchanged(unittest.TestCase):
         self.assertEqual(prompt, committed)
         self.assertIn("the transcript shows the criterion was satisfied", prompt)
         self.assertNotIn("the evidence shows the criterion was satisfied", prompt)
+
+
+class CommittedOutputsAreCompilerOutput(unittest.TestCase):
+    """Every committed compiled pack is exactly what scripts/pack_compile.py
+    writes for its source today -- all four files, compared as bytes (not as
+    parsed JSON, which would miss formatting drift, and not only compiled.json
+    and judge-prompt.md). A hand edit to a committed file, or a compiler change
+    that moves its output without a recompile, fails here."""
+    PACKS = (
+        ("packs/airline-support-outcomes/pack-source.yaml", "demo/airline-support-outcomes"),
+        ("packs/everyday-rules/pack-source.yaml", "packs/everyday-rules/compiled"),
+    )
+    FILES = ("compiled.json", "axes.json", "judge-prompt.md", "presentation.json")
+
+    def test_every_committed_file_equals_the_compiler_output_byte_for_byte(self):
+        for source_rel, out_rel in self.PACKS:
+            source = _strip_strings(yaml.safe_load((REPO_ROOT / source_rel).read_text()))
+            with tempfile.TemporaryDirectory() as tmp:
+                write_pack(source, pathlib.Path(tmp), out_rel)
+                for name in self.FILES:
+                    with self.subTest(pack=out_rel, file=name):
+                        self.assertEqual((pathlib.Path(tmp) / name).read_bytes(),
+                                         (REPO_ROOT / out_rel / name).read_bytes(),
+                                         f"{out_rel}/{name} is not what {source_rel} compiles to; "
+                                         f"recompile: python3 scripts/pack_compile.py compile {source_rel} "
+                                         f"--out {out_rel}")
 
 
 class WritePack(unittest.TestCase):

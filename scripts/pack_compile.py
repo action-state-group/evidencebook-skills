@@ -61,6 +61,11 @@ import yaml
 
 TIERS = {"judged", "recomputed"}
 
+# scripts/result_v0.py's CASE_SEPARATOR, repeated here rather than imported so
+# this compiler keeps no dependency on the rollup modules: a day document's
+# claim id is <case_id>::<clause_id>, so no check or criterion id may carry it.
+CASE_SEPARATOR = "::"
+
 # capsule-engine's own closed vocabulary for judge_pin.input_refs (PR #96,
 # "judge_pin for mode: judged obligations", `capsule_engine/packs/schema.py`'s
 # `NORMALIZED_ACTION_FIELDS`, commit 9069cf70aa562b42c9983d7277ec1ce2e1e34ce5).
@@ -213,6 +218,10 @@ def validate_source(source):
         if not isinstance(check_id, str) or not check_id.strip():
             issues.append(f"{where}.id must be a non-empty string")
             check_id = None
+        elif CASE_SEPARATOR in check_id:
+            issues.append(f"{where}.id {check_id!r} contains {CASE_SEPARATOR!r}, the separator a day "
+                          "document's claim ids use between case id and clause id")
+            check_id = None
         elif check_id in seen_check_ids:
             issues.append(f"duplicate check id: {check_id!r}")
         else:
@@ -232,6 +241,13 @@ def validate_source(source):
             crit_id = crit.get("id")
             if not isinstance(crit_id, str) or not crit_id.strip():
                 issues.append(f"{cwhere}.id must be a non-empty string")
+                crit_id = None
+            elif CASE_SEPARATOR in crit_id:
+                # A day document's claim id is <case_id>::<clause_id>, regrouped on
+                # the LAST "::" (scripts/result_v0.py:headline_from_result): a clause
+                # id carrying it would split one case into two.
+                issues.append(f"{cwhere}.id {crit_id!r} contains {CASE_SEPARATOR!r}, the separator a day "
+                              "document's claim ids use between case id and clause id")
                 crit_id = None
             for key in ("label", "text"):
                 if not isinstance(crit.get(key), str) or not crit[key].strip():
@@ -274,6 +290,20 @@ def validate_source(source):
                 issues.append(f"{cwhere}.rule_half must be a boolean")
             if "scope_note" in crit and (not isinstance(crit["scope_note"], str) or not crit["scope_note"].strip()):
                 issues.append(f"{cwhere}.scope_note must be a non-empty string")
+            # What an out_of_scope answer means for this row (e.g. "the situation
+            # the rule is about never came up"), compiled into the claim beside
+            # met/not_met -- so a row whose met_means names a situation is never
+            # answered met when that situation never arose. Only where the row
+            # can be answered out_of_scope at all.
+            if "out_of_scope_means" in crit:
+                oos = crit["out_of_scope_means"]
+                if not isinstance(oos, str) or not oos.strip():
+                    issues.append(f"{cwhere}.out_of_scope_means must be a non-empty string")
+                elif not switches.get("out_of_scope_verdict"):
+                    issues.append(f"{cwhere}.out_of_scope_means is set but switches.out_of_scope_verdict is "
+                                  "off: the judge is never offered out_of_scope")
+                elif crit.get("never_out_of_scope"):
+                    issues.append(f"{cwhere}.out_of_scope_means contradicts never_out_of_scope")
             # The normalized action fields this criterion's own judge prompt
             # declares it reads -- capsule-engine #96's input_refs vocabulary
             # (NORMALIZED_ACTION_FIELDS, above). Optional: a criterion whose
@@ -426,6 +456,8 @@ def judge_claim(crit):
         parts.append("Answer met when: " + crit["met_means"].strip() + ".")
     if crit.get("not_met_means"):
         parts.append("Answer not_met when: " + crit["not_met_means"].strip() + ".")
+    if crit.get("out_of_scope_means"):
+        parts.append("Answer out_of_scope when: " + crit["out_of_scope_means"].strip() + ".")
     if crit.get("scope_note"):
         parts.append("Scope: " + " ".join(crit["scope_note"].split()))
     return "\n".join(parts)
@@ -535,7 +567,8 @@ def _join_evidence(evidence):
 # pack that is transcript-shaped also gets "the transcript" wording there, never a
 # generic "the evidence" that a transcript-reading judge never actually said.
 # Changing any of these moves airline's judge-prompt.md, and the judge pin that
-# hashes it (scripts/judge_pin.py's prompt_digest) -- see tests/test_judge_pin_airline.py.
+# hashes it (scripts/judge_pin.py's prompt_digest) -- see tests/test_pack_compile.py
+# (AirlinePinUnchanged, CommittedOutputsAreCompilerOutput).
 _LEGACY_JUDGE_SUBJECT = "one recorded conversation"
 _LEGACY_JUDGE_EVIDENCE = [
     "the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their "

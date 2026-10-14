@@ -24,10 +24,34 @@ The judge pin (`scripts/judge_pin.py`) sealed on every judged report covers:
 - the compiled `judge-prompt.md` and `axes.json`;
 - `pack_source_digest`, the digest of the whole pack source, so a criterion edit or a
   rubric-switch flip moves the pin;
-- `instruction_template_digest`, the digest of the instruction template the judge
-  actually sends (it builds its instructions in code; `{"describe": true}` on stdin
-  reports the digest);
+- `instruction_template_digest`, the digest of what the judge sends besides the
+  clause wording and the evidence values: the instruction template, the answer
+  options, the out_of_scope paragraph, and the state layout -- the source of the
+  function that builds the request's sample, of the `state()` function that lays
+  it out, and of every module whose extractors compute a state field
+  (`scripts/airline_facts.py` for transcript mode). It builds its instructions in
+  code; `{"describe": true}` on stdin reports the digest. Source, not behaviour,
+  is hashed, so any edit to those functions or that module (a comment included)
+  moves the pin;
 - `min_confidence_micros`, when a confidence threshold is set.
+
+The model id in a pin names the real model only when the real backend answered.
+Under `JEV_JUDGE_BACKEND=mock` the judge refuses a `--judge-model-id` that does not
+say it is the mock (`run_daily.py` seals that id before the judge answers), and
+`scripts/judge_bundle.py` stamps the backend onto the id it seals, e.g.
+`jev-1.13.0 (mock backend, no model read the evidence)`.
+
+`scripts/judge_bundle.py` writes the Result document and, next to it, a judge
+sidecar `<result>.judge.json` (`--out day.json` gives `day.judge.json`; with the
+Result on stdout, `--sidecar PATH` is required). The sidecar holds
+`result_sha256`, the sha256 of the exact Result bytes written, and
+`judged_selection`: the rows sent to the judge in order (`rule_ids`,
+`requirement_refs`), which came back `out_of_scope` (claims[] omits those), and
+`allow_out_of_scope`. With the pack, the Result and its sidecar, a reader
+recomputes the pin's `prompt_template_hash` and `input_refs`. The Result itself
+adds no top-level key beyond the evidence-result-v0 schema's own. When every
+selected row comes back `out_of_scope` there is no Result and no sidecar: the
+run exits 3 and prints the judged selection on stderr.
 
 ## Failure behaviour
 
@@ -37,3 +61,11 @@ a backend error, an answer outside the allowed verdicts, or an answer below the
 pinned `min_confidence` (recorded `not_evaluable`). `run_daily.py` runs each call
 under `--judge-timeout` and treats a timeout or non-JSON output as
 `evidence unavailable`.
+
+`scripts/judge_bundle.py` never sends a partially disclosed bundle to the judge as
+if it were whole: a bundle that declares records missing (`records_mode`
+`declared_incomplete`, or a non-empty `missing[]`) gets `not_evaluable` on every
+row with the reason `bundle declares missing records`, and no judge call or pin;
+a bundle whose completeness contradicts itself (`payloads_mode` `none` beside
+disclosed payloads, an unknown mode, a completeness that is not a mapping) is
+refused as bad input.
