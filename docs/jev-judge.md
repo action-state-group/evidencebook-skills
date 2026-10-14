@@ -24,9 +24,15 @@ The judge pin (`scripts/judge_pin.py`) sealed on every judged report covers:
 - the compiled `judge-prompt.md` and `axes.json`;
 - `pack_source_digest`, the digest of the whole pack source, so a criterion edit or a
   rubric-switch flip moves the pin;
-- `instruction_template_digest`, the digest of the instruction template the judge
-  actually sends (it builds its instructions in code; `{"describe": true}` on stdin
-  reports the digest);
+- `instruction_template_digest`, the digest of what the judge sends besides the
+  clause wording and the evidence values: the instruction template, the answer
+  options, the out_of_scope paragraph, and the state layout -- the source of the
+  function that builds the request's sample, of the `state()` function that lays
+  it out, and of every module whose extractors compute a state field
+  (`scripts/airline_facts.py` for transcript mode). It builds its instructions in
+  code; `{"describe": true}` on stdin reports the digest. Source, not behaviour,
+  is hashed, so any edit to those functions or that module (a comment included)
+  moves the pin;
 - `min_confidence_micros`, when a confidence threshold is set.
 
 ## Failure behaviour
