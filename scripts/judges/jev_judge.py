@@ -471,6 +471,15 @@ def _answer_from_result(result, allow_out_of_scope, min_confidence=None):
         raise JudgeError(f"judge returned no valid verdict: {result.answer!r}")
     probs = (result.evidence or {}).get("probabilities") or {}
     confidence = (result.evidence or {}).get("confidence")
+    # jevals coerces an empty reply (no choice, no probabilities) to the FIRST option,
+    # which here is "met": a judge failure would seal as a pass. Refuse it instead.
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        raise JudgeError(f"judge returned no confidence for {result.answer!r}: not a verdict")
+    if not any(isinstance(v, (int, float)) and v > 0 for v in probs.values()):
+        raise JudgeError(f"judge returned no probabilities (probabilities={probs}): not a verdict")
+    if not (isinstance(probs.get(result.answer), (int, float)) and probs[result.answer] > 0):
+        raise JudgeError(f"judge chose {result.answer!r} at probability "
+                         f"{probs.get(result.answer)!r}: not a verdict")
     if min_confidence is not None and (not isinstance(confidence, (int, float)) or confidence < min_confidence):
         return {"verdict": "not_evaluable",
                 "rationale": f"jev choice {result.answer} at confidence={confidence} is below the pinned "

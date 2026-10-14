@@ -77,6 +77,17 @@ class JudgeFunction(unittest.TestCase):
         with self.assertRaisesRegex(jev_judge.JudgeError, "judge backend error"):
             jev_judge.judge(SAMPLE_REQUEST, backend=jevals.MockBackend(fn=boom))
 
+    def test_empty_reply_fails_closed_not_met(self):
+        # jevals 0.1.4 coerces an empty reply to the first option ("met") with every
+        # probability at 0: that must refuse, never seal a pass.
+        empty = jevals.MockBackend(fn=lambda *a: {})
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge.judge(SAMPLE_REQUEST, backend=empty)
+        batch = {k: v for k, v in SAMPLE_REQUEST.items() if k != "clause"}
+        batch["clauses"] = [SAMPLE_REQUEST["clause"]]
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge.judge_many(batch, backend=empty)
+
     def test_missing_clause_fails_closed(self):
         with self.assertRaisesRegex(jev_judge.JudgeError, "no clause"):
             jev_judge.judge({"case": {}, "agent_interaction": {"messages": [{"role": "user", "content": "hi"}]}})
@@ -380,8 +391,8 @@ class ConfidenceThreshold(unittest.TestCase):
         self.assertIn("below the pinned min_confidence", low["rationale"])
         high = jev_judge._answer_from_result(self._backend(0.95), False, min_confidence=0.8)
         self.assertEqual(high["verdict"], "met")
-        none = jev_judge._answer_from_result(self._backend(None), False, min_confidence=0.8)
-        self.assertEqual(none["verdict"], "not_evaluable", "no reported confidence never clears a threshold")
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge._answer_from_result(self._backend(None), False, min_confidence=0.8)
         self.assertEqual(jev_judge._answer_from_result(self._backend(0.1), False)["verdict"], "met",
                          "no threshold: unchanged")
 
