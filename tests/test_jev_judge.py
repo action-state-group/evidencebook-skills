@@ -77,6 +77,17 @@ class JudgeFunction(unittest.TestCase):
         with self.assertRaisesRegex(jev_judge.JudgeError, "judge backend error"):
             jev_judge.judge(SAMPLE_REQUEST, backend=jevals.MockBackend(fn=boom))
 
+    def test_empty_reply_fails_closed_not_met(self):
+        # jevals 0.1.4 coerces an empty reply to the first option ("met") with every
+        # probability at 0: that must refuse, never seal a pass.
+        empty = jevals.MockBackend(fn=lambda *a: {})
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge.judge(SAMPLE_REQUEST, backend=empty)
+        batch = {k: v for k, v in SAMPLE_REQUEST.items() if k != "clause"}
+        batch["clauses"] = [SAMPLE_REQUEST["clause"]]
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge.judge_many(batch, backend=empty)
+
     def test_missing_clause_fails_closed(self):
         with self.assertRaisesRegex(jev_judge.JudgeError, "no clause"):
             jev_judge.judge({"case": {}, "agent_interaction": {"messages": [{"role": "user", "content": "hi"}]}})
@@ -324,6 +335,32 @@ class PinnedInstructions(unittest.TestCase):
                                                          out_of_scope_instructions="")
         self.assertEqual(jev_judge.build_eval(clause).instructions, expected)
 
+    def test_transcript_mode_digest_is_pinned_to_the_literal_hash(self):
+        """The literal digest airline-support-outcomes' pin has always sealed
+        (computed independently from base commit e4a4fca, before disclosed_facts
+        mode existed). A future edit to CHOICE_OPTIONS, OUT_OF_SCOPE_OPTION,
+        INSTRUCTION_TEMPLATE or OUT_OF_SCOPE_INSTRUCTIONS -- or to how
+        instruction_template_digest() builds its basis dict -- moves this literal
+        and must fail this test loudly, not drift silently."""
+        self.assertEqual(jev_judge.instruction_template_digest(mode="transcript"),
+                         "279fddab6c80ce00b778bd869ac9112104acc3cadfc1d4e20f75f03312abe68f")
+
+    def test_disclosed_facts_mode_never_shares_transcript_mode_wording(self):
+        """disclosed_facts has its own options dict (DISCLOSED_FACTS_CHOICE_OPTIONS/
+        DISCLOSED_FACTS_OUT_OF_SCOPE_OPTION) -- editing the transcript mode's
+        options must never move disclosed_facts' digest, and vice versa."""
+        transcript_before = jev_judge.instruction_template_digest(mode="transcript")
+        disclosed_before = jev_judge.instruction_template_digest(mode="disclosed_facts")
+        original = dict(jev_judge.CHOICE_OPTIONS)
+        try:
+            jev_judge.CHOICE_OPTIONS["not_evaluable"] = "something else entirely"
+            self.assertNotEqual(jev_judge.instruction_template_digest(mode="transcript"), transcript_before)
+            self.assertEqual(jev_judge.instruction_template_digest(mode="disclosed_facts"), disclosed_before)
+        finally:
+            jev_judge.CHOICE_OPTIONS.clear()
+            jev_judge.CHOICE_OPTIONS.update(original)
+        self.assertEqual(jev_judge.instruction_template_digest(mode="transcript"), transcript_before)
+
 
 class BackendSelection(unittest.TestCase):
     def test_a_misspelled_backend_is_refused_not_the_real_backend(self):
@@ -354,8 +391,8 @@ class ConfidenceThreshold(unittest.TestCase):
         self.assertIn("below the pinned min_confidence", low["rationale"])
         high = jev_judge._answer_from_result(self._backend(0.95), False, min_confidence=0.8)
         self.assertEqual(high["verdict"], "met")
-        none = jev_judge._answer_from_result(self._backend(None), False, min_confidence=0.8)
-        self.assertEqual(none["verdict"], "not_evaluable", "no reported confidence never clears a threshold")
+        with self.assertRaisesRegex(jev_judge.JudgeError, "not a verdict"):
+            jev_judge._answer_from_result(self._backend(None), False, min_confidence=0.8)
         self.assertEqual(jev_judge._answer_from_result(self._backend(0.1), False)["verdict"], "met",
                          "no threshold: unchanged")
 
