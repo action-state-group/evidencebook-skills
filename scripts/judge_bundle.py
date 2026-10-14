@@ -352,6 +352,9 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
             f"(capsule-engine's own normalized action-field vocabulary for "
             f"judge_pin.input_refs) -- cannot seal a judge_pin for this call"
         )
+    # A pin over a stand-in backend's answer names the stand-in, never only the
+    # operator's (real-looking) model id: jev_judge.sealed_model_id().
+    judge_model_id = jev_judge.sealed_model_id(judge_model_id, backend)
     answers, target_ids, actually_judged = judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=backend)
 
     all_criteria = tuple(c["id"] for c in clauses)
@@ -408,6 +411,9 @@ def main(argv):
         pack = load_pack(args.pack)
         bundle = load_bundle(args.bundle)
         document = run(pack, bundle, rule_ids, args.capsule_id, judge_model_id, args.generated_at)
+    except jev_judge.JudgeError as e:  # e.g. an unknown JEV_JUDGE_BACKEND, before any call
+        print(f"judge backend failure: {e}", file=sys.stderr)
+        return 2
     except (BadInput, RollupError, EvidenceUnavailable, OSError) as e:
         print(f"bad input: {e}", file=sys.stderr)
         return 1

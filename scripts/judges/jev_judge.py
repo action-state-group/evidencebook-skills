@@ -96,7 +96,9 @@ Backend selection:
                            two different strings with nothing else cross-checking them.
 
 The tests never call the real backend: every test and demo run uses
-JEV_JUDGE_BACKEND=mock.
+JEV_JUDGE_BACKEND=mock. Under the mock the CLI refuses a judge_model_id that does
+not name the mock (sealed_model_id()), so a judge pin over a hashed stand-in
+never names a real model.
 
 Calibration: against a 15-conversation set rated by a human expert, this judge
 (jev-1.13.0, the nine-criterion rubric) returned 6 false passes -- met where the
@@ -436,11 +438,42 @@ def build_eval(clause, allow_out_of_scope=False, mode="transcript"):
     )()
 
 
-def resolve_backend():
+def _env_backend():
     mode = (os.environ.get("JEV_JUDGE_BACKEND") or "jev").strip().lower()
     if mode not in BACKENDS:
         raise JudgeError(f"JEV_JUDGE_BACKEND={mode!r} is not one of {list(BACKENDS)}; refusing rather "
                          "than guessing which backend was meant")
+    return mode
+
+
+def backend_kind(backend=None):
+    """"jev" for the real backend; "mock" for jevals.MockBackend (or
+    JEV_JUDGE_BACKEND=mock when no backend object is given); otherwise the
+    injected backend object's class name. Only "jev" is a named real model."""
+    if backend is None:
+        return _env_backend()
+    if isinstance(backend, str):
+        return backend
+    if isinstance(backend, jevals.MockBackend):
+        return "mock"
+    return type(backend).__name__
+
+
+def sealed_model_id(model_id, backend=None):
+    """The model id a judge pin may name for an answer from `backend`: the
+    operator's id unchanged for the real backend; for any other backend, the
+    id with the backend stamped on it (unless it already names it), so a pin
+    over a stand-in's answer never passes as a named real model."""
+    kind = backend_kind(backend)
+    if kind == "jev":
+        return model_id
+    if kind.lower() in (model_id or "").lower():
+        return model_id
+    return f"{model_id} ({kind} backend, no model read the evidence)"
+
+
+def resolve_backend():
+    mode = _env_backend()
     if mode == "mock":
         return jevals.MockBackend(fn=_mock_fn)
     os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
@@ -492,6 +525,20 @@ def _check_model_pin(request, be):
                 "judge_pin_digest would misstate which model judged. Pass "
                 f"--judge-model-id {PINNED_MODEL!r} exactly."
             )
+
+
+def _refuse_unstamped_stand_in(request):
+    """At the CLI edge (what run_daily.py calls, after it has already sealed
+    request["judge_model_id"] into the judge pin): any backend other than the
+    real one must be named in that id, or the pin would name a model that never
+    read the evidence."""
+    kind = backend_kind()
+    wanted = request.get("judge_model_id") if isinstance(request, dict) else None
+    if kind != "jev" and sealed_model_id(wanted, kind) != wanted:
+        raise JudgeError(
+            f"JEV_JUDGE_BACKEND={kind} but --judge-model-id {wanted!r} does not say so; a judge pin "
+            f"naming it would pass a {kind} stand-in off as a real model. Name the backend in the id, "
+            f"e.g. {sealed_model_id(wanted or PINNED_MODEL, kind)!r}.")
 
 
 def _min_confidence(request):
@@ -601,10 +648,12 @@ def main(argv):
             result = {"instruction_template_digest": instruction_template_digest(mode),
                      "pinned_model": PINNED_MODEL, "pinned_model_name": PINNED_MODEL_NAME,
                      "pinned_model_version": PINNED_MODEL_VERSION}
-        elif isinstance(request, dict) and "clauses" in request:
-            result = {"answers": judge_many(request)}
         else:
-            result = judge(request)
+            _refuse_unstamped_stand_in(request)
+            if isinstance(request, dict) and "clauses" in request:
+                result = {"answers": judge_many(request)}
+            else:
+                result = judge(request)
     except (KeyError, TypeError, ValueError) as e:
         print(f"malformed judge request: {type(e).__name__}: {e}", file=sys.stderr)
         return 1

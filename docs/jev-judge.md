@@ -35,6 +35,12 @@ The judge pin (`scripts/judge_pin.py`) sealed on every judged report covers:
   moves the pin;
 - `min_confidence_micros`, when a confidence threshold is set.
 
+The model id in a pin names the real model only when the real backend answered.
+Under `JEV_JUDGE_BACKEND=mock` the judge refuses a `--judge-model-id` that does not
+say it is the mock (`run_daily.py` seals that id before the judge answers), and
+`scripts/judge_bundle.py` stamps the backend onto the id it seals, e.g.
+`jev-1.13.0 (mock backend, no model read the evidence)`.
+
 ## Failure behaviour
 
 Every failure is a refusal, never a guessed verdict: an unknown

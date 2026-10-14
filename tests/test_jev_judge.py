@@ -38,6 +38,11 @@ SAMPLE_REQUEST = {
 
 JEV_JUDGE_PATH = str(ROOT / "scripts" / "judges" / "jev_judge.py")
 
+# What the CLI must be given under JEV_JUDGE_BACKEND=mock: an id that says it is
+# the mock (see MockBackendNeverPassesAsARealModel).
+MOCK_MODEL_ID = "jev-1.13.0 (mock backend, no model read the conversation)"
+MOCK_CLI_REQUEST = dict(SAMPLE_REQUEST, judge_model_id=MOCK_MODEL_ID)
+
 
 class JudgeFunction(unittest.TestCase):
     def test_mock_backend_well_formed_answer(self):
@@ -141,6 +146,28 @@ class JudgeFunction(unittest.TestCase):
             os.environ.update(env_backup)
 
 
+class MockBackendNeverPassesAsARealModel(unittest.TestCase):
+    """run_daily.py seals --judge-model-id into the judge pin before the judge
+    answers; under JEV_JUDGE_BACKEND=mock the CLI refuses an id that does not
+    say it is a mock, so no pin over a hashed stand-in names a real model."""
+
+    def _run(self, model_id):
+        env = dict(os.environ, JEV_JUDGE_BACKEND="mock")
+        return subprocess.run([sys.executable, JEV_JUDGE_PATH],
+                              input=json.dumps(dict(SAMPLE_REQUEST, judge_model_id=model_id)),
+                              capture_output=True, text=True, env=env)
+
+    def test_a_real_model_name_under_the_mock_backend_is_refused(self):
+        proc = self._run("jev-1.13.0")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("mock", proc.stderr)
+
+    def test_a_model_id_that_says_mock_is_accepted(self):
+        proc = self._run("jev-1.13.0 (mock backend, no model read the conversation)")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
 class CLI(unittest.TestCase):
     def _run(self, stdin_text):
         env = dict(os.environ, JEV_JUDGE_BACKEND="mock")
@@ -155,7 +182,7 @@ class CLI(unittest.TestCase):
         self.assertIn("not valid JSON", proc.stderr)
 
     def test_mock_end_to_end_prints_exactly_verdict_and_rationale(self):
-        proc = self._run(json.dumps(SAMPLE_REQUEST))
+        proc = self._run(json.dumps(MOCK_CLI_REQUEST))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         out = json.loads(proc.stdout)
         self.assertEqual(set(out), {"verdict", "rationale"})
@@ -298,6 +325,7 @@ class BatchMode(unittest.TestCase):
     def test_cli_batch_mode_prints_an_answers_object(self):
         env = dict(os.environ, JEV_JUDGE_BACKEND="mock")
         bad = self._request()
+        bad["judge_model_id"] = MOCK_MODEL_ID
         del bad["clause"]
         proc = subprocess.run([sys.executable, JEV_JUDGE_PATH], input=json.dumps(bad),
                                capture_output=True, text=True, env=env)
@@ -416,7 +444,7 @@ class BackendSelection(unittest.TestCase):
     def test_a_misspelled_backend_is_refused_not_the_real_backend(self):
         for typo in ("mok", "MOCK ", "jevv", "real"):
             env = dict(os.environ, JEV_JUDGE_BACKEND=typo, TYPESAFE_API_KEY="present-but-unused")
-            proc = subprocess.run([sys.executable, JEV_JUDGE_PATH], input=json.dumps(SAMPLE_REQUEST),
+            proc = subprocess.run([sys.executable, JEV_JUDGE_PATH], input=json.dumps(MOCK_CLI_REQUEST),
                                   capture_output=True, text=True, env=env)
             if typo.strip().lower() == "mock":
                 self.assertEqual(proc.returncode, 0, proc.stderr)
