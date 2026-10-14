@@ -214,12 +214,12 @@ class ClauseTiers(unittest.TestCase):
 
 
 class ResolveExpectedPin(unittest.TestCase):
-    def test_no_model_id_means_no_pin_scoping(self):
-        # Never calls capsulectl at all when there's no model id to pin against
-        # -- a hand-authored contract predating judge.model_id (e.g.
-        # demo/tau2-outcomes/compiled.json) must not crash or shell out here.
-        self.assertIsNone(resolve_expected_pin("capsulectl-should-not-run", {}, None, None, None, None))
-        self.assertIsNone(resolve_expected_pin("capsulectl-should-not-run", {}, "", None, None, None))
+    def test_no_model_id_is_refused_never_read_as_no_pin_scoping(self):
+        # An empty id once returned None, and None admitted every judged report
+        # of the contract whatever its pin. Refused before capsulectl runs.
+        for model_id in (None, "", "   ", "\t\n"):
+            with self.subTest(model_id=model_id), self.assertRaisesRegex(RollupError, "judge model id is required"):
+                resolve_expected_pin("capsulectl-should-not-run", {}, model_id, None, None, None)
 
     def test_a_model_id_without_a_judge_cmd_is_refused(self):
         # The pin covers the instruction template the judge reports; without the
@@ -457,6 +457,21 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
             self._main()
         self.assertEqual(cm.exception.code, 2)
+
+    def test_an_empty_judge_model_id_is_refused_not_read_as_no_pin(self):
+        # argparse accepts --judge-model-id ''; it used to roll up every judged
+        # report unscoped (exit 0, cases_judged 1, judge_pin_mismatch 0).
+        for model_id in ("", "  "):
+            with self.subTest(model_id=model_id):
+                argv = ["--profile", "p", "--spec", str(AIRLINE_SPEC), "--capsulectl", self.ctl,
+                        "--judge-cmd", STUB_JUDGE, "--generated-at", "2026-09-24T23:59:59Z",
+                        "--out", str(self.tmp / "out"), "--judge-model-id", model_id]
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+                    rollup_day.main(argv)
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn("--judge-model-id must name the judge's model id", err.getvalue())
+                self.assertFalse((self.tmp / "out").exists())
 
 
 if __name__ == "__main__":

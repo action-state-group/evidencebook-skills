@@ -166,12 +166,13 @@ def collect_reports(capsulectl, profile, contract, expected_pin=None, expected_p
 
 def resolve_expected_pin(capsulectl, spec, judge_model_id, judge_cmd, root, work, timeout=DEFAULT_JUDGE_TIMEOUT):
     """The current compiled spec's judge_pin_digest, built exactly as
-    scripts/run_daily.py builds it (scripts/judge_pin.py) -- or None when no model
-    id is available (a hand-authored contract predating judge.model_id), in which
-    case the rollup runs unscoped by pin. Needs the judge command, which reports
-    the instruction template it sends."""
-    if not judge_model_id:
-        return None
+    scripts/run_daily.py builds it (scripts/judge_pin.py). Needs the judge
+    command, which reports the instruction template it sends. An empty or
+    blank model id is refused, never read as "no pin": that would admit every
+    judged report of the contract whatever pin it was sealed under."""
+    if not judge_model_id or not judge_model_id.strip():
+        raise RollupError("a judge model id is required to scope the rollup by judge pin; "
+                          "an empty one would admit reports sealed under any pin")
     if not judge_cmd:
         raise EvidenceUnavailable("--judge-cmd is required to recompute the judge pin "
                                   "(the pin covers the instruction template the judge reports)")
@@ -316,6 +317,9 @@ def main(argv):
                           "sealed under any other id would roll up as zero cases. Judged reports under "
                           "any other pin are excluded and counted in the summary's reports_excluded.")
     args = ap.parse_args(argv)
+    if not args.judge_model_id.strip():
+        ap.error("--judge-model-id must name the judge's model id; an empty one would admit "
+                 "reports sealed under any pin")
 
     spec = json.loads(args.spec.read_text())
     root = args.spec.resolve().parents[2]
