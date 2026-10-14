@@ -19,6 +19,7 @@ from result_v0 import headline_from_result  # noqa: E402
 from rollup import RollupError, all_criteria_from_clauses, all_required_met, checks_from_clauses  # noqa: E402
 from rollup_day import (clause_tiers, day_document, group_reports, group_reports_by_day,  # noqa: E402
                         partition_stale, resolve_expected_pin, rollup_case, safe_filename)
+import rollup_day  # noqa: E402
 
 CLAUSES = [
     {"id": "policy_compliance.confirmed_before_acting", "check_id": "policy_compliance", "tier": "judged"},
@@ -325,6 +326,55 @@ class DayDocument(unittest.TestCase):
                                             self.NEVER_NA))
         self.assertEqual(headline_from_result(doc), {"cases": 3, "resolved": expected})
         self.assertEqual(expected, 2, "case-met and case-some-na resolve; case-not-met does not")
+
+
+class ConflictingCasesAreNeverDroppedSilently(unittest.TestCase):
+    """A case pruned from a day document for a conflict is listed in THAT day's
+    cases_skipped with its reason -- not only in the top-level
+    cases_conflicting -- whichever grouping found the conflict."""
+    CONTRACT = "airline-support-outcomes/v1"
+    GENERATED_AT = "2026-09-24T23:59:59Z"
+
+    def _bodies(self, case_id, period, verdicts):
+        return [(f"{case_id}-{period}-{i}", {"record_type": "evaluation-report/v1", "contract": self.CONTRACT,
+                                               "case_id": case_id, "clause_id": c, "verdict": v,
+                                               "period": period, "judge_pin_digest": "pin"})
+                for i, (c, v) in enumerate(verdicts.items())]
+
+    def _run(self, bodies):
+        conflicts = {}
+        rollup_day.group_reports(bodies, self.CONTRACT, "pin", None, conflicts)
+        return rollup_day.day_results(bodies, self.CONTRACT, "pin", None, conflicts, self.GENERATED_AT,
+                                      ALL_CRITERIA, CONTRACT_REF, TIERS), conflicts
+
+    def test_a_same_day_conflict_is_in_that_days_cases_skipped(self):
+        met = {c: "met" for c in ALL_CRITERIA}
+        clause = ALL_CRITERIA[0]
+        bodies = (self._bodies("case-ok", "day:2026-09-23", met)
+                  + self._bodies("case-x", "day:2026-09-23", met)
+                  + self._bodies("case-x", "day:2026-09-23", {clause: "not_met"}))
+        days, conflicts = self._run(bodies)
+        self.assertEqual(sorted(conflicts), ["case-x"])
+        (period, doc, skipped), = days
+        self.assertEqual(headline_from_result(doc)["cases"], 1)
+        entry, = [s for s in skipped if s["case_id"] == "case-x"]
+        self.assertIn("conflicting", entry["reason"])
+        self.assertEqual(entry["clauses"], {clause: ["met", "not_met"]})
+
+    def test_a_cross_day_conflict_is_in_every_affected_days_cases_skipped(self):
+        # met on one day, not_met on the next, same pin: the per-case grouping
+        # finds the conflict; neither day alone would.
+        met = {c: "met" for c in ALL_CRITERIA}
+        clause = ALL_CRITERIA[0]
+        bodies = (self._bodies("case-x", "day:2026-09-23", met)
+                  + self._bodies("case-x", "day:2026-09-24", {clause: "not_met"})
+                  + self._bodies("case-ok", "day:2026-09-24", met))
+        days, _ = self._run(bodies)
+        by_period = {period: (doc, skipped) for period, doc, skipped in days}
+        self.assertEqual(sorted(by_period), ["day:2026-09-23", "day:2026-09-24"])
+        for period, (doc, skipped) in by_period.items():
+            self.assertIn("case-x", [s["case_id"] for s in skipped], period)
+        self.assertIsNone(by_period["day:2026-09-23"][0], "case-x was that day's only case")
 
 
 if __name__ == "__main__":

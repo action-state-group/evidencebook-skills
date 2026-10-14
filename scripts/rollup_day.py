@@ -214,12 +214,20 @@ def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, co
     }
 
 
+REASON_CONFLICTING = "conflicting verdicts under one pin"
+
+
 def day_document(period, day_cases, generated_at, all_criteria, contract_ref, tiers,
-                 allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                 allow_out_of_scope=False, never_out_of_scope=frozenset(), conflicting=None):
     """Pure: one day's Result v0 over every case that can be rolled up, plus the
-    list of cases left out and why -- nothing is dropped silently. Returns
+    list of cases left out and why -- nothing is dropped silently. `conflicting`
+    (case_id -> {clause_id: sorted verdicts}) names the cases this day carried
+    reports for that were kept out of every rollup for a conflict (see _group);
+    each is listed in `skipped` too, with the conflicting clauses. Returns
     (document or None, skipped)."""
     case_rollups, skipped = [], []
+    for case_id, clauses in sorted((conflicting or {}).items()):
+        skipped.append({"case_id": case_id, "reason": REASON_CONFLICTING, "clauses": clauses})
     for case_id, clause_verdicts in sorted(day_cases.items()):
         current, stale = partition_stale(clause_verdicts, all_criteria)
         missing = [c for c in all_criteria if c not in current]
@@ -239,6 +247,37 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
         return None, skipped
     return build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
                                    allow_out_of_scope, never_out_of_scope), skipped
+
+
+def conflicting_cases_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts):
+    """period -> {case_id: conflicting clauses} for every in-scope report of a
+    case in `conflicts`: the days a conflicting case was pruned from, whichever
+    grouping (per case across days, or per day) found the conflict."""
+    out = {}
+    for _capsule_id, body in capsule_bodies:
+        if not _in_scope(body, contract, expected_pin, expected_pack):
+            continue
+        case_id = body.get("case_id")
+        if case_id in conflicts:
+            out.setdefault(body.get("period"), {})[case_id] = conflicts[case_id]
+    return out
+
+
+def day_results(capsule_bodies, contract, expected_pin, expected_pack, conflicts, generated_at, all_criteria,
+                contract_ref, tiers, allow_out_of_scope=False, never_out_of_scope=frozenset()):
+    """Pure: [(period, day document or None, cases_skipped)] for every period
+    the book carries an in-scope report for. `conflicts` is the record
+    collect_reports() already filled (per case, across days); the per-day
+    grouping adds to it. A conflicting case is pruned from every day document
+    and listed in each affected day's cases_skipped."""
+    by_day = group_reports_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts)
+    conflicted = conflicting_cases_by_day(capsule_bodies, contract, expected_pin, expected_pack, conflicts)
+    out = []
+    for period in sorted(set(by_day) | set(conflicted), key=lambda p: (p is None, p)):
+        doc, skipped = day_document(period, by_day.get(period, {}), generated_at, all_criteria, contract_ref,
+                                    tiers, allow_out_of_scope, never_out_of_scope, conflicted.get(period))
+        out.append((period, doc, skipped))
+    return out
 
 
 def main(argv):
@@ -284,7 +323,8 @@ def main(argv):
                                             args.judge_timeout)
         by_case, bodies = collect_reports(args.capsulectl, args.profile, contract, expected_pin, expected_pack,
                                           conflicts)
-        by_day = group_reports_by_day(bodies, contract, expected_pin, expected_pack, conflicts)
+        days = day_results(bodies, contract, expected_pin, expected_pack, conflicts, args.generated_at,
+                           all_criteria, contract_ref, tiers, allow_out_of_scope, never_oos)
     except (EvidenceUnavailable, RollupError) as e:
         print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
         return 2
@@ -312,10 +352,8 @@ def main(argv):
 
     # One Result v0 per day/period, over every case that day that rolls up, beside
     # the per-case documents above. Built from the same sealed reports and tiers.
-    day_results = []
-    for period, day_cases in sorted(by_day.items(), key=lambda kv: (kv[0] is None, kv[0])):
-        day_doc, skipped = day_document(period, day_cases, args.generated_at, all_criteria, contract_ref, tiers,
-                                        allow_out_of_scope, never_oos)
+    day_entries = []
+    for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
@@ -323,7 +361,7 @@ def main(argv):
             out_path.write_text(json.dumps(day_doc, indent=2))
             entry.update(cases=headline_from_result(day_doc)["cases"], claims=len(day_doc["claims"]),
                          headline=headline_from_result(day_doc), out=str(out_path))
-        day_results.append(entry)
+        day_entries.append(entry)
 
     summary = {
         "cases_judged": len(by_case),
@@ -331,7 +369,7 @@ def main(argv):
         "cases_complete": len(complete),
         "cases_incomplete": incomplete,
         "cases_conflicting": [{"case_id": c, "clauses": v} for c, v in sorted(conflicts.items())],
-        "day_results": day_results,
+        "day_results": day_entries,
         "judge_pin_digest": expected_pin,
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2))
