@@ -466,6 +466,32 @@ class AirlinePinUnchanged(unittest.TestCase):
         self.assertNotIn("the evidence shows the criterion was satisfied", prompt)
 
 
+class CommittedOutputsAreCompilerOutput(unittest.TestCase):
+    """Every committed compiled pack is exactly what scripts/pack_compile.py
+    writes for its source today -- all four files, compared as bytes (not as
+    parsed JSON, which would miss formatting drift, and not only compiled.json
+    and judge-prompt.md). A hand edit to a committed file, or a compiler change
+    that moves its output without a recompile, fails here."""
+    PACKS = (
+        ("packs/airline-support-outcomes/pack-source.yaml", "demo/airline-support-outcomes"),
+        ("packs/everyday-rules/pack-source.yaml", "packs/everyday-rules/compiled"),
+    )
+    FILES = ("compiled.json", "axes.json", "judge-prompt.md", "presentation.json")
+
+    def test_every_committed_file_equals_the_compiler_output_byte_for_byte(self):
+        for source_rel, out_rel in self.PACKS:
+            source = _strip_strings(yaml.safe_load((REPO_ROOT / source_rel).read_text()))
+            with tempfile.TemporaryDirectory() as tmp:
+                write_pack(source, pathlib.Path(tmp), out_rel)
+                for name in self.FILES:
+                    with self.subTest(pack=out_rel, file=name):
+                        self.assertEqual((pathlib.Path(tmp) / name).read_bytes(),
+                                         (REPO_ROOT / out_rel / name).read_bytes(),
+                                         f"{out_rel}/{name} is not what {source_rel} compiles to; "
+                                         f"recompile: python3 scripts/pack_compile.py compile {source_rel} "
+                                         f"--out {out_rel}")
+
+
 class WritePack(unittest.TestCase):
     def test_write_pack_produces_the_four_files(self):
         with tempfile.TemporaryDirectory() as tmp:
