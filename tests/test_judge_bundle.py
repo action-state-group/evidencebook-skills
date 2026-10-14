@@ -548,33 +548,34 @@ class JudgePin(unittest.TestCase):
 class JudgedSelectionIsRecorded(unittest.TestCase):
     """With --rule-ids and a row judged out_of_scope, claims[] omits that row
     (Result v0 has no out_of_scope verdict), yet the pin's prompt_template_hash
-    and input_refs cover every row sent to the judge. The document records the
-    judged selection, so a stranger holding the pack and the document alone can
-    recompute both."""
+    and input_refs cover every row sent to the judge. The judge sidecar records
+    the judged selection, so a stranger holding the pack, the document and its
+    sidecar can recompute both."""
 
     def _document(self):
         pack = compiled_pack()
         by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
         backend = jevals.MockBackend(fn=lambda qid, q, state: "out_of_scope" if qid.startswith(by_rule["10"] + ".") else "met")
-        return pack, judge_bundle.run(pack, disclosed_bundle(FACTS), ["9", "10"], None, "jev-1.13.0",
-                                      GENERATED_AT, backend=backend)
+        document, selection = judge_bundle.run_judged(pack, disclosed_bundle(FACTS), ["9", "10"], None, "jev-1.13.0",
+                                                      GENERATED_AT, backend=backend)
+        return pack, document, selection
 
     def test_the_out_of_scope_row_is_named_in_the_judged_selection(self):
-        pack, document = self._document()
+        pack, document, selection = self._document()
         by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
         self.assertEqual([c["rule_id"] for c in document["claims"]], ["9"])
-        selection = document["judged_selection"]
+        self.assertNotIn("judged_selection", document)
         self.assertEqual(selection["rule_ids"], ["9", "10"])
         self.assertEqual(selection["requirement_refs"], [by_rule["9"], by_rule["10"]])
         self.assertEqual(selection["out_of_scope"], [by_rule["10"]])
 
-    def test_a_stranger_recomputes_the_pin_from_the_pack_and_the_document_alone(self):
-        pack, document = self._document()
+    def test_a_stranger_recomputes_the_pin_from_the_pack_the_document_and_its_sidecar(self):
+        pack, document, selection = self._document()
         by_id = {c["id"]: c for c in pack["clauses"]}
-        clauses = [by_id[ref] for ref in document["judged_selection"]["requirement_refs"]]
+        clauses = [by_id[ref] for ref in selection["requirement_refs"]]
         pin = document["claims"][0]["judge_pin"]
         self.assertEqual(jev_judge.compiled_prompt_digest(judge_bundle.request_clauses(clauses),
-                                                          document["judged_selection"]["allow_out_of_scope"],
+                                                          selection["allow_out_of_scope"],
                                                           mode="disclosed_facts"),
                          pin["prompt_template_hash"])
         self.assertEqual(judge_bundle.declared_input_refs(clauses), pin["input_refs"])
@@ -606,8 +607,9 @@ class EveryRowOutOfScope(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             b = pathlib.Path(tmp) / "bundle.json"
             b.write_text(json.dumps(disclosed_bundle(FACTS)))
+            sidecar = pathlib.Path(tmp) / "result.judge.json"
             argv = ["--bundle", str(b), "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled" / "compiled.json"),
-                    "--generated-at", GENERATED_AT, "--rule-ids", "9"]
+                    "--generated-at", GENERATED_AT, "--rule-ids", "9", "--sidecar", str(sidecar)]
             original, env = jev_judge.resolve_backend, dict(os.environ)
             err, out = io.StringIO(), io.StringIO()
             try:
@@ -619,10 +621,101 @@ class EveryRowOutOfScope(unittest.TestCase):
                 jev_judge.resolve_backend = original
                 os.environ.clear()
                 os.environ.update(env)
+            # no Result, so no sidecar: the judged selection goes to stderr
+            self.assertFalse(sidecar.exists())
         self.assertEqual(code, 3, err.getvalue())
         self.assertEqual(out.getvalue(), "")
         self.assertNotIn("bad input", err.getvalue())
         self.assertIn("out_of_scope", err.getvalue())
+
+
+# evidence-result-v0's EvidenceResult properties (AAC schemas/evidence-result-v0.json,
+# additionalProperties: false): the only top-level keys a Result may carry.
+EVIDENCE_RESULT_TOP_LEVEL_KEYS = {"result_version", "generated_at", "claims", "aggregate", "view"}
+
+
+class ResultAddsNoTopLevelKey(unittest.TestCase):
+    """judge_bundle writes nothing at the top of a Result beyond the schema's own
+    EvidenceResult keys: what the judge run adds (the judged selection) goes in
+    the judge sidecar. Claim-level keys are not checked here."""
+
+    def _assert_schema_keys(self, document):
+        self.assertEqual(set(document), EVIDENCE_RESULT_TOP_LEVEL_KEYS)
+
+    def test_a_judged_document(self):
+        pack = compiled_pack()
+        by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
+        backend = jevals.MockBackend(fn=lambda qid, q, state: "out_of_scope" if qid.startswith(by_rule["10"] + ".") else "met")
+        self._assert_schema_keys(judge_bundle.run(pack, disclosed_bundle(FACTS), ["9", "10"], None, "jev-1.13.0",
+                                                  GENERATED_AT, backend=backend))
+
+    def test_an_abstention_document(self):
+        self._assert_schema_keys(judge_bundle.run(compiled_pack(), withheld_bundle(), None, None, "jev-1.13.0",
+                                                  GENERATED_AT))
+
+
+class JudgeSidecar(unittest.TestCase):
+    """The CLI writes the Result, then `<result>.judge.json` beside it: the
+    judged selection, citing the Result by the sha256 of the exact bytes
+    written. The Result itself never carries judged_selection."""
+
+    def setUp(self):
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, self.tmp)
+
+    def _run(self, bundle, *extra_args):
+        import os
+        b = self.tmp / "bundle.json"
+        b.write_text(json.dumps(bundle))
+        return subprocess.run(
+            [sys.executable, JUDGE_BUNDLE_PATH, "--bundle", str(b),
+             "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled" / "compiled.json"),
+             "--generated-at", GENERATED_AT, *extra_args],
+            capture_output=True, text=True, env=dict(os.environ, JEV_JUDGE_BACKEND="mock"),
+        )
+
+    def _assert_sidecar_cites(self, sidecar_path, result_bytes, rule_ids):
+        sidecar = json.loads(sidecar_path.read_text())
+        self.assertEqual(set(sidecar), {"result_sha256", "judged_selection"})
+        self.assertEqual(sidecar["result_sha256"], __import__("hashlib").sha256(result_bytes).hexdigest())
+        self.assertEqual(sidecar["judged_selection"]["rule_ids"], rule_ids)
+        self.assertTrue(sidecar["judged_selection"]["allow_out_of_scope"])
+        result = json.loads(result_bytes)
+        self.assertNotIn("judged_selection", result)
+        self.assertEqual(set(result), EVIDENCE_RESULT_TOP_LEVEL_KEYS)
+        return sidecar
+
+    def test_the_sidecar_sits_next_to_the_result_and_cites_its_bytes(self):
+        out = self.tmp / "day.json"
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2,26", "--out", str(out))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(judge_bundle.sidecar_path_for(out), self.tmp / "day.judge.json")
+        self._assert_sidecar_cites(self.tmp / "day.judge.json", out.read_bytes(), ["2", "26"])
+
+    def test_a_result_on_stdout_cites_the_bytes_printed(self):
+        sidecar = self.tmp / "elsewhere.judge.json"
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--sidecar", str(sidecar))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self._assert_sidecar_cites(sidecar, proc.stdout.encode("utf-8"), ["2"])
+
+    def test_an_abstention_gets_a_sidecar_too(self):
+        out = self.tmp / "withheld.json"
+        proc = self._run(withheld_bundle(), "--out", str(out))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        sidecar = self._assert_sidecar_cites(self.tmp / "withheld.judge.json", out.read_bytes(),
+                                             [c["rule_id"] for c in compiled_pack()["clauses"]])
+        self.assertEqual(sidecar["judged_selection"]["out_of_scope"], [])
+
+    def test_a_result_on_stdout_without_a_sidecar_path_is_refused_before_judging(self):
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2")
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("--sidecar", proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(list(self.tmp.glob("*.judge.json")), [])
+
+    def test_a_non_json_result_name_gets_the_suffix_appended(self):
+        self.assertEqual(judge_bundle.sidecar_path_for(pathlib.Path("/x/result")), pathlib.Path("/x/result.judge.json"))
 
 
 def never_called_backend():
@@ -687,7 +780,9 @@ class MalformedInputIsBadInputNotATraceback(unittest.TestCase):
             b.write_text(json.dumps(bundle))
             p.write_text(json.dumps(pack))
             return subprocess.run([sys.executable, JUDGE_BUNDLE_PATH, "--bundle", str(b), "--pack", str(p),
-                                   "--generated-at", GENERATED_AT], capture_output=True, text=True,
+                                   "--generated-at", GENERATED_AT,
+                                   "--sidecar", str(pathlib.Path(tmp) / "result.judge.json")],
+                                  capture_output=True, text=True,
                                   env=dict(os.environ, JEV_JUDGE_BACKEND="mock"))
 
     def test_a_non_mapping_completeness_is_bad_input(self):
@@ -725,7 +820,8 @@ class CliSmoke(unittest.TestCase):
         env = dict(os.environ, JEV_JUDGE_BACKEND="mock")
         return subprocess.run(
             [sys.executable, JUDGE_BUNDLE_PATH, "--bundle", str(self.bundle_path), "--pack", str(self.pack_path),
-            "--generated-at", GENERATED_AT, *extra_args],
+            "--generated-at", GENERATED_AT, "--sidecar", str(pathlib.Path(self.tmp.name) / "result.judge.json"),
+            *extra_args],
             capture_output=True, text=True, env=env,
         )
 
