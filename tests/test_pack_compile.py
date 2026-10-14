@@ -207,6 +207,33 @@ class ValidateSource(unittest.TestCase):
         self.assertEqual(never, {"task_resolution.done_in_full", "grounded_communication.no_invented_policy"})
 
 
+class OutOfScopeMeans(unittest.TestCase):
+    """out_of_scope_means: what a row's out_of_scope answer means, compiled into
+    the claim beside met/not_met -- only where out_of_scope can be answered."""
+
+    def _source(self, value="the situation never came up", switch=True, never=False):
+        source = minimal_source()
+        source["switches"] = {"out_of_scope_verdict": switch}
+        crit = source["checks"][0]["criteria"][0]
+        crit.update(judge_question="Was it done?", met_means="it was done", not_met_means="it was not",
+                    out_of_scope_means=value)
+        if never:
+            crit["never_out_of_scope"] = True
+        return source
+
+    def test_it_compiles_into_the_claim(self):
+        source = self._source()
+        self.assertEqual(validate_source(source), [])
+        claim = build_clauses(source)[0]["claim"]
+        self.assertIn("Answer out_of_scope when: the situation never came up.", claim)
+
+    def test_it_is_refused_where_out_of_scope_cannot_be_answered(self):
+        for kwargs in ({"switch": False}, {"never": True}, {"value": ""}, {"value": 7}):
+            with self.subTest(**kwargs):
+                issues = validate_source(self._source(**kwargs))
+                self.assertTrue(any("out_of_scope_means" in i for i in issues), issues)
+
+
 class Switches(unittest.TestCase):
     def test_no_switches_block_compiles_with_no_switches_key_at_all(self):
         # A pack source without switches compiles with no "switches" and no
