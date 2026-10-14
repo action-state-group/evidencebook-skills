@@ -543,6 +543,46 @@ class JudgePin(unittest.TestCase):
                              GENERATED_AT, backend=fixed_backend("met"))
 
 
+class JudgedSelectionIsRecorded(unittest.TestCase):
+    """With --rule-ids and a row judged out_of_scope, claims[] omits that row
+    (Result v0 has no out_of_scope verdict), yet the pin's prompt_template_hash
+    and input_refs cover every row sent to the judge. The document records the
+    judged selection, so a stranger holding the pack and the document alone can
+    recompute both."""
+
+    def _document(self):
+        pack = compiled_pack()
+        by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
+        backend = jevals.MockBackend(fn=lambda qid, q, state: "out_of_scope" if qid.startswith(by_rule["10"] + ".") else "met")
+        return pack, judge_bundle.run(pack, disclosed_bundle(FACTS), ["9", "10"], None, "jev-1.13.0",
+                                      GENERATED_AT, backend=backend)
+
+    def test_the_out_of_scope_row_is_named_in_the_judged_selection(self):
+        pack, document = self._document()
+        by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
+        self.assertEqual([c["rule_id"] for c in document["claims"]], ["9"])
+        selection = document["judged_selection"]
+        self.assertEqual(selection["rule_ids"], ["9", "10"])
+        self.assertEqual(selection["requirement_refs"], [by_rule["9"], by_rule["10"]])
+        self.assertEqual(selection["out_of_scope"], [by_rule["10"]])
+
+    def test_a_stranger_recomputes_the_pin_from_the_pack_and_the_document_alone(self):
+        pack, document = self._document()
+        by_id = {c["id"]: c for c in pack["clauses"]}
+        clauses = [by_id[ref] for ref in document["judged_selection"]["requirement_refs"]]
+        pin = document["claims"][0]["judge_pin"]
+        self.assertEqual(jev_judge.compiled_prompt_digest(judge_bundle.request_clauses(clauses),
+                                                          document["judged_selection"]["allow_out_of_scope"],
+                                                          mode="disclosed_facts"),
+                         pin["prompt_template_hash"])
+        self.assertEqual(judge_bundle.declared_input_refs(clauses), pin["input_refs"])
+        # the claims alone are not enough: they omit the out_of_scope row
+        from_claims = [by_id[c["requirement_ref"]] for c in document["claims"]]
+        self.assertNotEqual(jev_judge.compiled_prompt_digest(judge_bundle.request_clauses(from_claims), True,
+                                                             mode="disclosed_facts"),
+                            pin["prompt_template_hash"])
+
+
 def never_called_backend():
     return jevals.MockBackend(fn=lambda qid, q, state: (_ for _ in ()).throw(
         AssertionError("the judge must never be called over a partially disclosed bundle")))

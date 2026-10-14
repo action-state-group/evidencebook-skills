@@ -100,8 +100,12 @@ batch's pin, same as it was decided from the batch's one shared request, not
 a request of its own. A reader of the pin alone learns what kind of fact
 THIS CALL's shared judge request could read from, across every clause
 batched into it; evidence[] on each claim itself still says WHICH record
-that specific claim was actually judged from. A fail-closed abstention
-(withheld/missing/undisclosed, above) carries neither: no model was ever
+that specific claim was actually judged from. The document also
+records the judged selection (`judged_selection`: the rows sent, in order, and
+which came back out_of_scope -- claims[] omits those), so a reader holding the
+pack and the document recomputes the pin's prompt_template_hash and input_refs
+without being told which rows were asked. A fail-closed abstention
+(withheld/missing/undisclosed, above) carries no pin and cites no record: no model was ever
 consulted, so no judge identity is sealed on it -- only the reason. A call
 whose selected clauses declare no normalized action field at all cannot
 seal an honest pin; run() refuses it as a BadInput, before the judge is
@@ -448,7 +452,26 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     )
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
+    document["judged_selection"] = judged_selection(clauses, criterion_verdicts)
     return document
+
+
+def judged_selection(clauses, criterion_verdicts):
+    """What this call put in front of the judge, recorded on the document: the
+    selected rows (rule_ids and requirement_refs, in the order sent) and which
+    of them came back out_of_scope. claims[] omits an out_of_scope row (Result
+    v0 has no such verdict), yet the pin's prompt_template_hash and input_refs
+    cover every row sent; with this, a reader holding the pack and the document
+    alone recomputes both (select the pack's clauses by requirement_ref, then
+    jev_judge.compiled_prompt_digest(request_clauses(...), allow_out_of_scope,
+    "disclosed_facts") and declared_input_refs(...)). An extension key beyond
+    the vendored evidence-result-v0 schema, like a claim's rule_id/judge_pin."""
+    return {
+        "rule_ids": [c.get("rule_id") for c in clauses],
+        "requirement_refs": [c["id"] for c in clauses],
+        "out_of_scope": [c["id"] for c in clauses if criterion_verdicts.get(c["id"]) == "out_of_scope"],
+        "allow_out_of_scope": ALLOW_OUT_OF_SCOPE,
+    }
 
 
 def main(argv):
