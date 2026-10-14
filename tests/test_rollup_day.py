@@ -8,8 +8,14 @@ run instead (tests/fresh_env_outcomes.sh).
 
     python3 -m unittest discover -s tests -p 'test_*.py'
 """
+import contextlib
+import hashlib
+import io
+import json
+import os
 import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
@@ -375,6 +381,82 @@ class ConflictingCasesAreNeverDroppedSilently(unittest.TestCase):
         for period, (doc, skipped) in by_period.items():
             self.assertIn("case-x", [s["case_id"] for s in skipped], period)
         self.assertIsNone(by_period["day:2026-09-23"][0], "case-x was that day's only case")
+
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
+AIRLINE_SPEC = REPO / "demo" / "airline-support-outcomes" / "compiled.json"
+STUB_JUDGE = f"{sys.executable} {REPO / 'tests' / 'stub_judge.py'}"
+
+
+class ScopingExclusionsAreCounted(unittest.TestCase):
+    """Reports left out by pin or pack scoping are counted in the summary, and
+    --judge-model-id is required as it is for run_daily.py: a rollup never
+    defaults to a model id the reports were not sealed under and then reports
+    cases_judged 0 with nothing to say why. Runs main() against
+    tests/fake_capsulectl.py."""
+    SEALED_UNDER = "stub-judge/0 (no model)"
+
+    def setUp(self):
+        from judge_pin import pin_input
+        self.tmp = pathlib.Path(tempfile.mkdtemp())
+        self.spec = json.loads(AIRLINE_SPEC.read_text())
+        digest = json.loads(__import__("subprocess").run(
+            STUB_JUDGE.split(), input='{"describe": true}', capture_output=True, text=True).stdout)
+        pin = pin_input(self.spec, REPO, self.SEALED_UNDER, digest["instruction_template_digest"])
+        pin_digest = hashlib.sha256(json.dumps(pin, sort_keys=True).encode()).hexdigest()
+        book = []
+        for i, clause in enumerate(self.spec["clauses"]):
+            body = {"record_type": "evaluation-report/v1", "contract": self.spec["contract"],
+                    "case_id": "case-a", "clause_id": clause["id"], "verdict": "met",
+                    "period": "day:2026-09-23", "pack_source_digest": self.spec["pack_source_digest"],
+                    "judge_pin_digest": pin_digest}
+            book.append({"capsule_id": f"{i:064x}", "appended_at": "2026-09-24T00:00:00Z", "payload": body})
+        # one recomputed report (no pin) from an earlier compile of the pack
+        book.append({"capsule_id": "f" * 64, "appended_at": "2026-09-24T00:00:00Z",
+                     "payload": {"record_type": "evaluation-report/v1", "contract": self.spec["contract"],
+                                 "case_id": "case-b", "clause_id": self.spec["clauses"][1]["id"],
+                                 "verdict": "met", "period": "day:2026-09-23",
+                                 "pack_source_digest": "0" * 64}})
+        (self.tmp / "book.json").write_text(json.dumps(book))
+        ctl = self.tmp / "capsulectl"
+        ctl.write_text(f"#!/bin/sh\nexec {sys.executable} {REPO / 'tests' / 'fake_capsulectl.py'} \"$@\"\n")
+        ctl.chmod(0o755)
+        self.ctl = str(ctl)
+        self._env = mock_env = dict(os.environ, FAKE_CAPSULECTL_BOOK=str(self.tmp / "book.json"))
+        self._old_env = os.environ.copy()
+        os.environ.update(mock_env)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self._old_env)
+
+    def _main(self, *extra):
+        argv = ["--profile", "p", "--spec", str(AIRLINE_SPEC), "--capsulectl", self.ctl,
+                "--judge-cmd", STUB_JUDGE, "--generated-at", "2026-09-24T23:59:59Z",
+                "--out", str(self.tmp / "out"), *extra]
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = rollup_day.main(argv)
+        return code, json.loads(out.getvalue())
+
+    def test_the_sealing_model_id_rolls_up_and_counts_the_stale_pack_report(self):
+        code, summary = self._main("--judge-model-id", self.SEALED_UNDER)
+        self.assertEqual(code, 0)
+        self.assertEqual(summary["cases_complete"], 1)
+        self.assertEqual(summary["reports_excluded"], {"judge_pin_mismatch": 0, "pack_source_mismatch": 1})
+
+    def test_a_model_id_mismatch_is_counted_never_a_silent_zero(self):
+        code, summary = self._main("--judge-model-id", "some-other-model")
+        self.assertEqual(code, 0)
+        self.assertEqual(summary["cases_judged"], 0)
+        self.assertEqual(summary["reports_excluded"]["judge_pin_mismatch"], len(self.spec["clauses"]))
+
+    def test_no_judge_model_id_is_refused_not_defaulted_from_the_spec(self):
+        # The spec's own judge.model_id ("jev-1.13.0") is not what these reports
+        # were sealed under; defaulting to it reported cases_judged 0.
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            self._main()
+        self.assertEqual(cm.exception.code, 2)
 
 
 if __name__ == "__main__":
