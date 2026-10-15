@@ -14,7 +14,8 @@ RES=~/GitHub/tau2-bench/data/tau2/results/final/claude-3-7-sonnet-20250219_airli
 python3 backfill.py --results "$RES" --out "$DEMO/backfill"
 ```
 
-It writes **one request per task — that task's trial-0 run** — named
+It writes **one request per task — that task's trial-0 run** (`--trial N` picks
+another of the file's trials, e.g. `--trial 1`) — named
 `task-<id>.json` (task ids are sanitized for the filesystem; the airline file
 yields 50, the retail file 114). Publish them all into a profile you have already
 created (see [demo/DEMO.md](../DEMO.md) for creating the `airlinedemo` profile):

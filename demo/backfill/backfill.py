@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Backfill a tau2-bench results file into capsule-seal-request/v1 files.
 
-    backfill.py --results <tau2 results/final/*.json> --out <dir>
+    backfill.py --results <tau2 results/final/*.json> --out <dir> [--trial N]
 
 Input is one shipped tau2 results file; output is one seal request per task — its
-trial-0 simulation (agent + user-simulator transcript). It reads only the results file:
+trial-N simulation (agent + user-simulator transcript; trial 0 unless --trial
+says otherwise). It reads only the results file:
 no agent run, no user simulator, no model API key, and nothing synthesized. Then
 `capsulectl publish --request <file>` seals each into a Capsule and appends it to
 the CLL.
@@ -107,8 +108,12 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--results", required=True, type=pathlib.Path,
                     help="a tau2 results file (data/tau2/results/final/*.json)")
     ap.add_argument("--out", required=True, type=pathlib.Path,
-                    help="output directory; one seal request per task (its trial-0 run)")
+                    help="output directory; one seal request per task (its run for --trial)")
+    ap.add_argument("--trial", type=int, default=0,
+                    help="which of each task's trials to seal (default 0; tau2's 4-trial files hold 0-3)")
     args = ap.parse_args(argv)
+    if args.trial < 0:
+        ap.error("--trial must be 0 or more")
 
     data = json.loads(args.results.read_text())
     sims = data.get("simulations")
@@ -119,10 +124,10 @@ def main(argv: list[str]) -> int:
     if not domain:
         raise SystemExit("results file has no environment_info.domain_name")
 
-    # one interaction per task: its trial-0 simulation
-    trial0 = [s for s in sims if s.get("trial") == 0]
-    if not trial0:
-        raise SystemExit(f"{args.results} has no trial-0 simulations")
+    # one interaction per task: its simulation for the chosen trial
+    chosen = [s for s in sims if s.get("trial") == args.trial]
+    if not chosen:
+        raise SystemExit(f"{args.results} has no trial-{args.trial} simulations")
 
     args.out.mkdir(parents=True, exist_ok=True)
     # clear our own prior outputs so a reused dir can't leak a different/smaller run
@@ -132,14 +137,14 @@ def main(argv: list[str]) -> int:
     # filenames (lexical: task-0, task-1, task-10, …, task-2), not task_id order. Only a
     # per-case selection (by capsule/case id) is reliable; do not assume sequence == task.
     used: dict[str, int] = {}
-    for sim in sorted(trial0, key=lambda s: str(s["task_id"])):
+    for sim in sorted(chosen, key=lambda s: str(s["task_id"])):
         request = build_request(sim, info, args.results.name, domain)
         stem = f"task-{safe_name(sim['task_id'])}"
         n = used.get(stem, 0)
         used[stem] = n + 1
         name = f"{stem}.json" if n == 0 else f"{stem}-{n}.json"
         (args.out / name).write_text(json.dumps(request, indent=2) + "\n")
-    print(f"wrote {len(trial0)} seal requests (domain={domain}, one per task, trial 0) to {args.out}")
+    print(f"wrote {len(chosen)} seal requests (domain={domain}, one per task, trial {args.trial}) to {args.out}")
     return 0
 
 
