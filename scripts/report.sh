@@ -9,11 +9,13 @@
 # JUDGED path: scripts/run_daily.py (one Jev call per clause per case, mock
 # backend by default) then scripts/rollup_day.py's all-required rollup.
 # Both paths converge on the SAME tail: capsulectl result build -> a fresh
-# checkpoint -> disclose -> (judged path only) wire the pack's own
-# outcome-invoice/v1 presentation settings -> report build.
+# checkpoint -> disclose -> (judged path only) wire the pack's own compiled
+# presentation.json block (outcome-report/v1 or eu-ai-act-compliance/v1,
+# scripts/wire_presentation.py) onto the bundle -> report build.
 #
 #   report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] \
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
+#       [--title TITLE] [--attach-input-originals] \
 #       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
@@ -24,24 +26,35 @@
 # the final --out) live under it.
 #
 # --card defaults to the spec's own `presentation.card` (report-spec path)
-# or "outcome" (judged path, the pack's own card); --judge-backend defaults
+# or, on the judged path, the card the pack's own presentation block selects
+# ("obligation" for eu-ai-act-compliance/v1, "outcome" for outcome-report/v1,
+# "outcome" when the pack has no presentation.json); --judge-backend defaults
 # to mock (scripts/judges/jev_judge.py's mock backend, no key, no network
 # call) -- pass --judge-backend live with TYPESAFE_API_KEY set in the
-# environment for a real Jev run. --judge-cmd/--judge-model-id are read from
-# the compiled pack by default (its own judge.model_id) and almost never
-# need to be given explicitly.
+# environment for a real Jev run (the key is required only for the default
+# judge command; a --judge-cmd of your own brings its own credentials).
+# --judge-cmd/--judge-model-id are read from the compiled pack by default (its
+# own judge.model_id) and almost never need to be given explicitly.
+#
+# --title sets the page title (default: the Result v0's own view title).
+# --attach-input-originals passes the same flag to `capsulectl disclose`, so
+# each cited case record's original input -- the full conversation transcript,
+# tool calls and results -- is carried in the bundle and shown on the page. It
+# is off by default: it discloses the raw conversations, not just digests.
 set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
 usage: report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] --out report.html
                   [--work DIR] [--capsulectl PATH] [--card CARD]
+                  [--title TITLE] [--attach-input-originals]
                   [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
 EOF
   exit 2
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -52,6 +65,8 @@ while [[ $# -gt 0 ]]; do
     --work) WORK=$2; shift 2 ;;
     --capsulectl) CAPSULECTL=$2; shift 2 ;;
     --card) CARD=$2; shift 2 ;;
+    --title) TITLE_OVERRIDE=$2; shift 2 ;;
+    --attach-input-originals) ATTACH_ORIGINALS=1; shift ;;
     --judge-cmd) JUDGE_CMD=$2; shift 2 ;;
     --judge-model-id) JUDGE_MODEL_ID=$2; shift 2 ;;
     --judge-backend) JUDGE_BACKEND=$2; shift 2 ;;
@@ -61,7 +76,7 @@ done
 [[ -n "$SPEC" && -n "$PROFILE" && -n "$DATE" && -n "$OUT" ]] || usage
 [[ -f "$SPEC" ]] || { echo "report.sh: no such spec file: $SPEC" >&2; exit 2; }
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
-if [[ "$JUDGE_BACKEND" == "live" ]]; then
+if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
   [[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY set" >&2; exit 2; }
 fi
 
@@ -134,7 +149,6 @@ else
     --generated-at "$GENERATED_AT" --judge-model-id "$EFFECTIVE_MODEL_ID" --out "$WORK/rollup"
   DEFAULT_CARD=outcome
 fi
-CARD=${CARD:-$DEFAULT_CARD}
 
 # one result-v0-<day>.json per day either path just wrote; merge if more than one.
 shopt -s nullglob
@@ -174,7 +188,10 @@ step "cll checkpoint create: a fresh checkpoint covering the just-sealed Result 
 "$CAPSULECTL" cll checkpoint create --profile "$PROFILE" | tee "$WORK/checkpoint-create.json"
 
 step "capsulectl disclose: assemble the Evidence Bundle rooted at the sealed Result v0"
-"$CAPSULECTL" disclose --profile "$PROFILE" --root "$RESULT_CAPSULE" --closure-depth 2 --out "$WORK/bundle.json"
+DISCLOSE_EXTRA=()
+if [[ "$ATTACH_ORIGINALS" -eq 1 ]]; then DISCLOSE_EXTRA+=(--attach-input-originals); fi
+"$CAPSULECTL" disclose --profile "$PROFILE" --root "$RESULT_CAPSULE" --closure-depth 2 \
+  ${DISCLOSE_EXTRA[@]+"${DISCLOSE_EXTRA[@]}"} --out "$WORK/bundle.json"
 uncheckpointed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d['records']) - len(d.get('completeness_certificate',{}).get('memberships',{})))" "$WORK/bundle.json")
 [[ "$uncheckpointed" -eq 0 ]] || fail "$uncheckpointed records in the disclosed bundle have no membership entry"
 BUNDLE="$WORK/bundle.json"
@@ -188,32 +205,23 @@ if [[ "$MODE" == "judged" ]]; then
   # instead of trying to read its own compiled.json as a presentation file.
   PRESENTATION_JSON="${SPEC/compiled.json/presentation.json}"
   if [[ "$PRESENTATION_JSON" != "$SPEC" && -f "$PRESENTATION_JSON" ]]; then
-    step "wire the pack's own outcome-invoice/v1 presentation extension into the bundle"
-    BUNDLE="$WORK/bundle-with-invoice.json"
-    python3 -c "
-import json, sys
-bundle_path, pres_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
-bundle = json.load(open(bundle_path))
-presentation = (json.load(open(pres_path)) or {}).get('outcome-invoice/v1')
-if presentation is None:
-    print(f'report.sh: {pres_path} carries no outcome-invoice/v1 block -- skipping', file=sys.stderr)
-else:
-    bundle.setdefault('extensions', {})['outcome-invoice/v1'] = {
-        'enabled': True, 'percentages': presentation['percentages'],
-        'price_per_resolved': presentation['price_per_resolved'],
-    }
-json.dump(bundle, open(out_path, 'w'))
-" "$WORK/bundle.json" "$PRESENTATION_JSON" "$BUNDLE"
+    step "wire the pack's own presentation block into the bundle"
+    BUNDLE="$WORK/bundle-wired.json"
+    WIRED=$(python3 "$REPO/scripts/wire_presentation.py" --bundle "$WORK/bundle.json" \
+      --presentation "$PRESENTATION_JSON" --out "$BUNDLE") || fail "could not wire $PRESENTATION_JSON into the bundle"
+    echo "$WIRED"
+    DEFAULT_CARD=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['card'])" "$WIRED")
   fi
 fi
+CARD=${CARD:-$DEFAULT_CARD}
 
 PRESENTATION_FILE="$WORK/presentation.json"
 python3 -c "
 import json, sys
-result_v0_path, out_path = sys.argv[1], sys.argv[2]
-title = json.load(open(result_v0_path))['view']['title']
+result_v0_path, out_path, override = sys.argv[1], sys.argv[2], sys.argv[3]
+title = override or json.load(open(result_v0_path))['view']['title']
 json.dump({'title': title}, open(out_path, 'w'))
-" "$RESULT_V0" "$PRESENTATION_FILE"
+" "$RESULT_V0" "$PRESENTATION_FILE" "$TITLE_OVERRIDE"
 
 step "capsulectl report build: render $OUT (--card $CARD)"
 mkdir -p "$(dirname "$OUT")"
