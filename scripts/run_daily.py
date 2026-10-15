@@ -138,10 +138,10 @@ def judge_reference_files(spec, root):
         if parts.is_absolute() or ".." in parts.parts:
             raise EvidenceUnavailable(f"judge.reference_files.{key} must be relative to the repo root "
                                       f"with no '..': {value!r}")
-        path = root / value
-        if not path.resolve().is_relative_to(root_resolved):
+        path = (root / value).resolve()
+        if not path.is_relative_to(root_resolved):
             raise EvidenceUnavailable(f"judge.reference_files.{key} resolves outside the repo root: {value!r}")
-        files[key] = str(path)
+        files[key] = str(path)  # the checked, resolved path: a symlink swapped later can't redirect it
     return files
 
 

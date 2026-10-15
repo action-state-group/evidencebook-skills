@@ -27,6 +27,13 @@ class BlindPacket(unittest.TestCase):
         for leaked in ("verdict", "rationale", "judge_pin_digest", "stratum", "source_capsule_id", "record_type"):
             self.assertNotIn(leaked, packet)
 
+    def test_reference_files_default_to_airline_and_follow_the_contract(self):
+        packet = blind_packet(REPORT, CASE)
+        self.assertEqual((packet["policy"], packet["booking_db"]), ("airline-data/policy.md", "airline-data/db.json"))
+        named = {"policy": "data/p.md", "booking_db": "data/db.json"}
+        packet = blind_packet(REPORT, CASE, named)
+        self.assertEqual((packet["policy"], packet["booking_db"]), ("data/p.md", "data/db.json"))
+
     def test_no_value_of_the_report_but_its_case_and_clause_reaches_the_packet(self):
         packet = blind_packet(REPORT, CASE)
         leaked = {REPORT["verdict"], REPORT["rationale"], REPORT["judge_pin_digest"], REPORT["source_capsule_id"]}
