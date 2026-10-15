@@ -145,8 +145,12 @@ else
     fi
   done
   step "rollup_day.py: the all-required rollup, pin-scoped to the current compiled pack"
+  # rollup_day.py recomputes the judge pin to scope the rollup to it, and the pin
+  # covers the instruction template the judge command reports: it needs the same
+  # --judge-cmd run_daily.py was given (without it, it stops with evidence unavailable).
   python3 "$REPO/scripts/rollup_day.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
-    --generated-at "$GENERATED_AT" --judge-model-id "$EFFECTIVE_MODEL_ID" --out "$WORK/rollup"
+    --generated-at "$GENERATED_AT" --judge-cmd "$JUDGE_CMD" --judge-model-id "$EFFECTIVE_MODEL_ID" \
+    --out "$WORK/rollup"
   DEFAULT_CARD=outcome
 fi
 
