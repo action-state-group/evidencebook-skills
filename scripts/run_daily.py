@@ -48,6 +48,13 @@ axes, the sampling params, the pack source's digest and the instruction template
 judge command reports sending; a clause marked never_out_of_scope is never offered
 out_of_scope. Every judge-cmd call runs under --judge-timeout, and an unparseable
 or incomplete answer stops the run with `evidence unavailable`, never a crash.
+
+The reference files a judge or checker reads besides the conversation (the policy
+text and the booking database) come from the compiled contract's own
+`judge.reference_files` ({"policy", "booking_db"}, repo-root-relative paths), and
+default to tau2 airline's `airline-data/policy.md` / `airline-data/db.json` when the
+contract names none -- every pack compiled before this field existed, unchanged.
+See judge_reference_files().
 """
 
 import argparse
@@ -102,10 +109,47 @@ def effective_claim(clause, switches):
     return clause["claim"]
 
 
-def _judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence=None):
+# The reference files a pack judges against when its compiled contract names none:
+# tau2 airline's own, the only data every pack compiled before
+# `judge.reference_files` existed was judged against.
+DEFAULT_REFERENCE_FILES = {"policy": "airline-data/policy.md", "booking_db": "airline-data/db.json"}
+
+
+def judge_reference_files(spec, root):
+    """{"policy": path, "booking_db": path} for the judge and checker requests, from
+    the compiled contract's `judge.reference_files` (scripts/pack_compile.py passes a
+    pack source's own through), else DEFAULT_REFERENCE_FILES. Each is a relative
+    path under `root` (the repo root run_daily.py already resolves the prompt and
+    axes against); an absolute path, a `..` step, or a symlink that resolves outside
+    `root` is refused with EvidenceUnavailable -- a contract never points the judge
+    at a file outside the repo it was compiled in."""
+    named = (spec.get("judge") or {}).get("reference_files")
+    rel = DEFAULT_REFERENCE_FILES if named is None else named
+    if not isinstance(rel, dict) or set(rel) != set(DEFAULT_REFERENCE_FILES):
+        raise EvidenceUnavailable(f"judge.reference_files must name exactly {sorted(DEFAULT_REFERENCE_FILES)!r}; "
+                                  f"got {rel!r}")
+    root_resolved = root.resolve()
+    files = {}
+    for key in DEFAULT_REFERENCE_FILES:
+        value = rel[key]
+        if not isinstance(value, str) or not value.strip():
+            raise EvidenceUnavailable(f"judge.reference_files.{key} must be a non-empty path")
+        parts = pathlib.PurePosixPath(value)
+        if parts.is_absolute() or ".." in parts.parts:
+            raise EvidenceUnavailable(f"judge.reference_files.{key} must be relative to the repo root "
+                                      f"with no '..': {value!r}")
+        path = root / value
+        if not path.resolve().is_relative_to(root_resolved):
+            raise EvidenceUnavailable(f"judge.reference_files.{key} resolves outside the repo root: {value!r}")
+        files[key] = str(path)
+    return files
+
+
+def _judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence=None,
+                   reference_files=None):
+    files = reference_files or judge_reference_files({}, spec_root)
     request = {"case": case_payload["case"], "agent_interaction": case_payload["agent_interaction"],
-               "policy": str(spec_root / "airline-data" / "policy.md"),
-               "booking_db": str(spec_root / "airline-data" / "db.json"),
+               "policy": files["policy"], "booking_db": files["booking_db"],
                "judge_model_id": judge_model_id, "allow_out_of_scope": allow_out_of_scope}
     if min_confidence is not None:
         request["min_confidence"] = min_confidence
@@ -139,22 +183,22 @@ def _call_judge(cmd, request, timeout):
 
 
 def judge(cmd, case_payload, clause, spec_root, judge_model_id, allow_out_of_scope=False,
-          min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT):
+          min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT, reference_files=None):
     """Judge exactly one clause with one judge-cmd call. What demo/tau2/compiled.json
     (tests/stub_judge.py) and any contract without "judge_batch": true uses."""
-    request = dict(_judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence),
-                   clause=clause)
+    request = dict(_judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence,
+                                  reference_files), clause=clause)
     return checked_answer(_call_judge(cmd, request, timeout), valid_verdicts(clause, allow_out_of_scope))
 
 
 def judge_batch(cmd, case_payload, clauses, spec_root, judge_model_id, allow_out_of_scope=False,
-                min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT):
+                min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT, reference_files=None):
     """Judge every clause in `clauses` with ONE judge-cmd call: one conversation,
     one policy text, one request. clause_id -> checked answer, one entry per
     clause passed in -- a judge command that drops or invents a clause id fails
     this closed via checked_answer(), same as a bad single-clause answer would."""
-    request = dict(_judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence),
-                   clauses=clauses)
+    request = dict(_judge_request(case_payload, spec_root, judge_model_id, allow_out_of_scope, min_confidence,
+                                  reference_files), clauses=clauses)
     parsed = _call_judge(cmd, request, timeout)
     if not isinstance(parsed, dict) or not isinstance(parsed.get("answers"), dict):
         raise EvidenceUnavailable(f"judge returned no valid batch answers: {parsed!r}")
@@ -163,7 +207,7 @@ def judge_batch(cmd, case_payload, clauses, spec_root, judge_model_id, allow_out
             for clause in clauses}
 
 
-def recomputed_answer(case_payload, clause, spec_root):
+def recomputed_answer(case_payload, clause, spec_root, reference_files=None):
     """Run the registered deterministic checker for a tier:recomputed clause.
     Refuses -- fails the run closed -- for a clause that names no registered
     checker, rather than inventing one: skills/daily-judge-and-close/SKILL.md's
@@ -172,14 +216,14 @@ def recomputed_answer(case_payload, clause, spec_root):
     checker = RECOMPUTE_CHECKS.get(clause["id"])
     if checker is None:
         raise EvidenceUnavailable(f"clause {clause['id']!r} is tier 'recomputed' but names no registered checker")
+    files = reference_files or judge_reference_files({}, spec_root)
     request = {"clause": clause, "case": case_payload["case"],
                "agent_interaction": case_payload["agent_interaction"],
-               "policy": str(spec_root / "airline-data" / "policy.md"),
-               "booking_db": str(spec_root / "airline-data" / "db.json")}
+               "policy": files["policy"], "booking_db": files["booking_db"]}
     return checked_answer(checker(request))
 
 
-def precheck_answer(case_payload, clause, spec_root):
+def precheck_answer(case_payload, clause, spec_root, reference_files=None):
     """A tier:judged clause's recompute pre-check (its compiled
     "recompute_precheck", a key of scripts/recompute.py's RECOMPUTE_PRECHECKS),
     run before the judge: None when the clause names none or the pre-check
@@ -192,16 +236,17 @@ def precheck_answer(case_payload, clause, spec_root):
     precheck = RECOMPUTE_PRECHECKS.get(name)
     if precheck is None:
         raise EvidenceUnavailable(f"clause {clause['id']!r} names recompute_precheck {name!r}, which is not registered")
+    files = reference_files or judge_reference_files({}, spec_root)
     request = {"clause": clause, "case": case_payload["case"],
                "agent_interaction": case_payload["agent_interaction"],
-               "policy": str(spec_root / "airline-data" / "policy.md"),
-               "booking_db": str(spec_root / "airline-data" / "db.json")}
+               "policy": files["policy"], "booking_db": files["booking_db"]}
     answer = precheck(request)
     return None if answer is None else checked_answer(answer)
 
 
 def case_answers(body, spec, switches, root, judge_cmd, judge_model_id, allow_out_of_scope=False,
-                 judge_batch_mode=False, min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT):
+                 judge_batch_mode=False, min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT,
+                 reference_files=None):
     """Every clause's answer for one case: recomputed clauses through their
     checker, judged clauses through their recompute pre-check first
     (precheck_answer()) and the judge command only for those the pre-check
@@ -216,10 +261,10 @@ def case_answers(body, spec, switches, root, judge_cmd, judge_model_id, allow_ou
             recomputed_clauses.append(clause)
         # any other tier: skipped, same as today's `continue`
 
-    answers = {clause["id"]: recomputed_answer(body, clause, root) for clause in recomputed_clauses}
+    answers = {clause["id"]: recomputed_answer(body, clause, root, reference_files) for clause in recomputed_clauses}
     prechecked = {}
     for clause in judged_clauses:
-        pre = precheck_answer(body, clause, root)
+        pre = precheck_answer(body, clause, root, reference_files)
         if pre is not None:
             prechecked[clause["id"]] = pre
     answers.update(prechecked)
@@ -227,11 +272,11 @@ def case_answers(body, spec, switches, root, judge_cmd, judge_model_id, allow_ou
     if judged_clauses:
         if judge_batch_mode:
             answers.update(judge_batch(judge_cmd, body, judged_clauses, root, judge_model_id,
-                                       allow_out_of_scope, min_confidence, timeout))
+                                       allow_out_of_scope, min_confidence, timeout, reference_files))
         else:
             for clause in judged_clauses:
                 answers[clause["id"]] = judge(judge_cmd, body, clause, root, judge_model_id,
-                                              allow_out_of_scope, min_confidence, timeout)
+                                              allow_out_of_scope, min_confidence, timeout, reference_files)
     return answers, set(prechecked)
 
 
@@ -314,6 +359,7 @@ def main(argv):
     log = {"skill": "daily-judge-and-close", "day": str(day), "profile": profile}
 
     try:
+        reference_files = judge_reference_files(spec, root)
         # 1. Resolve the pinned judge before judging anything.
         pin_input = build_pin_input(spec, root, args.judge_model_id,
                                     describe_judge(args.judge_cmd, args.judge_timeout))
@@ -340,7 +386,7 @@ def main(argv):
 
             answers, prechecked = case_answers(body, spec, switches, root, args.judge_cmd, args.judge_model_id,
                                                allow_out_of_scope, judge_batch_mode, min_confidence,
-                                               args.judge_timeout)
+                                               args.judge_timeout, reference_files)
 
             for clause in spec["clauses"]:
                 if clause["id"] not in answers:

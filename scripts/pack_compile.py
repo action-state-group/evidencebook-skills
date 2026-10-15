@@ -450,6 +450,22 @@ def validate_source(source):
         if min_conf is not None and (isinstance(min_conf, bool) or not isinstance(min_conf, (int, float))
                                      or not 0 < min_conf <= 1):
             issues.append(f"judge.min_confidence must be a number in (0, 1], or absent; got {min_conf!r}")
+        # Optional: the reference files the judge and the recompute checkers read
+        # besides the conversation (scripts/run_daily.py's judge_reference_files(),
+        # which re-checks the same rules at run time and defaults to tau2 airline's
+        # files when a pack names none -- every pack written before this field).
+        ref_files = judge.get("reference_files")
+        if ref_files is not None:
+            if not isinstance(ref_files, dict) or set(ref_files) != {"policy", "booking_db"}:
+                issues.append("judge.reference_files must name exactly 'policy' and 'booking_db'")
+            else:
+                for key, value in sorted(ref_files.items()):
+                    if not isinstance(value, str) or not value.strip():
+                        issues.append(f"judge.reference_files.{key} must be a non-empty path")
+                    elif (pathlib.PurePosixPath(value).is_absolute()
+                          or ".." in pathlib.PurePosixPath(value).parts):
+                        issues.append(f"judge.reference_files.{key} must be relative to the repo root "
+                                      f"with no '..': {value!r}")
         # Pack-source-authored evidence description: build_judge_prompt() names exactly
         # what the judge is given here, never a hardcoded assumption (e.g. a
         # transcript, an airline policy file) -- a pack whose judge reads something
@@ -603,6 +619,8 @@ def build_compiled_json(source, out_rel):
     # "switches" as an empty one.
     if source["judge"].get("min_confidence") is not None:
         compiled["judge"]["min_confidence"] = source["judge"]["min_confidence"]
+    if source["judge"].get("reference_files") is not None:
+        compiled["judge"]["reference_files"] = dict(source["judge"]["reference_files"])
     if source.get("switches"):
         compiled["switches"] = dict(source["switches"])
     if source.get("switches_note"):

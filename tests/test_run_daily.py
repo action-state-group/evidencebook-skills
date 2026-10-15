@@ -16,8 +16,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts" /
 
 from capsulectl_calls import EvidenceUnavailable  # noqa: E402
 from judge_pin import describe_judge, pin_input  # noqa: E402
-from run_daily import (build_report, checked_answer, effective_claim, effective_tier,  # noqa: E402
-                       judge, judge_batch, recomputed_answer, valid_verdicts, VERDICTS, VERDICTS_WITH_OOS)
+from run_daily import (_judge_request, build_report, checked_answer, effective_claim,  # noqa: E402
+                       effective_tier, judge, judge_batch, judge_reference_files, recomputed_answer,
+                       valid_verdicts, VERDICTS, VERDICTS_WITH_OOS)
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WITHIN_FARE_RULES = {
@@ -101,6 +102,58 @@ class RecomputedAnswer(unittest.TestCase):
         unregistered = dict(WITHIN_FARE_RULES, id="task_resolution.right_change")
         with self.assertRaisesRegex(EvidenceUnavailable, "no registered checker"):
             recomputed_answer(self.CASE_PAYLOAD, unregistered, ROOT)
+
+
+class ReferenceFiles(unittest.TestCase):
+    """judge_reference_files(): the policy/booking-db paths a judge and checker
+    read come from the compiled contract's judge.reference_files, defaulting to
+    tau2 airline's own -- and never from outside the repo root."""
+
+    CASE_PAYLOAD = {"case": {"task_id": "1"}, "agent_interaction": {"messages": []}}
+
+    def test_a_contract_naming_none_gets_the_airline_files_exactly_as_before(self):
+        files = judge_reference_files({"judge": {"model_id": "m"}}, ROOT)
+        self.assertEqual(files, {"policy": str(ROOT / "airline-data" / "policy.md"),
+                                 "booking_db": str(ROOT / "airline-data" / "db.json")})
+        request = _judge_request(self.CASE_PAYLOAD, ROOT, "m", False)
+        self.assertEqual((request["policy"], request["booking_db"]), (files["policy"], files["booking_db"]))
+
+    def test_every_shipped_compiled_contract_keeps_the_airline_files(self):
+        for compiled in sorted(ROOT.glob("demo/*/compiled.json")):
+            spec = json.loads(compiled.read_text())
+            self.assertEqual(judge_reference_files(spec, ROOT)["policy"], str(ROOT / "airline-data" / "policy.md"),
+                             compiled)
+
+    def test_named_files_reach_the_judge_and_the_checker_requests(self):
+        spec = {"judge": {"reference_files": {"policy": "demo/backfill/README.md", "booking_db": "README.md"}}}
+        files = judge_reference_files(spec, ROOT)
+        self.assertEqual(files, {"policy": str(ROOT / "demo/backfill/README.md"),
+                                 "booking_db": str(ROOT / "README.md")})
+        request = _judge_request(self.CASE_PAYLOAD, ROOT, "m", False, reference_files=files)
+        self.assertEqual((request["policy"], request["booking_db"]), (files["policy"], files["booking_db"]))
+
+    def test_paths_outside_the_repo_root_are_refused(self):
+        for bad in ("/etc/passwd", "../outside.md", "airline-data/../../outside.md"):
+            spec = {"judge": {"reference_files": {"policy": bad, "booking_db": "airline-data/db.json"}}}
+            with self.assertRaisesRegex(EvidenceUnavailable, "repo root"):
+                judge_reference_files(spec, ROOT)
+
+    def test_a_symlink_that_escapes_the_repo_root_is_refused(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d) / "repo"
+            root.mkdir()
+            (root / "escape").symlink_to(pathlib.Path(d))
+            spec = {"judge": {"reference_files": {"policy": "escape/x.md", "booking_db": "db.json"}}}
+            with self.assertRaisesRegex(EvidenceUnavailable, "outside the repo root"):
+                judge_reference_files(spec, root)
+
+    def test_a_partial_or_malformed_block_is_refused_not_defaulted(self):
+        for bad in ({"policy": "airline-data/policy.md"}, [], "airline-data/policy.md",
+                    {"policy": "", "booking_db": "airline-data/db.json"},
+                    {"policy": "a", "booking_db": "b", "extra": "c"}):
+            with self.assertRaises(EvidenceUnavailable):
+                judge_reference_files({"judge": {"reference_files": bad}}, ROOT)
 
 
 class JudgeBatch(unittest.TestCase):
@@ -356,3 +409,46 @@ class Art14ePrecheck(unittest.TestCase):
         clause = {"id": "x.y", "recompute_precheck": "x.nope"}
         with self.assertRaisesRegex(EvidenceUnavailable, "not registered"):
             precheck_answer(self._body([{"role": "user", "content": "hi"}]), clause, ROOT)
+
+
+class PrecheckReferenceFiles(unittest.TestCase):
+    """A recompute pre-check reads the contract's own reference files, the
+    same ones the judge and the checker get; with none passed it reads tau2
+    airline's defaults, as before."""
+
+    FILES = {"policy": "/packs/x/policy.md", "booking_db": "/packs/x/db.json"}
+    BODY = {"case": {"benchmark": "tau2", "domain": "airline", "task_id": "x", "trial": 0},
+            "agent_interaction": {"messages": []}}
+
+    def _recording(self):
+        from unittest import mock
+        import run_daily
+        seen = []
+
+        def precheck(request):
+            seen.append((request["policy"], request["booking_db"]))
+            return {"verdict": "met", "rationale": "precheck"}
+
+        self.enterContext(mock.patch.dict(run_daily.RECOMPUTE_PRECHECKS, {"x.rec": precheck}))
+        return seen
+
+    def test_precheck_answer_uses_the_passed_reference_files(self):
+        from run_daily import precheck_answer
+        seen = self._recording()
+        precheck_answer(self.BODY, {"id": "x.y", "recompute_precheck": "x.rec"}, ROOT, self.FILES)
+        self.assertEqual(seen, [(self.FILES["policy"], self.FILES["booking_db"])])
+
+    def test_precheck_answer_without_reference_files_reads_the_airline_defaults(self):
+        from run_daily import precheck_answer
+        seen = self._recording()
+        precheck_answer(self.BODY, {"id": "x.y", "recompute_precheck": "x.rec"}, ROOT)
+        self.assertEqual(seen, [(str(ROOT / "airline-data" / "policy.md"), str(ROOT / "airline-data" / "db.json"))])
+
+    def test_case_answers_passes_the_reference_files_to_the_precheck(self):
+        from run_daily import case_answers
+        seen = self._recording()
+        spec = {"clauses": [{"id": "x.y", "tier": "judged", "claim": "c", "recompute_precheck": "x.rec"}]}
+        answers, prechecked = case_answers(self.BODY, spec, {}, ROOT, "false", "m", reference_files=self.FILES)
+        self.assertEqual(prechecked, {"x.y"})
+        self.assertEqual(answers["x.y"]["rationale"], "precheck")
+        self.assertEqual(seen, [(self.FILES["policy"], self.FILES["booking_db"])])
