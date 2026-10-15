@@ -61,7 +61,7 @@ def resolve_contract_ref(spec):
 
 
 def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, claim_id=None,
-             judge_pin_digest=None, judge_pin=None, rule_id=None):
+             judge_pin_digest=None, judge_pin=None, rule_id=None, source_capsule_id=None):
     """One requirement-type claim (PR #19's ClaimType default: absent == requirement)
     for one criterion. `tier` is that criterion's own tier ("judged" or
     "recomputed") from the compiled contract's clause -- required, never
@@ -91,6 +91,20 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     stays the compound `<check_id>.<criterion_id>` clause id; this is the separate,
     human-facing rule number a reader of the rule doc would recognize.
 
+    `source_capsule_id` is that report's own citation of the case record it
+    judged (evaluation-report/v1's `source_capsule_id`, always a book capsule's
+    own content-addressed id, which doubles as its digest in this system) --
+    appended to evidence[] after `report_digest`'s own entry (or entries), when
+    both are known (in practice a report always carries both or neither), and
+    not repeated when it is already one of those digests. Never fabricated:
+    omitted when the report didn't carry one, and -- pathological, never the
+    real shape -- it is evidence[]'s only entry if `report_digest` is absent
+    while this is given. A Result is sealed only over evidence the book holds
+    (capsule-cli's `result build`), so citing the case record here is what lets
+    `capsulectl disclose --attach-input-originals` later find and attach that
+    case's transcript (the case capsule's own agent_input original) with no
+    further, by-hand step.
+
     `claim_id` overrides the claim's own `id` (default: `criterion_id`) -- the
     day-level merge needs `<case_id>::<criterion_id>` so many cases' claims can
     live in one document (see build_result_v0_for_day); the per-case document
@@ -108,6 +122,8 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     disclosure_status = "INSUFFICIENT" if verdict == "not_evaluable" else "SATISFIED"
     digests = report_digest if isinstance(report_digest, (list, tuple)) else ([report_digest] if report_digest else [])
     evidence = [_digest_ref(d) for d in digests if d]
+    if source_capsule_id and source_capsule_id not in digests:
+        evidence.append(_digest_ref(source_capsule_id))
     claim = {
         "id": claim_id if claim_id is not None else criterion_id,
         "contract_ref": contract_ref,
@@ -131,9 +147,13 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
 
 def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, all_criteria, contract_ref, tiers,
                      allow_out_of_scope=False, never_out_of_scope=frozenset(), judge_pin_digests=None,
-                     judge_pins=None, rule_ids=None):
+                     judge_pins=None, rule_ids=None, source_capsule_ids=None):
     """criterion_verdicts: dict[criterion_id -> verdict]. report_digests: dict
     [criterion_id -> sealed evaluation-report capsule digest], may omit entries.
+    `source_capsule_ids`: optional dict[criterion_id -> the case record capsule
+    id that criterion's report named], may omit entries -- cited as each
+    claim's second evidence[] entry (see claim_for's own docstring); never
+    fabricated for a criterion this dict doesn't name.
     `all_criteria`: tuple of every criterion id the compiled contract defines
     (scripts/rollup.py:all_criteria_from_clauses) -- pack-driven, not a fixed nine.
     `contract_ref` is the compiled contract's own contract_ref, passed straight
@@ -169,6 +189,7 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     """
     resolved = all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
     report_digests = report_digests or {}
+    source_capsule_ids = source_capsule_ids or {}
     evaluated = [cid for cid in all_criteria if criterion_verdicts[cid] != "out_of_scope"]
     if not evaluated:
         raise RollupError(f"case {case_id!r}: every criterion is out_of_scope; nothing was evaluated")
@@ -177,7 +198,7 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     claims = [
         claim_for(cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid),
                  judge_pin_digest=judge_pin_digests.get(cid), judge_pin=judge_pins.get(cid),
-                 rule_id=rule_ids.get(cid))
+                 rule_id=rule_ids.get(cid), source_capsule_id=source_capsule_ids.get(cid))
         for cid in evaluated
     ]
     buckets = {"met": [], "not_met": [], "not_evaluable": []}
@@ -204,7 +225,8 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
 
 
 def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
-                             allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                             allow_out_of_scope=False, never_out_of_scope=frozenset(),
+                             source_capsule_ids=None):
     """One Result v0 document spanning every complete case judged for one day/
     period: an outcome report renders from a single Result root, so a
     conversation's criteria live beside every other conversation's in one document
@@ -219,6 +241,14 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     can hold every case's claims without collision, and so headline_from_result()
     can regroup them; `requirement_ref` stays the bare criterion_id.
 
+    `source_capsule_ids`: optional dict[case_id -> dict[criterion_id -> source
+    capsule id]] -- the per-case, per-criterion case-record citation
+    build_result_v0() takes per claim, keyed by case_id here because one day
+    document spans many cases. A missing case or criterion entry just means no
+    case-record citation for that claim; never fabricated. Kept as its own
+    top-level parameter rather than a 5th case_rollups element so every
+    existing caller/test keeps working unchanged.
+
     `allow_out_of_scope`: same switch build_result_v0() takes -- threaded through
     only so this function can tell a legitimate out_of_scope input verdict apart
     from a stray one (defense in depth; every real caller already filtered
@@ -231,6 +261,7 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     """
     claims = []
     excluded_not_applicable = 0
+    source_capsule_ids = source_capsule_ids or {}
     for case_id, criterion_verdicts, report_digests, tiers in case_rollups:
         missing = [c for c in all_criteria if c not in criterion_verdicts]
         if missing:
@@ -246,6 +277,7 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
         if all(criterion_verdicts[c] == "out_of_scope" for c in all_criteria):
             raise RollupError(f"case {case_id!r}: every criterion is out_of_scope; nothing was evaluated")
         report_digests = report_digests or {}
+        case_sources = source_capsule_ids.get(case_id) or {}
         for cid in all_criteria:
             if criterion_verdicts[cid] == "out_of_scope":
                 excluded_not_applicable += 1
@@ -253,6 +285,7 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
             claims.append(claim_for(
                 cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid),
                 claim_id=f"{case_id}{CASE_SEPARATOR}{cid}",
+                source_capsule_id=case_sources.get(cid),
             ))
     buckets = {"met": [], "not_met": [], "not_evaluable": []}
     for c in claims:
