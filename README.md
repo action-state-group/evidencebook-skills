@@ -58,10 +58,20 @@ $ scripts/report.sh --spec scripts/specs/tau2-airline-no-judge.yaml \
 # judged -- a compiled pack contract, e.g. demo/airline-support-outcomes/compiled.json
 $ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
     --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
+
+# judged, EU AI Act obligations -- renders on the obligation card, with transcripts
+$ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl \
+    --attach-input-originals --title "EU AI Act obligations: airline support agent"
 ```
 
 Both converge on the same tail (`capsulectl result build` → checkpoint →
-`disclose` → `report build`). `--date`/`--to` take a day range; more than one
+`disclose` → `report build`). On the judged path the pack's compiled
+`presentation.json` block is wired onto the bundle
+(`scripts/wire_presentation.py`) and picks the card: `eu-ai-act-compliance/v1`
+→ `obligation`, `outcome-report/v1` → `outcome`. `--attach-input-originals`
+carries each conversation's full transcript in the bundle (off by default: it
+discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
 day's `result-v0-*.json` is merged into one Result v0
 (`scripts/merge_results.py`) before the tail runs. See
 `scripts/report_spec.py`'s own module docstring for the full report-spec
