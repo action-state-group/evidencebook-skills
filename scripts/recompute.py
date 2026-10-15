@@ -391,10 +391,12 @@ ONE_AT_A_TIME_CITE = 'policy.md: "You should only make one tool call at a time"'
 DISCLOSURE_CITE = ('Regulation (EU) 2024/1689 Art 50(1): disclosure "at the latest at the '
                     'time of the first interaction"')
 
-# The tau2 benchmark runner's own fixed opening line for every trial-0 airline
+# The tau2 benchmark runner's own fixed opening line for every airline
 # conversation -- not agent output. Confirmed directly against all 50 trial-0
 # simulations in airline-data/claude-3-7-sonnet-20250219_..._4trials.json (not
-# inferred): every one opens with exactly this assistant turn, verbatim.
+# inferred): every one opens with exactly this assistant turn, verbatim. A later
+# check found the same line opening all 800 sessions (every trial, every
+# agent-model results file).
 TAU2_RUNNER_FIRST_MESSAGE = "Hi! How can I help you today?"
 
 
@@ -575,7 +577,7 @@ def check_disclosure_before_first_turn(request):
     """Art 50(1)'s ordering fact: a disclosure capsule must be sealed before
     the first substantive turn. See _check_disclosure_before_first_turn's own
     docstring for why this is not_evaluable, never a finding against the
-    agent, on tau2 trial-0 data specifically."""
+    agent, on tau2 data specifically."""
     try:
         return _check_disclosure_before_first_turn(request)
     except Exception as e:  # noqa: BLE001
@@ -586,13 +588,13 @@ def _check_disclosure_before_first_turn(request):
     """Art 50(1): disclosure must be sealed before the first substantive turn
     -- a pure ordering check over the sealed capsule, in principle. On THIS
     dataset it is not evaluable against the agent at all: tau2's benchmark
-    runner opens every trial-0 airline conversation with its own fixed
+    runner opens every airline conversation with its own fixed
     assistant turn (TAU2_RUNNER_FIRST_MESSAGE, verbatim and identical across
     all 50 real sessions this pack judges -- confirmed directly against
     airline-data/claude-3-7-sonnet-20250219_..._4trials.json, not inferred),
     not a turn the agent under test produced. Attributing a disclosure
     obligation to the agent for the one turn it never wrote would be exactly
-    a false finding. Always not_evaluable on tau2 trial-0 data; a
+    a false finding. Always not_evaluable on tau2 data; a
     transcript whose first turn is NOT this runner literal falls through to
     a real ordering check instead, so a future non-tau2 pack reusing this
     checker is not silently blinded by a hardcoded always-not_evaluable."""
