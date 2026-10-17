@@ -383,6 +383,7 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
         judge_pin_digests=judge_pin_digests,
         judge_pins=judge_pins,
         rule_ids=rule_ids_by_clause,
+        case_scoped_ids=True,
     )
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
