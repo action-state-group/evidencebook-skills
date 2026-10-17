@@ -46,7 +46,7 @@ This is the intended pattern for reasoning-heavy skills: hand-authored `SKILL.md
 ## Running the two cron skills
 
 Both run with `capsulectl` built from `capsule-cli` main, over a jsonl profile whose one log
-is its evidence book. Each has an exercise script that performs exactly the skill's steps,
+is its EvidenceBook. Each has an exercise script that performs exactly the skill's steps,
 calling only the verbs the skill lists:
 
 ```sh
@@ -58,6 +58,9 @@ python3 scripts/run_weekly.py --profile NAME --spec COMPILED.json --date YYYY-MM
 # ... and resume with them: ratings, calibration summary (k of n), the week's Close
 python3 scripts/run_weekly.py --profile NAME --spec COMPILED.json --date YYYY-MM-DD --out RUN_DIR --ratings RATINGS.json
 ```
+
+`COMPILED.json` is a compiled contract: for a Terms Pack (pack), `scripts/pack_compile.py`'s
+output for `packs/<name>/pack-source.yaml`.
 
 A run closes the previous day, since `close` refuses a day that has not ended. The reports
 a run seals are committed on the day it runs, so the judgments of day D's cases, made on
