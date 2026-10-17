@@ -12,8 +12,8 @@ the CLL.
 
 Each request's bound `payload` carries the real `agent_interaction` (transcript +
 tool calls, with each call's `requestor` attribution), a `case` block
-(benchmark/domain/task_id/trial), and `provenance`. The gold outcome — tau2's own
-`reward_info` and the task's `evaluation_criteria` — is deliberately excluded;
+(benchmark/domain/task_id/trial, plus agent_model with --case-model), and
+`provenance`. The gold outcome — tau2's own `reward_info` and the task's `evaluation_criteria` — is deliberately excluded;
 the judge reads the desired outcome independently from the dataset by
 `payload.case.task_id`.
 
@@ -72,20 +72,34 @@ def trim_message(message: dict) -> dict:
     return kept
 
 
-def build_request(sim: dict, info: dict, results_name: str, domain: str) -> dict:
+def case_block(domain: str, task_id: object, trial: object, agent_llm: object, with_model: bool) -> dict:
+    """The sealed `case` block. With `with_model`, it also names the agent model the
+    results file ran, so runs of the same task and trial by different agents are
+    different cases (scripts/capsulectl_calls.case_id_of puts it in the case id)."""
+    case = {"benchmark": "tau2", "domain": domain, "task_id": task_id, "trial": trial}
+    if with_model:
+        if not isinstance(agent_llm, str) or not agent_llm:
+            raise SystemExit("--case-model: the results file names no agent_info.llm")
+        case["agent_model"] = agent_llm
+    return case
+
+
+def build_request(sim: dict, info: dict, results_name: str, domain: str, with_model: bool = False) -> dict:
     task_id = sim["task_id"]
     trial = sim["trial"]
+    case = case_block(domain, task_id, trial, (info.get("agent_info") or {}).get("llm"), with_model)
+    agent = f"{case['agent_model']}:" if with_model else ""
     return {
         "spec_version": "capsule-seal-request/v1",
         "capsule": {
-            "ActionID": f"urn:tau2:{domain}:task-{task_id}:trial-{trial}",
+            "ActionID": f"urn:tau2:{domain}:{agent}task-{task_id}:trial-{trial}",
             "ActionType": "fyi",
             "Operator": OPERATOR,
             "Developer": DEVELOPER,
             "Timestamp": normalize_timestamp(sim.get("timestamp") or sim.get("start_time"), sim.get("id")),
         },
         "payload": {
-            "case": {"benchmark": "tau2", "domain": domain, "task_id": task_id, "trial": trial},
+            "case": case,
             "provenance": {
                 "results_file": results_name,
                 "agent_llm": (info.get("agent_info") or {}).get("llm"),
@@ -111,6 +125,9 @@ def main(argv: list[str]) -> int:
                     help="output directory; one seal request per task (its run for --trial)")
     ap.add_argument("--trial", type=int, default=0,
                     help="which of each task's trials to seal (default 0; tau2's 4-trial files hold 0-3)")
+    ap.add_argument("--case-model", action="store_true",
+                    help="also name the agent model in each case (and so in its case id), so several "
+                         "agents' runs of one task and trial can share a book")
     args = ap.parse_args(argv)
     if args.trial < 0:
         ap.error("--trial must be 0 or more")
@@ -138,7 +155,7 @@ def main(argv: list[str]) -> int:
     # per-case selection (by capsule/case id) is reliable; do not assume sequence == task.
     used: dict[str, int] = {}
     for sim in sorted(chosen, key=lambda s: str(s["task_id"])):
-        request = build_request(sim, info, args.results.name, domain)
+        request = build_request(sim, info, args.results.name, domain, args.case_model)
         stem = f"task-{safe_name(sim['task_id'])}"
         n = used.get(stem, 0)
         used[stem] = n + 1
