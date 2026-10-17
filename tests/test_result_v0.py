@@ -14,7 +14,8 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
-from result_v0 import build_result_v0, build_result_v0_for_day, claim_for, resolve_contract_ref  # noqa: E402
+from result_v0 import (build_result_v0, build_result_v0_for_day, claim_for,  # noqa: E402
+                       merge_result_v0_documents, resolve_contract_ref)
 from rollup import RollupError, all_criteria_from_clauses  # noqa: E402
 
 CLAUSES = [
@@ -329,6 +330,57 @@ class OutOfScopeSwitch(unittest.TestCase):
         verdicts = dict(ALL_MET, **{"task_resolution.right_change": "out_of_scope"})
         with self.assertRaisesRegex(RollupError, "not a verdict"):
             build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
+
+
+def _day_doc(day, group_id, verdict, contract_ref=CONTRACT_REF):
+    doc, _ = build_result_v0(f"{group_id}", {"x": verdict}, {}, f"{day}T23:59:59Z", ("x",), contract_ref,
+                              {"x": "recomputed"})
+    doc["claims"][0]["id"] = f"{day}::{group_id}::x"  # disambiguate ids across days, same convention as the day rollup
+    doc["aggregate"]["buckets"] = {"met": [], "not_met": [], "not_evaluable": []}
+    doc["aggregate"]["buckets"][verdict].append(doc["claims"][0]["id"])
+    return doc
+
+
+class MergeResultV0Documents(unittest.TestCase):
+    def test_concatenates_claims_and_recomputes_buckets(self):
+        d1 = _day_doc("2026-09-23", "g1", "met")
+        d2 = _day_doc("2026-09-24", "g1", "not_met")
+        merged = merge_result_v0_documents([d1, d2], "two days", "2026-09-25T00:00:00Z")
+        self.assertEqual(len(merged["claims"]), 2)
+        self.assertEqual(merged["aggregate"]["coverage"]["evaluated_population"], 2)
+        self.assertEqual(merged["aggregate"]["buckets"]["met"], ["2026-09-23::g1::x"])
+        self.assertEqual(merged["aggregate"]["buckets"]["not_met"], ["2026-09-24::g1::x"])
+        self.assertEqual(merged["view"]["title"], "two days")
+        self.assertEqual(merged["generated_at"], "2026-09-25T00:00:00Z")
+
+    def test_a_single_document_merges_to_itself_in_shape(self):
+        d1 = _day_doc("2026-09-23", "g1", "met")
+        merged = merge_result_v0_documents([d1], "one day", "2026-09-25T00:00:00Z")
+        self.assertEqual(len(merged["claims"]), 1)
+
+    def test_no_documents_is_refused(self):
+        with self.assertRaises(RollupError):
+            merge_result_v0_documents([], "nothing", "2026-09-25T00:00:00Z")
+
+    def test_mismatched_contract_refs_are_refused(self):
+        d1 = _day_doc("2026-09-23", "g1", "met", contract_ref="spec-a@1")
+        d2 = _day_doc("2026-09-24", "g1", "met", contract_ref="spec-b@1")
+        with self.assertRaisesRegex(RollupError, "more than one contract_ref"):
+            merge_result_v0_documents([d1, d2], "mixed", "2026-09-25T00:00:00Z")
+
+    def test_duplicate_claim_ids_are_refused(self):
+        d1 = _day_doc("2026-09-23", "g1", "met")
+        d2 = _day_doc("2026-09-23", "g1", "not_met")  # same day+group -- same claim id, a real collision
+        with self.assertRaisesRegex(RollupError, "share claim id"):
+            merge_result_v0_documents([d1, d2], "collision", "2026-09-25T00:00:00Z")
+
+    def test_excluded_not_applicable_is_summed_across_documents(self):
+        d1 = _day_doc("2026-09-23", "g1", "met")
+        d1["aggregate"]["coverage"]["excluded_not_applicable"] = 3
+        d2 = _day_doc("2026-09-24", "g2", "met")
+        d2["aggregate"]["coverage"]["excluded_not_applicable"] = 5
+        merged = merge_result_v0_documents([d1, d2], "t", "2026-09-25T00:00:00Z")
+        self.assertEqual(merged["aggregate"]["coverage"]["excluded_not_applicable"], 8)
 
 
 if __name__ == "__main__":

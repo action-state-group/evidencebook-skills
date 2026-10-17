@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
+from run_daily import DEFAULT_REFERENCE_FILES, judge_reference_files  # noqa: E402
 from skill_record import emit_skill_action, json_digest, skill_action_record  # noqa: E402
 
 SAMPLING_RULE = ("per stratum, order by hex(SHA-256(u32be(len(seed)) || seed || report_capsule_id)), "
@@ -34,12 +35,16 @@ SAMPLING_RULE = ("per stratum, order by hex(SHA-256(u32be(len(seed)) || seed || 
 PACKET_FIELDS = ("case_id", "clause", "agent_interaction", "policy", "booking_db")
 
 
-def blind_packet(report, case):
+def blind_packet(report, case, reference_files=None):
     """The packet a reviewer sees for one sampled report: the case and the
-    evidence the judge had, built field by field from PACKET_FIELDS."""
+    evidence the judge had, built field by field from PACKET_FIELDS.
+    `reference_files` is the contract's own repo-relative {"policy",
+    "booking_db"} (compiled judge.reference_files), default tau2 airline's --
+    the same files scripts/run_daily.py sent the judge."""
+    files = reference_files or DEFAULT_REFERENCE_FILES
     packet = {"case_id": report["case_id"], "clause": report["clause_id"],
               "agent_interaction": case["agent_interaction"],
-              "policy": "airline-data/policy.md", "booking_db": "airline-data/db.json"}
+              "policy": files["policy"], "booking_db": files["booking_db"]}
     assert tuple(packet) == PACKET_FIELDS
     return packet
 
@@ -77,6 +82,13 @@ def main(argv):
     args = ap.parse_args(argv)
 
     spec = json.loads(args.spec.read_text())
+    reference_files = (spec.get("judge") or {}).get("reference_files")
+    if reference_files is not None:
+        try:  # the same containment rules run_daily.py applied before judging
+            judge_reference_files(spec, args.spec.resolve().parents[2])
+        except EvidenceUnavailable as e:
+            print(json.dumps({"skill": "weekly-blind-expert", "evidence_unavailable": str(e)}, indent=2))
+            return 2
     day = datetime.date.fromisoformat(args.date)
     monday = day - datetime.timedelta(days=day.weekday())
     week_days = {str(monday + datetime.timedelta(days=i)) for i in range(7)}
@@ -138,7 +150,7 @@ def main(argv):
         by_case, written = {}, {}
         for rid, body in selected:
             case = payload(ctl, profile, body["source_capsule_id"])
-            packet = blind_packet(body, case)
+            packet = blind_packet(body, case, reference_files)
             name = body["case_id"].replace(":", "_")
             (packets / f"{name}.json").write_text(json.dumps(packet, indent=2))
             by_case[body["case_id"]] = (rid, body)

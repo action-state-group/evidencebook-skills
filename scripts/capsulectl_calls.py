@@ -79,6 +79,15 @@ def committed_on(entry, day):
     return parse_rfc3339(entry["appended_at"]).date() == day
 
 
+def case_id_of(case):
+    """The one case_id convention every reader of a sealed tau2 case shares
+    (scripts/run_daily.py, scripts/rollup_day.py's per-case output filenames,
+    scripts/report_spec.py's own case rows) -- demo/backfill/backfill.py's own
+    `case` block shape (benchmark/domain/task_id/trial), never redefined
+    per-caller."""
+    return f"{case['benchmark']}:{case['domain']}:task-{case['task_id']}:trial-{case['trial']}"
+
+
 def publish(capsulectl, profile, request, workdir, name):
     """Seal one record into the book. The request's Timestamp is fixed by the
     caller, so publishing the same record again returns the same capsule."""

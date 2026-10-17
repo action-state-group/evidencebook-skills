@@ -31,6 +31,48 @@ way.
   and `demo/backfill/` (operator-side data-prep mapping shipped tau2 runs into
   seal requests). The compiler ignores this folder when compiling.
 
+## Report from records: one command to `report.html`
+
+`scripts/report.sh` is the single entry point for turning an already-set-up
+book into a rendered report — either a **judged** report (Jev against a
+compiled pack's rubric) or a **no-judge** report (every claim computed
+deterministically from the sealed records themselves, via a declarative
+`report-spec/v1` YAML, `scripts/report_spec.py`). `--spec`'s own content
+picks the path; nothing else to choose:
+
+```console
+# no judge -- a report-spec/v1 YAML, e.g. scripts/specs/tau2-airline-no-judge.yaml
+$ scripts/report.sh --spec scripts/specs/tau2-airline-no-judge.yaml \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
+
+# judged -- a compiled pack contract, e.g. demo/airline-support-outcomes/compiled.json
+$ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
+
+# judged, EU AI Act obligations -- renders on the obligation card, with transcripts
+$ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
+    --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl \
+    --attach-input-originals --title "EU AI Act obligations: airline support agent"
+```
+
+Both converge on the same tail (`capsulectl result build` → checkpoint →
+`disclose` → `report build`). On the judged path the pack's compiled
+`presentation.json` block is wired onto the bundle
+(`scripts/wire_presentation.py`) and picks the card: `eu-ai-act-compliance/v1`
+→ `obligation`, `outcome-report/v1` → `outcome`. `--attach-input-originals`
+carries each conversation's full transcript in the bundle (off by default: it
+discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
+day's `result-v0-*.json` is merged into one Result v0
+(`scripts/merge_results.py`) before the tail runs. See
+`scripts/report_spec.py`'s own module docstring for the full report-spec
+shape (sources, grouping, metrics, threshold/forall claims), and
+`scripts/specs/tau2-airline-no-judge.yaml` /
+`scripts/specs/mesh-llm-settlement-draft.yaml` (a labelled DRAFT, pending
+mesh-llm's own export format) for two worked examples. `--profile` names an
+already set-up book (`tests/fresh_env_outcomes.sh` shows the steps that build one
+from this repo's own tau2 demo data: `profile create`, `store init`,
+`demo/backfill/backfill.py`, `seal`); `report.sh` only builds the report from it.
+
 ## Boundaries
 
 The compiler is the only editable source of evaluation instructions. Generated

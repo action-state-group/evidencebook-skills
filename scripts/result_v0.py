@@ -73,7 +73,10 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     criterion, when known -- cited in evidence[] but never inline. Either one
     digest (a string, every existing caller's shape) or several (a list/tuple --
     scripts/judge_bundle.py's whole-bundle mode, which judges every disclosed
-    record in one request and cites every one it actually used, not just one).
+    record in one request and cites every one it actually used, not just one;
+    and scripts/report_spec.py's deterministic (tier: recomputed) claims over a
+    GROUP of records, which cite every contributing capsule). A set is accepted
+    too (ordered as given by iteration).
 
     `judge_pin_digest`/`judge_pin` are the model identity a judged claim carries
     (a `judged` claim needs a code/model identity, not only the policy digest a
@@ -120,7 +123,12 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         raise RollupError(f"not a verdict: {verdict!r}")
     sufficiency = "GAP" if verdict == "not_evaluable" else "SATISFIED"
     disclosure_status = "INSUFFICIENT" if verdict == "not_evaluable" else "SATISFIED"
-    digests = report_digest if isinstance(report_digest, (list, tuple)) else ([report_digest] if report_digest else [])
+    if not report_digest:
+        digests = []
+    elif isinstance(report_digest, (list, tuple, set)):
+        digests = list(report_digest)
+    else:
+        digests = [report_digest]
     evidence = [_digest_ref(d) for d in digests if d]
     if source_capsule_id and source_capsule_id not in digests:
         evidence.append(_digest_ref(source_capsule_id))
@@ -321,3 +329,63 @@ def headline_from_result(document):
         by_case.setdefault(case_id, []).append(claim["verdict"])
     return {"cases": len(by_case),
             "resolved": sum(1 for verdicts in by_case.values() if all(v == "met" for v in verdicts))}
+
+
+def merge_result_v0_documents(docs, title, generated_at):
+    """Combine several already-built Result v0 documents (e.g. one per day
+    over a --date/--to range, from either scripts/rollup_day.py's judged path
+    or scripts/report_spec.py's no-judge path -- this function does not care
+    which) into ONE Result v0 document spanning all of them: `report build`
+    takes exactly one sealed Result as its bundle's root, so a multi-day
+    report needs its days combined before `result build` ever sees them, not
+    multiple separate bundles.
+
+    Concatenates every document's claims[] (fails closed -- RollupError -- if
+    two documents share a claim id, which would mean two different inputs
+    both computed a verdict for what the schema's own closed id space treats
+    as the same claim, or if they don't all share one contract_ref, which
+    would mean mixing results from two different contracts/specs into one
+    document) and recomputes aggregate.buckets and
+    aggregate.coverage.evaluated_population from the merged claims list
+    directly, never by trusting the inputs' own buckets/evaluated_population
+    verbatim -- a bug in how an input computed those can't survive into the
+    merge undetected. The one exception, by necessity rather than choice:
+    aggregate.coverage.excluded_not_applicable is SUMMED from the inputs'
+    own values, because an out_of_scope criterion gets NO claim object at
+    all (scripts/result_v0.py's own module docstring) -- there is nothing
+    in claims[] for this function to recompute that count FROM. A bad
+    excluded_not_applicable in one input's own aggregate does survive into
+    the merge; recomputing it would need each input's original
+    criterion_verdicts, which this function is never given."""
+    docs = list(docs)
+    if not docs:
+        raise RollupError("merge_result_v0_documents needs at least one document")
+    contract_refs = {c["contract_ref"] for d in docs for c in d["claims"]}
+    if len(contract_refs) > 1:
+        raise RollupError(f"documents carry more than one contract_ref: {sorted(contract_refs)!r}")
+    claims = [c for d in docs for c in d["claims"]]
+    seen = set()
+    dupes = sorted({c["id"] for c in claims if c["id"] in seen or seen.add(c["id"])})
+    if dupes:
+        raise RollupError(f"documents share claim id(s): {dupes!r}")
+    buckets = {"met": [], "not_met": [], "not_evaluable": []}
+    for c in claims:
+        buckets[c["verdict"]].append(c["id"])
+    excluded_not_applicable = sum(d["aggregate"]["coverage"]["excluded_not_applicable"] for d in docs)
+    return {
+        "result_version": "evidence-result-v0",
+        "generated_at": generated_at,
+        "claims": claims,
+        "aggregate": {
+            "coverage": {
+                "evaluated_population": len(claims),
+                "excluded_not_applicable": excluded_not_applicable,
+                "unknown_count": 0,
+            },
+            "buckets": buckets,
+        },
+        "view": {
+            "spec_version": "presentation/v1",
+            "title": title,
+        },
+    }
