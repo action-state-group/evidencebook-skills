@@ -19,7 +19,7 @@
 #       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
-# from one; it does not seal data into it -- see scripts/outcomes_setup.sh
+# from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
 # for that step, or your own producer's own sealing). Every capsulectl call
 # below runs in the CALLER's own environment (HOME/XDG_CONFIG_HOME
 # unchanged) unless --work is given, in which case intermediate files (never

@@ -69,8 +69,9 @@ shape (sources, grouping, metrics, threshold/forall claims), and
 `scripts/specs/tau2-airline-no-judge.yaml` /
 `scripts/specs/mesh-llm-settlement-draft.yaml` (a labelled DRAFT, pending
 mesh-llm's own export format) for two worked examples. `--profile` names an
-already set-up book (`scripts/outcomes_setup.sh` builds one from this repo's
-own tau2 demo data); `report.sh` only builds the report from it.
+already set-up book (`tests/fresh_env_outcomes.sh` shows the steps that build one
+from this repo's own tau2 demo data: `profile create`, `store init`,
+`demo/backfill/backfill.py`, `seal`); `report.sh` only builds the report from it.
 
 ## Boundaries
 
