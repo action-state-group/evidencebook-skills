@@ -23,6 +23,10 @@ way.
   into one `evaluation-summary/v1` Capsule, never re-judging.
 - [`references/capsule-cli.md`](references/capsule-cli.md) — the Capsule CLI contract
   copied verbatim into bundles.
+- [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
+  `pack-source.yaml`, compiled by `scripts/pack_compile.py` into the contract,
+  judge prompt and report presentation the skills run (`everyday-rules`,
+  `airline-support-outcomes`).
 - [`demo/`](demo/) — a self-contained demonstration, **not** compiler input. It holds
   `demo/DEMO.md` (end-to-end reproductions: an investigation over an existing
   CLL, and a tau2 customer-service evaluation over a local SQLite CLL — compile →
