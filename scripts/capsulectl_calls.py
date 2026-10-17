@@ -83,8 +83,13 @@ def case_id_of(case):
     """The one case_id convention every reader of a sealed tau2 case shares
     (scripts/run_daily.py, scripts/rollup_day.py's per-case output filenames,
     scripts/report_spec.py's own case rows) -- demo/backfill/backfill.py's own
-    `case` block shape (benchmark/domain/task_id/trial), never redefined
-    per-caller."""
+    `case` block shape (benchmark/domain/task_id/trial, plus agent_model when
+    sealed with --case-model), never redefined per-caller."""
+    model = case.get("agent_model")
+    if model is not None:  # demo/backfill/backfill.py --case-model: one agent's run of a task+trial
+        if not isinstance(model, str) or not model or ":" in model:
+            raise ValueError(f"case agent_model must be a non-empty string without ':', got {model!r}")
+        return f"{case['benchmark']}:{case['domain']}:{model}:task-{case['task_id']}:trial-{case['trial']}"
     return f"{case['benchmark']}:{case['domain']}:task-{case['task_id']}:trial-{case['trial']}"
 
 
