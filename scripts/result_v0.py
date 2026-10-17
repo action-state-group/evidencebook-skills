@@ -155,7 +155,7 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
 
 def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, all_criteria, contract_ref, tiers,
                      allow_out_of_scope=False, never_out_of_scope=frozenset(), judge_pin_digests=None,
-                     judge_pins=None, rule_ids=None, source_capsule_ids=None):
+                     judge_pins=None, rule_ids=None, source_capsule_ids=None, case_scoped_ids=False):
     """criterion_verdicts: dict[criterion_id -> verdict]. report_digests: dict
     [criterion_id -> sealed evaluation-report capsule digest], may omit entries.
     `source_capsule_ids`: optional dict[criterion_id -> the case record capsule
@@ -187,6 +187,10 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     v0's own schema (see this module's docstring): `verdict`/`buckets` have no
     out_of_scope value to hold it in.
 
+    case_scoped_ids: off by default (claim id = criterion id). On, each claim id is
+    `<case_id>::<criterion_id>`, the scheme build_result_v0_for_day uses, so documents
+    for different cases merge (merge_result_v0_documents refuses shared claim ids).
+
     Returns (document, resolved) -- resolved is the same all_required_met() boolean
     that produced the buckets, so a caller never has to re-derive it from the
     document to know whether this conversation resolved.
@@ -206,7 +210,8 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     claims = [
         claim_for(cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid),
                  judge_pin_digest=judge_pin_digests.get(cid), judge_pin=judge_pins.get(cid),
-                 rule_id=rule_ids.get(cid), source_capsule_id=source_capsule_ids.get(cid))
+                 rule_id=rule_ids.get(cid), source_capsule_id=source_capsule_ids.get(cid),
+                 claim_id=f"{case_id}{CASE_SEPARATOR}{cid}" if case_scoped_ids else None)
         for cid in evaluated
     ]
     buckets = {"met": [], "not_met": [], "not_evaluable": []}
