@@ -393,6 +393,26 @@ class DisclosedBundleJudged(unittest.TestCase):
         self.assertNotIn("out_of_scope", seen["options"])
 
 
+class MonthOfBundles(unittest.TestCase):
+    """A month is many bundles: each bundle's claim ids are scoped to the bundle
+    (`<root>::<criterion>`), so merge_result_v0_documents takes two of them."""
+
+    def test_two_bundles_results_merge_into_one_document(self):
+        from result_v0 import CASE_SEPARATOR, merge_result_v0_documents
+        pack = compiled_pack()
+        docs = [judge_bundle.run(pack, disclosed_bundle(FACTS, capsule_id=cid, root=root), ["9", "10"], None,
+                                 "jev-1.13.0", GENERATED_AT, backend=fixed_backend(verdict))
+                for cid, root, verdict in ((CAPSULE_ID, "bundle-oct-01", "met"),
+                                           (OTHER_CAPSULE_ID, "bundle-oct-02", "not_met"))]
+        for doc, root in zip(docs, ("bundle-oct-01", "bundle-oct-02")):
+            for claim in doc["claims"]:
+                self.assertEqual(claim["id"], f"{root}{CASE_SEPARATOR}{claim['requirement_ref']}")
+        merged = merge_result_v0_documents(docs, "Everyday Rules -- October", GENERATED_AT)
+        self.assertEqual(len(merged["claims"]), 4)
+        self.assertEqual(len(merged["aggregate"]["buckets"]["met"]), 2)
+        self.assertEqual(len(merged["aggregate"]["buckets"]["not_met"]), 2)
+
+
 class WholeBundleDefault(unittest.TestCase):
     """The default (no --capsule-id): every disclosed record in the bundle,
     plus its extensions, feed one batched judge request -- exercised against
