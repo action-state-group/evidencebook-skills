@@ -49,10 +49,14 @@ def blind_packet(report, case, reference_files=None):
     return packet
 
 
-def checked_ratings(ratings, sampled_case_ids):
+def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
-    make rated exceed drawn and the shortfall go negative."""
+    make rated exceed drawn and the shortfall go negative. `out_of_scope` is a
+    rating only when the contract lets the judge answer it (switches
+    out_of_scope_verdict): the sample then holds out_of_scope reports, and the
+    reviewer must be able to agree with them."""
+    allowed = {"met", "not_met", "not_evaluable"} | ({"out_of_scope"} if allow_out_of_scope else set())
     seen = set()
     for r in ratings:
         case_id = r.get("case_id")
@@ -60,8 +64,8 @@ def checked_ratings(ratings, sampled_case_ids):
             raise ValueError(f"rating for a case outside the sample: {case_id!r}")
         if case_id in seen:
             raise ValueError(f"more than one rating for case {case_id!r}")
-        if r.get("rating") not in {"met", "not_met", "not_evaluable"}:
-            raise ValueError(f"rating for {case_id!r} is not met, not_met or not_evaluable")
+        if r.get("rating") not in allowed:
+            raise ValueError(f"rating for {case_id!r} is not one of {', '.join(sorted(allowed))}")
         seen.add(case_id)
     return ratings
 
@@ -165,7 +169,8 @@ def main(argv):
 
         # 4. The human's ratings, one record each, chained to the report audited.
         try:
-            ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case))
+            ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case),
+                                      bool((spec.get("switches") or {}).get("out_of_scope_verdict")))
         except ValueError as e:
             raise EvidenceUnavailable(f"ratings refused: {e}") from e
         rated = []
