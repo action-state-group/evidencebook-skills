@@ -59,8 +59,18 @@ class CheckedRatings(unittest.TestCase):
             checked_ratings([{"case_id": "z", "rating": "met"}], self.SAMPLE)
 
     def test_a_rating_that_is_not_a_verdict_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "not met, not_met or not_evaluable"):
+        with self.assertRaisesRegex(ValueError, "not one of met, not_evaluable, not_met"):
             checked_ratings([{"case_id": "a", "rating": "yes"}], self.SAMPLE)
+
+    def test_out_of_scope_is_refused_unless_the_contract_allows_it(self):
+        with self.assertRaisesRegex(ValueError, "not one of met, not_evaluable, not_met$"):
+            checked_ratings([{"case_id": "a", "rating": "out_of_scope"}], self.SAMPLE)
+
+    def test_out_of_scope_is_a_rating_when_the_contract_allows_it(self):
+        ratings = [{"case_id": "a", "rating": "out_of_scope"}, {"case_id": "b", "rating": "met"}]
+        self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True), ratings)
+        with self.assertRaisesRegex(ValueError, "not one of met, not_evaluable, not_met, out_of_scope"):
+            checked_ratings([{"case_id": "a", "rating": "yes"}], self.SAMPLE, allow_out_of_scope=True)
 
 
 class ParseRfc3339(unittest.TestCase):
