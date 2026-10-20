@@ -11,9 +11,10 @@ followed; one that did not run a sample says so rather than leaving the line out
 
 **20 cases per report** for launch. The draw is stratified by the judge's verdict, so a
 pack sets `sample_policy.per_stratum: 10` and the two judged strata, `met` and `not_met`,
-give 20. When a stratum holds fewer than 10 cases, every case in it is drawn and the
-report states the shortfall; the gap is never filled from the other stratum. A report
-that states k of n also states n.
+give 20. A pack that turns on `out_of_scope` draws that stratum too, on top of the 20
+(see [Out-of-scope cases](#out-of-scope-cases)). When a stratum holds fewer than 10
+cases, every case in it is drawn and the report states the shortfall; the gap is never
+filled from another stratum. A report that states k of n also states n.
 
 ## Draw
 
@@ -35,7 +36,10 @@ model never stands in for the grader, and no rating is filled in from a timeout.
 The grader receives the packets directory and nothing else. A packet carries the case and
 the evidence the judge had (the rule text, the disclosed facts, the criteria), never the
 verdict, rationale, axis judgments, stratum or report id. The grader answers `met`,
-`not_met` or `not_evaluable` for the one rule the packet names.
+`not_met` or `not_evaluable` for the one rule the packet names. When the pack turns on
+`switches.out_of_scope_verdict` (the airline pack does), the grader may also answer
+`out_of_scope`; `scripts/run_weekly.py` refuses an `out_of_scope` rating from a pack that
+leaves the switch off.
 
 ## Withheld cases
 
@@ -50,6 +54,21 @@ record named was missing or undisclosed (`scripts/judge_bundle.py`). It is recor
 - a field a pack's `disclosure.suppress` names is withheld from the packet by digest,
   and the packet says which field.
 
+## Out-of-scope cases
+
+With `switches.out_of_scope_verdict` on, the judge can answer `out_of_scope`, and those
+reports are drawn and counted like any other verdict:
+
+- **Stratified:** the draw stratifies by verdict, so `out_of_scope` reports are a stratum
+  of their own, drawn by the same rule up to `per_stratum`. They are never taken from the
+  `met`/`not_met` 20; at `per_stratum: 10` they add up to 10 drawn cases.
+- **Counted:** each drawn `out_of_scope` case is in the drawn n and, when it is not
+  rated, in the shortfall. A rating agrees with the judge only when it is the same word as
+  the verdict: an `out_of_scope` report agrees only when the grader answers
+  `out_of_scope`, and a `met` or `not_met` report the grader calls `out_of_scope` is
+  rated and does not agree. Agreement stays one k of n per judge pin over every drawn
+  stratum; `out_of_scope` is not reported apart.
+
 ## What the report states
 
 Agreement as **k of n** per judge pin, the drawn n, the shortfall and its reasons, the
@@ -63,6 +82,7 @@ or a rating of the agent.
 - `run_weekly.py`'s packet is the airline shape (`PACKET_FIELDS`). A pack judged from
   disclosed facts (`everyday-rules`, through `scripts/judge_bundle.py`) needs a packet
   built from its bundle's disclosed records.
-- The draw takes `per_stratum` from every verdict present, so `not_evaluable` and
-  `out_of_scope` cases form strata of their own today. This method counts only `met` and
-  `not_met` toward the 20.
+- The draw takes `per_stratum` from every verdict present, so `not_evaluable` cases
+  form a stratum of their own today and are drawn too. This method does not count them
+  toward the 20. (`out_of_scope` is drawn and counted as
+  [Out-of-scope cases](#out-of-scope-cases) says.)
