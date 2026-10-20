@@ -8,10 +8,10 @@
 # compiled.json, e.g. demo/airline-support-outcomes/compiled.json) goes the
 # JUDGED path: scripts/run_daily.py (one Jev call per clause per case, mock
 # backend by default) then scripts/rollup_day.py's all-required rollup.
-# Both paths converge on the SAME tail: capsulectl result build -> a fresh
+# Both paths converge on the SAME tail: capsulectl book result build -> a fresh
 # checkpoint -> disclose -> (judged path only) wire the pack's own compiled
 # presentation.json block (outcome-report/v1 or eu-ai-act-compliance/v1,
-# scripts/wire_presentation.py) onto the bundle -> report build.
+# scripts/wire_presentation.py) onto the bundle -> book report build.
 #
 #   report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] \
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
@@ -182,8 +182,8 @@ else
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 
-step "capsulectl result build: seal the Result v0 into the book"
-"$CAPSULECTL" result build --profile "$PROFILE" --result "$RESULT_V0" --out "$WORK/result-sealed.json" \
+step "capsulectl book result build: seal the Result v0 into the book"
+"$CAPSULECTL" book result build --profile "$PROFILE" --result "$RESULT_V0" --out "$WORK/result-sealed.json" \
   | tee "$WORK/result-build.json"
 RESULT_CAPSULE=$(jq -r '.record_id' "$WORK/result-build.json")
 [[ -n "$RESULT_CAPSULE" && "$RESULT_CAPSULE" != "null" ]] || fail "result build printed no .record_id"
@@ -227,9 +227,9 @@ title = override or json.load(open(result_v0_path))['view']['title']
 json.dump({'title': title}, open(out_path, 'w'))
 " "$RESULT_V0" "$PRESENTATION_FILE" "$TITLE_OVERRIDE"
 
-step "capsulectl report build: render $OUT (--card $CARD)"
+step "capsulectl book report build: render $OUT (--card $CARD)"
 mkdir -p "$(dirname "$OUT")"
-"$CAPSULECTL" report build --profile "$PROFILE" --bundle "$BUNDLE" --card "$CARD" \
+"$CAPSULECTL" book report build --profile "$PROFILE" --bundle "$BUNDLE" --card "$CARD" \
   --presentation "$PRESENTATION_FILE" --out "$OUT" | tee "$WORK/report-build.json"
 [[ -f "$OUT" ]] || fail "report.html was not written"
 
