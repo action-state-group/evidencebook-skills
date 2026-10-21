@@ -27,7 +27,10 @@ _LINK = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))" + _TITLE + r"\s*\)"
 # file) and one-line code spans are dropped before links are read. Indented code
 # blocks are not told apart from list continuations, so they are read: a link
 # example there fails loudly rather than a real broken link passing.
-_FENCED = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1[`~]*[ \t]*$|\Z)", re.M | re.S)
+# A backtick fence's info string holds no backtick (CommonMark), so a line like
+# ```js``` x is a code span, not an unclosed fence that would swallow the file.
+_FENCED = re.compile(r"^ {0,3}(?:(`{3,})[^`\n]*|(~{3,})[^\n]*)$.*?(?:^ {0,3}(?:\1`*|\2~*)[ \t]*$|\Z)",
+                     re.M | re.S)
 _CODE_SPAN = re.compile(r"(`+)(?!`)[^\n]*?(?<!`)\1(?!`)")
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _NAME = re.compile(r"^name:\s*(\S+)\s*$", re.M)
@@ -148,10 +151,12 @@ class BrokenLinkCheckBites(unittest.TestCase):
                            "a `[span](spanned.md)` and ``[span](double.md)`` in prose\n\n"
                            "- item\n\n    [continued](list-gone.md)\n\n"
                            "a stray ` here\n\nand [after](after-gone.md) a ` there\n\n"
+                           "```js``` is a span, not a fence\n\n[spanned-fence](span-gone.md)\n\n"
+                           "~~~\n[tilde](tilde.md)\n~~~~\n\n"
                            "```\n[unclosed](fence.md)\n")
             self.assertEqual(broken_links(doc), ["single.md", "paren.md", "has space.md", "dangling.md",
                                                  "here.md/../here.md", "/root-gone.md", "list-gone.md",
-                                                 "after-gone.md"])
+                                                 "after-gone.md", "span-gone.md"])
 
     def test_a_name_only_in_the_body_is_not_the_skill_name(self):
         self.assertIsNone(skill_name("---\ndescription: x\n---\nname: impostor\n"))
