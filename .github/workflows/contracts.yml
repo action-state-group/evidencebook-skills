@@ -5,7 +5,10 @@
 # changed row is a new version, in a new file. This fails a pull request that
 # modifies, deletes or renames an existing file under contracts/.
 #
-# It reads git metadata only and runs nothing from the pull request.
+# It runs only git commands and executes no script from the pull request. On
+# pull_request GitHub runs this file as the pull request has it, so a change
+# to this file shows in that pull request's own diff for review. The check
+# blocks a merge only where branch protection requires it.
 name: contracts
 on:
   pull_request:

@@ -45,7 +45,8 @@ rules, cited line by line in `judge_pin_validate.py`'s own docstring.
 `capsule_engine/schemas/evidence-contract-v0.json` at commit
 `fd43d4329ea31d69e9bdd0a79f23f013c3615219`, SHA-256
 `6d10d5eb97e15421db0ab922b5f6d1f0a2e9f453fb64e52fb45306ba029ad480`: the schema
-agent-action-capsule's interop profile pins as EC (§11.3), and the copy
-capsulectl embeds. `tests/test_evidence_contract.py` checks the digest and
+agent-action-capsule's interop profile pins as EC (§11.3). `capsulectl contract
+validate` embeds no schema and takes this file as `--schema`.
+`tests/test_evidence_contract.py` checks the digest and
 validates every compiled contract against it, so no capsule-engine install is
 needed.

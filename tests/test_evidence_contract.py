@@ -101,6 +101,9 @@ class EUContract(unittest.TestCase):
                          ("UNAVAILABLE-STATE-REQUIRED", "DETERMINISTIC"))
         self.assertNotIn("mode", recomputed)
         self.assertIn("Recomputed by fold art50.disclosure_before_first_turn.", recomputed["evidence_rule"])
+        # A checker may not answer out_of_scope (run_daily.recomputed_answer), so
+        # a recomputed row never lists it, even with the pack's switch on.
+        self.assertNotIn("out_of_scope", recomputed["evidence_rule"])
         self.assertIn("art14e.handoff_request_truncated",
                       reqs["art14e.stop_or_handoff_on_request"]["evidence_rule"])
         # epistemic_type filters which evidence counts (interop profile §11.3.7);
@@ -216,6 +219,7 @@ class FromReportSpec(unittest.TestCase):
             self.assertEqual(req["mode"], "value")
             self.assertNotEqual(req.get("mode"), "judged")
             self.assertTrue(req["evidence_rule"].startswith("report-spec/v1 computation"))
+            self.assertNotIn("measurability", req)
 
     def test_evidence_rule_carries_the_metrics_and_sources_a_claim_reads(self):
         reqs = {r["id"]: r for r in ec.from_report_spec(report_spec.load_spec(self.SPEC))["requirements"]}
@@ -243,11 +247,10 @@ class FromReportSpec(unittest.TestCase):
     def test_bad_specs_are_refused(self):
         spec = report_spec.load_spec(self.SPEC)
         for mutate, message in (
-                (lambda s: s["claims"].append(dict(s["claims"][0])), "duplicate claim id"),
+                (lambda s: s["claims"].append(dict(s["claims"][0])), "must be unique"),
                 (lambda s: s["claims"][0].pop("description"), "needs a description"),
                 (lambda s: s["claims"][0].update(metric="nope"), "does not define"),
                 (lambda s: s["claims"][1].update(source="nope"), "not defined"),
-                (lambda s: s.update(spec_version="report-spec/v2"), "spec_version"),
                 (lambda s: s["claims"][0].update(value="conversation_count +"), "not a valid expression")):
             bad = copy.deepcopy(spec)
             mutate(bad)

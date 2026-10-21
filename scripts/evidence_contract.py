@@ -141,10 +141,12 @@ def from_pack(source):
                 req["backward_verdict"] = "MODEL-ASSISTED"
                 req["mode"] = "judged"
             else:
-                fold = crit.get("fold_id") or clause.get("tier_switch", {}).get("fold_id")
+                fold = crit.get("fold_id")
                 rule = [effective_claim(clause, switches), ""]
                 rule.append(f"Recomputed by fold {fold}." if fold else "Recomputed from the session's records.")
-                rule.append(_answers(oos))
+                # A checker's answer is held to met/not_met/not_evaluable
+                # (run_daily.recomputed_answer); out_of_scope is a judge answer only.
+                rule.append(_answers(False))
                 req["evidence_rule"] = "\n".join(rule)
                 req["forward_verdict"] = FORWARD_RECOMPUTED
                 req["backward_verdict"] = "DETERMINISTIC"
@@ -185,26 +187,17 @@ def _source_chain(name, sources):
 
 
 def from_report_spec(spec):
-    """A loaded report-spec/v1 (report_spec.load_spec) -> the contract. Every
+    """A report-spec/v1 that report_spec.load_spec accepted -> the contract. Every
     row is recomputed: `evidence_rule` is the claim's computation, as JCS text
     of the claim and the metrics and sources it reads, so a third party can
     recompute it from the same records."""
-    if spec.get("spec_version") != "report-spec/v1":
-        raise ContractError(f"spec_version must be report-spec/v1, got {spec.get('spec_version')!r}")
-    for key in ("id", "version", "sources", "claims"):
-        if spec.get(key) in (None, "", []):
-            raise ContractError(f"report spec has no {key!r}")
-    sources = {s["name"]: s for s in spec.get("sources") or []}
+    sources = {s["name"]: s for s in spec["sources"]}
     metrics = {m["name"]: m for m in spec.get("metrics") or []}
-    out_of_scope = bool((spec.get("switches") or {}).get("out_of_scope_verdict"))
-    requirements, seen = [], set()
+    requirements = []
     for claim in spec["claims"]:
         cid = claim.get("id")
         if not isinstance(cid, str) or not cid.strip():
             raise ContractError("every claim needs a non-empty id")
-        if cid in seen:
-            raise ContractError(f"duplicate claim id {cid!r}")
-        seen.add(cid)
         if not isinstance(claim.get("description"), str) or not claim["description"].strip():
             raise ContractError(f"claim {cid!r} needs a description: it is the requirement's statement")
         used_metrics = _referenced_metrics(claim, metrics)
@@ -226,7 +219,7 @@ def from_report_spec(spec):
         }
         rule = (f"report-spec/v1 computation, recomputed from the records: "
                 f"{rfc8785.dumps(computation).decode()}\n{_REPORT_SPEC_RULES}\n"
-                f"{_answers(out_of_scope and not claim.get('never_out_of_scope'))}")
+                f"{_answers(report_spec.out_of_scope_allowed(spec, claim))}")
         requirements.append({
             "id": cid,
             "profile": "outcome",
@@ -234,7 +227,6 @@ def from_report_spec(spec):
             "evidence_rule": rule,
             "forward_verdict": FORWARD_RECOMPUTED,
             "backward_verdict": "DETERMINISTIC",
-            "measurability": "measured",
             "mode": "value",
         })
     return _contract(str(spec["id"]), str(spec["version"]), requirements)

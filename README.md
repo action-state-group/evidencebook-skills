@@ -45,8 +45,10 @@ way.
   with one requirement per row, and a Result cites it by `contract_ref`
   (`<pack_id>@<pack_version>`, or a report spec's `<id>@<version>`). A
   published contract never changes: any edit that changes the compiled
-  contract, a row's label or judge question included, needs a new version,
-  and CI refuses a pull request that modifies or removes a published file.
+  contract, a row's label or judge question included, needs a new version
+  (`evidence_contract.py publish` writes it), and a CI check
+  (`.github/workflows/contracts.yml`) fails a pull request that modifies or
+  removes a published file.
   The contract states each row's rule, not its presentation wording.
 - [`demo/`](demo/) — a self-contained demonstration, **not** compiler input. It holds
   `demo/DEMO.md` (end-to-end reproductions: an investigation over an existing
