@@ -154,20 +154,26 @@ def main(argv: list[str]) -> int:
     if not chosen:
         raise SystemExit(f"{args.results} has no trial-{args.trial} simulations")
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    # clear our own prior outputs so a reused dir can't leak a different/smaller run
-    for stale in args.out.glob("task-*.json"):
-        stale.unlink()
+    # Build every request before touching --out: build_request() refuses a bad
+    # --case-model agent model (check_agent_model), and a refused run must leave
+    # the previous run's request files where they are.
     # NOTE: CLL sequence is set by the publish order, which is the shell glob over these
     # filenames (lexical: task-0, task-1, task-10, …, task-2), not task_id order. Only a
     # per-case selection (by capsule/case id) is reliable; do not assume sequence == task.
     used: dict[str, int] = {}
+    outputs = []
     for sim in sorted(chosen, key=lambda s: str(s["task_id"])):
         request = build_request(sim, info, args.results.name, domain, args.case_model)
         stem = f"task-{safe_name(sim['task_id'])}"
         n = used.get(stem, 0)
         used[stem] = n + 1
-        name = f"{stem}.json" if n == 0 else f"{stem}-{n}.json"
+        outputs.append((f"{stem}.json" if n == 0 else f"{stem}-{n}.json", request))
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    # clear our own prior outputs so a reused dir can't leak a different/smaller run
+    for stale in args.out.glob("task-*.json"):
+        stale.unlink()
+    for name, request in outputs:
         (args.out / name).write_text(json.dumps(request, indent=2) + "\n")
     print(f"wrote {len(chosen)} seal requests (domain={domain}, one per task, trial {args.trial}) to {args.out}")
     return 0

@@ -115,6 +115,23 @@ class CaseModel(unittest.TestCase):
             self.assertIn(repr(llm), str(cm.exception.code))
             self.assertEqual(list((d / "out").glob("*.json")) if (d / "out").exists() else [], [])
 
+    def test_a_rejected_case_model_leaves_the_prior_request_files_in_place(self):
+        # review of edd79a8: the model check runs before the old task-*.json files are
+        # cleared, so a refused --case-model run never loses the previous run's requests.
+        d = pathlib.Path(self.enterContext(tempfile.TemporaryDirectory()))
+        good = dict(RESULTS, info=dict(RESULTS["info"], agent_info={"llm": "gpt-4.1-2025-04-14"}))
+        (d / "results.json").write_text(json.dumps(good))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(backfill.main(["--results", str(d / "results.json"), "--out", str(d / "out"),
+                                            "--case-model"]), 0)
+        before = {p.name: p.read_text() for p in (d / "out").glob("task-*.json")}
+        self.assertEqual(sorted(before), ["task-1.json", "task-2.json"])
+        bad = dict(RESULTS, info=dict(RESULTS["info"], agent_info={"llm": "openai/gpt-4.1"}))
+        (d / "bad.json").write_text(json.dumps(bad))
+        with self.assertRaises(SystemExit), contextlib.redirect_stdout(io.StringIO()):
+            backfill.main(["--results", str(d / "bad.json"), "--out", str(d / "out"), "--case-model"])
+        self.assertEqual({p.name: p.read_text() for p in (d / "out").glob("task-*.json")}, before)
+
     def test_a_model_without_a_colon_or_a_slash_is_sealed(self):
         out = self._run(dict(RESULTS, info=dict(RESULTS["info"], agent_info={"llm": "gpt-4.1-2025-04-14"})),
                         "--case-model")
