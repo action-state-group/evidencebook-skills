@@ -10,8 +10,8 @@ followed; one that did not run a sample says so rather than leaving the line out
 ## Sample size
 
 **20 cases per report** for launch: 10 per stratum from the two judged strata, `met`
-and `not_met`, which needs `sample_policy.per_stratum: 10`. Every pack on main sets 3
-today (see [Not yet run](#not-yet-run)). The draw is stratified by the judge's verdict
+and `not_met`, which needs `sample_policy.per_stratum: 10`. `airline-support-outcomes` and
+`eu-ai-act-obligations` set 3 today, and `everyday-rules` sets none (see [Not yet run](#not-yet-run)). The draw is stratified by the judge's verdict
 and takes `per_stratum` from every verdict present, so `not_evaluable` and
 `out_of_scope` reports are strata of their own and are drawn on top of the `met` and
 `not_met` cases (see [Withheld cases](#withheld-cases) and
@@ -45,7 +45,9 @@ verdict, rationale, axis judgments, stratum or report id. The grader answers `me
 `out_of_scope`, except on a criterion marked `never_out_of_scope`. `scripts/run_weekly.py`
 refuses an `out_of_scope` rating from a pack that leaves the switch off, or on a
 `never_out_of_scope` criterion even with the switch on, and one refused rating refuses
-the whole ratings file: nothing is sealed. In the airline pack those criteria are
+the whole ratings file: no `human-rating/v1` is sealed, and no calibration summary or Close
+is built. (The read frame, the sample manifest and the blind-packets record are already
+sealed by then, and a refusal does not remove them.) In the airline pack those criteria are
 `task_resolution.done_in_full` and `grounded_communication.no_invented_policy`; a grader
 answers `met`, `not_met` or `not_evaluable` there.
 
@@ -73,7 +75,8 @@ With `switches.out_of_scope_verdict` on, the judge can answer `out_of_scope`, an
 reports are drawn and counted like any other verdict:
 
 - **Stratified:** the draw stratifies by verdict, so `out_of_scope` reports are a stratum
-  of their own, drawn by the same rule up to `per_stratum` (3 today, 10 at launch). They
+  of their own, drawn by the same rule up to `per_stratum` (3 today in `airline-support-outcomes` and
+  `eu-ai-act-obligations`, 10 at launch; `everyday-rules` sets none). They
   are never taken from the `met`/`not_met` cases; they are drawn on top of them.
 - **Counted:** each drawn `out_of_scope` case is in the drawn n and, when it is not
   rated, in the shortfall. A rating agrees with the judge only when it is the same word as
@@ -96,7 +99,8 @@ or a rating of the agent.
 - `run_weekly.py`'s packet is the airline shape (`PACKET_FIELDS`). A pack judged from
   disclosed facts (`everyday-rules`, through `scripts/judge_bundle.py`) needs a packet
   built from its bundle's disclosed records.
-- Every pack on main sets `sample_policy.per_stratum: 3`. The 20-case method needs 10
+- `airline-support-outcomes` and `eu-ai-act-obligations` set `sample_policy.per_stratum: 3`;
+  `everyday-rules` sets none (below). The 20-case method needs 10
   per stratum. Raising it is a separate pack change, because it moves the judge pin.
 - `everyday-rules`' compiled `sample_policy` is `{}`, so `run_weekly.py` stops with a
   `KeyError` on that pack rather than a clean refusal.
