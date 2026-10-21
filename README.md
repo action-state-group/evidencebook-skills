@@ -24,9 +24,15 @@ way.
 - [`references/capsule-cli.md`](references/capsule-cli.md) — the Capsule CLI contract
   copied verbatim into bundles.
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
-  `pack-source.yaml`, compiled by `scripts/pack_compile.py` into the contract,
-  judge prompt and report presentation the skills run (`everyday-rules`,
-  `airline-support-outcomes`).
+  `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
+  `everyday-rules`). `scripts/pack_compile.py` compiles one into four files:
+  `compiled.json`, the contract the run scripts read; `judge-prompt.md` and
+  `axes.json`, which `scripts/judge_pin.py` hashes into the judge pin; and
+  `presentation.json`, the bundle presentation extension a report viewer
+  renders (nothing in this repository reads it). `airline-support-outcomes` and
+  `eu-ai-act-obligations` compile to `demo/<name>/` and run through the two cron
+  skills; `everyday-rules` compiles to `packs/everyday-rules/compiled/` and is
+  judged with `scripts/judge_bundle.py`, not the skills.
 - [`demo/`](demo/) — a self-contained demonstration, **not** compiler input. It holds
   `demo/DEMO.md` (end-to-end reproductions: an investigation over an existing
   CLL, and a tau2 customer-service evaluation over a local SQLite CLL — compile →
