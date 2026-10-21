@@ -838,3 +838,64 @@ class ReviewOf5746f2a(unittest.TestCase):
         verdicts, _, metrics = evaluate_group(spec, "d1", rows, "day")
         self.assertEqual(verdicts["big"], "not_evaluable")
         self.assertIsNone(metrics["paid"])
+
+
+class ReviewOfB892c2c(unittest.TestCase):
+    """Ethan's review of b892c2c: a missing projection drops its field, so a
+    projection named after a built-in field (day, case_id, the group_by
+    field, a "__" field) could take a row out of every group."""
+
+    def _load(self, sources, group_by="day"):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-load-spec-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        path = tmp / "spec.yaml"
+        path.write_text(f"""
+spec_version: report-spec/v1
+id: x
+version: 1
+group_by: {group_by}
+sources: {sources}
+claims: [{{id: ok, kind: forall, source: conversations, assert: "True"}}]
+""")
+        return load_spec(path)
+
+    def test_a_tool_result_projection_named_day_is_refused_at_load(self):
+        with self.assertRaisesRegex(ReportSpecError, "projection 'day'"):
+            self._load("[{name: conversations, kind: case}, "
+                       "{name: calls, kind: tool_result, from: conversations, tool_name: lookup, "
+                       "fields: {day: result.date}}]")
+
+    def test_case_id_and_dunder_projections_are_refused_on_every_kind(self):
+        for kind, name in (("case", "case_id"), ("case", "__capsule_id"), ("record", "day"), ("record", "__row_id")):
+            with self.assertRaisesRegex(ReportSpecError, "names a field the engine owns", msg=f"{kind}/{name}"):
+                self._load(f"[{{name: conversations, kind: {kind}, fields: {{{name}: a.b}}}}]")
+
+    def test_the_group_by_field_is_refused_on_a_derived_source(self):
+        with self.assertRaisesRegex(ReportSpecError, "group_by field 'region'"):
+            self._load("[{name: conversations, kind: case, fields: {region: case.region}}, "
+                       "{name: calls, kind: tool_result, from: conversations, tool_name: lookup, "
+                       "fields: {region: result.region}}]", group_by="region")
+
+    def test_the_group_by_field_may_still_be_projected_on_its_base_source(self):
+        spec = self._load("[{name: conversations, kind: case, fields: {region: case.region}}]", group_by="region")
+        self.assertEqual(spec["group_by"], "region")
+
+    def test_a_direct_caller_missing_a_protected_projection_gets_an_unreadable_row(self):
+        messages = [{"role": "assistant", "tool_calls": [{"id": "t1", "name": "lookup"}]},
+                    {"role": "tool", "tool_call_id": "t1", "content": '{"result": {"amount": 1}}'}]
+        rows = extract_tool_result_rows([{"case_id": "c", "day": "d1", "__messages": messages}], "lookup",
+                                        fields={"day": "result.date"})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["day"], "d1")
+        self.assertIn(UNREADABLE, rows[0])
+
+    def test_a_normal_missing_projection_still_reads_not_evaluable(self):
+        messages = [{"role": "assistant", "tool_calls": [{"id": "t1", "name": "lookup"}]},
+                    {"role": "tool", "tool_call_id": "t1", "content": '{"result": {"amount": 1}}'}]
+        rows = extract_tool_result_rows([{"case_id": "c", "day": "d1", "status": "ok", "__messages": messages}],
+                                        "lookup", fields={"status": "result.status"})
+        self.assertNotIn(UNREADABLE, rows[0])
+        spec = {"sources": [{"name": "calls", "kind": "tool_result"}],
+                "claims": [{"id": "ok", "kind": "forall", "source": "calls", "assert": "status == 'ok'"}]}
+        verdicts, _, _ = evaluate_group(spec, "d1", {"calls": rows}, "day")
+        self.assertEqual(verdicts["ok"], "not_evaluable")

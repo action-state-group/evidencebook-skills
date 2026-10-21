@@ -358,6 +358,17 @@ def extract_tool_result_rows(parent_rows, tool_name, fields=None, protected=_ALW
                 out.append(dict(_unreadable_row(carried, f"{tool_name} result {j} sets protected "
                                                          f"field(s) {clash!r}"), __row_id=row_id))
                 continue
+            # A projection may never name a protected field (load_spec
+            # refuses it). A direct caller that passes one anyway and whose
+            # path is missing gets an UNREADABLE row, never a row that lost
+            # its group or provenance and so drops out of every group.
+            lost = sorted(name for name, projection in fields.items()
+                          if isinstance(projection, str) and _is_protected(name, protected)
+                          and _get_path_or_missing(result, projection) is _MISSING)
+            if lost:
+                out.append(dict(_unreadable_row(carried, f"{tool_name} result {j} has no value for protected "
+                                                         f"projection(s) {lost!r}"), __row_id=row_id))
+                continue
             row = dict(result)
             row.update(carried)
             row["__row_id"] = row_id
@@ -832,6 +843,29 @@ def build_report_from_records(spec, capsulectl, profile, generated_at, out_dir, 
     return summary
 
 
+def _check_projection_names(spec, path):
+    """A `fields:` projection never names a field the engine owns: a "__"
+    field (provenance), `day` or `case_id` on any source, and, on a derived
+    (`tool_result`) source, the report's group_by field, which the row
+    carries from its parent. A projection whose path is missing removes its
+    field from the row, so one of these names could take a row out of every
+    group and leave a forall over the source vacuously met."""
+    group_by = spec.get("group_by", "day")
+    for source in spec.get("sources") or []:
+        fields = source.get("fields") or {}
+        if not isinstance(fields, dict):
+            raise ReportSpecError(f"{path}: source {source.get('name')!r}: `fields` must be a mapping")
+        derived = source.get("kind") == "tool_result"
+        for name in fields:
+            name = str(name)
+            if name.startswith("__") or name in _ALWAYS_PROTECTED or (derived and name == group_by):
+                raise ReportSpecError(
+                    f"{path}: source {source.get('name')!r}: projection {name!r} names a field the engine "
+                    f"owns (every \"__\" field, {', '.join(_ALWAYS_PROTECTED)}"
+                    + (f", and the group_by field {group_by!r} on a derived source" if derived else "")
+                    + "); rename it")
+
+
 def load_spec(path):
     import yaml
     spec = yaml.safe_load(pathlib.Path(path).read_text())
@@ -848,6 +882,7 @@ def load_spec(path):
     for c in spec["claims"]:
         if not isinstance(c.get("never_out_of_scope", False), bool):
             raise ReportSpecError(f"{path}: claim {c.get('id')!r}: never_out_of_scope must be a boolean")
+    _check_projection_names(spec, path)
     for m in spec.get("metrics", []) or []:
         if m.get("name") in _RESERVED_METRIC_NAMES:
             raise ReportSpecError(f"{path}: metric name {m['name']!r} is reserved (the title template's own "
