@@ -12,9 +12,11 @@ rebuild them yourself. Nothing here depends on the people who made it.
 | `pages/outcomes_2025-09-15_day.html` | Customer support outcomes report (tau2-bench airline), one day: 2025-09-15 |
 | `pages/outcomes_2025-09_week5.html` | Customer support outcomes report, week 5 of September 2025 (09-29 to 09-30) |
 | `bundles/<same name>.bundle.json` | the sealed Evidence Bundle each page was built from |
-| `tools/render-page.mjs` | a 20-line script that draws a page from a bundle with a capsule-viewer build (used for the new layout, below) |
+| `tools/render-page.mjs` | a 20-line script that draws a page from a bundle with a capsule-viewer build older than capsule-viewer's own `scripts/render-report.mjs` (#48); the pages here don't need it |
 | `homepage/terms-pack.md` | the homepage explainer text, as one paragraph |
 | `MANIFEST.txt` | sha256 and size of every file, the verify result for each page and bundle, and the versions used |
+
+The pages were drawn with capsule-viewer `5a86acef1697735e2121d417b3b2a34db96dfd6b` (PR #48 head: #41, #42 and #48).
 
 The records are tau2-bench airline runs (four agent models), replayed into
 September 2025 and sealed into an evidence book. Sizes and hashes are in
@@ -117,11 +119,12 @@ requests that capsulectl does not ship yet:
 - #48 `desk/contract-report-module`: one view, wording packs (#46)
 
 #41 is merged to capsule-viewer `main`. #42 is open, based on `main`. #48 is
-open, targets #42's branch, and is not yet rebased onto #42's current head. The pages here were built from the #42
-head, `457a13e35b7f4f2bfbd201057d15deea0aad9896`, which is #41 plus #42.
-#48 (wording packs, and capsule-viewer's own `scripts/render-report.mjs`) is
-not in these pages. Each page names the build it was drawn with:
-`capsule-viewer 0.1.0 at 457a13e35b7f`.
+open, stacked on #42. The pages here were built from the #48 head,
+`5a86acef1697735e2121d417b3b2a34db96dfd6b`, which is #41 plus #42 plus #48
+(the wording packs, and capsule-viewer's own `scripts/render-report.mjs`).
+Each page names the build it was drawn with:
+`capsule-viewer 0.1.0 at 5a86acef1697`. Both PRs may still move before they
+merge; the commit stays fetchable by its sha, as below.
 
 ## rebuild with the new layout, before capsulectl ships it
 
@@ -129,15 +132,15 @@ Needs `git` and Node 20 or newer (checked with Node 24.18.1, npm 11.16.0).
 Run from the `site-kit/` directory:
 
 ```bash
-CV=457a13e35b7f4f2bfbd201057d15deea0aad9896   # capsule-viewer #42 head, on main with #41 merged
+CV=5a86acef1697735e2121d417b3b2a34db96dfd6b   # capsule-viewer #48 head (#41 + #42 + #48)
 git clone -q https://github.com/action-state-group/capsule-viewer.git
-git -C capsule-viewer fetch -q origin desk/report-provenance-line
+git -C capsule-viewer fetch -q origin $CV
 git -C capsule-viewer checkout -q $CV
 (cd capsule-viewer/ts && npm ci --no-audit --no-fund && npm run build)
 mkdir -p rebuilt-new
 for n in eu_2025-09-15_day eu_2025-09_week5 outcomes_2025-09-15_day outcomes_2025-09_week5; do
-  node --max-old-space-size=4096 tools/render-page.mjs capsule-viewer/ts \
-    bundles/$n.bundle.json rebuilt-new/$n.html
+  (cd capsule-viewer/ts && node --max-old-space-size=4096 scripts/render-report.mjs \
+    ../../bundles/$n.bundle.json -o ../../rebuilt-new/$n.html)
 done
 ```
 
@@ -147,11 +150,9 @@ pages) and `default words`. The render does not change the bundle, so no
 digest or verdict moves. To check a rebuilt page, open it in a browser: the
 page verifies its own bundle and shows the result.
 
-Checked: run exactly as above on a clean Linux box, all four rebuilt pages
-are byte-identical to the ones in `pages/` (same sha256 as in
-`MANIFEST.txt`). Once #48 is rebased onto #42, capsule-viewer's own
-`node scripts/render-report.mjs BUNDLE.json -o PAGE.html` does the same job
-and also takes `--wording PACK.json`.
+Checked: built this way on a clean Linux box (Node 24.18.1), a second render
+of each bundle is byte-identical to the page in `pages/` (same sha256 as in
+`MANIFEST.txt`). `scripts/render-report.mjs` also takes `--wording PACK.json`.
 
 Once capsulectl ships a release with these capsule-viewer changes, the rc18
 steps above give the new layout with that version number in place of rc18.
