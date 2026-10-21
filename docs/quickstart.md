@@ -291,10 +291,11 @@ as the producer stated it.
 **What `book report build` checks.** It writes the page only when
 `capsulectl verify --bundle` would call the bundle VALID, which includes
 each record's signature and the checkpoint's signature. Run that check
-yourself on the bundle `report.sh` disclosed:
+yourself on the bundle `report.sh` disclosed. Each run writes into its own
+directory under `--work`, and `--work/last-run` points at the newest:
 
 ```sh
-capsulectl verify --bundle $QS/run-no-judge/bundle.json | jq -c '{verdict, checkpoint: .checkpoint.status, producer_signatures: .producer_signatures.status, witnesses: .witnesses.status}'
+capsulectl verify --bundle $QS/run-no-judge/last-run/bundle.json | jq -c '{verdict, checkpoint: .checkpoint.status, producer_signatures: .producer_signatures.status, witnesses: .witnesses.status}'
 ```
 
 ```
@@ -396,7 +397,7 @@ scripts/report.sh --spec demo/my-airline-pack/compiled.json --profile airline \
   --date $DAY --out $QS/my-pack.html --work $QS/run-my-pack --capsulectl $QS/bin/capsulectl \
   --judge-backend mock > $QS/my-pack.log
 jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rules") | "\(.id)  \(.tier)  \(.verdict)"' \
-  $QS/run-my-pack/rollup/result-v0-$DAY.json
+  $QS/run-my-pack/last-run/rollup/result-v0-$DAY.json
 ```
 
 And the EU AI Act pack. `--attach-input-originals` puts each conversation's
@@ -439,8 +440,12 @@ evaluable.
 **Changing the words.** The words on a card come from the pack: check
 questions, criterion labels and text, obligation titles. Edit them in
 `pack-source.yaml` and compile again; no code changes. The compiled
-`presentation.json` is added to the bundle after it is disclosed, so no
-signed record covers it, and the page labels it as the producer's text.
+`presentation.json` is added to the bundle after it is disclosed, but its
+digest is not: `report.sh` pins it inside the Result before sealing
+(`x-presentation-digest`), so the producer's signature covers the wording,
+and a block changed afterwards reads as unsigned producer text. The words
+are still the producer's, not evidence: every verdict and count comes from
+the signed claims.
 Changing any field moves the judge pin (above), so judge again after a
 wording change. `--title` sets the page title. In `v0.1.0-rc18` the two
 result cards are built in; wording packs (`aac.wording-pack/v0`) apply to
