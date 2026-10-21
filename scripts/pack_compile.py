@@ -174,7 +174,7 @@ def validate_source(source):
 
     # contract_ref (build_compiled_json: f"{pack_id}@{pack_version}") must match the
     # Evidence Result v0 ContractRef pattern "^[^@\\s]+@[^@\\s]+$": an "@" or whitespace
-    # in either half would compile a pack that `capsulectl result build` refuses.
+    # in either half would compile a pack that `capsulectl book result build` refuses.
     for key in ("pack_id", "pack_version"):
         v = source.get(key)
         if isinstance(v, str) and ("@" in v or re.search(r"\s", v)):

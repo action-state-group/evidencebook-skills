@@ -3,7 +3,7 @@
 evaluation-report/v1 capsule scripts/run_daily.py sealed for this --spec's clauses,
 group by case, and for every case with every clause, compute the per-check and
 all-required verdicts plus a Result v0 document (scripts/result_v0.py) -- the input
-`capsulectl result build` takes.
+`capsulectl book result build` takes.
 
 Pack-driven: the check groupings, the full criteria set, each clause's EFFECTIVE
 tier (its tier_switch applied) and the never_out_of_scope set all come from

@@ -55,11 +55,20 @@ $ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
     --attach-input-originals --title "EU AI Act obligations: airline support agent"
 ```
 
-Both converge on the same tail (`capsulectl result build` → checkpoint →
-`disclose` → `report build`). On the judged path the pack's compiled
+Both converge on the same tail (`capsulectl book result build` → checkpoint →
+`disclose` → `book report build`). On the judged path the pack's compiled
 `presentation.json` block is wired onto the bundle
 (`scripts/wire_presentation.py`) and picks the card: `eu-ai-act-compliance/v1`
-→ `obligation`, `outcome-report/v1` → `outcome`. `--attach-input-originals`
+→ `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
+own text (check questions, criterion wording, obligation titles and
+plain-language summaries), added after `disclose`: no signed record covers it,
+and the page says so. On the outcome card the wiring adds a `producer_note`,
+which the renderer shows under its own "Producer's note · presentation text,
+not evidence" label, stating that the producer added the block and no signed
+record covers it; the card's own checks and wording come from the sealed
+reports, not from the block. The obligation card labels the producer's mapping
+itself, so its block is copied unchanged. Sealing the block in a record is a
+later step. `--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it
 discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
 day's `result-v0-*.json` is merged into one Result v0

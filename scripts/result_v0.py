@@ -1,6 +1,6 @@
 """Maps this contract's per-criterion evaluation-report/v1 records
 (scripts/run_daily.py, one conversation) into the Evidence Result v0 document
-(evidence-result-v0) `capsulectl result build` takes as its --result input and
+(evidence-result-v0) `capsulectl book result build` takes as its --result input and
 validates against its vendored schema. Written to match that schema exactly.
 
 Known, flagged gaps against the schema:
@@ -103,7 +103,7 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     omitted when the report didn't carry one, and -- pathological, never the
     real shape -- it is evidence[]'s only entry if `report_digest` is absent
     while this is given. A Result is sealed only over evidence the book holds
-    (capsule-cli's `result build`), so citing the case record here is what lets
+    (capsule-cli's `book result build`), so citing the case record here is what lets
     `capsulectl disclose --attach-input-originals` later find and attach that
     case's transcript (the case capsule's own agent_input original) with no
     further, by-hand step.
@@ -335,9 +335,9 @@ def merge_result_v0_documents(docs, title, generated_at):
     """Combine several already-built Result v0 documents (e.g. one per day
     over a --date/--to range, from either scripts/rollup_day.py's judged path
     or scripts/report_spec.py's no-judge path -- this function does not care
-    which) into ONE Result v0 document spanning all of them: `report build`
+    which) into ONE Result v0 document spanning all of them: `book report build`
     takes exactly one sealed Result as its bundle's root, so a multi-day
-    report needs its days combined before `result build` ever sees them, not
+    report needs its days combined before `book result build` ever sees them, not
     multiple separate bundles.
 
     Concatenates every document's claims[] (fails closed -- RollupError -- if

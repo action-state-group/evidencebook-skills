@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Thin CLI wrapper over scripts/result_v0.merge_result_v0_documents: `report
-build` takes exactly one sealed Result as its bundle's root, so a --date/--to
+"""Thin CLI wrapper over scripts/result_v0.merge_result_v0_documents: `capsulectl
+book report build` takes exactly one sealed Result as its bundle's root, so a --date/--to
 range that produced one result-v0-<day>.json per day (either path --
 scripts/rollup_day.py or scripts/report_spec.py) needs them combined into one
-document before scripts/report.sh's "result build" step. A single input file
+document before scripts/report.sh's "book result build" step. A single input file
 is accepted too (the common one-day case) -- it passes through in the same
 shape merge_result_v0_documents always produces (claims/aggregate recomputed
 from the one document's own claims, not copied verbatim), so a caller never

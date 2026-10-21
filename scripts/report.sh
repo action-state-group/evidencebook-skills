@@ -11,7 +11,9 @@
 # Both paths converge on the SAME tail: capsulectl book result build -> a fresh
 # checkpoint -> disclose -> (judged path only) wire the pack's own compiled
 # presentation.json block (outcome-report/v1 or eu-ai-act-compliance/v1,
-# scripts/wire_presentation.py) onto the bundle -> book report build.
+# scripts/wire_presentation.py) onto the bundle -> book report build. The wired
+# block is the producer's text outside the signed records; on the outcome card
+# wire_presentation.py adds a producer_note so the page says so.
 #
 #   report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] \
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
@@ -186,7 +188,7 @@ step "capsulectl book result build: seal the Result v0 into the book"
 "$CAPSULECTL" book result build --profile "$PROFILE" --result "$RESULT_V0" --out "$WORK/result-sealed.json" \
   | tee "$WORK/result-build.json"
 RESULT_CAPSULE=$(jq -r '.record_id' "$WORK/result-build.json")
-[[ -n "$RESULT_CAPSULE" && "$RESULT_CAPSULE" != "null" ]] || fail "result build printed no .record_id"
+[[ -n "$RESULT_CAPSULE" && "$RESULT_CAPSULE" != "null" ]] || fail "book result build printed no .record_id"
 
 step "cll checkpoint create: a fresh checkpoint covering the just-sealed Result v0"
 "$CAPSULECTL" cll checkpoint create --profile "$PROFILE" | tee "$WORK/checkpoint-create.json"

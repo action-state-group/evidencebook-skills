@@ -13,7 +13,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from wire_presentation import CARD_FOR_TEMPLATE, WireError, wire  # noqa: E402
+from wire_presentation import (  # noqa: E402
+    CARD_FOR_TEMPLATE, MAX_NOTE_LINE, MAX_NOTE_LINES, MAX_NOTE_TITLE, PRODUCER_NOTE_LINES,
+    PRODUCER_NOTE_TITLE, PRODUCER_TERMS_LINE, WireError, wire)
 
 BUNDLE = {"records": [{"capsule_id": "ab" * 32}],
           "extensions": {"producer-key/v1": {"public_key": "cd" * 32}}}
@@ -38,7 +40,19 @@ class ShippedPacks(unittest.TestCase):
         presentation = _load("demo/airline-support-outcomes/presentation.json")
         wired, template, card = wire(BUNDLE, presentation)
         self.assertEqual((template, card), ("outcome-report/v1", "outcome"))
-        self.assertEqual(wired["extensions"]["outcome-report/v1"], presentation["outcome-report/v1"])
+        block = dict(wired["extensions"]["outcome-report/v1"])
+        note = block.pop("producer_note")
+        # the pack's own members ride unchanged; the only addition is the label
+        self.assertEqual(block, presentation["outcome-report/v1"])
+        self.assertEqual(note, {"title": PRODUCER_NOTE_TITLE,
+                                "lines": [*PRODUCER_NOTE_LINES, PRODUCER_TERMS_LINE]})
+
+    def test_every_shipped_outcome_block_is_labelled_producer_supplied(self):
+        for rel in ("demo/airline-support-outcomes/presentation.json",
+                    "packs/everyday-rules/compiled/presentation.json"):
+            with self.subTest(rel):
+                wired, _, _ = wire(BUNDLE, _load(rel))
+                self.assertIn("producer_note", wired["extensions"]["outcome-report/v1"])
 
     def test_every_template_the_compiler_registers_has_a_card(self):
         from pack_compile import REPORT_TEMPLATES
@@ -92,6 +106,70 @@ class Wire(unittest.TestCase):
         for bundle in ([], {"extensions": []}):
             with self.assertRaises(WireError):
                 wire(bundle, self.BLOCK)
+
+
+class ProducerNote(unittest.TestCase):
+    """Gap 10: the wired block is the producer's text, outside the signed records.
+    On the outcome card the page says so through `producer_note`, the one member of
+    the block the renderer draws as text, under its own "Producer's note ... not
+    evidence" label (agent-action-capsule ts/src/outcome-report-presentation.ts)."""
+
+    OUTCOME = {"outcome-report/v1": {"enabled": True, "percentages": False}}
+
+    def _note(self, presentation):
+        wired, _, _ = wire(BUNDLE, presentation)
+        return wired["extensions"]["outcome-report/v1"]["producer_note"]
+
+    def test_the_note_says_the_producer_added_it_and_no_signed_record_covers_it(self):
+        note = self._note(self.OUTCOME)
+        text = " ".join(note["lines"])
+        self.assertIn("producer added", text)
+        self.assertIn("after it was disclosed", text)
+        self.assertIn("No signed record covers", text)
+        self.assertIn("not evidence", text)
+
+    def test_the_terms_line_appears_only_when_the_block_carries_the_packs_wording(self):
+        self.assertEqual(self._note(self.OUTCOME)["lines"], list(PRODUCER_NOTE_LINES))
+        with_terms = {"outcome-report/v1": {"enabled": True, "terms": {"checks": []}}}
+        self.assertEqual(self._note(with_terms)["lines"][-1], PRODUCER_TERMS_LINE)
+        with_codes = {"outcome-report/v1": {"enabled": True, "reason_codes": {}}}
+        self.assertEqual(self._note(with_codes)["lines"][-1], PRODUCER_TERMS_LINE)
+
+    def test_the_note_is_inside_the_renderers_limits_so_it_is_never_dropped(self):
+        # readProducerNote drops a note whole if any line is empty or over-long,
+        # or there are too many lines -- which would leave the page unlabelled.
+        presentation = _load("demo/airline-support-outcomes/presentation.json")
+        note = self._note(presentation)
+        self.assertLessEqual(len(note["lines"]), MAX_NOTE_LINES)
+        self.assertTrue(0 < len(note["title"].strip()) and len(note["title"]) <= MAX_NOTE_TITLE)
+        for line in note["lines"]:
+            self.assertIsInstance(line, str)
+            self.assertTrue(0 < len(line.strip()) and len(line) <= MAX_NOTE_LINE, line)
+
+    def test_a_note_the_block_already_carries_is_kept_and_the_label_appended(self):
+        own = {"title": "What changed in this run", "lines": ["Rerun after the r22 retune."]}
+        note = self._note({"outcome-report/v1": {"enabled": True, "producer_note": own}})
+        self.assertEqual(note["title"], own["title"])
+        self.assertEqual(note["lines"], [*own["lines"], *PRODUCER_NOTE_LINES])
+
+    def test_a_note_the_renderer_would_drop_is_refused_not_wired(self):
+        full = {"title": "t", "lines": ["x"] * MAX_NOTE_LINES}
+        for bad in (full, {"title": "t", "lines": ["y" * (MAX_NOTE_LINE + 1)]},
+                    {"title": "t" * (MAX_NOTE_TITLE + 1), "lines": ["x"]},
+                    {"title": "t", "lines": [""]}, {"title": "t", "lines": "x"}, "x"):
+            with self.subTest(bad=bad), self.assertRaisesRegex(WireError, "producer_note"):
+                wire(BUNDLE, {"outcome-report/v1": {"enabled": True, "producer_note": bad}})
+
+    def test_the_eu_block_is_copied_verbatim_with_no_note_its_renderer_would_not_read(self):
+        # The obligation card reads no producer_note; it labels the producer's
+        # mapping itself, so a note there would be text no reader ever sees.
+        wired, _, _ = wire(BUNDLE, Wire.BLOCK)
+        self.assertEqual(wired["extensions"]["eu-ai-act-compliance/v1"], Wire.BLOCK["eu-ai-act-compliance/v1"])
+
+    def test_the_input_block_is_not_modified(self):
+        presentation = json.loads(json.dumps(self.OUTCOME))
+        wire(BUNDLE, presentation)
+        self.assertEqual(presentation, self.OUTCOME)
 
 
 class Cli(unittest.TestCase):

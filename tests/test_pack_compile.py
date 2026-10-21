@@ -62,7 +62,7 @@ class ValidateSource(unittest.TestCase):
         # build_compiled_json emits contract_ref as f"{pack_id}@{pack_version}",
         # which must match the Evidence Result v0 ContractRef pattern
         # "^[^@\\s]+@[^@\\s]+$" -- an embedded "@" would compile a pack
-        # `capsulectl result build` refuses.
+        # `capsulectl book result build` refuses.
         source = minimal_source()
         source["pack_id"] = "airline@support"
         issues = validate_source(source)
