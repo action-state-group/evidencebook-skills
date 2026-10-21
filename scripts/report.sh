@@ -8,12 +8,16 @@
 # compiled.json, e.g. demo/airline-support-outcomes/compiled.json) goes the
 # JUDGED path: scripts/run_daily.py (one Jev call per clause per case, mock
 # backend by default) then scripts/rollup_day.py's all-required rollup.
-# Both paths converge on the SAME tail: capsulectl book result build -> a fresh
-# checkpoint -> disclose -> (judged path only) wire the pack's own compiled
-# presentation.json block (outcome-report/v1 or eu-ai-act-compliance/v1,
-# scripts/wire_presentation.py) onto the bundle -> book report build. The wired
-# block is the producer's text outside the signed records; on the outcome card
-# wire_presentation.py adds a producer_note so the page says so.
+# Both paths converge on the SAME tail: (judged path only) pin the pack's own
+# compiled presentation.json block's digest in the Result v0 -> capsulectl book
+# result build -> a fresh checkpoint -> disclose -> (judged path only) wire that
+# same block (outcome-report/v1 or eu-ai-act-compliance/v1,
+# scripts/wire_presentation.py) onto the bundle -> book report build. The block
+# is the producer's text, carried outside the signed records; the signed Result
+# pins its SHA-256 (x-presentation-digest), so a block changed after sealing no
+# longer matches and reads as unsigned producer text. Verdicts and counts never
+# come from it. On the outcome card wire_presentation.py adds a producer_note so
+# the page says so.
 #
 #   report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] \
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
@@ -184,6 +188,29 @@ else
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 
+# The judged path's presentation block: its digest is pinned in the Result v0
+# BEFORE result build, so the producer's signature over the Result covers it
+# (issue #29). The block itself is wired onto the bundle after disclose, below,
+# and must match the sealed digest.
+PRESENTATION_JSON=
+if [[ "$MODE" == "judged" ]]; then
+  # The pack-compiler convention (scripts/pack_compile.py): a compiled.json
+  # always has a presentation.json beside it. `${SPEC/compiled.json/presentation.json}`
+  # is a no-op (equals $SPEC itself) for any --spec not literally named
+  # "compiled.json" -- guarded explicitly rather than relying on an unlikely
+  # coincidence, so a differently-named contract skips this step cleanly
+  # instead of trying to read its own compiled.json as a presentation file.
+  candidate="${SPEC/compiled.json/presentation.json}"
+  if [[ "$candidate" != "$SPEC" && -f "$candidate" ]]; then
+    PRESENTATION_JSON="$candidate"
+    step "seal the presentation block's digest in the Result v0"
+    SEALED_RESULT_V0="$WORK/result-v0-with-presentation-digest.json"
+    python3 "$REPO/scripts/wire_presentation.py" seal --presentation "$PRESENTATION_JSON" \
+      --result "$RESULT_V0" --out "$SEALED_RESULT_V0" || fail "could not pin $PRESENTATION_JSON's digest in the Result v0"
+    RESULT_V0="$SEALED_RESULT_V0"
+  fi
+fi
+
 step "capsulectl book result build: seal the Result v0 into the book"
 "$CAPSULECTL" book result build --profile "$PROFILE" --result "$RESULT_V0" --out "$WORK/result-sealed.json" \
   | tee "$WORK/result-build.json"
@@ -202,22 +229,21 @@ uncheckpointed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); pr
 [[ "$uncheckpointed" -eq 0 ]] || fail "$uncheckpointed records in the disclosed bundle have no membership entry"
 BUNDLE="$WORK/bundle.json"
 
-if [[ "$MODE" == "judged" ]]; then
-  # The pack-compiler convention (scripts/pack_compile.py): a compiled.json
-  # always has a presentation.json beside it. `${SPEC/compiled.json/presentation.json}`
-  # is a no-op (equals $SPEC itself) for any --spec not literally named
-  # "compiled.json" -- guarded explicitly rather than relying on an unlikely
-  # coincidence, so a differently-named contract skips this step cleanly
-  # instead of trying to read its own compiled.json as a presentation file.
-  PRESENTATION_JSON="${SPEC/compiled.json/presentation.json}"
-  if [[ "$PRESENTATION_JSON" != "$SPEC" && -f "$PRESENTATION_JSON" ]]; then
-    step "wire the pack's own presentation block into the bundle"
-    BUNDLE="$WORK/bundle-wired.json"
-    WIRED=$(python3 "$REPO/scripts/wire_presentation.py" --bundle "$WORK/bundle.json" \
-      --presentation "$PRESENTATION_JSON" --out "$BUNDLE") || fail "could not wire $PRESENTATION_JSON into the bundle"
-    echo "$WIRED"
-    DEFAULT_CARD=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['card'])" "$WIRED")
-  fi
+if [[ -n "$PRESENTATION_JSON" ]]; then
+  step "wire the pack's own presentation block into the bundle (must match the sealed digest)"
+  BUNDLE="$WORK/bundle-wired.json"
+  WIRED=$(python3 "$REPO/scripts/wire_presentation.py" --bundle "$WORK/bundle.json" \
+    --presentation "$PRESENTATION_JSON" --sealed-result "$WORK/result-sealed.json" --out "$BUNDLE") \
+    || fail "could not wire $PRESENTATION_JSON into the bundle"
+  echo "$WIRED"
+  DEFAULT_CARD=$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['card'])" "$WIRED")
+  # Read back through the disclosed root, the way a page reads it: the block on
+  # the bundle must match the digest inside the sealed Result.
+  LABEL=$(python3 "$REPO/scripts/wire_presentation.py" label --bundle "$BUNDLE") \
+    || fail "could not read the wired bundle's presentation label"
+  echo "$LABEL"
+  [[ "$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['label'])" "$LABEL")" == "producer-signed" ]] \
+    || fail "the wired presentation block does not match the digest in the sealed Result"
 fi
 CARD=${CARD:-$DEFAULT_CARD}
 

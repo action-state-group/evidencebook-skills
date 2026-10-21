@@ -71,16 +71,25 @@ Both converge on the same tail (`capsulectl book result build` → checkpoint �
 (`scripts/wire_presentation.py`) and picks the card: `eu-ai-act-compliance/v1`
 → `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
 own text (check questions, criterion wording, obligation titles and
-plain-language summaries), added after `disclose`: no signed record covers it,
-and the page says so. On the outcome card the wiring adds a `producer_note`,
-which the renderer shows under its own "Producer's note · presentation text,
-not evidence" label, stating that the producer added the block and no signed
-record covers it; the card's own checks and wording come from the sealed
-reports, not from the block. The obligation card labels the producer's mapping
-itself, so its block is copied unchanged. The next step pins the
-presentation block's digest inside the sealed Result (`presentation_digest`),
-not in a new record; until then the "producer's note · not evidence" label
-stands. `--attach-input-originals`
+plain-language summaries), added after `disclose`, outside the signed records.
+Its digest is not: before `result build`, `wire_presentation.py seal` pins
+sha256(JCS(block)) of the block exactly as it will be wired inside the Result
+as `x-presentation-digest` (`{template, digest_alg, digest}`; Result v0 is a
+closed document, so the member takes the spec's `x-` extension form), and the
+producer's signature over the Result covers it. No new record is added. After
+`disclose` the same block is wired, refused if it doesn't match, and read back
+with `wire_presentation.py label`: a block that matches is the producer's
+signed wording, and a block changed by even one character afterwards reads as
+"unsigned producer text". The words stay presentation, never evidence: every
+verdict and count comes from the signed claims, and page wording still comes
+from the renderer, never the bundle (presentation contract §6). On the outcome
+card the wiring adds a `producer_note`, which the renderer shows under its own
+"Producer's note · presentation text, not evidence" label; the card's own
+checks and wording come from the sealed reports, not from the block. The
+obligation card labels the producer's mapping itself, so its block is copied
+unchanged. The renderers don't yet compare the block against the sealed digest
+(issue #29's viewer follow-up), so until they do the page keeps its
+"not evidence" labels. `--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it
 discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
 day's `result-v0-*.json` is merged into one Result v0
