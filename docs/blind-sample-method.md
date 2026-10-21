@@ -34,10 +34,11 @@ gap is never filled from another stratum. A report that states k of n also state
 
 **Grader: a blind expert.** One person grades the sample, blind to the judge's verdict. A
 model never stands in for the grader, and no rating is filled in from a timeout. "Expert"
-claims a qualification, so each report states what makes the grader an expert for that
-pack (for example, "airline support lead" or "EU AI Act counsel"). The role, that
-qualification and, where the report's terms allow it, the person are to be recorded in
-each `human-rating/v1`; no sealed record carries them yet (see [Not yet run](#not-yet-run)).
+claims a qualification, so each report states in its text what makes the grader an expert
+for that pack (for example, "airline support lead" or "EU AI Act counsel"). Each
+`human-rating/v1` is to record the role in `rater.role`, the person in `rater.id` where
+the report's terms allow it, and the qualification beside them; no sealed record carries
+any of them yet (see [Not yet run](#not-yet-run)).
 
 The grader receives the packets directory and nothing else. A packet carries the case and
 the evidence the judge had (the rule text, the disclosed facts, the criteria), never the
@@ -91,8 +92,8 @@ reports are drawn and counted like any other verdict:
 
 Agreement as **k of n** per judge pin (n is the rated cases for that pin), the drawn n,
 the shortfall and its reasons, the manifest's capsule id, and the grader's role and
-qualification once a record carries them (see [Not yet run](#not-yet-run)). Never a score, a rate presented as accuracy,
-or a rating of the agent.
+qualification (in its text until a record carries them; see [Not yet run](#not-yet-run)).
+Never a score, a rate presented as accuracy, or a rating of the agent.
 
 ## Not yet run
 
@@ -109,9 +110,11 @@ or a rating of the agent.
 - The 20 is meant to be `met` and `not_met` only. Today `not_evaluable` reports are drawn,
   shown and counted as [Withheld cases](#withheld-cases) says, so a report states k of n
   with them in it until the runner leaves them out.
-- No sealed record holds the grader's role or qualification yet: `human-rating/v1` and
-  `calibration-summary/v1` have no field for either, so a report can't state them until
-  one is added.
+- No sealed record holds the grader's role or qualification yet. The spec's
+  `human-rating/v1` has `rater.role` and `rater.id`, but `run_weekly.py` doesn't seal
+  `rater`. No record shape has a field for the qualification, and
+  `calibration-summary/v1` carries neither. Until they do, a report states the role and
+  qualification in its text, and no sealed record backs them.
 - `blind_packet()` does not apply `disclosure.suppress` yet (only `pack_compile.py`
   checks the list), so a pack with suppressed fields can't hand out today's packets as
   they are.
