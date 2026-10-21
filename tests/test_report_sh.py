@@ -142,6 +142,11 @@ class ReportShJudgedPath(unittest.TestCase):
         days = {c["id"].split("::")[0] for c in self.sealed()["claims"]}
         self.assertEqual(days, {"case-2026-10-02"})
         self.assertEqual(len(list(work.glob("run.*"))), 2)
+        # --work/last-run is the newest run's directory.
+        last = work / "last-run"
+        self.assertTrue(last.is_symlink())
+        claims = json.loads((last / "rollup" / "result-v0-2026-10-02.json").read_text())["claims"]
+        self.assertTrue(all("2026-10-02" in c["id"] for c in claims))
 
     def test_live_sets_the_real_backend_even_with_an_inherited_mock(self):
         proc = self.run_report("--date", "2026-10-01", "--judge-backend", "live",

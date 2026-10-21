@@ -30,8 +30,8 @@
 # below runs in the CALLER's own environment (HOME/XDG_CONFIG_HOME
 # unchanged). Intermediate files (never the final --out) go in a fresh,
 # empty run directory: under --work when given (a new run.XXXXXX inside it,
-# so a reused --work never mixes an earlier run's results into this one),
-# else a temp directory.
+# so a reused --work never mixes an earlier run's results into this one, and
+# --work/last-run points at the newest), else a temp directory.
 #
 # --card defaults to the spec's own `presentation.card` (report-spec path)
 # or, on the judged path, the card the pack's own presentation block selects
@@ -100,11 +100,14 @@ fi
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ -n "$WORK" ]]; then
   mkdir -p "$WORK"
-  WORK=$(mktemp -d "$WORK/run.XXXXXX")
+  WORK_BASE=$WORK
+  WORK=$(mktemp -d "$WORK_BASE/run.XXXXXX")
+  ln -sfn "$(basename "$WORK")" "$WORK_BASE/last-run"
 else
   WORK=$(mktemp -d)
 fi
 step() { printf '\n== %s ==\n' "$*"; }
+printf 'report.sh: run directory %s\n' "$WORK"
 fail() { printf 'report.sh: FAIL -- %s\n' "$*" >&2; exit 1; }
 
 # the day range this report covers. A plain command-substitution assignment
