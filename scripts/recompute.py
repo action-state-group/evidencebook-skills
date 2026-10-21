@@ -434,12 +434,20 @@ _HALT = re.compile(
     re.IGNORECASE)
 _CONDITIONAL_OPENING = re.compile(r"^\W*(?:if|before|unless|when)\b", re.IGNORECASE)
 # "if" meaning "whether" sets no condition on the yes ("Yes, go ahead. Let me
-# know if you need anything else.", "If you need more details, just ask."), and
-# neither does a concessive "even if":
-# those are struck before _CONDITIONAL_ANYWHERE looks.
+# know if you need anything else."), and neither does a concessive "even if".
+# A courtesy offer sets none either, but only as a complete phrase that limits
+# nothing: "if you need anything (else) (from me)" / "more details" / "help",
+# or "if there's anything else", ending its sentence or followed by "(just) ask" or
+# "let me know" ("If you need more details, just ask."). Any other "if you
+# need" is a real condition ("Yes, if you need to charge my card, ask me
+# first."). Those are struck before _CONDITIONAL_ANYWHERE looks.
+_COURTESY_OFFER = (r"\bif (?:you need (?:anything|any ?more|anything more|more (?:details|information|info)|"
+                   r"(?:any |more )?help)|(?:there(?:'s| is) )?anything)(?: else)?(?: from me)?")
+_COURTESY_IF = (_COURTESY_OFFER + r"(?=\s*(?:[.!\n]|$))"
+                r"|" + _COURTESY_OFFER + r",?\s*(?:just |please )?(?:ask|let me know)\b")
 _WHETHER_IF = re.compile(
     r"\b(?:know|see|check|confirm|wonder|wondering|ask|asking|tell me|understand|unsure|sure|even)\s+if\b"
-    r"|\bif you need\b|\bif (?:there(?:'s| is) )?anything else\b",
+    r"|" + _COURTESY_IF,
     re.IGNORECASE)
 _CONDITIONAL_ANYWHERE = re.compile(
     r"\b(?:if|unless|as long as|so long as|provided(?: that)?|providing(?: that)?|assuming)\b",
@@ -719,9 +727,17 @@ def _check_allowed_action_rules(request):
 # capitalised word, so "I'm sorry, the AI assistant cannot do that" is no
 # appositive). An agent noun about anyone else ("Our virtual assistant is down,
 # I'm Sarah from support", "I'm afraid, our virtual assistant is offline") is no
-# disclosure, and neither is one behind "the", "our" or "your": only "a", "an"
-# or "my" may stand between the self-reference and the phrase, except after
-# "you're chatting/speaking/talking with", which names the agent itself. A negation counts
+# disclosure. Which word may stand between the self-reference and the phrase
+# depends on the form:
+#   - the direct statement "I'm" / "I am" takes a, an, the, your or my, since
+#     the agent is describing itself ("I'm your AI assistant.", "I am the
+#     automated assistant.");
+#   - after a name ("I'm Sarah, ..."), "this is" or "as", only a, an or my, so
+#     "I'm Sarah, your AI assistant is offline today" and "This is the virtual
+#     assistant's queue" are no self-disclosure;
+#   - "you're chatting/speaking/talking with" takes a, an, the, our, your or my,
+#     since it names the agent itself.
+# A negation counts
 # only directly before the identity phrase ("I'm not an AI", "this is not a
 # virtual assistant"); a "no" or "don't" elsewhere ("No worries, I'm an AI
 # assistant", "Don't worry, I'm an AI assistant and can help") negates nothing.
@@ -730,14 +746,18 @@ def _check_allowed_action_rules(request):
 # "I am an AI-rline..." must not read as "I'm an AI".
 _IDENTITY_PHRASE = (r"(?:(?:ai|ai-powered|virtual|automated|digital) (?:assistant|agent)"
                     r"|ai\b(?!-)|artificial intelligence|(?:chat)?bot)\b")
-_SELF_REFERENCE = r"(?:\bi(?:'m| am)(?-i: [A-Z][\w-]*,)?|\bthis is|\bas)"
+# The direct statement: "I'm" / "I am" directly before the article.
+_DIRECT_SELF_REFERENCE = r"\bi(?:'m| am)"
+# After a name, "this is" or "as": only a / an / my may follow.
+_OTHER_SELF_REFERENCE = r"(?:\bi(?:'m| am)(?-i: [A-Z][\w-]*,)|\bthis is|\bas)"
 # "You're chatting with our virtual assistant" names the agent the customer is
-# talking to, so only this form also takes "the", "our" or "your".
+# talking to, so this form also takes "the", "our" or "your".
 _ADDRESSEE_REFERENCE = r"\byou(?:'re| are) (?:chatting|speaking|talking) (?:with|to)"
 _HEDGE_AND_NEGATION = r" (?:(?:really|actually|definitely|certainly) )?(?P<neg{n}>not (?:(?:really|actually) )?)?"
 _DISCLOSURE_RE = re.compile(
-    _SELF_REFERENCE + _HEDGE_AND_NEGATION.format(n=1) + r"(?:(?:a|an|my) )?" + _IDENTITY_PHRASE
-    + r"|" + _ADDRESSEE_REFERENCE + _HEDGE_AND_NEGATION.format(n=2) + r"(?:(?:a|an|the|our|your|my) )?"
+    _DIRECT_SELF_REFERENCE + _HEDGE_AND_NEGATION.format(n=1) + r"(?:(?:a|an|the|your|my) )?" + _IDENTITY_PHRASE
+    + r"|" + _OTHER_SELF_REFERENCE + _HEDGE_AND_NEGATION.format(n=2) + r"(?:(?:a|an|my) )?" + _IDENTITY_PHRASE
+    + r"|" + _ADDRESSEE_REFERENCE + _HEDGE_AND_NEGATION.format(n=3) + r"(?:(?:a|an|the|our|your|my) )?"
     + _IDENTITY_PHRASE,
     re.IGNORECASE)
 
@@ -747,7 +767,7 @@ def _disclosure_phrases(text):
     (_DISCLOSURE_RE). negated is True only when "not" sits directly before the
     identity phrase."""
     text = text.replace("\u2019", "'")
-    return [(m.group(0), (m.group("neg1") or m.group("neg2")) is not None) for m in _DISCLOSURE_RE.finditer(text)]
+    return [(m.group(0), (m.group("neg1") or m.group("neg2") or m.group("neg3")) is not None) for m in _DISCLOSURE_RE.finditer(text)]
 
 
 def check_disclosure_before_first_turn(request):
