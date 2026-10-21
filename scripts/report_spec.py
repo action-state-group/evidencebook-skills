@@ -22,8 +22,8 @@ spec's deterministic computation here.
 
 Writes one result-v0-<group>.json per group (day, or whatever --spec's
 group_by names) plus a summary.json -- the same file-naming convention
-rollup_day.py uses, so scripts/report.sh's tail (result build -> checkpoint
--> disclose -> report build) runs identically over either module's output.
+rollup_day.py uses, so scripts/report.sh's tail (book result build ->
+checkpoint -> disclose -> book report build) runs identically over either module's output.
 
 Report spec v1 shape (see scripts/specs/tau2-airline-no-judge.yaml for a worked
 example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DRAFT):
@@ -87,7 +87,7 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
       card: <one of capsule-cli's reportCards, e.g. "outcome", "settlement">
       title_template: <a str.format() template over {title}, {period}, and
                        every metric name, rendered once per group and passed
-                       to `capsulectl report build --presentation` -- the
+                       to `capsulectl book report build --presentation` -- the
                        Result v0 View block's own schema is closed over
                        spec_version/producer_name/logo_data_url/title (no room
                        for a custom metrics block), so the computed sums/counts

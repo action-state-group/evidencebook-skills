@@ -3,7 +3,7 @@
 
 The exercise scripts (run_daily.py, run_weekly.py) seal their own steps. This is
 for the actions a skill runs by hand from its SKILL.md: install, discover, map,
-`contract validate`, `result build`, and any other step. It runs the command,
+`contract validate`, `book result build`, and any other step. It runs the command,
 passes its stdout and stderr through unchanged, and seals one record of it with
 `capsulectl publish` (scripts/capsulectl_calls.py: skill_action_record).
 
