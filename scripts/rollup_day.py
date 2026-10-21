@@ -35,6 +35,10 @@ written to --out as plain files.
 demo/tau2/compiled.json) compiles no judge.model_id, and a contract with judged
 clauses and no model id is refused.
 
+Each claim's tier is what that session's own report records (its
+epistemic_type), so a judged criterion whose recompute pre-check decided a
+session reads `recomputed` for that session and `judged` for the rest.
+
 Writes one JSON file per fully-judged case (rollup + the Result v0 document), one
 Result v0 per day, and a summary.json whose per-day headline is re-derived from
 each day document alone (scripts/result_v0.py:headline_from_result).
@@ -205,6 +209,43 @@ def clause_tiers(spec):
     return {clause["id"]: effective_tier(clause, switches) for clause in spec["clauses"]}
 
 
+# A sealed report's own epistemic_type (scripts/run_daily.py:build_report) ->
+# the Result v0 claim tier it supports.
+_DETERMINATION_TIERS = {"semantic_judgment": "judged", "recomputed_determination": "recomputed"}
+
+
+def report_determinations(capsule_bodies):
+    """capsule_id -> the tier its evaluation-report/v1 actually records
+    ("judged" for a semantic_judgment, "recomputed" for a
+    recomputed_determination), for every report that names one. A judged
+    clause whose recompute pre-check decided a session is sealed as a
+    recomputed_determination for that session only (run_daily.py's
+    precheck_answer()), so one criterion can be recomputed in some sessions
+    and judged in others: the claim's tier must come from the report, not
+    from the clause's static tier."""
+    return {capsule_id: body["epistemic_type"] for capsule_id, body in capsule_bodies
+            if isinstance(body, dict) and body.get("record_type") == "evaluation-report/v1"
+            and body.get("epistemic_type") is not None}
+
+
+def case_tiers(clause_verdicts, tiers, determinations=None):
+    """criterion_id -> tier for ONE case: each criterion's own report's
+    determination (report_determinations()) when it records one, else the
+    clause's effective tier (clause_tiers()). A report recording an
+    epistemic_type this rollup does not know is refused (RollupError), never
+    guessed."""
+    out = dict(tiers)
+    for cid, entry in clause_verdicts.items():
+        capsule_id = entry[1]
+        kind = (determinations or {}).get(capsule_id)
+        if kind is None:
+            continue
+        if kind not in _DETERMINATION_TIERS:
+            raise RollupError(f"report {capsule_id} for {cid!r} records an unknown epistemic_type {kind!r}")
+        out[cid] = _DETERMINATION_TIERS[kind]
+    return out
+
+
 def partition_stale(clause_verdicts, all_criteria):
     """Split a case's {clause_id: (verdict, capsule_id, source_capsule_id)} into (current, stale).
     `stale` is every clause id the current contract no longer defines --
@@ -221,7 +262,8 @@ def partition_stale(clause_verdicts, all_criteria):
 
 
 def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, contract_ref, tiers,
-                allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                allow_out_of_scope=False, never_out_of_scope=frozenset(), determinations=None):
+    tiers = case_tiers(clause_verdicts, tiers, determinations)
     verdicts = {cid: v for cid, (v, _, _) in clause_verdicts.items()}
     digests = {cid: cap_id for cid, (_, cap_id, _) in clause_verdicts.items()}
     source_capsule_ids = {cid: src for cid, (_, _, src) in clause_verdicts.items() if src}
@@ -241,10 +283,11 @@ def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, co
 
 
 def day_document(period, day_cases, generated_at, all_criteria, contract_ref, tiers,
-                 allow_out_of_scope=False, never_out_of_scope=frozenset()):
+                 allow_out_of_scope=False, never_out_of_scope=frozenset(), determinations=None):
     """Pure: one day's Result v0 over every case that can be rolled up, plus the
     list of cases left out and why -- nothing is dropped silently. Returns
-    (document or None, skipped)."""
+    (document or None, skipped). `determinations` (report_determinations())
+    sets each case's claim tiers from its own reports (case_tiers())."""
     case_rollups, skipped, source_capsule_ids = [], [], {}
     for case_id, clause_verdicts in sorted(day_cases.items()):
         current, stale = partition_stale(clause_verdicts, all_criteria)
@@ -256,13 +299,14 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
         digests = {cid: cap_id for cid, (_, cap_id, _) in current.items()}
         case_sources = {cid: src for cid, (_, _, src) in current.items() if src}
         try:
-            build_result_v0_for_day(period, [(case_id, verdicts, digests, tiers)], generated_at, all_criteria,
-                                    contract_ref, allow_out_of_scope, never_out_of_scope,
+            this_case_tiers = case_tiers(current, tiers, determinations)
+            build_result_v0_for_day(period, [(case_id, verdicts, digests, this_case_tiers)], generated_at,
+                                    all_criteria, contract_ref, allow_out_of_scope, never_out_of_scope,
                                     source_capsule_ids={case_id: case_sources})
         except RollupError as e:
             skipped.append({"case_id": case_id, "reason": str(e)})
             continue
-        case_rollups.append((case_id, verdicts, digests, tiers))
+        case_rollups.append((case_id, verdicts, digests, this_case_tiers))
         source_capsule_ids[case_id] = case_sources
     if not case_rollups:
         return None, skipped
@@ -342,6 +386,7 @@ def main(argv):
         by_case, bodies = collect_reports(args.capsulectl, args.profile, contract, expected_pin, expected_pack,
                                           conflicts)
         by_day = group_reports_by_day(bodies, contract, expected_pin, expected_pack, conflicts)
+        determinations = report_determinations(bodies)
     except (EvidenceUnavailable, RollupError) as e:
         print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
         return 2
@@ -358,7 +403,7 @@ def main(argv):
             continue
         try:
             case_rollup = rollup_case(case_id, current, args.generated_at, checks, all_criteria, contract_ref, tiers,
-                                      allow_out_of_scope, never_oos)
+                                      allow_out_of_scope, never_oos, determinations)
         except RollupError as e:
             incomplete.append({"case_id": case_id, "error": str(e)})
             continue
@@ -372,7 +417,7 @@ def main(argv):
     day_results = []
     for period, day_cases in sorted(by_day.items(), key=lambda kv: (kv[0] is None, kv[0])):
         day_doc, skipped = day_document(period, day_cases, args.generated_at, all_criteria, contract_ref, tiers,
-                                        allow_out_of_scope, never_oos)
+                                        allow_out_of_scope, never_oos, determinations)
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
