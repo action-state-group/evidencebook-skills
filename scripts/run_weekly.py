@@ -22,6 +22,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
+from rollup_day import safe_filename  # noqa: E402
 from run_daily import DEFAULT_REFERENCE_FILES, judge_reference_files  # noqa: E402
 from skill_record import emit_skill_action, json_digest, skill_action_record  # noqa: E402
 
@@ -49,10 +50,17 @@ def blind_packet(report, case, reference_files=None):
     return packet
 
 
-def checked_ratings(ratings, sampled_case_ids):
+def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset()):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
-    make rated exceed drawn and the shortfall go negative."""
+    make rated exceed drawn and the shortfall go negative. `out_of_scope` is a
+    rating only when the contract lets the judge answer it: the switch
+    out_of_scope_verdict is on AND the sampled report's clause is not
+    never_out_of_scope (`never_out_of_scope_cases` names the sampled cases
+    whose clause is). The sample then holds out_of_scope reports, and the
+    reviewer must be able to agree with them; on a clause that can never be
+    out of scope, such a rating would be sealed and count against the judge."""
+    base = {"met", "not_met", "not_evaluable"}
     seen = set()
     for r in ratings:
         case_id = r.get("case_id")
@@ -60,8 +68,10 @@ def checked_ratings(ratings, sampled_case_ids):
             raise ValueError(f"rating for a case outside the sample: {case_id!r}")
         if case_id in seen:
             raise ValueError(f"more than one rating for case {case_id!r}")
-        if r.get("rating") not in {"met", "not_met", "not_evaluable"}:
-            raise ValueError(f"rating for {case_id!r} is not met, not_met or not_evaluable")
+        allowed = base | ({"out_of_scope"} if allow_out_of_scope and case_id not in never_out_of_scope_cases
+                          else set())
+        if r.get("rating") not in allowed:
+            raise ValueError(f"rating for {case_id!r} is not one of {', '.join(sorted(allowed))}")
         seen.add(case_id)
     return ratings
 
@@ -151,7 +161,10 @@ def main(argv):
         for rid, body in selected:
             case = payload(ctl, profile, body["source_capsule_id"])
             packet = blind_packet(body, case, reference_files)
-            name = body["case_id"].replace(":", "_")
+            # A case id is book-sourced data (it can carry an agent model,
+            # demo/backfill/backfill.py --case-model): escaped the same way
+            # every other per-case file name is, never interpolated raw.
+            name = safe_filename(body["case_id"])
             (packets / f"{name}.json").write_text(json.dumps(packet, indent=2))
             by_case[body["case_id"]] = (rid, body)
             written[name] = packet
@@ -165,7 +178,11 @@ def main(argv):
 
         # 4. The human's ratings, one record each, chained to the report audited.
         try:
-            ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case))
+            never_oos_clauses = {c["id"] for c in spec.get("clauses", []) if c.get("never_out_of_scope")}
+            never_oos_cases = {cid for cid, (_, b) in by_case.items() if b.get("clause_id") in never_oos_clauses}
+            ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case),
+                                      bool((spec.get("switches") or {}).get("out_of_scope_verdict")),
+                                      never_oos_cases)
         except ValueError as e:
             raise EvidenceUnavailable(f"ratings refused: {e}") from e
         rated = []

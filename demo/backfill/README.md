@@ -6,7 +6,7 @@ benchmark and ships its recorded runs under `data/tau2/results/final/*.json`;
 each file holds `simulations[]` for every `(task_id, trial)`, with the real agent
 and user-simulator transcript. This script reads those shipped results only — no
 agent run, no user simulator, no model/LLM API key, and nothing is synthesized.
-It has exactly two arguments:
+It takes two required arguments:
 
 ```sh
 DEMO=~/.local/share/evaluation-runs/tau2-airline-eval
@@ -29,11 +29,39 @@ Capsule's Operator/Developer are fixed backfill-provenance labels (`tau2-demo`,
 `tau2@backfill-v1`), and the Timestamp is the simulation's own timestamp; a
 simulation without a usable one is rejected rather than stamped with `now()`.
 
+### `--case-model`: several agents in one book
+
+By default a case is one task and trial, so two agents' runs of the same task
+and trial would be the same case. `--case-model` also names the agent model
+(the results file's `agent_info.llm`) in each case:
+
+```sh
+python3 backfill.py --results "$RES" --out "$DEMO/backfill" --case-model
+```
+
+The flag changes the case's identity, not only its payload:
+
+- the `case` block gains `agent_model`;
+- the case id becomes `tau2:<domain>:<agent_model>:task-<id>:trial-<n>`
+  (default `tau2:<domain>:task-<id>:trial-<n>`);
+- the ActionID becomes `urn:tau2:<domain>:<agent_model>:task-<id>:trial-<n>`.
+
+The model must match `[A-Za-z0-9._-]+`: no `:` (the case id's separator) and no
+`/` (a path separator; the case id names files). A model such as `...-v1:0` or
+`openai/gpt-4.1` is refused before anything is written, because the book is
+append-only and every reader would refuse the record later. A results file with
+no `agent_info.llm` is refused too.
+
+**Use one mode per book.** A book that mixes cases sealed with and without
+`--case-model` holds two case-id shapes for the same task and trial, and
+nothing merges them.
+
 ## Payload layout
 
 The bound `payload` carries the authenticated interaction:
 
-- `case`: `{benchmark, domain, task_id, trial}`
+- `case`: `{benchmark, domain, task_id, trial}`, plus `agent_model` with
+  `--case-model` (see above)
 - `provenance`: results file, agent LLM, user-simulator LLM, simulation id, seed,
   termination reason
 - `agent_interaction`: `{messages: [...]}` — the real transcript (role, content,

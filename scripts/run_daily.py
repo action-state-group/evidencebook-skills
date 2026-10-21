@@ -382,7 +382,10 @@ def main(argv):
         stamp = f"{day}T23:59:59Z"
         for capsule_id, body in cases:
             verify(ctl, profile, capsule_id, work)
-            case_id = case_id_of(body["case"])
+            try:
+                case_id = case_id_of(body["case"])
+            except ValueError as e:
+                raise EvidenceUnavailable(f"case record {capsule_id}: {e}") from e
 
             answers, prechecked = case_answers(body, spec, switches, root, args.judge_cmd, args.judge_model_id,
                                                allow_out_of_scope, judge_batch_mode, min_confidence,

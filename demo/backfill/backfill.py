@@ -12,8 +12,8 @@ the CLL.
 
 Each request's bound `payload` carries the real `agent_interaction` (transcript +
 tool calls, with each call's `requestor` attribution), a `case` block
-(benchmark/domain/task_id/trial), and `provenance`. The gold outcome — tau2's own
-`reward_info` and the task's `evaluation_criteria` — is deliberately excluded;
+(benchmark/domain/task_id/trial, plus agent_model with --case-model), and
+`provenance`. The gold outcome — tau2's own `reward_info` and the task's `evaluation_criteria` — is deliberately excluded;
 the judge reads the desired outcome independently from the dataset by
 `payload.case.task_id`.
 
@@ -29,6 +29,9 @@ import json
 import pathlib
 import re
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts"))
+from capsulectl_calls import check_agent_model  # noqa: E402
 
 OPERATOR = "tau2-demo"
 DEVELOPER = "tau2@backfill-v1"
@@ -72,20 +75,39 @@ def trim_message(message: dict) -> dict:
     return kept
 
 
-def build_request(sim: dict, info: dict, results_name: str, domain: str) -> dict:
+def case_block(domain: str, task_id: object, trial: object, agent_llm: object, with_model: bool) -> dict:
+    """The sealed `case` block. With `with_model`, it also names the agent model the
+    results file ran, so runs of the same task and trial by different agents are
+    different cases (scripts/capsulectl_calls.case_id_of puts it in the case id)."""
+    case = {"benchmark": "tau2", "domain": domain, "task_id": task_id, "trial": trial}
+    if with_model:
+        if not isinstance(agent_llm, str) or not agent_llm:
+            raise SystemExit("--case-model: the results file names no agent_info.llm")
+        try:  # checked here, before sealing: the book is append-only
+            case["agent_model"] = check_agent_model(agent_llm)
+        except ValueError:
+            raise SystemExit(f"--case-model: agent model {agent_llm!r} can't go in a case id; it must match "
+                             f"[A-Za-z0-9._-]+ (no ':' or '/'). Rename the agent_info.llm in the results "
+                             f"file, or backfill without --case-model")
+    return case
+
+
+def build_request(sim: dict, info: dict, results_name: str, domain: str, with_model: bool = False) -> dict:
     task_id = sim["task_id"]
     trial = sim["trial"]
+    case = case_block(domain, task_id, trial, (info.get("agent_info") or {}).get("llm"), with_model)
+    agent = f"{case['agent_model']}:" if with_model else ""
     return {
         "spec_version": "capsule-seal-request/v1",
         "capsule": {
-            "ActionID": f"urn:tau2:{domain}:task-{task_id}:trial-{trial}",
+            "ActionID": f"urn:tau2:{domain}:{agent}task-{task_id}:trial-{trial}",
             "ActionType": "fyi",
             "Operator": OPERATOR,
             "Developer": DEVELOPER,
             "Timestamp": normalize_timestamp(sim.get("timestamp") or sim.get("start_time"), sim.get("id")),
         },
         "payload": {
-            "case": {"benchmark": "tau2", "domain": domain, "task_id": task_id, "trial": trial},
+            "case": case,
             "provenance": {
                 "results_file": results_name,
                 "agent_llm": (info.get("agent_info") or {}).get("llm"),
@@ -111,6 +133,9 @@ def main(argv: list[str]) -> int:
                     help="output directory; one seal request per task (its run for --trial)")
     ap.add_argument("--trial", type=int, default=0,
                     help="which of each task's trials to seal (default 0; tau2's 4-trial files hold 0-3)")
+    ap.add_argument("--case-model", action="store_true",
+                    help="also name the agent model in each case (and so in its case id), so several "
+                         "agents' runs of one task and trial can share a book")
     args = ap.parse_args(argv)
     if args.trial < 0:
         ap.error("--trial must be 0 or more")
@@ -129,20 +154,26 @@ def main(argv: list[str]) -> int:
     if not chosen:
         raise SystemExit(f"{args.results} has no trial-{args.trial} simulations")
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    # clear our own prior outputs so a reused dir can't leak a different/smaller run
-    for stale in args.out.glob("task-*.json"):
-        stale.unlink()
+    # Build every request before touching --out: build_request() refuses a bad
+    # --case-model agent model (check_agent_model), and a refused run must leave
+    # the previous run's request files where they are.
     # NOTE: CLL sequence is set by the publish order, which is the shell glob over these
     # filenames (lexical: task-0, task-1, task-10, …, task-2), not task_id order. Only a
     # per-case selection (by capsule/case id) is reliable; do not assume sequence == task.
     used: dict[str, int] = {}
+    outputs = []
     for sim in sorted(chosen, key=lambda s: str(s["task_id"])):
-        request = build_request(sim, info, args.results.name, domain)
+        request = build_request(sim, info, args.results.name, domain, args.case_model)
         stem = f"task-{safe_name(sim['task_id'])}"
         n = used.get(stem, 0)
         used[stem] = n + 1
-        name = f"{stem}.json" if n == 0 else f"{stem}-{n}.json"
+        outputs.append((f"{stem}.json" if n == 0 else f"{stem}-{n}.json", request))
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    # clear our own prior outputs so a reused dir can't leak a different/smaller run
+    for stale in args.out.glob("task-*.json"):
+        stale.unlink()
+    for name, request in outputs:
         (args.out / name).write_text(json.dumps(request, indent=2) + "\n")
     print(f"wrote {len(chosen)} seal requests (domain={domain}, one per task, trial {args.trial}) to {args.out}")
     return 0

@@ -79,12 +79,33 @@ def committed_on(entry, day):
     return parse_rfc3339(entry["appended_at"]).date() == day
 
 
+AGENT_MODEL_PATTERN = re.compile(r"[A-Za-z0-9._-]+")
+
+
+def check_agent_model(model):
+    """The one check on a case's agent_model, shared by the writer
+    (demo/backfill/backfill.py, at seal time) and every reader (case_id_of).
+    The model goes into the case id, the ActionID and, via the case id, file
+    names (blind packets, per-case results), so it is restricted to
+    [A-Za-z0-9._-]+: no ':' (the case id's own separator) and no '/' (a path
+    separator). Real ids such as Bedrock's `...-v1:0` or `openai/gpt-4.1` are
+    refused rather than sealed in a form every reader would later refuse: the
+    book is append-only. Returns the model; raises ValueError otherwise."""
+    if not isinstance(model, str) or not AGENT_MODEL_PATTERN.fullmatch(model):
+        raise ValueError(f"case agent_model must match [A-Za-z0-9._-]+ (no ':' or '/'), got {model!r}")
+    return model
+
+
 def case_id_of(case):
     """The one case_id convention every reader of a sealed tau2 case shares
     (scripts/run_daily.py, scripts/rollup_day.py's per-case output filenames,
     scripts/report_spec.py's own case rows) -- demo/backfill/backfill.py's own
-    `case` block shape (benchmark/domain/task_id/trial), never redefined
-    per-caller."""
+    `case` block shape (benchmark/domain/task_id/trial, plus agent_model when
+    sealed with --case-model), never redefined per-caller."""
+    model = case.get("agent_model")
+    if model is not None:  # demo/backfill/backfill.py --case-model: one agent's run of a task+trial
+        check_agent_model(model)
+        return f"{case['benchmark']}:{case['domain']}:{model}:task-{case['task_id']}:trial-{case['trial']}"
     return f"{case['benchmark']}:{case['domain']}:task-{case['task_id']}:trial-{case['trial']}"
 
 

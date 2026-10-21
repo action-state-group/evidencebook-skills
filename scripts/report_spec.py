@@ -289,8 +289,12 @@ def select_case_rows(capsulectl, profile, date_from=None, date_to=None, fields=N
         if not isinstance(body, dict) or not isinstance(body.get("case"), dict):
             continue
         messages = (body.get("agent_interaction") or {}).get("messages")
+        try:
+            case_id = case_id_of(body["case"])
+        except ValueError as e:
+            raise ReportSpecError(f"case record {entry['capsule_id']}: {e}") from e
         row = {
-            "case_id": case_id_of(body["case"]),
+            "case_id": case_id,
             "day": day.isoformat(),
             "tool_call_count": _tool_call_count(messages),
             "__capsule_id": entry["capsule_id"],
