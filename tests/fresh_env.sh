@@ -59,10 +59,11 @@ step "unit tests of the scripts' pure logic"
 cd "$work/skills"
 CAPSULECTL="$ctl" python3 -m unittest discover -s tests -p 'test_*.py'
 
-step "the EU AI Act pack's published Evidence Contract is what it compiles to, and capsulectl accepts it"
-contract=contracts/eu-ai-act-obligations/0.2.1.json
-python3 scripts/evidence_contract.py compile packs/eu-ai-act-obligations/pack-source.yaml | cmp - "$contract" \
-  || fail "packs/eu-ai-act-obligations compiles to something other than $contract"
+step "the EU AI Act pack's Evidence Contract is published as it compiles, and capsulectl accepts it"
+python3 scripts/evidence_contract.py publish packs/eu-ai-act-obligations/pack-source.yaml >"$work/contract.json" \
+  || fail "the EU AI Act pack does not compile to its published contract: $(cat "$work/contract.json")"
+[[ $(jq -r .written "$work/contract.json") == false ]] || fail "the EU AI Act pack's current version is not published"
+contract=$(jq -r .path "$work/contract.json")
 "$ctl" contract validate "$contract" --schema tests/fixtures/capsule-engine/evidence-contract-v0.json --json \
   | jq -e .valid >/dev/null || fail "capsulectl contract validate refuses $contract"
 printf '%s: valid Evidence Contract v0\n' "$contract"

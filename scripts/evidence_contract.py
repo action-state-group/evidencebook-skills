@@ -85,16 +85,33 @@ def _answers(out_of_scope):
     return _ANSWERS_WITH_OUT_OF_SCOPE if out_of_scope else _ANSWERS
 
 
+# The judge prompt speaks to the model ("passed to you as text"); the contract
+# states the same evidence in the third person.
+_SECOND_PERSON = ("passed to you as text", "supplied to the judge as text")
+
+
 def _judged_evidence(source):
+    """What the judge reads: the pack's judge.subject/evidence, or the default
+    build_judge_prompt uses when a pack names neither."""
     judge = source["judge"]
     if "subject" in judge:
         return judge["subject"], judge["evidence"]
-    return pack_compile._LEGACY_JUDGE_SUBJECT, pack_compile._LEGACY_JUDGE_EVIDENCE
+    return (pack_compile._LEGACY_JUDGE_SUBJECT,
+            [e.replace(*_SECOND_PERSON) for e in pack_compile._LEGACY_JUDGE_EVIDENCE])
 
 
 def from_pack(source):
     """A validated pack source (pack_compile.validate_source) -> the contract."""
     issues = pack_compile.validate_source(source)
+    if isinstance(source, dict) and any(isinstance(c, dict) and "article" in c for c in source.get("checks") or []):
+        # A check citing an article compiles to an obligation whose clause names
+        # the instrument and the article (EC clauseSpec: both non-empty text).
+        if not isinstance(source.get("regulation"), str) or not source["regulation"].strip():
+            issues.append("regulation must be a non-empty string when a check cites an article")
+        for i, check in enumerate(source["checks"]):
+            if isinstance(check, dict) and "article" in check and (
+                    not isinstance(check["article"], str) or not check["article"].strip()):
+                issues.append(f"checks[{i}].article must be a non-empty string")
     if issues:
         raise ContractError("pack source is invalid: " + "; ".join(issues))
     switches = source.get("switches") or {}
@@ -108,7 +125,7 @@ def from_pack(source):
             clause = clauses[f"{check['id']}.{crit['id']}"]
             tier = effective_tier(clause, switches)
             req = {"id": clause["id"]}
-            if check.get("article"):
+            if "article" in check:
                 req["profile"] = "obligation"
             else:
                 req["profile"] = "outcome"
@@ -275,7 +292,11 @@ def load_input(path):
     """A pack source or a report spec, by its own shape."""
     doc = yaml.safe_load(pathlib.Path(path).read_text())
     if isinstance(doc, dict) and doc.get("spec_version") == "report-spec/v1":
-        return from_report_spec(doc)
+        try:  # the runner's own checks first, so a contract never states a spec the runner refuses
+            spec = report_spec.load_spec(path)
+        except report_spec.ReportSpecError as e:
+            raise ContractError(str(e)) from e
+        return from_report_spec(spec)
     if isinstance(doc, dict) and "pack_id" in doc:
         return from_pack(pack_compile._strip_strings(doc))
     raise ContractError(f"{path}: neither a pack source (pack_id) nor a report-spec/v1")

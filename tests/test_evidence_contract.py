@@ -30,6 +30,8 @@ from test_pack_compile import _criterion, minimal_source  # noqa: E402
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 EU_SOURCE = REPO_ROOT / "packs/eu-ai-act-obligations/pack-source.yaml"
+# The golden: the EU pack as it is published here first. A later version is a
+# new file beside it; this one never changes.
 EU_PUBLISHED = REPO_ROOT / "contracts/eu-ai-act-obligations/0.2.1.json"
 SCHEMA = REPO_ROOT / "tests/fixtures/capsule-engine/evidence-contract-v0.json"
 # The EC v0 schema agent-action-capsule's interop profile pins (its Dependency
@@ -47,8 +49,18 @@ def capsulectl():
 
 
 class EUContract(unittest.TestCase):
-    def test_golden_the_published_eu_contract_is_what_the_pack_compiles_to(self):
-        self.assertEqual(ec.to_bytes(ec.from_pack(load_pack(EU_SOURCE))), EU_PUBLISHED.read_bytes())
+    def test_golden_the_eu_pack_compiles_to_its_published_contract(self):
+        # Compared at the pack's current version, so a version bump that
+        # publishes a new file keeps this test meaningful.
+        contract = ec.from_pack(load_pack(EU_SOURCE))
+        path = ec.published_path(contract)
+        self.assertTrue(path.exists(), f"{ec.contract_ref(contract)} is not published: run evidence_contract.py publish")
+        self.assertEqual(ec.to_bytes(contract), path.read_bytes())
+
+    def test_the_first_published_eu_contract_is_kept(self):
+        doc = json.loads(EU_PUBLISHED.read_text())
+        self.assertEqual(ec.contract_ref(doc), "eu-ai-act-obligations@0.2.1")
+        self.assertEqual(len(doc["requirements"]), 12)
 
     def test_recompiling_is_byte_stable(self):
         a = ec.to_bytes(ec.from_pack(load_pack(EU_SOURCE)))
@@ -62,7 +74,6 @@ class EUContract(unittest.TestCase):
         source = load_pack(EU_SOURCE)
         contract = ec.from_pack(source)
         compiled = pack_compile.build_compiled_json(source, "demo/eu-ai-act-obligations")
-        self.assertEqual(ec.contract_ref(contract), "eu-ai-act-obligations@0.2.1")
         self.assertEqual(ec.contract_ref(contract), compiled["contract_ref"])
         self.assertEqual([r["id"] for r in contract["requirements"]], [c["id"] for c in compiled["clauses"]])
         committed = json.loads((REPO_ROOT / "demo/eu-ai-act-obligations/compiled.json").read_text())
@@ -98,8 +109,15 @@ class EUContract(unittest.TestCase):
 
     def test_the_evidence_scope_is_what_the_judge_reads(self):
         reqs = {r["id"]: r for r in ec.from_pack(load_pack(EU_SOURCE))["requirements"]}
-        self.assertIn("the airline policy (`airline-data/policy.md`, passed to you as text)",
+        self.assertIn("the airline policy (`airline-data/policy.md`, supplied to the judge as text)",
                       reqs["art26.consequential_actions_vs_instructions"]["evidence_rule"])
+
+    def test_the_evidence_scope_speaks_of_the_judge_not_to_it(self):
+        text = EU_PUBLISHED.read_text()
+        self.assertNotIn("passed to you", text)
+        self.assertIn("supplied to the judge as text", text)
+        # The judge prompt keeps its own wording; the contract only restates it.
+        self.assertTrue(any(ec._SECOND_PERSON[0] in e for e in pack_compile._LEGACY_JUDGE_EVIDENCE))
 
     def test_presentation_wording_is_not_in_the_contract(self):
         text = EU_PUBLISHED.read_text()
@@ -148,6 +166,24 @@ class FromPack(unittest.TestCase):
     def test_duplicate_requirement_ids_are_refused_whatever_the_input(self):
         with self.assertRaisesRegex(ec.ContractError, "must be unique"):
             ec._contract("x", "1", [{"id": "a"}, {"id": "a"}])
+
+    def test_an_obligation_needs_a_regulation_and_an_article(self):
+        source = minimal_source()
+        source["checks"][0]["article"] = "Art 1"
+        with self.assertRaisesRegex(ec.ContractError, "regulation must be a non-empty string"):
+            ec.from_pack(copy.deepcopy(source))
+        for bad in ("", None, 3):
+            source["regulation"] = bad
+            with self.assertRaisesRegex(ec.ContractError, "regulation must be a non-empty string"):
+                ec.from_pack(copy.deepcopy(source))
+        source["regulation"] = "Regulation X"
+        source["checks"][0]["article"] = " "
+        with self.assertRaisesRegex(ec.ContractError, r"checks\[0\]\.article must be a non-empty string"):
+            ec.from_pack(copy.deepcopy(source))
+        source["checks"][0]["article"] = "Art 1"
+        reqs = ec.from_pack(source)["requirements"]
+        self.assertEqual(reqs[0]["clause"], {"instrument": "Regulation X", "article": "Art 1"})
+        self.assertEqual(reqs[2]["profile"], "outcome")
 
     def test_an_invalid_pack_is_refused_with_its_issues(self):
         source = minimal_source()
@@ -249,6 +285,19 @@ class Published(unittest.TestCase):
                 ec.publish(changed, root)
             self.assertEqual(path.read_bytes(), ec.to_bytes(contract))
 
+    def test_a_new_version_is_a_new_file_and_the_old_one_stays(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = minimal_source()
+            old, _ = ec.publish(ec.from_pack(copy.deepcopy(source)), root)
+            old_bytes = old.read_bytes()
+            source["pack_version"] = "1.0.1"
+            source["checks"][0]["criteria"][0]["label"] = "Relabelled"
+            new, written = ec.publish(ec.from_pack(source), root)
+            self.assertTrue(written)
+            self.assertEqual(new, root / "test-pack/1.0.1.json")
+            self.assertEqual(old.read_bytes(), old_bytes)
+
     def test_an_id_with_a_slash_nests_and_an_escaping_one_is_refused(self):
         root = pathlib.Path("/r")
         self.assertEqual(ec.published_path({"id": "asg/everyday-rules", "version": "0.1.0"}, root),
@@ -262,8 +311,22 @@ class Published(unittest.TestCase):
         out = subprocess.run([sys.executable, "scripts/evidence_contract.py", "publish", str(EU_SOURCE)],
                              cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout
         result = json.loads(out)
+        contract = ec.from_pack(load_pack(EU_SOURCE))
         self.assertEqual((result["contract_ref"], result["path"], result["written"]),
-                         ("eu-ai-act-obligations@0.2.1", "contracts/eu-ai-act-obligations/0.2.1.json", False))
+                         (ec.contract_ref(contract), ec.published_path(contract).relative_to(REPO_ROOT).as_posix(),
+                          False))
+        self.assertEqual(result["contract_digest"], ec.contract_digest(contract))
+
+    def test_cli_runs_the_report_spec_runner_s_own_checks(self):
+        spec = yaml.safe_load((REPO_ROOT / "scripts/specs/tau2-airline-no-judge.yaml").read_text())
+        spec["switches"] = {"out_of_scope_verdict": "false"}
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml") as f:
+            yaml.safe_dump(spec, f)
+            f.flush()
+            proc = subprocess.run([sys.executable, "scripts/evidence_contract.py", "compile", f.name],
+                                  cwd=REPO_ROOT, capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("out_of_scope_verdict must be a boolean", json.loads(proc.stdout)["error"])
 
     def test_cli_refuses_a_file_that_is_neither_input(self):
         with tempfile.NamedTemporaryFile("w", suffix=".yaml") as f:
