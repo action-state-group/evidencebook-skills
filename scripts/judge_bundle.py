@@ -127,6 +127,7 @@ REASON_PAYLOAD_WITHHELD = "payload withheld"
 REASON_RECORD_DECLARED_MISSING = "record declared missing"
 REASON_RECORD_NOT_FOUND = "record not found in bundle"
 REASON_NOTHING_DISCLOSED = "no disclosed record in this bundle"
+REASON_NOT_SELECTED = "not judged in this run: outside the --rule-ids selection"
 
 
 class BadInput(Exception):
@@ -354,25 +355,44 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
         )
     answers, target_ids, actually_judged = judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=backend)
 
-    all_criteria = tuple(c["id"] for c in clauses)
+    # A --rule-ids run judges some of the pack's rules. Every judged rule it
+    # did NOT select still gets a claim, not_evaluable with its reason: the
+    # outcome card renders against the whole pack's presentation and reads a
+    # rule with no claim as not_applicable, so a one-rule run would otherwise
+    # read as the whole pack passing. Selected clauses come first, in the
+    # order asked for; the rest follow in pack order.
+    selected_ids = [c["id"] for c in clauses]
+    unselected = [c for c in select_clauses(pack, None) if c["id"] not in set(selected_ids)]
+    answers = dict(answers)
+    answers.update(not_evaluable_answers(unselected, REASON_NOT_SELECTED))
+    all_clauses = list(clauses) + unselected
+
+    all_criteria = tuple(c["id"] for c in all_clauses)
     criterion_verdicts = {cid: answers[cid]["verdict"] for cid in all_criteria}
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
-    rule_ids_by_clause = {c["id"]: c["rule_id"] for c in clauses if c.get("rule_id")}
+    rule_ids_by_clause = {c["id"]: c["rule_id"] for c in all_clauses if c.get("rule_id")}
     if actually_judged:
         # A fail-closed abstention cites only its reason (never a record it did
         # not actually read) and carries no judge_pin_digest: that field asserts
         # a named model actually produced this verdict, never sealed when no
-        # model was ever consulted.
-        report_digests = {cid: target_ids for cid in all_criteria}
+        # model was ever consulted. The same holds for a rule outside the
+        # --rule-ids selection: only the selected clauses were judged.
+        report_digests = {cid: target_ids for cid in selected_ids}
         pin, pin_digest = build_judge_pin(judge_model_id, input_refs, clauses)
-        judge_pin_digests = {cid: pin_digest for cid in all_criteria}
-        judge_pins = {cid: pin for cid in all_criteria}
+        judge_pin_digests = {cid: pin_digest for cid in selected_ids}
+        judge_pins = {cid: pin for cid in selected_ids}
     else:
         report_digests, judge_pin_digests, judge_pins = {}, {}, {}
 
+    # The case id scopes every claim id (<case_id>::<criterion>). A run
+    # narrowed by --capsule-id is scoped to that record too, so two narrowed
+    # runs on one bundle never share claim ids and their results merge.
+    root = bundle.get("root") or (target_ids[0] if target_ids else "unknown-bundle")
+    case_id = f"{root}/{capsule_id}" if capsule_id else root
+
     document, _ = build_result_v0(
-        case_id=bundle.get("root") or (target_ids[0] if target_ids else "unknown-bundle"),
+        case_id=case_id,
         criterion_verdicts=criterion_verdicts,
         report_digests=report_digests,
         generated_at=generated_at,
@@ -383,6 +403,7 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
         judge_pin_digests=judge_pin_digests,
         judge_pins=judge_pins,
         rule_ids=rule_ids_by_clause,
+        case_scoped_ids=True,
     )
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
@@ -395,8 +416,11 @@ def main(argv):
     ap.add_argument("--pack", required=True, type=pathlib.Path, help="a compiled pack (compiled.json)")
     ap.add_argument("--generated-at", required=True, help="ISO-8601 timestamp sealed as the document's generated_at")
     ap.add_argument("--capsule-id", default=None,
-                    help="narrow to one bundle record (optional; default: every disclosed record in the bundle)")
-    ap.add_argument("--rule-ids", default=None, help="comma-separated rule_id subset to judge (default: every judged row)")
+                    help="narrow to one bundle record (optional; default: every disclosed record in the bundle); "
+                         "claim ids are then scoped to <root>/<capsule-id>, so narrowed runs on one bundle merge")
+    ap.add_argument("--rule-ids", default=None,
+                    help="comma-separated rule_id subset to judge (default: every judged row); the pack's other "
+                         "judged rules are claimed not_evaluable, so a partial run never reads as a full pass")
     ap.add_argument("--judge-model-id", default=None, help="defaults to the judge this script pins (jev_judge.PINNED_MODEL)")
     ap.add_argument("--out", type=pathlib.Path, default=None, help="write the Result v0 document here (default: stdout)")
     args = ap.parse_args(argv)

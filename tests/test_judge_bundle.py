@@ -94,6 +94,13 @@ FACTS = {"agent_input": {"action": "pay", "action_class": "money.transfer", "amo
                          "recurrence": "none"}}
 
 
+def judged_claims(document):
+    """The claims a run actually judged: a --rule-ids run also claims every
+    unselected judged rule as not_evaluable (REASON_NOT_SELECTED), and those
+    carry no judge pin and cite no record."""
+    return [c for c in document["claims"] if "judge_pin_digest" in c]
+
+
 def fixed_backend(verdict):
     return jevals.MockBackend(fn=lambda qid, q, state: verdict)
 
@@ -393,6 +400,84 @@ class DisclosedBundleJudged(unittest.TestCase):
         self.assertNotIn("out_of_scope", seen["options"])
 
 
+class MonthOfBundles(unittest.TestCase):
+    """A month is many bundles: each bundle's claim ids are scoped to the bundle
+    (`<root>::<criterion>`), so merge_result_v0_documents takes two of them."""
+
+    def test_two_bundles_results_merge_into_one_document(self):
+        from result_v0 import CASE_SEPARATOR, merge_result_v0_documents
+        pack = compiled_pack()
+        docs = [judge_bundle.run(pack, disclosed_bundle(FACTS, capsule_id=cid, root=root), ["9", "10"], None,
+                                 "jev-1.13.0", GENERATED_AT, backend=fixed_backend(verdict))
+                for cid, root, verdict in ((CAPSULE_ID, "bundle-oct-01", "met"),
+                                           (OTHER_CAPSULE_ID, "bundle-oct-02", "not_met"))]
+        for doc, root in zip(docs, ("bundle-oct-01", "bundle-oct-02")):
+            for claim in doc["claims"]:
+                self.assertEqual(claim["id"], f"{root}{CASE_SEPARATOR}{claim['requirement_ref']}")
+        merged = merge_result_v0_documents(docs, "Everyday Rules -- October", GENERATED_AT)
+        # 13 judged rules per bundle: 2 selected, 11 claimed not_evaluable.
+        self.assertEqual(len(merged["claims"]), 26)
+        self.assertEqual(len(merged["aggregate"]["buckets"]["met"]), 2)
+        self.assertEqual(len(merged["aggregate"]["buckets"]["not_met"]), 2)
+        self.assertEqual(len(merged["aggregate"]["buckets"]["not_evaluable"]), 22)
+
+    def test_two_capsule_id_runs_on_one_bundle_merge(self):
+        # Narrowed runs on one bundle share its root; the claim id is scoped to
+        # <root>/<capsule_id>, so they no longer collide.
+        from result_v0 import CASE_SEPARATOR, merge_result_v0_documents
+        pack = compiled_pack()
+        bundle = real_deal_bundle()
+        ids = [r["capsule_id"] for r in bundle["records"]][:2]
+        self.assertEqual(len(ids), 2)
+        docs = [judge_bundle.run(pack, bundle, ["9"], cid, "jev-1.13.0", GENERATED_AT,
+                                 backend=fixed_backend("met")) for cid in ids]
+        for doc, cid in zip(docs, ids):
+            claim = judged_claims(doc)[0]
+            self.assertEqual(claim["id"], f"{bundle['root']}/{cid}{CASE_SEPARATOR}{claim['requirement_ref']}")
+        merged = merge_result_v0_documents(docs, "Everyday Rules -- one bundle", GENERATED_AT)
+        self.assertEqual(len(merged["claims"]), 26)
+
+    def test_a_bundle_root_holding_the_case_separator_is_refused(self):
+        from result_v0 import RollupError
+        pack = compiled_pack()
+        with self.assertRaisesRegex(RollupError, "::"):
+            judge_bundle.run(pack, disclosed_bundle(FACTS, root="bundle::oct"), ["9"], None,
+                             "jev-1.13.0", GENERATED_AT, backend=fixed_backend("met"))
+
+
+class PartialRunIsNotAFullPass(unittest.TestCase):
+    """A --rule-ids run judges some rules. The card renders against the whole
+    pack and reads a rule with no claim as not_applicable, so every judged rule
+    outside the selection is claimed not_evaluable: the run cannot resolve."""
+
+    def test_one_rule_met_leaves_every_other_judged_rule_not_evaluable(self):
+        pack = compiled_pack()
+        document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
+                                    GENERATED_AT, backend=fixed_backend("met"))
+        judged_rule_ids = {c["rule_id"] for c in pack["clauses"] if c.get("tier") == "judged"}
+        self.assertEqual({c["rule_id"] for c in document["claims"]}, judged_rule_ids)
+        by_rule = {c["rule_id"]: c for c in document["claims"]}
+        self.assertEqual(by_rule["9"]["verdict"], "met")
+        for rid, claim in by_rule.items():
+            if rid == "9":
+                continue
+            self.assertEqual(claim["verdict"], "not_evaluable")
+            self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
+            self.assertNotIn("judge_pin_digest", claim)
+            self.assertEqual(claim["evidence"], [])
+        buckets = document["aggregate"]["buckets"]
+        self.assertEqual(len(buckets["met"]), 1)
+        self.assertEqual(len(buckets["not_evaluable"]), len(judged_rule_ids) - 1)
+        self.assertEqual(document["aggregate"]["coverage"]["excluded_not_applicable"], 0)
+
+    def test_a_full_run_claims_nothing_as_not_selected(self):
+        pack = compiled_pack()
+        document = judge_bundle.run(pack, disclosed_bundle(FACTS), None, None, "jev-1.13.0",
+                                    GENERATED_AT, backend=fixed_backend("met"))
+        self.assertTrue(all(c["verdict"] == "met" for c in document["claims"]))
+        self.assertFalse(any(c.get("rationale") == judge_bundle.REASON_NOT_SELECTED for c in document["claims"]))
+
+
 class WholeBundleDefault(unittest.TestCase):
     """The default (no --capsule-id): every disclosed record in the bundle,
     plus its extensions, feed one batched judge request -- exercised against
@@ -426,9 +511,9 @@ class WholeBundleDefault(unittest.TestCase):
         bundle = real_deal_bundle()
         document = judge_bundle.run(pack, bundle, ["9", "21"], None, "jev-1.13.0", GENERATED_AT,
                                     backend=fixed_backend("met"))
-        self.assertEqual(len(document["claims"]), 2)
-        digests = {c["judge_pin_digest"] for c in document["claims"]}
-        pins = [c["judge_pin"] for c in document["claims"]]
+        self.assertEqual(len(judged_claims(document)), 2)
+        digests = {c["judge_pin_digest"] for c in judged_claims(document)}
+        pins = [c["judge_pin"] for c in judged_claims(document)]
         self.assertEqual(len(digests), 1)
         self.assertEqual(pins[0], pins[1])
         self.assertEqual(pins[0]["input_refs"], ["amount_minor", "currency", "recurrence"])
@@ -564,8 +649,11 @@ class CliSmoke(unittest.TestCase):
         proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "8,26")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         document = json.loads(proc.stdout)
-        rule_ids = {c["rule_id"] for c in document["claims"]}
-        self.assertTrue(rule_ids <= {"8", "26"})
+        judged = {c["rule_id"] for c in document["claims"] if c["verdict"] != "not_evaluable"}
+        self.assertTrue(judged <= {"8", "26"})
+        others = [c for c in document["claims"] if c["rule_id"] not in {"8", "26"}]
+        self.assertEqual(len(others), 11)
+        self.assertTrue(all(c["verdict"] == "not_evaluable" for c in others))
 
     def test_malformed_rule_ids_exits_as_bad_input_not_a_backend_failure(self):
         proc = self._run(disclosed_bundle(FACTS), "--rule-ids", ",")
