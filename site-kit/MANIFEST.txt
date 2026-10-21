@@ -1,0 +1,52 @@
+site-kit MANIFEST
+
+versions
+  pages drawn with: capsule-viewer 457a13e35b7f4f2bfbd201057d15deea0aad9896 (PR #42 head; main with #41 merged),
+                    ts package @action-state-group/capsule-viewer 0.1.0, verifier @action-state-group/agent-action-capsule 0.5.0 (npm), Node 24.18.1
+  bundles disclosed and verified with: capsulectl v0.1.0-rc18 (commit 459aea37ad313c21d07ccb00391b60b33910abef),
+                    linux-amd64 binary sha256 ffe131fd2aec052d7d2f6eac3fd2d3bf125dcae5669069ecbf8735b9d141e5bb (release SHA256SUMS);
+                    rc18 go.mod pins agent-action-capsule/go v0.11.0, capsule-viewer/go v0.1.1
+  packs: eu-ai-act-obligations@0.2.1, airline-support-outcomes@1.5.0
+
+files (sha256  bytes  path)
+  36eb0ccf15ef3965e639db19e0f64c3b4ebdfded79c1c5667ceab70d9d1b0d50      10392  README.md
+  bc19fe5f025df72a8d50cda93ae4c1e42be892cbb43627bc1c85ea394b56e440    4135848  bundles/eu_2025-09-15_day.bundle.json
+  7dbfef8775a419f9dca33ba5615f27ec4c39658a8c16b5929a041428946e2642    6697722  bundles/eu_2025-09_week5.bundle.json
+  97db531ccc89c5911bcd0115807f20e53c14e44b4c3dd5c9df6e0a60e46cbd82    3534951  bundles/outcomes_2025-09-15_day.bundle.json
+  ffb90eb785921d3427611a1744d46200685e12acacdaa9e915a5f9eee676d406    5018632  bundles/outcomes_2025-09_week5.bundle.json
+  49b408038aecd9f99c24d27c8d14b30c36bfe6c2b91d46ec82c595d03e7fec2e        612  homepage/terms-pack.md
+  7d61be69e32817cf3569faf6987bd28c9da25bb56e1020ab17b5e88a8c98e495    4623691  pages/eu_2025-09-15_day.html
+  1ebc4eb901dc59e2eb5dbb791bd2b56a1438b80731adcb0cc86a914f3bbbcc07    7153476  pages/eu_2025-09_week5.html
+  4b03a6c361604c99cc7afc8ee398200203d3b9cb9b650559ec4d588f4d779964    4023148  pages/outcomes_2025-09-15_day.html
+  37ff3c4762afba60cfbeaf9ba482f033adcc770130c1b50bd928c8d9d60a09bc    5492589  pages/outcomes_2025-09_week5.html
+  0f9e293456bfb9d6312ac49879d8fd07a83e69568dd64fd17cca86f663099375       1116  tools/render-page.mjs
+
+verify results (run on harness-1, 2026-10-21)
+  eu_2025-09-15_day
+    bundles/eu_2025-09-15_day.bundle.json: capsulectl rc18 verify --bundle -> "verdict":"VALID", bundle_digest f91f3859d7532c71727b7f08088eb2b782144e1cd7086a8457158043d9d8a250
+      root 02f128311ab0ee1802c7cc5b09dc8a147821883cf13566455c18f6ab327838e2; checkpoint, graph_closure, interval_coverage, per_record_membership, producer_signatures: pass; witnesses: withheld (witness_receipt_absent)
+    rc18 book report build from that bundle -> "verdict":"VALID","verification":"pass", claims 218
+    pages/eu_2025-09-15_day.html: embedded bundle identical to bundles/eu_2025-09-15_day.bundle.json; headless Chrome, no network (unshare -rn): data-verify="verified"
+      rebuilt from the bundle with capsule-viewer 457a13e + tools/render-page.mjs: byte-identical
+  eu_2025-09_week5
+    bundles/eu_2025-09_week5.bundle.json: capsulectl rc18 verify --bundle -> "verdict":"VALID", bundle_digest e1e5578bea17fe261dbaccf51f81d594cc855db26b7395b3700fde1d79cc129e
+      root 0fa5cc40a117cf132f4f2910d759ab26780ec39a01db1cf36dace9324dc6c589; checkpoint, graph_closure, interval_coverage, per_record_membership, producer_signatures: pass; witnesses: withheld (witness_receipt_absent)
+    rc18 book report build from that bundle -> "verdict":"VALID","verification":"pass", claims 421
+    pages/eu_2025-09_week5.html: embedded bundle identical to bundles/eu_2025-09_week5.bundle.json; headless Chrome, no network (unshare -rn): data-verify="verified"
+      rebuilt from the bundle with capsule-viewer 457a13e + tools/render-page.mjs: byte-identical
+  outcomes_2025-09-15_day
+    bundles/outcomes_2025-09-15_day.bundle.json: capsulectl rc18 verify --bundle -> "verdict":"VALID", bundle_digest 5ca3bbe3001df713202903054274ab36412d2b1dc1cf98b8c5be64c935b5bf9d
+      root 4d8f2f9a1cb7c48e2c1899c5ae47d11c33f9e916fd1b6dbafeee41dd5e6f3a77; checkpoint, graph_closure, interval_coverage, per_record_membership, producer_signatures: pass; witnesses: withheld (witness_receipt_absent)
+    rc18 book report build from that bundle -> "verdict":"VALID","verification":"pass", claims 192
+    pages/outcomes_2025-09-15_day.html: embedded bundle identical to bundles/outcomes_2025-09-15_day.bundle.json; headless Chrome, no network (unshare -rn): data-verify="verified"
+      rebuilt from the bundle with capsule-viewer 457a13e + tools/render-page.mjs: byte-identical
+  outcomes_2025-09_week5
+    bundles/outcomes_2025-09_week5.bundle.json: capsulectl rc18 verify --bundle -> "verdict":"VALID", bundle_digest 290b895c5fc695b824eea0a563f71416bc041b2ca7180c90c6ab0478e843cad1
+      root 6407bba60e6197c5bcfa6c16d3c319393cbf0854f5e1eb9ecd558f8488ab5523; checkpoint, graph_closure, interval_coverage, per_record_membership, producer_signatures: pass; witnesses: withheld (witness_receipt_absent)
+    rc18 book report build from that bundle -> "verdict":"VALID","verification":"pass", claims 356
+    pages/outcomes_2025-09_week5.html: embedded bundle identical to bundles/outcomes_2025-09_week5.bundle.json; headless Chrome, no network (unshare -rn): data-verify="verified"
+      rebuilt from the bundle with capsule-viewer 457a13e + tools/render-page.mjs: byte-identical
+
+notes
+  witnesses: no witness receipt is in these bundles, so verify reports witnesses as withheld; every other check passes.
+  the bundles carry the tau2 conversations of 26 (day) or 50 (week) case records; see README, 'read this before publishing'.
