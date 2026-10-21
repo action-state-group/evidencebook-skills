@@ -57,7 +57,16 @@ export PATH="$work/venv/bin:$PATH"
 
 step "unit tests of the scripts' pure logic"
 cd "$work/skills"
-python3 -m unittest discover -s tests -p 'test_*.py'
+CAPSULECTL="$ctl" python3 -m unittest discover -s tests -p 'test_*.py'
+
+step "the EU AI Act pack's Evidence Contract is published as it compiles, and capsulectl accepts it"
+python3 scripts/evidence_contract.py publish packs/eu-ai-act-obligations/pack-source.yaml >"$work/contract.json" \
+  || fail "the EU AI Act pack does not compile to its published contract: $(cat "$work/contract.json")"
+[[ $(jq -r .written "$work/contract.json") == false ]] || fail "the EU AI Act pack's current version is not published"
+contract=$(jq -r .path "$work/contract.json")
+"$ctl" contract validate "$contract" --schema tests/fixtures/capsule-engine/evidence-contract-v0.json --json \
+  | jq -e .valid >/dev/null || fail "capsulectl contract validate refuses $contract"
+printf '%s: valid Evidence Contract v0\n' "$contract"
 
 step "a tau2 book: profile, keys, store"
 "$ctl" key generate --output "$work/producer.seed" >"$work/producer.json"

@@ -38,6 +38,18 @@ way.
   `eu-ai-act-obligations` compile to `demo/<name>/` and run through the two cron
   skills; `everyday-rules` compiles to `packs/everyday-rules/compiled/` and is
   judged with `scripts/judge_bundle.py`, not the skills.
+- [`contracts/`](contracts/) — published Evidence Contracts, one file per
+  version at `contracts/<id>/<version>.json`. A pack source or a report spec
+  stays the authoring form; `scripts/evidence_contract.py` compiles it to an
+  Evidence Contract v0 document (agent-action-capsule interop profile §11.3)
+  with one requirement per row, and a Result cites it by `contract_ref`
+  (`<pack_id>@<pack_version>`, or a report spec's `<id>@<version>`). A
+  published contract never changes: any edit that changes the compiled
+  contract, a row's label or judge question included, needs a new version
+  (`evidence_contract.py publish` writes it), and a CI check
+  (`.github/workflows/contracts.yml`) fails a pull request that modifies or
+  removes a published file.
+  The contract states each row's rule, not its presentation wording.
 - [`demo/`](demo/) — a self-contained demonstration, **not** compiler input. It holds
   `demo/DEMO.md` (end-to-end reproductions: an investigation over an existing
   CLL, and a tau2 customer-service evaluation over a local SQLite CLL — compile →
