@@ -46,7 +46,7 @@ Fail-closed rules, never inferred:
                        not_evaluable, reason "payload withheld". No judge call
                        is made at all.
   nothing disclosed    (whole-bundle mode only) no record in the bundle has a
-                       non-empty entry in `disclosures` -- an empty bundle, a
+                       non-empty entry in `disclosures` -- a
                        selectively-disclosed bundle that disclosed nothing
                        this script can use, or every disclosed entry being
                        `{}`. Every in-scope row: not_evaluable, reason "no
@@ -56,12 +56,16 @@ Fail-closed rules, never inferred:
                        not in `records[]`. If it IS listed in
                        completeness.missing[], the reason is "record declared
                        missing"; otherwise "record not found in bundle".
-                       Every in-scope row: not_evaluable -- never a hard
-                       refusal, and never an inferred verdict.
+                       Every in-scope row: not_evaluable, citing the root
+                       record -- never an inferred verdict.
   payload withheld     (--capsule-id narrowing only) the named record exists
                        in `records[]` but has no entry (or an empty one) in
                        `disclosures`. Every in-scope row: not_evaluable,
                        reason "payload withheld".
+  nothing to cite      the bundle holds neither the --capsule-id record nor
+                       its root record (an empty bundle among them): refused
+                       as bad input, since every Result claim cites at least
+                       one record (agent-action-capsule#353).
 
 Only when none of the above applies does this script call the real (or mock)
 judge: one jev_judge.judge_many() call, "disclosed_facts" mode

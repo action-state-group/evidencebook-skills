@@ -285,6 +285,15 @@ class AbstentionCitesTheBundle(unittest.TestCase):
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
         self.assertTrue(all(c["evidence"] == cited for c in document["claims"]))
 
+    def test_a_narrowed_partial_run_cites_the_asked_for_record_on_unselected_rules(self):
+        bundle = disclosed_bundle(FACTS)
+        document = judge_bundle.run(compiled_pack(), bundle, ["9"], CAPSULE_ID, "jev-1.13.0", GENERATED_AT,
+                                    backend=fixed_backend("met"))
+        cited = [{"digest_alg": "SHA-256", "digest": CAPSULE_ID}]
+        unselected = [c for c in document["claims"] if c.get("rationale") == judge_bundle.REASON_NOT_SELECTED]
+        self.assertTrue(unselected)
+        self.assertTrue(all(c["evidence"] == cited for c in unselected))
+
     def test_a_full_run_with_no_root_still_judges_every_rule(self):
         bundle = disclosed_bundle(FACTS, root=CAPSULE_ID)
         del bundle["root"]
