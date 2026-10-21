@@ -1,16 +1,19 @@
-# The four skills
+# The skills
 
-This directory holds the `SKILL.md`/`AGENTS.md` text for the skills this repository is
-growing into: the evolution of the existing compiler, and the two cron-run skills it
-compiles. The two cron skills run (see "Running the two cron skills"). It is additive — the
-repository's root `SKILL.md` (the `evaluation-compiler` skill, still live and still the thing
-generated bundles are exercised against) is untouched; retiring it and moving its assets is a
-separate, later step.
+This directory is the repository's one skill tree: every skill lives in its own
+directory here, with its `SKILL.md`, a byte-identical `AGENTS.md`, and any `assets/` or
+`references/` it reads. Nothing outside `skills/` is a skill. `tests/test_skill_tree.py`
+holds that layout.
 
-## The four skills, and where each one lives
+`evaluation-compiler` is the existing compiler, still live and still the thing generated
+bundles are exercised against. The other three are its evolution and the two cron-run
+skills that evolution compiles. The two cron skills run (see "Running the two cron skills").
+
+## The skills, and where each one lives
 
 | # | Skill | Here | Status |
 |---|---|---|---|
+| 0 | `evaluation-compiler` | [`evaluation-compiler/SKILL.md`](evaluation-compiler/SKILL.md), with its `assets/` and `references/` | live |
 | 1 | `evidence-contract-compile` | [`evidence-contract-compile/SKILL.md`](evidence-contract-compile/SKILL.md) | drafted, unwired |
 | 2 | `daily-judge-and-close` | [`daily-judge-and-close/SKILL.md`](daily-judge-and-close/SKILL.md) | runnable: `scripts/run_daily.py` |
 | 3 | `weekly-blind-expert` | [`weekly-blind-expert/SKILL.md`](weekly-blind-expert/SKILL.md) | runnable: `scripts/run_weekly.py` |
@@ -37,7 +40,7 @@ evolved). `daily-judge-and-close` and `weekly-blind-expert` judge, sample, and b
 also reasoning, not a closed verb list. Forcing any of the three into `skill-spec/v0` would mean
 either misstating their verb surface or stripping the reasoning out.
 
-So all three are hand-authored `SKILL.md` prose, in the same voice and rigor as the existing
+So all three are hand-authored `SKILL.md` prose, in the same voice and rigor as the
 `evaluation-compiler` skill, with `AGENTS.md` a literal byte-identical copy — Claude Code and
 Codex read the same text. Only skill 4 goes through `skillgen`, because only skill 4 is thin.
 This is the intended pattern for reasoning-heavy skills: hand-authored `SKILL.md`, with
@@ -98,5 +101,5 @@ copy, and record names are kept in step with the monthly aggregation stage that 
 
 ## Not yet done
 
-Retiring the older compiler and judge programs, the root `SKILL.md` cutover, and the
-`capsulectl-engine` plugin for recomputed clauses.
+Retiring the older compiler and judge programs, replacing `evaluation-compiler` with
+`evidence-contract-compile`, and the `capsulectl-engine` plugin for recomputed clauses.

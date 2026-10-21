@@ -127,12 +127,12 @@ just the envelope. A mismatch is a verification error.
 
 One Capsule per human rating, appended to the same CLL, chained to the
 `evaluation-report/v1` Capsule it audits (reuse of the `chain` mechanism — see
-`references/capsule-cli.md`), forming the provenance chain interaction ← report ←
-rating. The sampling skill sets the chain parent to the report; the **rater sees the
-full packet defined in "Blinding"** (the interaction plus the independently-sourced
-desired-outcome materials) and none of the judge-derived report fields, so the rating
-audits exactly one verdict while staying blind to the judge. The chain link is also the
-calibration join — no identity re-derivation needed.
+`skills/evaluation-compiler/references/capsule-cli.md`), forming the provenance chain
+interaction ← report ← rating. The sampling skill sets the chain parent to the report;
+the **rater sees the full packet defined in "Blinding"** (the interaction plus the
+independently-sourced desired-outcome materials) and none of the judge-derived report
+fields, so the rating audits exactly one verdict while staying blind to the judge. The
+chain link is also the calibration join — no identity re-derivation needed.
 
 Request `capsule` (PascalCase `emit.Input`; `assurance`/`ledger_mode` are derived,
 not caller-set):
@@ -201,7 +201,8 @@ Resources (mirrors the aggregate bundle):
 - `SKILL.md` — purpose, runtime inputs (`profile`, period window, `rated_quantity`),
   and the reduce-then-publish steps. It does **not** draw samples — that is the
   sampling bundle's job; calibration only consumes the ratings that already exist.
-- `references/calibration.md` — adapted from a new `assets/calibration.md`.
+- `references/calibration.md` — adapted from a new `assets/calibration.md`
+  (`skills/evaluation-compiler/assets/calibration.md`).
 - `references/capsule-cli.md` — copied as usual (`capsulectl` stays a host prereq).
 
 Steps:
@@ -248,9 +249,10 @@ Steps:
      publishes a `human-rating/v1` Capsule chained to the audited report;
   2. a **calibration** bundle (`<scenario>-calibrate/`) — reduces the reports and
      ratings into `calibration-summary/v1`.
-- New `assets/sampling.md` and `assets/calibration.md`, referenced the way
-  `assets/aggregation.md` is. `resolved-spec.json` records the audited quantity and
-  sampling design so both skills agree.
+- New `assets/sampling.md` and `assets/calibration.md` under
+  `skills/evaluation-compiler/`, referenced the way `assets/aggregation.md` is.
+  `resolved-spec.json` records the audited quantity and sampling design so both
+  skills agree.
 - `human-rating/v1` is created only by the sampling-and-rating skill's
   human-in-the-loop step — never by the compiler, the evaluator, or a model
   standing in for the expert. The ratings must exist before calibration can reduce

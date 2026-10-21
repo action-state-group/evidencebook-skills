@@ -10,7 +10,8 @@ Contract** into the same axes/judgment machinery plus two cron-run skills, wired
 customer's own Evidence Book. The compiler is still the only editable source of
 evaluation instructions; the compiled skills are still immutable outputs — fix this
 skill or its references, then regenerate the whole pair, never patch a compiled skill
-by hand. Draft note: this file has not yet replaced the root `SKILL.md`; see
+by hand. Draft note: this file has not yet replaced
+[`../evaluation-compiler/SKILL.md`](../evaluation-compiler/SKILL.md); see
 [`../README.md`](../README.md).
 
 ## Validate before reading anything as a spec

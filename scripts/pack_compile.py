@@ -5,7 +5,7 @@ against the same data, and select the report template the results render through
 
 Relationship to this repo's other two compilers:
 
-  - `evaluation-compiler` (the root SKILL.md) turns a free-form value proposition
+  - `evaluation-compiler` (skills/evaluation-compiler/SKILL.md) turns a free-form value proposition
     into a new evaluation bundle from scratch, for a scenario with no existing
     Evidence Contract. A pack already names its criteria, so there is nothing to
     decompose from zero.
