@@ -3,8 +3,8 @@
 # *** DRAFT, pending mesh-llm's real export format. ***
 #
 # This is the shape a mesh-llm settlement report would take over this engine
-# -- what a node served, what it earned, what it paid other peers, grouped by
-# peer and by day -- NOT a working spec against real data: mesh-llm has no
+# -- what a node served, what it earned, what it paid for what it consumed, grouped by
+# day -- NOT a working spec against real data: mesh-llm has no
 # shipped sealed-record schema yet, so every field name and the `record_type`
 # value below (`mesh-settlement-exchange/v1`) is this job's own placeholder,
 # invented to give the shape something concrete to read, not a name mesh-llm
@@ -13,8 +13,15 @@
 # the `fields:`/`join` projection, evaluate_group) is exercised instead with
 # synthetic rows shaped like this draft's own record (tests/test_report_spec.py,
 # and this job's BUILD.md section on the mesh-llm draft), which is as far as
-# "it fits the format" can be demonstrated before a real export exists.
+# "it fits the format" can be demonstrated before a real export exists. It
+# stays a DRAFT until Mesh range bundles verify (AAC #339).
 #
+# Grouped by day only, never by counterparty: a per-peer summary reads like a
+# reputation score of the other node, which this report does not make.
+# `peer_id` stays a row field (the bilateral-seal claim reads each exchange),
+# but no group, title or metric is keyed on it.
+#
+# Amounts are millisatoshis: Mesh settles over Lightning, in msat.
 # What this draft assumes a node's own sealed exchange record carries, once
 # mesh-llm has one (each exchange sealed on BOTH sides -- a node's own book
 # carries its half; the counterparty's digest, when known, is the link to the
@@ -25,16 +32,16 @@
 #   peer: {id: <counterparty node id>}
 #   direction: served | consumed       # this node served the peer (earned),
 #                                      # or consumed the peer's service (paid)
-#   amount_cents: <int>                # earned (direction: served) or paid
-#                                      # (direction: consumed), minor units
+#   amount_msat: <int>                 # earned (direction: served) or paid
+#                                      # (direction: consumed), in msat
 #   tokens_served: <int, present only when direction: served>
 #   counterparty_seal_digest: <sha256 hex, or null if not yet linked>
 #
 spec_version: report-spec/v1
 id: mesh-llm-settlement-draft
 version: 1
-title: "Mesh-llm node settlement -- served / earned / paid per peer per day (DRAFT)"
-group_by: peer_day
+title: "Mesh-llm node settlement -- served / earned / paid per day (DRAFT)"
+group_by: day
 
 sources:
   - name: exchanges
@@ -44,13 +51,11 @@ sources:
     fields:
       peer_id: peer.id
       direction: direction
-      amount_cents: amount_cents
+      amount_msat: amount_msat
       tokens_served: tokens_served
       counterparty_seal_digest: counterparty_seal_digest
       # "day" is this engine's own built-in (the day the exchange was sealed
-      # on this node's book) -- peer_id must be projected above it in this
-      # mapping so the join below can read it back.
-      peer_day: {join: [peer_id, day], sep: "/"}
+      # on this node's book) and is the group.
 
 metrics:
   - name: exchange_count
@@ -61,15 +66,15 @@ metrics:
     op: sum
     field: tokens_served
     where: "direction == 'served'"
-  - name: earned_cents
+  - name: earned_msat
     source: exchanges
     op: sum
-    field: amount_cents
+    field: amount_msat
     where: "direction == 'served'"
-  - name: paid_cents
+  - name: paid_msat
     source: exchanges
     op: sum
-    field: amount_cents
+    field: amount_msat
     where: "direction == 'consumed'"
 
 claims:
@@ -89,4 +94,4 @@ presentation:
   card: settlement
   title_template: >-
     {title} -- {period}: {exchange_count} exchanges, {tokens_served_total}
-    tokens served, ${earned_cents} earned (cents), ${paid_cents} paid (cents)
+    tokens served, {earned_msat} msat earned, {paid_msat} msat paid

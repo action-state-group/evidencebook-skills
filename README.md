@@ -77,8 +77,10 @@ which the renderer shows under its own "Producer's note · presentation text,
 not evidence" label, stating that the producer added the block and no signed
 record covers it; the card's own checks and wording come from the sealed
 reports, not from the block. The obligation card labels the producer's mapping
-itself, so its block is copied unchanged. Sealing the block in a record is a
-later step. `--attach-input-originals`
+itself, so its block is copied unchanged. The next step pins the
+presentation block's digest inside the sealed Result (`presentation_digest`),
+not in a new record; until then the "producer's note · not evidence" label
+stands. `--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it
 discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
 day's `result-v0-*.json` is merged into one Result v0

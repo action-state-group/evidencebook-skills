@@ -33,9 +33,9 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
     version: <int, becomes the contract_ref "<id>@<version>">
     title: <free text, the report's headline>
     group_by: day              # or the name of any field a source's own
-                                # `fields:` mapping projects (e.g. peer_id, or
+                                # `fields:` mapping projects (e.g. region, or
                                 # a `join` composite of two fields for a
-                                # "per peer per day" grouping -- see
+                                # "per region per day" grouping -- see
                                 # apply_field_projections's own docstring)
     sources:
       - name: <referenced by other sources/metrics/claims>
@@ -145,8 +145,8 @@ def apply_field_projections(row, body, fields):
     case), or {"join": [names...], "sep": "/"} (default "/"), which reads
     those NAMES BACK OUT OF `row` ITSELF (already-built-in fields like "day",
     or an earlier entry in this same `fields` mapping) and joins them into one
-    composite grouping key -- e.g. a mesh-llm settlement spec's "per peer per
-    day" grouping, where neither "peer_id" nor "day" alone is the group, but
+    composite grouping key -- e.g. a "per region per day" grouping, where
+    neither "region" nor "day" alone is the group, but
     group_by has only ever needed one field name. A `join` naming a field
     declared later in the same mapping reads it back as the string "None"
     (get()'s own default), not a crash -- a spec ordering bug is visible in
