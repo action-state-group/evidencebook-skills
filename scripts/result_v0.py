@@ -199,6 +199,12 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     schema requires at least one claim) and resolves nothing: refused with
     RollupError, for the caller to report.
     """
+    if case_scoped_ids and CASE_SEPARATOR in str(case_id):
+        # The same refusal build_result_v0_for_day makes: the root becomes part
+        # of every claim id, and readers split it back out at CASE_SEPARATOR
+        # (headline_from_result at the last, the card's parseClaimGrouping at
+        # the first), so a case id holding one would be grouped two ways.
+        raise RollupError(f"case id {case_id!r} contains {CASE_SEPARATOR!r}; claim ids could not be regrouped")
     resolved = all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
     report_digests = report_digests or {}
     source_capsule_ids = source_capsule_ids or {}
