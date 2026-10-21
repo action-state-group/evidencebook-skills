@@ -15,6 +15,13 @@ version: 1
 title: "Tau2 airline support -- report from records, no judge"
 group_by: day
 
+# Ruling 10: a claim whose sources were read but hold no rows to check (a day
+# with no refunds) did not apply -- out_of_scope, citing the conversations
+# scanned -- rather than not_evaluable. Never met on zero rows. Unreadable or
+# missing evidence stays not_evaluable either way.
+switches:
+  out_of_scope_verdict: true
+
 sources:
   # One row per sealed conversation.
   - name: conversations

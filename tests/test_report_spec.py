@@ -404,6 +404,63 @@ class EvaluateGroup(unittest.TestCase):
         self.assertEqual(digests["has_activity"], [])
         self.assertIn("has_activity", reasons)
 
+    def test_zero_rows_with_the_switch_on_is_out_of_scope_citing_what_was_scanned(self):
+        spec = dict(self.SPEC, switches={"out_of_scope_verdict": True}, claims=[
+            {"id": "refunded", "kind": "forall", "source": "cancellations", "assert": "refunded == True"},
+            {"id": "bounded", "kind": "threshold", "metric": "cancellation_count", "op": "<=", "value": 5}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1", "tool_call_count": 1},
+                                          {"day": "d1", "__capsule_id": "c2", "tool_call_count": 2}],
+                        "cancellations": []}
+        reasons, oos = {}, {}
+        verdicts, digests, _ = evaluate_group(spec, "d1", rows_by_name, "day", reasons, oos)
+        self.assertEqual(verdicts, {"refunded": "out_of_scope", "bounded": "out_of_scope"})
+        self.assertEqual(digests["refunded"], ["c1", "c2"])
+        self.assertEqual(oos["refunded"]["scanned"], ["c1", "c2"])
+        self.assertTrue(oos["refunded"]["reason"].startswith("did not apply"))
+        self.assertEqual(reasons, {})
+
+    def test_zero_rows_with_the_switch_off_is_not_evaluable(self):
+        spec = dict(self.SPEC, claims=[{"id": "refunded", "kind": "forall", "source": "cancellations",
+                                         "assert": "refunded == True"}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1"}], "cancellations": []}
+        oos = {}
+        verdicts, _, _ = evaluate_group(spec, "d1", rows_by_name, "day", None, oos)
+        self.assertEqual(verdicts["refunded"], "not_evaluable")
+        self.assertEqual(oos, {})
+
+    def test_zero_rows_on_a_never_out_of_scope_claim_is_not_evaluable_even_with_the_switch(self):
+        spec = dict(self.SPEC, switches={"out_of_scope_verdict": True},
+                    claims=[{"id": "refunded", "kind": "forall", "source": "cancellations",
+                             "assert": "refunded == True", "never_out_of_scope": True}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1"}], "cancellations": []}
+        verdicts, _, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts["refunded"], "not_evaluable")
+
+    def test_unreadable_is_not_evaluable_even_with_the_switch(self):
+        spec = dict(self.SPEC, switches={"out_of_scope_verdict": True},
+                    claims=[{"id": "refunded", "kind": "forall", "source": "cancellations",
+                             "assert": "refunded == True"}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1"}],
+                        "cancellations": [{"day": "d1", "__capsule_id": "c1", UNREADABLE: "not JSON"}]}
+        verdicts, _, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts["refunded"], "not_evaluable")
+
+    def test_an_out_of_scope_claim_is_excluded_from_the_result_and_listed_in_the_summary(self):
+        spec = {"id": "s", "version": 1, "title": "T", "switches": {"out_of_scope_verdict": True},
+                "sources": [{"name": "conversations", "kind": "case"}, {"name": "cancellations", "kind": "case"}],
+                "metrics": [],
+                "claims": [{"id": "has_activity", "kind": "forall", "source": "conversations",
+                            "assert": "tool_call_count > 0"},
+                           {"id": "refunded", "kind": "forall", "source": "cancellations", "assert": "True"}]}
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1", "tool_call_count": 1}],
+                        "cancellations": []}
+        docs, results = build_documents(spec, rows_by_name, "2026-10-01T23:59:59Z")
+        doc = docs["d1"]
+        self.assertEqual([c["requirement_ref"] for c in doc["claims"]], ["has_activity"])
+        self.assertEqual(doc["aggregate"]["coverage"]["excluded_not_applicable"], 1)
+        self.assertEqual(results[0]["out_of_scope"]["refunded"]["scanned"], ["c1"])
+        self.assertFalse(any(c["verdict"] == "met" and c["requirement_ref"] == "refunded" for c in doc["claims"]))
+
     def test_a_forall_over_an_unreadable_tool_result_is_not_evaluable_not_met(self):
         spec = dict(self.SPEC, claims=[{"id": "refunded", "kind": "forall", "source": "cancellations",
                                          "assert": "refunded == True"}])
@@ -707,6 +764,11 @@ class Tau2NoJudgeSpec(unittest.TestCase):
         verdicts, _, metrics = evaluate_group(self.SPEC, "d1", self._rows([{"reservation_id": "R1"}]), "day")
         self.assertEqual(verdicts["refund_amount_matches_payment_record"], "not_evaluable")
         self.assertIsNone(metrics["total_refunded"])
+
+    def test_a_day_with_conversations_but_no_refunds_did_not_apply(self):
+        verdicts, digests, _ = evaluate_group(self.SPEC, "d1", self._rows([]), "day")
+        self.assertEqual(verdicts["refund_amount_matches_payment_record"], "out_of_scope")
+        self.assertEqual(digests["refund_amount_matches_payment_record"], ["k1", "k2"])
 
     def test_title_shows_unknown_for_an_unknown_metric(self):
         _, _, metrics = evaluate_group(self.SPEC, "d1", self._rows([{"reservation_id": "R1"}]), "day")

@@ -85,6 +85,11 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
         assert: <safe_expr string over one row of that source; must hold for
                  EVERY row in this group for the claim to be met -- not_evaluable
                  when the group has no rows for that source>
+    switches:
+      out_of_scope_verdict: <optional bool, default false: a claim with
+                             readable sources and zero rows is out_of_scope
+                             instead of not_evaluable (claims may opt out with
+                             never_out_of_scope: true)>
     presentation:
       card: <one of capsule-cli's reportCards, e.g. "outcome", "settlement">
       title_template: <a str.format() template over {title}, {period}, and
@@ -106,8 +111,14 @@ not_evaluable:
 - an expression that reads a field the row does not carry (safe_expr
   MissingField; absent is never None);
 - a sum over a value that is not a finite number;
-- a claim that cites no record (a forall over zero rows, a threshold whose
-  metrics aggregate nothing): nobody could recompute it from the disclosure.
+- readable sources but zero rows to check (a forall over zero rows, a
+  threshold whose metrics aggregate nothing), when the out_of_scope switch is
+  off or the claim is never_out_of_scope.
+With `switches: {out_of_scope_verdict: true}` (ruling 10) a zero-rows claim is
+out_of_scope ("did not apply") instead, citing the group's base-source records
+that were scanned (summary.json; Result v0 gives an out_of_scope criterion no
+claim, only coverage.excluded_not_applicable). A claim is never met on zero
+rows. A claim may set `never_out_of_scope: true` to stay not_evaluable.
 A threshold claim cites the records behind EVERY metric it uses, its `value`
 side included. summary.json lists each not_evaluable claim's reason per group.
 """
@@ -557,7 +568,13 @@ _OPS = {"<=": lambda a, b: a <= b, ">=": lambda a, b: a >= b, "<": lambda a, b: 
         ">": lambda a, b: a > b, "==": lambda a, b: a == b, "!=": lambda a, b: a != b}
 
 
-def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
+def out_of_scope_allowed(spec, claim):
+    """The spec's switches.out_of_scope_verdict (ruling 10), unless the claim
+    itself is never_out_of_scope."""
+    return bool((spec.get("switches") or {}).get("out_of_scope_verdict")) and not claim.get("never_out_of_scope")
+
+
+def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None, out_of_scope=None):
     """One group's (criterion_verdicts, report_digests, metric_values) --
     every claim in the spec, evaluated over only this group's own rows.
 
@@ -566,14 +583,22 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
       field the row does not carry (safe_expr.MissingField);
     - a metric it uses is unknown (MetricUnknown: unreadable rows, a missing
       field, a sum over a value that isn't a finite number);
-    - it cites no record at all (a forall over zero rows, a threshold whose
-      metrics aggregate nothing): a claim nobody can recompute from the
-      disclosed records proves nothing.
+    - its sources were all readable but it has zero rows to check (a forall
+      over zero rows, a threshold whose metrics aggregate nothing) AND the
+      spec's out_of_scope switch is off or the claim is never_out_of_scope.
+    With the switch on (switches.out_of_scope_verdict, ruling 10) such a claim
+    is out_of_scope: it did not apply. It is never met on zero rows. Result v0
+    gives an out_of_scope criterion no claim (it counts in
+    coverage.excluded_not_applicable), so the records scanned to establish it
+    did not apply -- the group's base-source records -- are cited in
+    `out_of_scope` (and the summary.json), and also returned as its digests.
     A threshold claim cites the records of EVERY metric it uses, its `value`
     side included, so the disclosure can recompute both sides. `reasons`, when
-    given, is filled with {claim id: why it is not_evaluable}; metric_values
-    holds None for an unknown metric."""
+    given, is filled with {claim id: why it is not_evaluable}; `out_of_scope`
+    with {claim id: {"reason", "scanned"}}; metric_values holds None for an
+    unknown metric."""
     reasons = {} if reasons is None else reasons
+    out_of_scope = {} if out_of_scope is None else out_of_scope
     group_rows = {name: [r for r in rows if r.get(group_field) == group_key] for name, rows in rows_by_name.items()}
 
     metric_values, metric_cited, metric_unknown = {}, {}, {}
@@ -590,7 +615,22 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
         except ExprError as e:
             raise ReportSpecError(f"metric {m['name']!r}: where {m.get('where')!r}: {e}") from e
 
+    base_rows = group_rows.get(spec["sources"][0]["name"], [])
     verdicts, digests = {}, {}
+
+    def zero_rows(claim, why):
+        # Readable sources, nothing to check: did not apply when the switch
+        # allows it, citing what was scanned; otherwise not_evaluable.
+        cid = claim["id"]
+        scanned = sorted(_cited(base_rows))
+        if out_of_scope_allowed(spec, claim) and scanned:
+            verdicts[cid] = "out_of_scope"
+            digests[cid] = scanned
+            out_of_scope[cid] = {"reason": f"did not apply: {why}", "scanned": scanned}
+        else:
+            verdicts[cid] = "not_evaluable"
+            reasons[cid] = why
+
     for claim in spec["claims"]:
         cid = claim["id"]
         kind = claim["kind"]
@@ -623,8 +663,7 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
             except ExprError as e:
                 raise ReportSpecError(f"claim {cid!r}: value {value!r}: {e}") from e
             if not cited:
-                verdicts[cid] = "not_evaluable"
-                reasons[cid] = "no record behind any metric this claim uses"
+                zero_rows(claim, "no record behind any metric this claim uses")
                 continue
             verdicts[cid] = "met" if _OPS[op](left, right) else "not_met"
         elif kind == "forall":
@@ -637,9 +676,12 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
                 verdicts[cid] = "not_evaluable"
                 reasons[cid] = f"{len(unreadable)} unreadable row(s), e.g. {unreadable[0]}"
                 continue
+            if not source_rows:
+                zero_rows(claim, f"no {claim['source']!r} rows in this group: nothing to check")
+                continue
             if not digests[cid]:
                 verdicts[cid] = "not_evaluable"
-                reasons[cid] = f"no {claim['source']!r} rows in this group: nothing to check"
+                reasons[cid] = f"{claim['source']!r} rows cite no record"
                 continue
             try:
                 ok = all(eval_expr(claim["assert"], r) for r in source_rows)
@@ -715,12 +757,14 @@ def build_documents(spec, rows_by_name, generated_at):
 
     docs, group_results = {}, []
     for group_key in group_keys:
-        reasons = {}
-        verdicts, digests, metric_values = evaluate_group(spec, group_key, rows_by_name, group_field, reasons)
+        reasons, oos = {}, {}
+        verdicts, digests, metric_values = evaluate_group(spec, group_key, rows_by_name, group_field, reasons, oos)
         try:
             doc = build_result_v0_for_day(
                 f"{group_field}:{group_key}", [(str(group_key), verdicts, digests, tiers)],
-                generated_at, all_claims, cref)
+                generated_at, all_claims, cref,
+                allow_out_of_scope=bool((spec.get("switches") or {}).get("out_of_scope_verdict")),
+                never_out_of_scope=frozenset(c["id"] for c in spec["claims"] if c.get("never_out_of_scope")))
         except RollupError as e:
             raise ReportSpecError(f"group {group_key!r}: {e}") from e
         doc["view"]["title"] = render_title(spec, group_key, metric_values)
@@ -728,6 +772,8 @@ def build_documents(spec, rows_by_name, generated_at):
         entry = {group_field: str(group_key), "claims": len(doc["claims"]), "metrics": metric_values}
         if reasons:
             entry["not_evaluable"] = reasons
+        if oos:
+            entry["out_of_scope"] = oos
         group_results.append(entry)
     return docs, group_results
 
@@ -767,6 +813,12 @@ def load_spec(path):
     for key in ("id", "version", "sources", "claims"):
         if not spec.get(key):
             raise ReportSpecError(f"{path}: missing or empty required key {key!r}")
+    switch = (spec.get("switches") or {}).get("out_of_scope_verdict", False)
+    if not isinstance(switch, bool):
+        raise ReportSpecError(f"{path}: switches.out_of_scope_verdict must be a boolean")
+    for c in spec["claims"]:
+        if not isinstance(c.get("never_out_of_scope", False), bool):
+            raise ReportSpecError(f"{path}: claim {c.get('id')!r}: never_out_of_scope must be a boolean")
     for m in spec.get("metrics", []) or []:
         if m.get("name") in _RESERVED_METRIC_NAMES:
             raise ReportSpecError(f"{path}: metric name {m['name']!r} is reserved (the title template's own "
