@@ -18,8 +18,16 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKILLS = ROOT / "skills"
 
-# Inline links, with or without angle brackets or a title, and reference definitions.
-_LINK = re.compile(r"\]\(<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\)|^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
+# CommonMark inline links (bare or <angle-bracketed> destination, with an optional
+# "double", 'single' or (paren) title) and reference definitions, not footnotes.
+_TITLE = r"""(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?"""
+_LINK = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))" + _TITLE + r"\s*\)"
+                   r"|^ {0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^>\n]*)>|(\S+))", re.M)
+# Code is not Markdown: fenced blocks, indented blocks and code spans are dropped
+# before links are read.
+_FENCED = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*[ \t]*$", re.M | re.S)
+_INDENTED = re.compile(r"(?:\A|\n[ \t]*\n)((?: {4}|\t)[^\n]*(?:\n(?: {4}|\t)[^\n]*)*)")
+_CODE_SPAN = re.compile(r"(`+)(?!`).*?(?<!`)\1(?!`)", re.S)
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _NAME = re.compile(r"^name:\s*(\S+)\s*$", re.M)
 
@@ -35,23 +43,33 @@ def skill_dirs():
 
 
 def _exists_exactly(base, rel):
-    """rel names an entry under base, every component spelled with its case."""
+    """rel names an entry under base that resolves (no dangling symlink), every
+    component spelled with its case. A leading / is the repository root, as
+    GitHub reads it."""
+    if rel.startswith("/"):
+        base, rel = ROOT, rel.lstrip("/")
     here = base
     for part in pathlib.PurePosixPath(rel).parts:
-        if part in (".", ".."):
-            here = here / part
-            continue
-        if not here.is_dir() or part not in os.listdir(here):
+        if not here.is_dir():
+            return False
+        if part not in (".", "..") and part not in os.listdir(here):
             return False
         here = here / part
-    return True
+    return here.exists()
+
+
+def _prose(text):
+    """text with its code blocks and code spans removed."""
+    text = _FENCED.sub("", text)
+    text = _INDENTED.sub("\n\n", text)
+    return _CODE_SPAN.sub("", text)
 
 
 def broken_links(path):
     """The relative link targets in path that name no file or directory."""
     broken = []
-    for inline, reference in _LINK.findall(path.read_text()):
-        target = inline or reference
+    for groups in _LINK.findall(_prose(path.read_text())):
+        target = next((g for g in groups if g), "")
         if re.match(r"[a-z][a-z0-9+.-]*:", target) or target.startswith("#"):
             continue
         rel = target.split("#", 1)[0]
@@ -116,6 +134,21 @@ class BrokenLinkCheckBites(unittest.TestCase):
                            "[self](#top) [gone](assets/execution.md) [titled](gone.md \"t\") "
                            "[angled](<gone2.md>) [case](Here.md)\n[ref]: gone3.md\n[ok-ref]: here.md\n")
             self.assertEqual(broken_links(doc), ["assets/execution.md", "gone.md", "gone2.md", "Here.md", "gone3.md"])
+
+    def test_every_link_form_is_read_and_code_is_not(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            base = pathlib.Path(tmp)
+            (base / "here.md").write_text("x")
+            (base / "dangling.md").symlink_to(base / "nowhere.md")
+            doc = base / "doc.md"
+            doc.write_text("[a](single.md 'title') [b](paren.md (title)) [c](<has space.md>)\n"
+                           "[d](dangling.md) [e](here.md/../here.md) [f](/root-gone.md)\n"
+                           "[g](here.md \"t\") [h](<here.md>) [^1]: a footnote, not a link\n\n"
+                           "```\n[code](fenced.md)\n```\n\n    [code](indented.md)\n\n"
+                           "a `[span](spanned.md)` and ``[span](double.md)`` in prose\n")
+            self.assertEqual(broken_links(doc), ["single.md", "paren.md", "has space.md", "dangling.md",
+                                                 "here.md/../here.md", "/root-gone.md"])
 
     def test_a_name_only_in_the_body_is_not_the_skill_name(self):
         self.assertIsNone(skill_name("---\ndescription: x\n---\nname: impostor\n"))

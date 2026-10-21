@@ -127,8 +127,8 @@ just the envelope. A mismatch is a verification error.
 
 One Capsule per human rating, appended to the same CLL, chained to the
 `evaluation-report/v1` Capsule it audits (reuse of the `chain` mechanism — see
-`skills/evaluation-compiler/references/capsule-cli.md`), forming the provenance chain interaction ← report ←
-rating. The sampling skill sets the chain parent to the report; the **rater sees the
+`skills/evaluation-compiler/references/capsule-cli.md`), forming the provenance
+chain interaction ← report ← rating. The sampling skill sets the chain parent to the report; the **rater sees the
 full packet defined in "Blinding"** (the interaction plus the independently-sourced
 desired-outcome materials) and none of the judge-derived report fields, so the rating
 audits exactly one verdict while staying blind to the judge. The chain link is also the
