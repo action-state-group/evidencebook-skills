@@ -581,6 +581,27 @@ class EuAiActComplianceTemplate(unittest.TestCase):
         rows = presentation["eu-ai-act-compliance/v1"]["obligations"][1]["rows"]
         self.assertNotIn("finding", rows[0])
 
+    def test_a_scalar_criteria_is_an_issue_not_a_crash(self):
+        # Ethan's review of bfb1aa1: criteria: 1 made the EU validator call
+        # enumerate() on an int, so the CLI never printed its issues JSON.
+        source = eu_ai_act_source()
+        source["checks"][0]["criteria"] = 1
+        issues = validate_source(source)
+        self.assertTrue(any("criteria" in i for i in issues), issues)
+
+    def test_the_real_pack_names_no_owner_and_states_when_rows_apply(self):
+        source = yaml.safe_load((REPO_ROOT / "packs/eu-ai-act-obligations/pack-source.yaml").read_text())
+        for check in source["checks"]:
+            self.assertNotIn("In force", check["applicability"]["note"], check["id"])
+            for crit in check["criteria"]:
+                if crit.get("finding"):
+                    self.assertTrue(crit["finding"]["owner_due"].startswith("Sample placeholder"), crit["id"])
+            if check["article"].startswith(("Art 14", "Art 26", "Art 86")):
+                self.assertEqual(check["applicability"]["status"], "future", check["id"])
+                for crit in check["criteria"]:
+                    if crit.get("finding"):
+                        self.assertIn("readiness tracking", crit["finding"]["recommendation"], crit["id"])
+
     def test_counts_only_no_percentages_in_this_template(self):
         _, _, _, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
         block = presentation["eu-ai-act-compliance/v1"]

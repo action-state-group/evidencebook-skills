@@ -224,7 +224,10 @@ def _validate_eu_ai_act_fields(source):
             issues.append(f"{where}.applicability.note must be a non-empty string")
         if "judged_terms" in check and not isinstance(check["judged_terms"], list):
             issues.append(f"{where}.judged_terms must be a list")
-        for j, crit in enumerate(check.get("criteria") or []):
+        criteria = check.get("criteria")
+        if not isinstance(criteria, list):
+            continue  # the generic validator already flagged a missing or non-list criteria
+        for j, crit in enumerate(criteria):
             if not isinstance(crit, dict):
                 continue
             cwhere = f"{where}.criteria[{j}]"
