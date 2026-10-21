@@ -161,7 +161,7 @@ def _build_eu_ai_act_presentation(source):
         for crit in check["criteria"]:
             row = {
                 "criterion_id": f"{check['id']}.{crit['id']}",
-                "name": crit["label"],
+                "name": crit.get("card_label") or crit["label"],
                 "desc": crit["text"],
                 "tier": crit["tier"],
             }
@@ -368,6 +368,19 @@ def validate_source(source):
                 issues.append(f"{cwhere}.rule_half must be a boolean")
             if "scope_note" in crit and (not isinstance(crit["scope_note"], str) or not crit["scope_note"].strip()):
                 issues.append(f"{cwhere}.scope_note must be a non-empty string")
+            # Presentation-only row text for the report card, when it must say
+            # more than the label (eu-ai-act-compliance/v1 only); never judged.
+            if "card_label" in crit and (not isinstance(crit["card_label"], str) or not crit["card_label"].strip()):
+                issues.append(f"{cwhere}.card_label must be a non-empty string")
+            # A deterministic pre-check that runs before the judge on a judged
+            # criterion and may replace its verdict for a session
+            # (scripts/recompute.py's RECOMPUTE_PRECHECKS, read by run_daily.py).
+            # Named here, checked against the registry there, at run time.
+            if "recompute_precheck" in crit:
+                if not isinstance(crit["recompute_precheck"], str) or not crit["recompute_precheck"].strip():
+                    issues.append(f"{cwhere}.recompute_precheck must be a non-empty string")
+                elif tier != "judged":
+                    issues.append(f"{cwhere}.recompute_precheck applies only to a tier 'judged' criterion")
             # The normalized action fields this criterion's own judge prompt
             # declares it reads -- capsule-engine #96's input_refs vocabulary
             # (NORMALIZED_ACTION_FIELDS, above). Optional: a criterion whose
@@ -550,6 +563,8 @@ def build_clauses(source):
                 clause["rule_half"] = True
             if crit.get("scope_note"):
                 clause["scope_note"] = crit["scope_note"]
+            if crit.get("recompute_precheck"):
+                clause["recompute_precheck"] = crit["recompute_precheck"]
             if crit.get("judge_input_refs"):
                 clause["judge_input_refs"] = list(crit["judge_input_refs"])
             if crit.get("tier_switch"):
