@@ -34,7 +34,10 @@ for what each one does.
 
 A clause whose effective tier is "recomputed" never reaches the judge command at
 all: scripts/recompute.py's registered checker runs in-process instead (see
-recomputed_answer()). A contract may additionally set a top-level "judge_batch": true
+recomputed_answer()). A judged clause may name a "recompute_precheck"
+(scripts/recompute.py's RECOMPUTE_PRECHECKS): it runs first, and when it decides a
+session, that session's clause is not sent to the judge and its report is sealed as
+a recomputed determination (see precheck_answer() and case_answers()). A contract may additionally set a top-level "judge_batch": true
 to have every judged clause of one case go through the judge command in a single
 call (judge_batch() below) instead of one call per clause -- a cost fix (the policy
 text was being sent once per criterion, nine times per conversation). A contract that
@@ -59,7 +62,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import (EvidenceUnavailable, committed_on, list_capsules, payload,  # noqa: E402
                               publish, run, seal_request, verify)
 from judge_pin import DEFAULT_JUDGE_TIMEOUT, describe_judge, pin_input as build_pin_input  # noqa: E402
-from recompute import RECOMPUTE_CHECKS  # noqa: E402
+from recompute import RECOMPUTE_CHECKS, RECOMPUTE_PRECHECKS  # noqa: E402
 from rollup import RETIRED_NOT_APPLICABLE, RETIRED_NOT_APPLICABLE_REASON  # noqa: E402
 
 VERDICTS = {"met", "not_met", "not_evaluable"}
@@ -176,8 +179,64 @@ def recomputed_answer(case_payload, clause, spec_root):
     return checked_answer(checker(request))
 
 
+def precheck_answer(case_payload, clause, spec_root):
+    """A tier:judged clause's recompute pre-check (its compiled
+    "recompute_precheck", a key of scripts/recompute.py's RECOMPUTE_PRECHECKS),
+    run before the judge: None when the clause names none or the pre-check
+    leaves the session to the judge, else the checked answer that replaces the
+    judge for this session. A named pre-check that is not registered fails the
+    run closed, the same rule recomputed_answer() applies to a checker."""
+    name = clause.get("recompute_precheck")
+    if not name:
+        return None
+    precheck = RECOMPUTE_PRECHECKS.get(name)
+    if precheck is None:
+        raise EvidenceUnavailable(f"clause {clause['id']!r} names recompute_precheck {name!r}, which is not registered")
+    request = {"clause": clause, "case": case_payload["case"],
+               "agent_interaction": case_payload["agent_interaction"],
+               "policy": str(spec_root / "airline-data" / "policy.md"),
+               "booking_db": str(spec_root / "airline-data" / "db.json")}
+    answer = precheck(request)
+    return None if answer is None else checked_answer(answer)
+
+
+def case_answers(body, spec, switches, root, judge_cmd, judge_model_id, allow_out_of_scope=False,
+                 judge_batch_mode=False, min_confidence=None, timeout=DEFAULT_JUDGE_TIMEOUT):
+    """Every clause's answer for one case: recomputed clauses through their
+    checker, judged clauses through their recompute pre-check first
+    (precheck_answer()) and the judge command only for those the pre-check
+    leaves to it. Returns (clause_id -> answer, the set of clause ids a
+    pre-check decided). Any other tier is skipped."""
+    judged_clauses, recomputed_clauses = [], []
+    for clause in spec["clauses"]:
+        tier = effective_tier(clause, switches)
+        if tier == "judged":
+            judged_clauses.append(dict(clause, claim=effective_claim(clause, switches)))
+        elif tier == "recomputed":
+            recomputed_clauses.append(clause)
+        # any other tier: skipped, same as today's `continue`
+
+    answers = {clause["id"]: recomputed_answer(body, clause, root) for clause in recomputed_clauses}
+    prechecked = {}
+    for clause in judged_clauses:
+        pre = precheck_answer(body, clause, root)
+        if pre is not None:
+            prechecked[clause["id"]] = pre
+    answers.update(prechecked)
+    judged_clauses = [clause for clause in judged_clauses if clause["id"] not in prechecked]
+    if judged_clauses:
+        if judge_batch_mode:
+            answers.update(judge_batch(judge_cmd, body, judged_clauses, root, judge_model_id,
+                                       allow_out_of_scope, min_confidence, timeout))
+        else:
+            for clause in judged_clauses:
+                answers[clause["id"]] = judge(judge_cmd, body, clause, root, judge_model_id,
+                                              allow_out_of_scope, min_confidence, timeout)
+    return answers, set(prechecked)
+
+
 def build_report(clause, switches, answer, contract, case_id, capsule_id, pin, day,
-                 contract_ref=None, judge_pin=None, pack_source_digest=None):
+                 contract_ref=None, judge_pin=None, pack_source_digest=None, prechecked=False):
     """The evaluation-report/v1 body for one clause -- pure, no I/O. `judge_pin_digest`
     is sealed only for a tier judged clause: a recomputed one was never judged, and
     citing the pinned judge's digest on it would misstate which model (none) actually
@@ -194,7 +253,12 @@ def build_report(clause, switches, answer, contract, case_id, capsule_id, pin, d
     disclosed report can see WHICH model, prompt and axes the pin names and recompute
     the digest from them, instead of being handed an opaque hash. `period` is the
     judged window, `day:<YYYY-MM-DD>`. `judge_pin` follows the same rule as the
-    digest: never on a recomputed clause."""
+    digest: never on a recomputed clause.
+
+    `prechecked` marks a judged clause whose verdict came from its recompute
+    pre-check (precheck_answer()) instead of the judge: sealed as a recomputed
+    determination citing the pre-check, with no judge pin -- no model produced
+    it."""
     tier = effective_tier(clause, switches)
     report = {"record_type": "evaluation-report/v1",
               "contract": contract, "clause_id": clause["id"], "case_id": case_id,
@@ -206,7 +270,11 @@ def build_report(clause, switches, answer, contract, case_id, capsule_id, pin, d
         report["contract_ref"] = contract_ref
     if pack_source_digest is not None:
         report["pack_source_digest"] = pack_source_digest
-    if tier == "judged":
+    if tier == "judged" and prechecked:
+        report["epistemic_type"] = "recomputed_determination"
+        precheck = RECOMPUTE_PRECHECKS[clause["recompute_precheck"]]
+        report["checker_ref"] = f"{precheck.__module__}.{precheck.__qualname__}"
+    elif tier == "judged":
         report["epistemic_type"] = "semantic_judgment"
         report["judge_pin_digest"] = pin
         if judge_pin is not None:
@@ -271,26 +339,9 @@ def main(argv):
             c = body["case"]
             case_id = f"{c['benchmark']}:{c['domain']}:task-{c['task_id']}:trial-{c['trial']}"
 
-            judged_clauses, recomputed_clauses = [], []
-            for clause in spec["clauses"]:
-                tier = effective_tier(clause, switches)
-                if tier == "judged":
-                    judged_clauses.append(dict(clause, claim=effective_claim(clause, switches)))
-                elif tier == "recomputed":
-                    recomputed_clauses.append(clause)
-                # any other tier: skipped, same as today's `continue`
-
-            answers = {clause["id"]: recomputed_answer(body, clause, root) for clause in recomputed_clauses}
-            if judged_clauses:
-                if judge_batch_mode:
-                    answers.update(judge_batch(args.judge_cmd, body, judged_clauses, root,
-                                                args.judge_model_id, allow_out_of_scope,
-                                                min_confidence, args.judge_timeout))
-                else:
-                    for clause in judged_clauses:
-                        answers[clause["id"]] = judge(args.judge_cmd, body, clause, root,
-                                                       args.judge_model_id, allow_out_of_scope,
-                                                       min_confidence, args.judge_timeout)
+            answers, prechecked = case_answers(body, spec, switches, root, args.judge_cmd, args.judge_model_id,
+                                               allow_out_of_scope, judge_batch_mode, min_confidence,
+                                               args.judge_timeout)
 
             for clause in spec["clauses"]:
                 if clause["id"] not in answers:
@@ -299,7 +350,8 @@ def main(argv):
                 report = build_report(clause, switches, answer, spec["contract"],
                                        case_id, capsule_id, pin, day,
                                        contract_ref=spec.get("contract_ref"), judge_pin=pin_input,
-                                       pack_source_digest=spec.get("pack_source_digest"))
+                                       pack_source_digest=spec.get("pack_source_digest"),
+                                       prechecked=clause["id"] in prechecked)
                 rid = publish(ctl, profile, seal_request(
                     f"urn:evidencebook-skills:evaluation-report:{case_id}:{clause['id']}", operator,
                     "evidencebook-skills/daily-judge-and-close", stamp, report), work, f"report-{capsule_id[:16]}")
