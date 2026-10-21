@@ -777,3 +777,64 @@ class Tau2NoJudgeSpec(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReviewOf5746f2a(unittest.TestCase):
+    """Ethan's review of 5746f2a: a projection whose path is absent kept the
+    parent's value of the same name, and the finite check on `sum` covered
+    each value but not the total (and raised on a huge int)."""
+
+    PARENT = {"case_id": "tau2:airline:task-1:trial-0", "day": "d1", "status": "ok", "__capsule_id": "c1"}
+
+    def _rows(self, content):
+        messages = [{"role": "assistant", "tool_calls": [{"id": "t1", "name": "lookup"}]},
+                    {"role": "tool", "tool_call_id": "t1", "content": content}]
+        return extract_tool_result_rows([dict(self.PARENT, __messages=messages)], "lookup",
+                                        fields={"status": "result.status"})
+
+    def test_a_missing_projection_never_inherits_the_parents_value(self):
+        rows = self._rows('{"result": {"amount": 1}}')
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("status", rows[0])
+
+    def test_a_present_projection_still_wins(self):
+        self.assertEqual(self._rows('{"result": {"status": "failed"}}')[0]["status"], "failed")
+
+    def test_a_forall_over_the_missing_projection_is_not_evaluable(self):
+        spec = {"sources": [{"name": "calls", "kind": "tool_result"}],
+                "claims": [{"id": "ok", "kind": "forall", "source": "calls", "assert": "status == 'ok'"}]}
+        verdicts, _, _ = evaluate_group(spec, "d1", {"calls": self._rows('{"result": {"amount": 1}}')}, "day")
+        self.assertEqual(verdicts["ok"], "not_evaluable")
+
+    def test_apply_field_projections_drops_a_field_it_cannot_project(self):
+        row = {"status": "ok"}
+        apply_field_projections(row, {"result": {}}, {"status": "result.status"})
+        self.assertEqual(row, {})
+
+    def _sum(self, *values):
+        return compute_metric({"name": "n", "op": "sum", "field": "amount"}, [{"amount": v} for v in values])
+
+    def test_two_finite_floats_summing_to_inf_are_unknown(self):
+        with self.assertRaises(MetricUnknown):
+            self._sum(1e308, 1e308)
+        with self.assertRaises(MetricUnknown):
+            self._sum(-1e308, -1e308)
+
+    def test_a_huge_int_is_unknown_not_an_overflow_error(self):
+        for values in ((10 ** 400,), (10 ** 400, 1), (10 ** 400, 1.5), (-(10 ** 400),)):
+            with self.assertRaises(MetricUnknown, msg=repr(values)[:40]):
+                self._sum(*values)
+
+    def test_ints_in_float_range_still_sum_exactly(self):
+        self.assertEqual(self._sum(2 ** 60, 1), 2 ** 60 + 1)
+        self.assertEqual(self._sum(1e308, -1e308), 0.0)
+
+    def test_a_threshold_over_an_inf_total_is_not_evaluable(self):
+        spec = {"sources": [{"name": "x", "kind": "record"}],
+                "metrics": [{"name": "paid", "source": "x", "op": "sum", "field": "amount"}],
+                "claims": [{"id": "big", "kind": "threshold", "metric": "paid", "op": ">=", "value": 0}]}
+        rows = {"x": [{"day": "d1", "__capsule_id": "a", "amount": 1e308},
+                      {"day": "d1", "__capsule_id": "b", "amount": 1e308}]}
+        verdicts, _, metrics = evaluate_group(spec, "d1", rows, "day")
+        self.assertEqual(verdicts["big"], "not_evaluable")
+        self.assertIsNone(metrics["paid"])

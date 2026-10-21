@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Report from records, with no judge: a declarative "report spec" YAML names
-which sealed records count, how to group them (by day, by peer, ...), which
+which sealed records count, how to group them (by day, by region, ...), which
 sums/counts to compute, and which thresholds or per-record invariants make a
 claim met/unmet -- computed deterministically, with no rubric and no Jev.
 Every claim this module produces carries tier "recomputed" and cites the
@@ -227,9 +227,14 @@ def apply_field_projections(row, body, fields):
             # A path the body does not carry leaves the field ABSENT, never
             # None: an expression reading it raises MissingField
             # (scripts/safe_expr.py), so missing evidence never passes. A
-            # path holding JSON null projects None, which is a value.
+            # path holding JSON null projects None, which is a value. A row
+            # that already carries a field of this name (a tool-result row
+            # holds its parent's fields) drops it, so a missing path can
+            # never inherit the parent's value.
             value = _get_path_or_missing(body, projection)
-            if value is not _MISSING:
+            if value is _MISSING:
+                row.pop(name, None)
+            else:
                 row[name] = value
         elif isinstance(projection, dict) and "join" in projection:
             sep = projection.get("sep", "/")
@@ -518,12 +523,31 @@ def _row_value(row, field):
     return _get_path_or_missing(row, field) if "." in field else _MISSING
 
 
+def _in_range_number(v):
+    """A non-boolean int or float a threshold can compare and JSON can carry
+    as a finite number: a float must be finite, and an int (exact in Python,
+    so math.isfinite(10**400) would raise OverflowError) must lie within the
+    float range."""
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        return abs(v) <= sys.float_info.max
+    return isinstance(v, float) and math.isfinite(v)
+
+
+def _short(v):
+    """repr(v), cut short: a 400-digit int never fills a rationale."""
+    text = repr(v)
+    return text if len(text) <= 40 else text[:37] + "..."
+
+
 def compute_metric(metric, rows):
     """count, count_distinct (rows with distinct values of `field`) or sum.
     sum requires a finite, non-boolean number on every row it aggregates: a
     missing field, null, "", a list or a bool is never counted as zero or
-    one. Any of those raises MetricUnknown, so the claim reads
-    not_evaluable."""
+    one. Neither is a value outside the float range (an int past it, inf,
+    nan), nor a total that leaves it (two 1e308 rows sum to inf). Any of
+    those raises MetricUnknown, so the claim reads not_evaluable."""
     rows = metric_rows(metric, rows)
     op = metric["op"]
     if op == "count":
@@ -543,10 +567,15 @@ def compute_metric(metric, rows):
                 raise MetricUnknown(f"metric {metric['name']!r}: {field!r} is not a scalar id on some row")
             return len(set(values))
         for v in values:
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+            if not _in_range_number(v):
                 raise MetricUnknown(f"metric {metric['name']!r}: field {field!r} is not a finite number "
-                                    f"on some row ({v!r})")
-        total = sum(values)
+                                    f"in range on some row ({_short(v)})")
+        try:
+            total = sum(values)
+        except OverflowError:  # an int past float range added to a float
+            raise MetricUnknown(f"metric {metric['name']!r}: the sum of {field!r} is out of range") from None
+        if not _in_range_number(total):  # two finite floats can still sum to inf
+            raise MetricUnknown(f"metric {metric['name']!r}: the sum of {field!r} is out of range")
         return abs(total) if metric.get("abs") else total
     raise ReportSpecError(f"metric {metric['name']!r}: unknown op {op!r}")
 

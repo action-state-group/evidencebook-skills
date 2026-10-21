@@ -32,7 +32,10 @@ So the page says so, through a channel the renderer already labels:
     claims and reports, never from the block's `terms`. This module adds a
     `producer_note` (PRODUCER_NOTE_LINES) stating that the block was added by
     the report's producer after disclosure, that no signed record covers it,
-    and that the pack's own wording it carries is not what the page shows. A
+    and that the pack's own wording it carries is not what the page shows.
+    Sealed (below), the note uses SEALED_NOTE_LINES and SEALED_TERMS_LINE
+    instead: the Result's digest covers the whole block, the pack's wording
+    included, which is still not evidence and still not drawn on the page. A
     note the block already carries is kept, with these lines appended.
   - eu-ai-act-compliance/v1: the renderer reads no note from this block, and
     it does show the producer's titles and summaries. It labels them itself:
@@ -105,6 +108,14 @@ PRODUCER_TERMS_LINE = (
     "The same block carries the pack's own check questions and criterion wording, which no "
     "signed record covers either. This page does not show them: its checks, criteria and "
     "wording are read from the sealed claims and reports, or marked as not stated."
+)
+# Used instead of PRODUCER_TERMS_LINE when the block's digest is sealed: the digest
+# covers the whole block, `terms` included, so the line must not say no signed
+# record covers them.
+SEALED_TERMS_LINE = (
+    "The same block carries the pack's own check questions and criterion wording. The sealed "
+    "digest covers them too, but they are not evidence, and this page does not draw on them: its "
+    "checks, criteria and wording are read from the sealed claims and reports, or marked as not stated."
 )
 
 # Used instead of PRODUCER_NOTE_LINES when the block's digest is sealed in the Result.
@@ -292,12 +303,14 @@ def _note_text(value, limit):
 def producer_note(block, sealed=False):
     """The producer_note to wire onto an outcome-report/v1 block: the block's
     own note (if any) with this module's lines appended, or a new one. With
-    `sealed`, the first line says the signed Result pins the block's digest.
+    `sealed`, the first line says the signed Result pins the block's digest,
+    and the terms line (when the block carries the pack's wording) says the
+    digest covers that wording too, never that no signed record does.
     Refuses a note the renderer would drop whole, rather than leave the page
     unlabelled."""
     lines = list(SEALED_NOTE_LINES if sealed else PRODUCER_NOTE_LINES)
     if "terms" in block or "reason_codes" in block:
-        lines.append(PRODUCER_TERMS_LINE)
+        lines.append(SEALED_TERMS_LINE if sealed else PRODUCER_TERMS_LINE)
     existing = block.get("producer_note")
     if existing is None:
         return {"title": PRODUCER_NOTE_TITLE, "lines": lines}

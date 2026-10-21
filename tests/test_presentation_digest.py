@@ -29,7 +29,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from result_v0 import build_result_v0_for_day  # noqa: E402
 from rollup import all_criteria_from_clauses  # noqa: E402
 from wire_presentation import (  # noqa: E402
-    DIGEST_ALG, DIGEST_MEMBER, LABEL_SIGNED, LABEL_UNSIGNED, SEALED_NOTE_LINES, WireError,
+    DIGEST_ALG, DIGEST_MEMBER, LABEL_SIGNED, LABEL_UNSIGNED, PRODUCER_NOTE_LINES, PRODUCER_TERMS_LINE,
+    SEALED_NOTE_LINES, SEALED_TERMS_LINE, WireError,
     block_digest, jcs, prepare_block, presentation_label, seal, sealed_result_of, wire)
 
 AIRLINE = json.loads((ROOT / "demo/airline-support-outcomes/presentation.json").read_text())
@@ -136,6 +137,30 @@ class SealRoundTrip(unittest.TestCase):
         self.assertEqual(note["lines"][0], SEALED_NOTE_LINES[0])
         self.assertIn("not evidence", note["lines"][0])
         self.assertIn(DIGEST_MEMBER, note["lines"][0])
+
+    def test_a_sealed_block_with_terms_never_says_its_wording_is_uncovered(self):
+        # review of 5746f2a: the digest covers the whole block, terms included, so the
+        # sealed note must not carry the unsealed "no signed record covers either" line
+        self.assertIn("terms", AIRLINE["outcome-report/v1"])
+        _, wired, template = sealed_and_wired(AIRLINE)
+        lines = wired["extensions"][template]["producer_note"]["lines"]
+        self.assertEqual(lines, [*SEALED_NOTE_LINES, SEALED_TERMS_LINE])
+        self.assertNotIn(PRODUCER_TERMS_LINE, lines)
+        text = " ".join(lines)
+        self.assertNotIn("no signed record covers", text.lower())
+        self.assertIn("sealed digest covers them", SEALED_TERMS_LINE)
+        self.assertIn("not evidence", SEALED_TERMS_LINE)
+        self.assertIn("does not draw on them", SEALED_TERMS_LINE)
+
+    def test_an_unsealed_block_with_terms_keeps_the_uncovered_terms_line(self):
+        _, block, _ = prepare_block(AIRLINE, sealed=False)
+        self.assertEqual(block["producer_note"]["lines"], [*PRODUCER_NOTE_LINES, PRODUCER_TERMS_LINE])
+        self.assertNotIn(SEALED_TERMS_LINE, block["producer_note"]["lines"])
+
+    def test_a_sealed_block_without_terms_carries_no_terms_line(self):
+        bare = {"outcome-report/v1": {"enabled": True}}
+        _, block, _ = prepare_block(bare, sealed=True)
+        self.assertEqual(block["producer_note"]["lines"], list(SEALED_NOTE_LINES))
 
     def test_the_label_reads_the_result_from_the_payload_form_too(self):
         sealed, template, _ = seal(result_doc(), AIRLINE)
