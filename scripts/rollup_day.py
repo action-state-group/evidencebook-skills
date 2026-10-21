@@ -29,7 +29,11 @@ written to --out as plain files.
 
     python3 scripts/rollup_day.py --profile tau2 --spec demo/tau2-outcomes/compiled.json \\
         --capsulectl CTL --judge-cmd "python3 scripts/judges/jev_judge.py" \\
-        --generated-at 2026-09-23T23:59:59Z --out RUN_DIR/rollup
+        --judge-model-id MODEL_ID --generated-at 2026-09-23T23:59:59Z --out RUN_DIR/rollup
+
+--judge-model-id is required here: demo/tau2-outcomes/compiled.json (like
+demo/tau2/compiled.json) compiles no judge.model_id, and a contract with judged
+clauses and no model id is refused.
 
 Writes one JSON file per fully-judged case (rollup + the Result v0 document), one
 Result v0 per day, and a summary.json whose per-day headline is re-derived from
