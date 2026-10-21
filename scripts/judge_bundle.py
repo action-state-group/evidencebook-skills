@@ -90,8 +90,10 @@ a request of its own. A reader of the pin alone learns what kind of fact
 THIS CALL's shared judge request could read from, across every clause
 batched into it; evidence[] on each claim itself still says WHICH record
 that specific claim was actually judged from. A fail-closed abstention
-(withheld/missing/undisclosed, above) carries neither: no model was ever
-consulted, so no judge identity is sealed on it -- only the reason. A call
+(withheld/missing/undisclosed, above) carries no pin: no model was ever
+consulted, so no judge identity is sealed on it -- only the reason. Its
+evidence[] cites only the bundle's root, the bundle it was asked about, since
+every claim cites at least one record (agent-action-capsule#353). A call
 whose selected clauses declare no normalized action field at all cannot
 seal an honest pin; run() refuses it as a BadInput, before the judge is
 ever consulted, rather than invent a field name or omit the pin silently
@@ -372,23 +374,31 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
     rule_ids_by_clause = {c["id"]: c["rule_id"] for c in all_clauses if c.get("rule_id")}
+    # Every claim cites at least one record (Evidence Result v0 section 1,
+    # agent-action-capsule#353). A fail-closed abstention, and a rule outside
+    # the --rule-ids selection, cites the bundle it was asked about: its root
+    # is a record the run holds, and citing it claims nothing about records
+    # the judge never read. It carries no judge_pin_digest: that field asserts
+    # a named model actually produced this verdict, never sealed when no model
+    # was consulted. Only the selected clauses of a judged run cite the
+    # records they read, and carry the pin.
+    root = bundle.get("root")
+    abstained = [cid for cid in all_criteria if not (actually_judged and cid in selected_ids)]
+    if abstained and not (isinstance(root, str) and root):
+        raise BadInput("the bundle names no root capsule id, so a not_evaluable claim has no record to cite")
+    report_digests = {cid: [root] for cid in abstained}
     if actually_judged:
-        # A fail-closed abstention cites only its reason (never a record it did
-        # not actually read) and carries no judge_pin_digest: that field asserts
-        # a named model actually produced this verdict, never sealed when no
-        # model was ever consulted. The same holds for a rule outside the
-        # --rule-ids selection: only the selected clauses were judged.
-        report_digests = {cid: target_ids for cid in selected_ids}
+        report_digests.update({cid: target_ids for cid in selected_ids})
         pin, pin_digest = build_judge_pin(judge_model_id, input_refs, clauses)
         judge_pin_digests = {cid: pin_digest for cid in selected_ids}
         judge_pins = {cid: pin for cid in selected_ids}
     else:
-        report_digests, judge_pin_digests, judge_pins = {}, {}, {}
+        judge_pin_digests, judge_pins = {}, {}
 
     # The case id scopes every claim id (<case_id>::<criterion>). A run
     # narrowed by --capsule-id is scoped to that record too, so two narrowed
     # runs on one bundle never share claim ids and their results merge.
-    root = bundle.get("root") or (target_ids[0] if target_ids else "unknown-bundle")
+    root = root or (target_ids[0] if target_ids else "unknown-bundle")
     case_id = f"{root}/{capsule_id}" if capsule_id else root
 
     document, _ = build_result_v0(

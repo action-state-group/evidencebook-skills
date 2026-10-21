@@ -217,8 +217,11 @@ class Withheld(unittest.TestCase):
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
         self.assertTrue(all("judge_pin_digest" not in c for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
-        # A fail-closed abstention never cites a record (nothing was actually read).
-        self.assertTrue(all(c["evidence"] == [] for c in document["claims"]))
+        # A fail-closed abstention cites only the bundle it was asked about,
+        # never a record it read (it read none): a claim cites at least one
+        # record (agent-action-capsule#353).
+        root = [{"digest_alg": "SHA-256", "digest": withheld_bundle()["root"]}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
 
     def test_withheld_bundle_with_more_than_one_record_is_also_all_not_evaluable(self):
         # The global WITHHELD check applies whatever --capsule-id says, and
@@ -242,7 +245,16 @@ class Withheld(unittest.TestCase):
         self.assertEqual(len(document["claims"]), 13)
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
-        self.assertTrue(all(c["evidence"] == [] for c in document["claims"]))
+        root = [{"digest_alg": "SHA-256", "digest": bundle["root"]}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
+
+
+class AbstentionCitesTheBundle(unittest.TestCase):
+    def test_a_bundle_with_no_root_is_refused_rather_than_claimed_with_no_record(self):
+        bundle = withheld_bundle()
+        del bundle["root"]
+        with self.assertRaisesRegex(judge_bundle.BadInput, "no root capsule id"):
+            judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT)
 
 
 class MissingRecord(unittest.TestCase):
@@ -452,7 +464,8 @@ class PartialRunIsNotAFullPass(unittest.TestCase):
 
     def test_one_rule_met_leaves_every_other_judged_rule_not_evaluable(self):
         pack = compiled_pack()
-        document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
+        bundle = disclosed_bundle(FACTS)
+        document = judge_bundle.run(pack, bundle, ["9"], None, "jev-1.13.0",
                                     GENERATED_AT, backend=fixed_backend("met"))
         judged_rule_ids = {c["rule_id"] for c in pack["clauses"] if c.get("tier") == "judged"}
         self.assertEqual({c["rule_id"] for c in document["claims"]}, judged_rule_ids)
@@ -464,7 +477,7 @@ class PartialRunIsNotAFullPass(unittest.TestCase):
             self.assertEqual(claim["verdict"], "not_evaluable")
             self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
             self.assertNotIn("judge_pin_digest", claim)
-            self.assertEqual(claim["evidence"], [])
+            self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": bundle["root"]}])
         buckets = document["aggregate"]["buckets"]
         self.assertEqual(len(buckets["met"]), 1)
         self.assertEqual(len(buckets["not_evaluable"]), len(judged_rule_ids) - 1)

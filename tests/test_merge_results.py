@@ -19,14 +19,18 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from merge_results import main  # noqa: E402
 
 
+# A claim cites at least one record (agent-action-capsule#353).
+CITED = {"digest_alg": "SHA-256", "digest": "cd" * 32}
+
+
 def doc(claim_id, verdict, contract_ref="spec@1"):
     return {
         "result_version": "evidence-result-v0",
         "generated_at": "2026-09-23T23:59:59Z",
         "claims": [{
             "id": claim_id, "contract_ref": contract_ref, "requirement_ref": "x", "tier": "recomputed",
-            "grade": "self-attested", "sufficiency": "SATISFIED", "verdict": verdict, "evidence": [], "proofs": [],
-            "presentation": {"kind": "disclosure", "status": "SATISFIED", "evidence": []},
+            "grade": "self-attested", "sufficiency": "SATISFIED", "verdict": verdict, "evidence": [CITED], "proofs": [],
+            "presentation": {"kind": "disclosure", "status": "SATISFIED", "evidence": [CITED]},
         }],
         "aggregate": {"coverage": {"evaluated_population": 1, "excluded_not_applicable": 0, "unknown_count": 0},
                       "buckets": {"met": [claim_id] if verdict == "met" else [],
