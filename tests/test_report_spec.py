@@ -401,8 +401,26 @@ class EvaluateGroup(unittest.TestCase):
         verdicts, digests, _ = evaluate_group(self.SPEC, "d1", rows_by_name, "day", reasons)
         self.assertEqual(verdicts["has_activity"], "not_evaluable")
         self.assertEqual(verdicts["bounded"], "not_evaluable")
-        self.assertEqual(digests["has_activity"], [])
+        self.assertEqual(digests["has_activity"], [])  # no base record to cite either
         self.assertIn("has_activity", reasons)
+
+    def test_a_not_evaluable_claim_over_no_rows_cites_the_records_scanned(self):
+        # Every Result claim cites at least one record (agent-action-capsule#353):
+        # with nothing of its own to cite, it cites the group's base records.
+        spec = dict(self.SPEC, id="spec", version="1.0.0", claims=[
+            {"id": "refunded", "kind": "forall", "source": "cancellations", "assert": "refunded == True"},
+            {"id": "bounded", "kind": "threshold", "metric": "cancellation_count", "op": "<=", "value": 5}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c2"}, {"day": "d1", "__capsule_id": "c1"}],
+                        "cancellations": []}
+        verdicts, digests, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts, {"refunded": "not_evaluable", "bounded": "not_evaluable"})
+        self.assertEqual(digests, {"refunded": ["c1", "c2"], "bounded": ["c1", "c2"]})
+        docs, results = build_documents(spec, rows_by_name, "2026-10-01T23:59:59Z")
+        claims = docs["d1"]["claims"]
+        self.assertEqual([c["verdict"] for c in claims], ["not_evaluable", "not_evaluable"])
+        cited = [{"digest_alg": "SHA-256", "digest": d} for d in ("c1", "c2")]
+        self.assertTrue(all(c["evidence"] == cited for c in claims), claims)
+        self.assertEqual(set(results[0]["not_evaluable"]), {"refunded", "bounded"})
 
     def test_zero_rows_with_the_switch_on_is_out_of_scope_citing_what_was_scanned(self):
         spec = dict(self.SPEC, switches={"out_of_scope_verdict": True}, claims=[

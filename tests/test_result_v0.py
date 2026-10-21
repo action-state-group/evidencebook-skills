@@ -33,6 +33,10 @@ ALL_CRITERIA = all_criteria_from_clauses(CLAUSES)
 CONTRACT_REF = "airline-support-outcomes@1.3.0"
 ALL_MET = {c: "met" for c in ALL_CRITERIA}
 ALL_JUDGED = {c: "judged" for c in ALL_CRITERIA}
+# Every claim cites at least one record (agent-action-capsule#353): one
+# report digest per criterion.
+DIGESTS = {c: "cd" * 32 for c in ALL_CRITERIA}
+CITED = [{"digest_alg": "SHA-256", "digest": "cd" * 32}]
 
 
 class ResolveContractRef(unittest.TestCase):
@@ -64,7 +68,7 @@ class ClaimFor(unittest.TestCase):
         self.assertEqual(c["sufficiency"], "SATISFIED")
 
     def test_not_evaluable_is_never_satisfied_sufficiency(self):
-        c = claim_for("policy_compliance.confirmed_before_acting", "not_evaluable", CONTRACT_REF, "judged", None)
+        c = claim_for("policy_compliance.confirmed_before_acting", "not_evaluable", CONTRACT_REF, "judged", "ab" * 32)
         self.assertNotEqual(c["sufficiency"], "SATISFIED")
         self.assertEqual(c["verdict"], "not_evaluable")
 
@@ -75,9 +79,12 @@ class ClaimFor(unittest.TestCase):
         self.assertNotIn("close", c)
         self.assertNotIn("type", c)
 
-    def test_evidence_is_absent_without_a_digest_never_invented(self):
-        c = claim_for("policy_compliance.confirmed_before_acting", "not_evaluable", CONTRACT_REF, "judged", None)
-        self.assertEqual(c["evidence"], [])
+    def test_a_claim_with_nothing_to_cite_is_refused_never_invented(self):
+        # Evidence Result v0 section 1: a claim cites at least one record.
+        for digest in (None, "", []):
+            with self.assertRaisesRegex(RollupError, "a claim cites at least one record"):
+                claim_for("policy_compliance.confirmed_before_acting", "not_evaluable", CONTRACT_REF, "judged",
+                          digest)
 
     def test_bad_verdict_is_refused(self):
         with self.assertRaisesRegex(RollupError, "not a verdict"):
@@ -106,13 +113,13 @@ class ClaimFor(unittest.TestCase):
         # tier is a required parameter, never a silent "judged" default -- a
         # criterion later flipped to tier: recomputed (scripts/pack_compile.py)
         # is reported as what it actually is.
-        c = claim_for("grounded_communication.prices_from_system", "met", CONTRACT_REF, "recomputed", None)
+        c = claim_for("grounded_communication.prices_from_system", "met", CONTRACT_REF, "recomputed", "ab" * 32)
         self.assertEqual(c["tier"], "recomputed")
-        judged = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", None)
+        judged = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", "ab" * 32)
         self.assertEqual(judged["tier"], "judged")
 
     def test_claim_id_override_for_the_day_level_merge(self):
-        c = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", None,
+        c = claim_for("policy_compliance.confirmed_before_acting", "met", CONTRACT_REF, "judged", "ab" * 32,
                        claim_id="tau2:airline:task-1:trial-0::policy_compliance.confirmed_before_acting")
         self.assertEqual(c["id"], "tau2:airline:task-1:trial-0::policy_compliance.confirmed_before_acting")
         # requirement_ref always stays the bare criterion id, even when id is overridden
@@ -121,7 +128,7 @@ class ClaimFor(unittest.TestCase):
 
 class BuildResultV0(unittest.TestCase):
     def test_all_nine_met_resolves_and_buckets_all_nine_as_met(self):
-        doc, resolved = build_result_v0("tau2:airline:task-1:trial-0", ALL_MET, {}, "2026-09-30T00:00:00Z",
+        doc, resolved = build_result_v0("tau2:airline:task-1:trial-0", ALL_MET, DIGESTS, "2026-09-30T00:00:00Z",
                                          ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
         self.assertTrue(resolved)
         self.assertEqual(len(doc["claims"]), 9)
@@ -137,7 +144,7 @@ class BuildResultV0(unittest.TestCase):
             "grounded_communication.prices_from_system": "not_met",
             "task_resolution.done_in_full": "not_evaluable",
         })
-        doc, resolved = build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z",
+        doc, resolved = build_result_v0("case", verdicts, DIGESTS, "2026-09-30T00:00:00Z",
                                          ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
         self.assertFalse(resolved)
         all_bucketed = doc["aggregate"]["buckets"]["met"] + doc["aggregate"]["buckets"]["not_met"] + doc["aggregate"]["buckets"]["not_evaluable"]
@@ -151,25 +158,31 @@ class BuildResultV0(unittest.TestCase):
             build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
 
     def test_evidence_cites_the_report_digest_when_given(self):
-        digests = {"policy_compliance.confirmed_before_acting": "ab" * 32}
+        digests = dict(DIGESTS, **{"policy_compliance.confirmed_before_acting": "ab" * 32})
         doc, _ = build_result_v0("case", ALL_MET, digests, "2026-09-30T00:00:00Z",
                                   ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
         claim = next(c for c in doc["claims"] if c["id"] == "policy_compliance.confirmed_before_acting")
         self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": "ab" * 32}])
         other = next(c for c in doc["claims"] if c["id"] != "policy_compliance.confirmed_before_acting")
-        self.assertEqual(other["evidence"], [])
+        self.assertEqual(other["evidence"], CITED)
+
+    def test_a_criterion_with_no_report_digest_is_refused(self):
+        digests = dict(DIGESTS)
+        del digests["policy_compliance.confirmed_before_acting"]
+        with self.assertRaisesRegex(RollupError, "confirmed_before_acting.*a claim cites at least one record"):
+            build_result_v0("case", ALL_MET, digests, "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED)
 
     def test_tiers_flow_from_the_supplied_map_per_criterion(self):
         tiers = {c: "judged" for c in ALL_CRITERIA}
         tiers["grounded_communication.prices_from_system"] = "recomputed"
-        doc, _ = build_result_v0("case", ALL_MET, {}, "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, tiers)
+        doc, _ = build_result_v0("case", ALL_MET, DIGESTS, "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, tiers)
         recomputed = next(c for c in doc["claims"] if c["id"] == "grounded_communication.prices_from_system")
         self.assertEqual(recomputed["tier"], "recomputed")
         judged = next(c for c in doc["claims"] if c["id"] == "policy_compliance.confirmed_before_acting")
         self.assertEqual(judged["tier"], "judged")
 
     def test_evidence_cites_the_case_record_second_when_given(self):
-        digests = {"policy_compliance.confirmed_before_acting": "ab" * 32}
+        digests = dict(DIGESTS, **{"policy_compliance.confirmed_before_acting": "ab" * 32})
         sources = {"policy_compliance.confirmed_before_acting": "case-capsule"}
         doc, _ = build_result_v0("case", ALL_MET, digests, "2026-09-30T00:00:00Z",
                                   ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED, source_capsule_ids=sources)
@@ -179,14 +192,14 @@ class BuildResultV0(unittest.TestCase):
             {"digest_alg": "SHA-256", "digest": "case-capsule"},
         ])
         other = next(c for c in doc["claims"] if c["id"] != "policy_compliance.confirmed_before_acting")
-        self.assertEqual(other["evidence"], [])
+        self.assertEqual(other["evidence"], CITED)
 
     def test_a_different_pack_shape_builds_its_own_contract_ref_and_count(self):
         clauses = [{"id": "a.one", "check_id": "a"}, {"id": "a.two", "check_id": "a"}]
         all_criteria = all_criteria_from_clauses(clauses)
         verdicts = {"a.one": "met", "a.two": "met"}
-        doc, resolved = build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z",
-                                         all_criteria, "some-other-pack@1.0.0", {"a.one": "judged", "a.two": "judged"})
+        doc, resolved = build_result_v0("case", verdicts, {"a.one": "cd" * 32, "a.two": "cd" * 32},
+                                         "2026-09-30T00:00:00Z", all_criteria, "some-other-pack@1.0.0", {"a.one": "judged", "a.two": "judged"})
         self.assertTrue(resolved)
         self.assertEqual(len(doc["claims"]), 2)
         self.assertTrue(all(c["contract_ref"] == "some-other-pack@1.0.0" for c in doc["claims"]))
@@ -197,8 +210,8 @@ class BuildResultV0ForDay(unittest.TestCase):
 
     def test_merges_every_complete_cases_claims_into_one_document(self):
         case_rollups = [
-            ("case-a", ALL_MET, {}, self.TIERS),
-            ("case-b", ALL_MET, {}, self.TIERS),
+            ("case-a", ALL_MET, DIGESTS, self.TIERS),
+            ("case-b", ALL_MET, DIGESTS, self.TIERS),
         ]
         doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
                                        ALL_CRITERIA, CONTRACT_REF)
@@ -214,9 +227,9 @@ class BuildResultV0ForDay(unittest.TestCase):
 
     def test_each_cases_claims_cite_that_cases_own_source_capsule_keyed_by_case_id(self):
         case_rollups = [
-            ("case-a", ALL_MET, {}, self.TIERS),
-            ("case-b", ALL_MET, {}, self.TIERS),
-            ("case-c", ALL_MET, {}, self.TIERS),
+            ("case-a", ALL_MET, DIGESTS, self.TIERS),
+            ("case-b", ALL_MET, DIGESTS, self.TIERS),
+            ("case-c", ALL_MET, DIGESTS, self.TIERS),
         ]
         clause = "policy_compliance.confirmed_before_acting"
         source_capsule_ids = {"case-a": {clause: "capsule-a"}, "case-b": {clause: "capsule-b"}}  # no case-c
@@ -224,23 +237,23 @@ class BuildResultV0ForDay(unittest.TestCase):
                                        ALL_CRITERIA, CONTRACT_REF, source_capsule_ids=source_capsule_ids)
         claim_a = next(c for c in doc["claims"] if c["id"] == f"case-a::{clause}")
         claim_b = next(c for c in doc["claims"] if c["id"] == f"case-b::{clause}")
-        self.assertEqual(claim_a["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-a"}])
-        self.assertEqual(claim_b["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-b"}])
+        self.assertEqual(claim_a["evidence"], CITED + [{"digest_alg": "SHA-256", "digest": "capsule-a"}])
+        self.assertEqual(claim_b["evidence"], CITED + [{"digest_alg": "SHA-256", "digest": "capsule-b"}])
         # a criterion missing from a case's own map is never fabricated a citation
         other_claim = next(c for c in doc["claims"]
                            if c["id"] == f"case-a::{next(c2 for c2 in ALL_CRITERIA if c2 != clause)}")
-        self.assertEqual(other_claim["evidence"], [])
+        self.assertEqual(other_claim["evidence"], CITED)
         # and neither is any claim of a case missing from source_capsule_ids altogether
         case_c_claims = [c for c in doc["claims"] if c["id"].startswith("case-c::")]
         self.assertEqual(len(case_c_claims), len(ALL_CRITERIA))
-        self.assertTrue(all(c["evidence"] == [] for c in case_c_claims), case_c_claims)
+        self.assertTrue(all(c["evidence"] == CITED for c in case_c_claims), case_c_claims)
 
     def test_buckets_still_partition_every_claim_exactly_once_across_cases(self):
         mixed = dict(self.TIERS)
         verdicts_b = dict(ALL_MET, **{"task_resolution.done_in_full": "not_met"})
         case_rollups = [
-            ("case-a", ALL_MET, {}, self.TIERS),
-            ("case-b", verdicts_b, {}, mixed),
+            ("case-a", ALL_MET, DIGESTS, self.TIERS),
+            ("case-b", verdicts_b, DIGESTS, mixed),
         ]
         doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
                                        ALL_CRITERIA, CONTRACT_REF)
@@ -260,7 +273,7 @@ class BuildResultV0ForDay(unittest.TestCase):
 
     def test_tier_per_case_claim_comes_from_the_tiers_map_not_hard_coded(self):
         tiers = dict(self.TIERS, **{"grounded_communication.prices_from_system": "recomputed"})
-        case_rollups = [("case-a", ALL_MET, {}, tiers)]
+        case_rollups = [("case-a", ALL_MET, DIGESTS, tiers)]
         doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
                                        ALL_CRITERIA, CONTRACT_REF)
         claim = next(c for c in doc["claims"]
@@ -269,7 +282,7 @@ class BuildResultV0ForDay(unittest.TestCase):
 
     def test_out_of_scope_criteria_get_no_claim_at_all_across_cases(self):
         verdicts_a = dict(ALL_MET, **{"task_resolution.right_change": "out_of_scope"})
-        case_rollups = [("case-a", verdicts_a, {}, self.TIERS), ("case-b", ALL_MET, {}, self.TIERS)]
+        case_rollups = [("case-a", verdicts_a, DIGESTS, self.TIERS), ("case-b", ALL_MET, DIGESTS, self.TIERS)]
         doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
                                        ALL_CRITERIA, CONTRACT_REF, allow_out_of_scope=True)
         self.assertEqual(len(doc["claims"]), 17)  # 8 + 9, not 9 + 9
@@ -297,7 +310,7 @@ class OutOfScopeSwitch(unittest.TestCase):
     def test_out_of_scope_criteria_get_no_claim_at_all_not_a_bucket(self):
         verdicts = dict(ALL_MET, **{"task_resolution.right_change": "out_of_scope",
                                      "grounded_communication.refunds_match_payment_records": "out_of_scope"})
-        doc, resolved = build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z",
+        doc, resolved = build_result_v0("case", verdicts, DIGESTS, "2026-09-30T00:00:00Z",
                                          ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED, allow_out_of_scope=True)
         self.assertTrue(resolved)  # every criterion that applies is met; the two out_of_scope are set aside
         self.assertEqual(len(doc["claims"]), 7)  # nine minus the two out_of_scope
@@ -311,12 +324,12 @@ class OutOfScopeSwitch(unittest.TestCase):
 
     def test_out_of_scope_never_becomes_a_not_evaluable_claim(self):
         verdicts = dict(ALL_MET, **{"task_resolution.right_change": "out_of_scope"})
-        doc, _ = build_result_v0("case", verdicts, {}, "2026-09-30T00:00:00Z",
+        doc, _ = build_result_v0("case", verdicts, DIGESTS, "2026-09-30T00:00:00Z",
                                  ALL_CRITERIA, CONTRACT_REF, ALL_JUDGED, allow_out_of_scope=True)
         self.assertEqual(doc["aggregate"]["buckets"]["not_evaluable"], [])
         self.assertEqual(doc["aggregate"]["coverage"]["unknown_count"], 0)
         self.assertFalse(any(c["verdict"] == "not_evaluable" or c["sufficiency"] == "GAP" for c in doc["claims"]))
-        day = build_result_v0_for_day("day:2026-09-30", [("case-a", verdicts, {}, ALL_JUDGED)],
+        day = build_result_v0_for_day("day:2026-09-30", [("case-a", verdicts, DIGESTS, ALL_JUDGED)],
                                       "2026-09-30T00:00:00Z", ALL_CRITERIA, CONTRACT_REF, allow_out_of_scope=True)
         self.assertEqual(day["aggregate"]["buckets"]["not_evaluable"], [])
 
@@ -338,7 +351,7 @@ class OutOfScopeSwitch(unittest.TestCase):
 
 
 def _day_doc(day, group_id, verdict, contract_ref=CONTRACT_REF):
-    doc, _ = build_result_v0(f"{group_id}", {"x": verdict}, {}, f"{day}T23:59:59Z", ("x",), contract_ref,
+    doc, _ = build_result_v0(f"{group_id}", {"x": verdict}, {"x": "cd" * 32}, f"{day}T23:59:59Z", ("x",), contract_ref,
                               {"x": "recomputed"})
     doc["claims"][0]["id"] = f"{day}::{group_id}::x"  # disambiguate ids across days, same convention as the day rollup
     doc["aggregate"]["buckets"] = {"met": [], "not_met": [], "not_evaluable": []}

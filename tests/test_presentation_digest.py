@@ -46,7 +46,8 @@ ROOT_ID = "c2" * 32
 def result_doc():
     tiers = {c: "judged" for c in ALL_CRITERIA}
     verdicts = {"a.one": "met", "a.two": "not_met"}
-    return build_result_v0_for_day("day:2026-09-23", [("case-a", verdicts, {}, tiers)],
+    digests = {c: "cd" * 32 for c in ALL_CRITERIA}
+    return build_result_v0_for_day("day:2026-09-23", [("case-a", verdicts, digests, tiers)],
                                    "2026-09-23T23:59:59Z", ALL_CRITERIA, "some-pack@1.0.0")
 
 

@@ -637,7 +637,10 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None, out
     did not apply -- the group's base-source records -- are cited in
     `out_of_scope` (and the summary.json), and also returned as its digests.
     A threshold claim cites the records of EVERY metric it uses, its `value`
-    side included, so the disclosure can recompute both sides. `reasons`, when
+    side included, so the disclosure can recompute both sides. A not_evaluable
+    claim that would cite nothing cites the group's base-source records, the
+    records scanned to find it could not be evaluated: every Result claim cites
+    at least one record (agent-action-capsule#353). `reasons`, when
     given, is filled with {claim id: why it is not_evaluable}; `out_of_scope`
     with {claim id: {"reason", "scanned"}}; metric_values holds None for an
     unknown metric."""
@@ -738,6 +741,10 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None, out
             verdicts[cid] = "met" if ok else "not_met"
         else:
             raise ReportSpecError(f"claim {cid!r}: unknown kind {kind!r}")
+    scanned = sorted(_cited(base_rows))
+    for cid, verdict in verdicts.items():
+        if verdict == "not_evaluable" and not digests.get(cid):
+            digests[cid] = scanned
     return verdicts, digests, metric_values
 
 

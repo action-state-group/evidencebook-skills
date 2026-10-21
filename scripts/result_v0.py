@@ -70,7 +70,10 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     relabelled "judged".
 
     `report_digest` is the sealed evaluation-report/v1 capsule's digest for this
-    criterion, when known -- cited in evidence[] but never inline. Either one
+    criterion, when known -- cited in evidence[] but never inline. A claim with
+    neither it nor `source_capsule_id` has nothing to cite and is refused with
+    RollupError: Evidence Result v0 requires every claim to cite at least one
+    record (agent-action-capsule#353). Either one
     digest (a string, every existing caller's shape) or several (a list/tuple --
     scripts/judge_bundle.py's whole-bundle mode, which judges every disclosed
     record in one request and cites every one it actually used, not just one;
@@ -132,6 +135,12 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     evidence = [_digest_ref(d) for d in digests if d]
     if source_capsule_id and source_capsule_id not in digests:
         evidence.append(_digest_ref(source_capsule_id))
+    if not evidence:
+        # Evidence Result v0 section 1: every claim cites at least one record
+        # (agent-action-capsule#353), and `book result build` refuses one
+        # that cites none. Refused here, where the missing digest is named.
+        raise RollupError(f"criterion {criterion_id!r}: no report digest or case record to cite; "
+                          "a claim cites at least one record")
     claim = {
         "id": claim_id if claim_id is not None else criterion_id,
         "contract_ref": contract_ref,
@@ -157,7 +166,9 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
                      allow_out_of_scope=False, never_out_of_scope=frozenset(), judge_pin_digests=None,
                      judge_pins=None, rule_ids=None, source_capsule_ids=None, case_scoped_ids=False):
     """criterion_verdicts: dict[criterion_id -> verdict]. report_digests: dict
-    [criterion_id -> sealed evaluation-report capsule digest], may omit entries.
+    [criterion_id -> sealed evaluation-report capsule digest]. An evaluated
+    criterion with neither a report digest nor a source capsule id is refused
+    (claim_for): every claim cites at least one record.
     `source_capsule_ids`: optional dict[criterion_id -> the case record capsule
     id that criterion's report named], may omit entries -- cited as each
     claim's second evidence[] entry (see claim_for's own docstring); never

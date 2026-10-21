@@ -46,7 +46,7 @@ Fail-closed rules, never inferred:
                        not_evaluable, reason "payload withheld". No judge call
                        is made at all.
   nothing disclosed    (whole-bundle mode only) no record in the bundle has a
-                       non-empty entry in `disclosures` -- an empty bundle, a
+                       non-empty entry in `disclosures` -- a
                        selectively-disclosed bundle that disclosed nothing
                        this script can use, or every disclosed entry being
                        `{}`. Every in-scope row: not_evaluable, reason "no
@@ -56,12 +56,16 @@ Fail-closed rules, never inferred:
                        not in `records[]`. If it IS listed in
                        completeness.missing[], the reason is "record declared
                        missing"; otherwise "record not found in bundle".
-                       Every in-scope row: not_evaluable -- never a hard
-                       refusal, and never an inferred verdict.
+                       Every in-scope row: not_evaluable, citing the root
+                       record -- never an inferred verdict.
   payload withheld     (--capsule-id narrowing only) the named record exists
                        in `records[]` but has no entry (or an empty one) in
                        `disclosures`. Every in-scope row: not_evaluable,
                        reason "payload withheld".
+  nothing to cite      the bundle holds neither the --capsule-id record nor
+                       its root record (an empty bundle among them): refused
+                       as bad input, since every Result claim cites at least
+                       one record (agent-action-capsule#353).
 
 Only when none of the above applies does this script call the real (or mock)
 judge: one jev_judge.judge_many() call, "disclosed_facts" mode
@@ -90,8 +94,12 @@ a request of its own. A reader of the pin alone learns what kind of fact
 THIS CALL's shared judge request could read from, across every clause
 batched into it; evidence[] on each claim itself still says WHICH record
 that specific claim was actually judged from. A fail-closed abstention
-(withheld/missing/undisclosed, above) carries neither: no model was ever
-consulted, so no judge identity is sealed on it -- only the reason. A call
+(withheld/missing/undisclosed, above) carries no pin: no model was ever
+consulted, so no judge identity is sealed on it -- only the reason. Its
+evidence[] cites only the record the run was asked about: the --capsule-id
+record when the bundle holds it, otherwise the bundle's root record, since
+every claim cites at least one record (agent-action-capsule#353). A bundle
+holding neither is refused, before the judge is consulted. A call
 whose selected clauses declare no normalized action field at all cannot
 seal an honest pin; run() refuses it as a BadInput, before the judge is
 ever consulted, rather than invent a field name or omit the pin silently
@@ -257,6 +265,19 @@ def not_evaluable_answers(clauses, reason):
 ALLOW_OUT_OF_SCOPE = True
 
 
+def abstention_citation(bundle, capsule_id):
+    """The one record a not_evaluable claim without a judged read cites: every
+    Result claim cites at least one record (agent-action-capsule#353). A
+    --capsule-id run cites the record it was asked about when the bundle holds
+    it; otherwise the claim cites the bundle's root record. None when the bundle
+    holds neither, so there is nothing honest to cite."""
+    held = {r.get("capsule_id") for r in _bundle_records(bundle) if isinstance(r, dict)}
+    if capsule_id and capsule_id in held:
+        return capsule_id
+    root = bundle.get("root")
+    return root if isinstance(root, str) and root in held else None
+
+
 def request_clauses(clauses):
     """The clause objects one judge_many() request carries: exactly what
     build_judge_pin() hashes, so the pin covers the questions the judge was
@@ -353,8 +374,6 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
             f"(capsule-engine's own normalized action-field vocabulary for "
             f"judge_pin.input_refs) -- cannot seal a judge_pin for this call"
         )
-    answers, target_ids, actually_judged = judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=backend)
-
     # A --rule-ids run judges some of the pack's rules. Every judged rule it
     # did NOT select still gets a claim, not_evaluable with its reason: the
     # outcome card renders against the whole pack's presentation and reads a
@@ -363,6 +382,16 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     # order asked for; the rest follow in pack order.
     selected_ids = [c["id"] for c in clauses]
     unselected = [c for c in select_clauses(pack, None) if c["id"] not in set(selected_ids)]
+    # Those claims, and any fail-closed abstention, cite abstention_citation():
+    # checked here, before the judge (and its cost) is ever consulted.
+    citation = abstention_citation(bundle, capsule_id)
+    no_citation = BadInput("the bundle holds neither the --capsule-id record nor its root record, "
+                           "so a not_evaluable claim has no record to cite")
+    if unselected and citation is None:
+        raise no_citation
+    answers, target_ids, actually_judged = judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=backend)
+    if not actually_judged and citation is None:
+        raise no_citation
     answers = dict(answers)
     answers.update(not_evaluable_answers(unselected, REASON_NOT_SELECTED))
     all_clauses = list(clauses) + unselected
@@ -372,18 +401,23 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
     rule_ids_by_clause = {c["id"]: c["rule_id"] for c in all_clauses if c.get("rule_id")}
+    # Every claim cites at least one record (Evidence Result v0 section 1,
+    # agent-action-capsule#353). A fail-closed abstention, and a rule outside
+    # the --rule-ids selection, cites the record the run was asked about
+    # (abstention_citation), which claims nothing about records the judge
+    # never read. It carries no judge_pin_digest: that field asserts a named
+    # model actually produced this verdict, never sealed when no model was
+    # consulted. Only the selected clauses of a judged run cite the records
+    # they read, and carry the pin.
+    abstained = [cid for cid in all_criteria if not (actually_judged and cid in selected_ids)]
+    report_digests = {cid: [citation] for cid in abstained}
     if actually_judged:
-        # A fail-closed abstention cites only its reason (never a record it did
-        # not actually read) and carries no judge_pin_digest: that field asserts
-        # a named model actually produced this verdict, never sealed when no
-        # model was ever consulted. The same holds for a rule outside the
-        # --rule-ids selection: only the selected clauses were judged.
-        report_digests = {cid: target_ids for cid in selected_ids}
+        report_digests.update({cid: target_ids for cid in selected_ids})
         pin, pin_digest = build_judge_pin(judge_model_id, input_refs, clauses)
         judge_pin_digests = {cid: pin_digest for cid in selected_ids}
         judge_pins = {cid: pin for cid in selected_ids}
     else:
-        report_digests, judge_pin_digests, judge_pins = {}, {}, {}
+        judge_pin_digests, judge_pins = {}, {}
 
     # The case id scopes every claim id (<case_id>::<criterion>). A run
     # narrowed by --capsule-id is scoped to that record too, so two narrowed

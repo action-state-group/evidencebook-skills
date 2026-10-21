@@ -69,10 +69,16 @@ def _record(capsule_id):
             "timestamp": "2026-10-01T12:00:00Z"}
 
 
+def _records(capsule_id, root):
+    """The bundle's records: a real bundle's root is one of them (its root
+    record), so a fixture root other than the judged record is held too."""
+    return [_record(capsule_id)] + ([_record(root)] if root != capsule_id else [])
+
+
 def disclosed_bundle(facts, capsule_id=CAPSULE_ID, root="test-bundle-disclosed"):
     return {
         "bundle_version": "2", "bundle_kind": "evidence-bundle/v2", "root": root,
-        "records": [_record(capsule_id)],
+        "records": _records(capsule_id, root),
         "completeness": {"closure_depth": 1, "records_mode": "complete", "payloads_mode": "all",
                          "suppressed_fields": [], "missing": []},
         "disclosures": {capsule_id: facts},
@@ -82,7 +88,7 @@ def disclosed_bundle(facts, capsule_id=CAPSULE_ID, root="test-bundle-disclosed")
 def withheld_bundle(capsule_id=CAPSULE_ID, root="test-bundle-withheld"):
     return {
         "bundle_version": "2", "bundle_kind": "evidence-bundle/v2", "root": root,
-        "records": [_record(capsule_id)],
+        "records": _records(capsule_id, root),
         "completeness": {"closure_depth": 1, "records_mode": "complete", "payloads_mode": "none",
                          "suppressed_fields": ["agent_input", "agent_output"], "missing": []},
         # deliberately no "disclosures" key at all
@@ -217,8 +223,11 @@ class Withheld(unittest.TestCase):
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
         self.assertTrue(all("judge_pin_digest" not in c for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
-        # A fail-closed abstention never cites a record (nothing was actually read).
-        self.assertTrue(all(c["evidence"] == [] for c in document["claims"]))
+        # A fail-closed abstention cites only the bundle it was asked about,
+        # never a record it read (it read none): a claim cites at least one
+        # record (agent-action-capsule#353).
+        root = [{"digest_alg": "SHA-256", "digest": withheld_bundle()["root"]}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
 
     def test_withheld_bundle_with_more_than_one_record_is_also_all_not_evaluable(self):
         # The global WITHHELD check applies whatever --capsule-id says, and
@@ -242,14 +251,62 @@ class Withheld(unittest.TestCase):
         self.assertEqual(len(document["claims"]), 13)
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
-        self.assertTrue(all(c["evidence"] == [] for c in document["claims"]))
+        root = [{"digest_alg": "SHA-256", "digest": bundle["root"]}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
+
+
+class AbstentionCitesTheBundle(unittest.TestCase):
+    def test_a_bundle_with_no_root_is_refused_rather_than_claimed_with_no_record(self):
+        bundle = withheld_bundle()
+        del bundle["root"]
+        with self.assertRaisesRegex(judge_bundle.BadInput, "no record to cite"):
+            judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT)
+
+    def test_a_root_the_bundle_does_not_hold_is_never_cited(self):
+        bundle = withheld_bundle()
+        bundle["records"] = [_record(CAPSULE_ID)]
+        with self.assertRaisesRegex(judge_bundle.BadInput, "no record to cite"):
+            judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT)
+
+    def test_a_partial_run_with_nothing_to_cite_is_refused_before_the_judge_is_called(self):
+        bundle = disclosed_bundle(FACTS, root="not-held")
+        bundle["records"] = [_record(CAPSULE_ID)]
+        backend = jevals.MockBackend(fn=lambda qid, q, state: (_ for _ in ()).throw(
+            AssertionError("the judge must not be called when the run cannot be claimed")))
+        with self.assertRaisesRegex(judge_bundle.BadInput, "no record to cite"):
+            judge_bundle.run(compiled_pack(), bundle, ["9"], None, "jev-1.13.0", GENERATED_AT, backend=backend)
+
+    def test_a_narrowed_abstention_cites_the_record_it_was_asked_about(self):
+        bundle = disclosed_bundle(FACTS)
+        bundle["completeness"]["payloads_mode"] = "selected"
+        bundle["disclosures"] = {}
+        document = judge_bundle.run(compiled_pack(), bundle, None, CAPSULE_ID, "jev-1.13.0", GENERATED_AT)
+        cited = [{"digest_alg": "SHA-256", "digest": CAPSULE_ID}]
+        self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
+        self.assertTrue(all(c["evidence"] == cited for c in document["claims"]))
+
+    def test_a_narrowed_partial_run_cites_the_asked_for_record_on_unselected_rules(self):
+        bundle = disclosed_bundle(FACTS)
+        document = judge_bundle.run(compiled_pack(), bundle, ["9"], CAPSULE_ID, "jev-1.13.0", GENERATED_AT,
+                                    backend=fixed_backend("met"))
+        cited = [{"digest_alg": "SHA-256", "digest": CAPSULE_ID}]
+        unselected = [c for c in document["claims"] if c.get("rationale") == judge_bundle.REASON_NOT_SELECTED]
+        self.assertTrue(unselected)
+        self.assertTrue(all(c["evidence"] == cited for c in unselected))
+
+    def test_a_full_run_with_no_root_still_judges_every_rule(self):
+        bundle = disclosed_bundle(FACTS, root=CAPSULE_ID)
+        del bundle["root"]
+        document = judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT,
+                                    backend=fixed_backend("met"))
+        self.assertTrue(all(c["verdict"] == "met" for c in document["claims"]))
 
 
 class MissingRecord(unittest.TestCase):
     def test_record_declared_missing(self):
         bundle = {
             "bundle_version": "2", "bundle_kind": "evidence-bundle/v2", "root": "missing-declared",
-            "records": [], "completeness": {"records_mode": "declared_incomplete", "payloads_mode": "all",
+            "records": [_record("missing-declared")], "completeness": {"records_mode": "declared_incomplete", "payloads_mode": "all",
                                             "missing": [OTHER_CAPSULE_ID]},
             "disclosures": {},
         }
@@ -271,13 +328,16 @@ class MissingRecord(unittest.TestCase):
         pack = compiled_pack()
         bundle = {
             "bundle_version": "2", "bundle_kind": "evidence-bundle/v2", "root": "missing-declared",
-            "records": [], "completeness": {"records_mode": "declared_incomplete", "payloads_mode": "all",
+            "records": [_record("missing-declared")], "completeness": {"records_mode": "declared_incomplete", "payloads_mode": "all",
                                             "missing": [OTHER_CAPSULE_ID]},
             "disclosures": {},
         }
         document = judge_bundle.run(pack, bundle, None, OTHER_CAPSULE_ID, "jev-1.13.0", GENERATED_AT)
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_RECORD_DECLARED_MISSING for c in document["claims"]))
+        # The asked-for record is not held, so the claims cite the root record.
+        root = [{"digest_alg": "SHA-256", "digest": "missing-declared"}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
 
     def test_record_present_but_not_individually_disclosed_is_payload_withheld(self):
         # --capsule-id narrows to THIS record, which has no entry under
@@ -308,19 +368,27 @@ class MissingRecord(unittest.TestCase):
         self.assertEqual(target_ids, [])
         self.assertTrue(all(a["rationale"] == judge_bundle.REASON_NOTHING_DISCLOSED for a in answers.values()))
 
-    def test_empty_bundle_is_nothing_disclosed_not_a_hard_refusal(self):
-        # Whole-bundle mode: no records at all is "nothing to judge from",
-        # not bad input -- the caller never has to pre-check record count
-        # before calling this script.
+    def test_a_bundle_disclosing_nothing_is_nothing_disclosed_not_a_hard_refusal(self):
+        # Whole-bundle mode: records with nothing disclosed is "nothing to
+        # judge from", not bad input; the claims cite the root record.
+        bundle = disclosed_bundle({}, capsule_id="root-only", root="root-only")
+        bundle["disclosures"] = {}
+        pack = compiled_pack()
+        document = judge_bundle.run(pack, bundle, None, None, "jev-1.13.0", GENERATED_AT)
+        self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
+        self.assertTrue(all(c["rationale"] == judge_bundle.REASON_NOTHING_DISCLOSED for c in document["claims"]))
+        root = [{"digest_alg": "SHA-256", "digest": "root-only"}]
+        self.assertTrue(all(c["evidence"] == root for c in document["claims"]))
+
+    def test_a_bundle_with_no_records_has_nothing_to_cite_and_is_refused(self):
+        # Every Result claim cites at least one record (agent-action-capsule#353).
         bundle = {
             "bundle_version": "2", "bundle_kind": "evidence-bundle/v2", "root": "empty",
             "records": [], "completeness": {"records_mode": "complete", "payloads_mode": "all", "missing": []},
             "disclosures": {},
         }
-        pack = compiled_pack()
-        document = judge_bundle.run(pack, bundle, None, None, "jev-1.13.0", GENERATED_AT)
-        self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
-        self.assertTrue(all(c["rationale"] == judge_bundle.REASON_NOTHING_DISCLOSED for c in document["claims"]))
+        with self.assertRaisesRegex(judge_bundle.BadInput, "no record to cite"):
+            judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT)
 
 
 class DisclosedBundleJudged(unittest.TestCase):
@@ -452,7 +520,8 @@ class PartialRunIsNotAFullPass(unittest.TestCase):
 
     def test_one_rule_met_leaves_every_other_judged_rule_not_evaluable(self):
         pack = compiled_pack()
-        document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
+        bundle = disclosed_bundle(FACTS)
+        document = judge_bundle.run(pack, bundle, ["9"], None, "jev-1.13.0",
                                     GENERATED_AT, backend=fixed_backend("met"))
         judged_rule_ids = {c["rule_id"] for c in pack["clauses"] if c.get("tier") == "judged"}
         self.assertEqual({c["rule_id"] for c in document["claims"]}, judged_rule_ids)
@@ -464,7 +533,7 @@ class PartialRunIsNotAFullPass(unittest.TestCase):
             self.assertEqual(claim["verdict"], "not_evaluable")
             self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
             self.assertNotIn("judge_pin_digest", claim)
-            self.assertEqual(claim["evidence"], [])
+            self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": bundle["root"]}])
         buckets = document["aggregate"]["buckets"]
         self.assertEqual(len(buckets["met"]), 1)
         self.assertEqual(len(buckets["not_evaluable"]), len(judged_rule_ids) - 1)
