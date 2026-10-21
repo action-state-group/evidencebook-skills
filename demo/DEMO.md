@@ -173,7 +173,7 @@ prepared facts. The exchange below is from a real run.
 
 **The compile dialog:**
 
-> **You:** invoke the skill.md in this repo
+> **You:** invoke skills/evaluation-compiler/SKILL.md in this repo
 >
 > **evaluation-compiler:** *(loads `SKILL.md`)* I compile a **value proposition** plus
 > a recorded-interaction source into an evaluation skill bundle. What should improve,

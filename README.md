@@ -14,15 +14,20 @@ way.
 
 ## Contents
 
-- [`SKILL.md`](SKILL.md) — the compiler skill (intake, bundle generation, exercise).
-- [`assets/execution.md`](assets/execution.md) — the per-case execution template
-  adapted into each generated bundle.
-- [`assets/aggregation.md`](assets/aggregation.md) — the cross-case aggregation
-  template; adapted into a second **aggregation** bundle only when
-  `cross_case_aggregation` is requested. It reduces `evaluation-report/v1` Capsules
-  into one `evaluation-summary/v1` Capsule, never re-judging.
-- [`references/capsule-cli.md`](references/capsule-cli.md) — the Capsule CLI contract
-  copied verbatim into bundles.
+- [`skills/`](skills/) — every skill in this repository, one directory each, with
+  its `SKILL.md` and an `AGENTS.md` copy. [`skills/README.md`](skills/README.md)
+  lists them.
+- [`skills/evaluation-compiler/SKILL.md`](skills/evaluation-compiler/SKILL.md) — the
+  compiler skill (intake, bundle generation, exercise).
+- [`skills/evaluation-compiler/assets/execution.md`](skills/evaluation-compiler/assets/execution.md)
+  — the per-case execution template adapted into each generated bundle.
+- [`skills/evaluation-compiler/assets/aggregation.md`](skills/evaluation-compiler/assets/aggregation.md)
+  — the cross-case aggregation template; adapted into a second **aggregation**
+  bundle only when `cross_case_aggregation` is requested. It reduces
+  `evaluation-report/v1` Capsules into one `evaluation-summary/v1` Capsule, never
+  re-judging.
+- [`skills/evaluation-compiler/references/capsule-cli.md`](skills/evaluation-compiler/references/capsule-cli.md)
+  — the Capsule CLI contract copied verbatim into bundles.
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
   `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
   `everyday-rules`). `scripts/pack_compile.py` compiles one into four files:
@@ -113,5 +118,5 @@ bundles are immutable outputs — fix the compiler and regenerate, never patch a
 bundle. The host agent uses the Capsule CLI and ordinary tools; no helper programs,
 runners, or scripts are generated. Operator-side data-prep and demonstrations (the
 `demo/` folder) may live in this repo but are never copied into a bundle and are
-ignored during compilation: `assets/` and `references/` are the
-only bundle-source material.
+ignored during compilation: the compiler's own `assets/` and `references/`
+(under `skills/evaluation-compiler/`) are the only bundle-source material.

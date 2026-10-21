@@ -201,7 +201,8 @@ Resources (mirrors the aggregate bundle):
 - `SKILL.md` — purpose, runtime inputs (`profile`, period window, `rated_quantity`),
   and the reduce-then-publish steps. It does **not** draw samples — that is the
   sampling bundle's job; calibration only consumes the ratings that already exist.
-- `references/calibration.md` — adapted from a new `assets/calibration.md`.
+- `references/calibration.md` — adapted from a new `assets/calibration.md`
+  (`skills/evaluation-compiler/assets/calibration.md`).
 - `references/capsule-cli.md` — copied as usual (`capsulectl` stays a host prereq).
 
 Steps:
@@ -248,8 +249,8 @@ Steps:
      publishes a `human-rating/v1` Capsule chained to the audited report;
   2. a **calibration** bundle (`<scenario>-calibrate/`) — reduces the reports and
      ratings into `calibration-summary/v1`.
-- New `assets/sampling.md` and `assets/calibration.md`, referenced the way
-  `assets/aggregation.md` is. `resolved-spec.json` records the audited quantity and
+- New `assets/sampling.md` and `assets/calibration.md` under
+  `skills/evaluation-compiler/`, referenced the way `assets/aggregation.md` is. `resolved-spec.json` records the audited quantity and
   sampling design so both skills agree.
 - `human-rating/v1` is created only by the sampling-and-rating skill's
   human-in-the-loop step — never by the compiler, the evaluator, or a model
