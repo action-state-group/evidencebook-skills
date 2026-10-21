@@ -351,21 +351,24 @@ judgments made under the pin of the pack you pass. Change any field in
 until you judge again. The pin names the model by its id; it does not show
 that the model behind that id is unchanged.
 
-**The judge.** The packs use Jev (`jevals` on PyPI). A live call needs a
-key in `TYPESAFE_API_KEY` and `--judge-backend live`. This page's run had
-no key, so it used `--judge-backend mock`: the whole chain runs, judged rows
-get placeholder verdicts, and the sealed reports and the page name the model
-as "(mock backend, no model read the conversation)". Recomputed rows are
-real either way.
+**The judge.** The packs use Jev (`jevals` on PyPI), pinned to
+`jev-1.13.0`. A live call needs your key in `TYPESAFE_API_KEY` and
+`--judge-backend live`. Without a key, `--judge-backend mock` runs the same
+chain with placeholder verdicts, and the sealed reports and the page then
+name the model as "(mock backend, no model read the conversation)".
+Recomputed rows are real either way. This page's run judged live.
 
 ```sh
 # the next UTC day, from the directory that holds quickstart/
 cd quickstart && export QS=$PWD PATH=$PWD/bin:$PATH && . venv/bin/activate && cd evidencebook-skills
+# export TYPESAFE_API_KEY=...    your Jev key
 DAY=$(capsulectl cll list --profile airline --limit 1000 | jq -r '[.entries[].appended_at[:10]] | min')
 scripts/report.sh --spec demo/airline-support-outcomes/compiled.json --profile airline \
   --date $DAY --out $QS/outcomes.html --work $QS/run-outcomes --capsulectl $QS/bin/capsulectl \
-  --judge-backend mock > $QS/outcomes.log
+  --judge-backend live > $QS/outcomes.log
 jq -c '{cases, reports: (.reports | length), verdicts, judge_pin_digest}' $QS/run-outcomes/runs/day-$DAY/run.json
+jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rules") | "\(.id)  \(.tier)  \(.verdict)"' \
+  $QS/run-outcomes/rollup/result-v0-$DAY.json
 grep -A1 "book report build: render" $QS/outcomes.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
 ```
 
@@ -395,7 +398,7 @@ word for it. That is what the switch in step 3 is for. Your pack, with
 ```sh
 scripts/report.sh --spec demo/my-airline-pack/compiled.json --profile airline \
   --date $DAY --out $QS/my-pack.html --work $QS/run-my-pack --capsulectl $QS/bin/capsulectl \
-  --judge-backend mock > $QS/my-pack.log
+  --judge-backend live > $QS/my-pack.log
 jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rules") | "\(.id)  \(.tier)  \(.verdict)"' \
   $QS/run-my-pack/last-run/rollup/result-v0-$DAY.json
 ```
@@ -407,7 +410,7 @@ because it discloses the conversations themselves, not only their digests:
 ```sh
 scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json --profile airline \
   --date $DAY --out $QS/eu.html --work $QS/run-eu --capsulectl $QS/bin/capsulectl \
-  --judge-backend mock --attach-input-originals \
+  --judge-backend live --attach-input-originals \
   --title "EU AI Act obligations: airline support agent" > $QS/eu.log
 grep -A1 "book report build: render" $QS/eu.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
 ```
