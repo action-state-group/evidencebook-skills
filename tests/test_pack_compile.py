@@ -62,7 +62,7 @@ class ValidateSource(unittest.TestCase):
         # build_compiled_json emits contract_ref as f"{pack_id}@{pack_version}",
         # which must match the Evidence Result v0 ContractRef pattern
         # "^[^@\\s]+@[^@\\s]+$" -- an embedded "@" would compile a pack
-        # `capsulectl result build` refuses.
+        # `capsulectl book result build` refuses.
         source = minimal_source()
         source["pack_id"] = "airline@support"
         issues = validate_source(source)
@@ -266,6 +266,34 @@ class Switches(unittest.TestCase):
         self.assertEqual(clauses[1]["claim_switch"], source["checks"][0]["criteria"][1]["claim_switch"])
         self.assertNotIn("tier_switch", clauses[1])
         self.assertNotIn("claim_switch", clauses[0])
+
+
+class ReferenceFiles(unittest.TestCase):
+    """judge.reference_files: optional, passed through to compiled.json's judge
+    block for scripts/run_daily.py's judge_reference_files()."""
+
+    FILES = {"policy": "data/policy.md", "booking_db": "data/db.json"}
+
+    def test_absent_compiles_with_no_reference_files_key(self):
+        self.assertNotIn("reference_files", build_compiled_json(minimal_source(), "demo/test-pack")["judge"])
+
+    def test_named_files_pass_through_and_move_the_source_digest(self):
+        source = minimal_source()
+        source["judge"]["reference_files"] = dict(self.FILES)
+        self.assertEqual(validate_source(source), [])
+        self.assertEqual(build_compiled_json(source, "demo/test-pack")["judge"]["reference_files"], self.FILES)
+        self.assertNotEqual(source_digest(source), source_digest(minimal_source()))
+
+    def test_malformed_blocks_are_refused(self):
+        for bad, expected in (({"policy": "p.md"}, "exactly 'policy' and 'booking_db'"),
+                              ("p.md", "exactly 'policy' and 'booking_db'"),
+                              ({"policy": "", "booking_db": "d.json"}, "non-empty path"),
+                              ({"policy": "/etc/p.md", "booking_db": "d.json"}, "relative to the repo root"),
+                              ({"policy": "../p.md", "booking_db": "d.json"}, "relative to the repo root")):
+            source = minimal_source()
+            source["judge"]["reference_files"] = bad
+            issues = validate_source(source)
+            self.assertTrue(any(expected in i for i in issues), (bad, issues))
 
 
 class BuildClauses(unittest.TestCase):
