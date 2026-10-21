@@ -366,9 +366,9 @@ DAY=$(capsulectl cll list --profile airline --limit 1000 | jq -r '[.entries[].ap
 scripts/report.sh --spec demo/airline-support-outcomes/compiled.json --profile airline \
   --date $DAY --out $QS/outcomes.html --work $QS/run-outcomes --capsulectl $QS/bin/capsulectl \
   --judge-backend live > $QS/outcomes.log
-jq -c '{cases, reports: (.reports | length), verdicts, judge_pin_digest}' $QS/run-outcomes/runs/day-$DAY/run.json
+jq -c '{cases, reports: (.reports | length), verdicts, judge_pin_digest}' $QS/run-outcomes/last-run/runs/day-$DAY/run.json
 jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rules") | "\(.id)  \(.tier)  \(.verdict)"' \
-  $QS/run-outcomes/rollup/result-v0-$DAY.json
+  $QS/run-outcomes/last-run/rollup/result-v0-$DAY.json
 grep -A1 "book report build: render" $QS/outcomes.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
 ```
 
@@ -413,6 +413,33 @@ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json --profile airl
   --judge-backend live --attach-input-originals \
   --title "EU AI Act obligations: airline support agent" > $QS/eu.log
 grep -A1 "book report build: render" $QS/eu.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
+```
+
+### Adjudication on or off
+
+There is no single on/off flag. What gets adjudicated follows from the spec
+you pass and the tier of each row:
+
+- **On.** A compiled pack with judged rows: `report.sh` sends each judged
+  row to the pinned judge, the one the pack names, through `--judge-cmd`
+  (default `scripts/judges/jev_judge.py`) with `--judge-backend live`. To
+  use your own judge, pass your command as `--judge-cmd`; the pin then
+  covers the instruction template that command reports.
+- **Off for a whole report.** Pass a `report-spec/v1` file instead of a
+  compiled pack, as in step 4. `report.sh` picks the no-judge path from the
+  spec's own content.
+- **Off for one row.** Give it `tier: recomputed`, or turn on its
+  `tier_switch` flag as in step 3. The compiler accepts that only for a row
+  that has a deterministic check. A pack has no setting that skips a judged
+  row and keeps it in the report.
+
+`--judge-backend mock` does not turn adjudication off: the judged rows are
+still sealed, with placeholder verdicts. To see which rows of a compiled
+pack go to the judge, read each row's effective tier the way
+`run_daily.py` does:
+
+```sh
+python3 -c 'import json, sys; sys.path.insert(0, "scripts"); import run_daily as rd; spec = json.load(open(sys.argv[1])); sw = spec.get("switches") or {}; [print("%-10s %s" % (rd.effective_tier(c, sw), c["id"])) for c in spec["clauses"]]' demo/my-airline-pack/compiled.json
 ```
 
 **Reading a judged card.** `$QS/outcomes.html` reads at two levels:
