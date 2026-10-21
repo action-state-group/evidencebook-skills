@@ -169,11 +169,13 @@ B3 is presenter-driven: it runs inside **Claude Code** with the `evaluation-comp
 skill (agent host + model access), not a shell command. Run it in a **fresh** Claude
 Code context. Compilation is a short **dialog** — you lead with the value proposition;
 the skill derives what it can and asks for what it cannot infer; you answer from the
-prepared facts. The exchange below is from a real run.
+prepared facts. The exchange below is from a real run, made when the skill's
+`SKILL.md` sat at the repository root; it now lives at
+`skills/evaluation-compiler/SKILL.md`.
 
 **The compile dialog:**
 
-> **You:** invoke skills/evaluation-compiler/SKILL.md in this repo
+> **You:** invoke the skill.md in this repo
 >
 > **evaluation-compiler:** *(loads `SKILL.md`)* I compile a **value proposition** plus
 > a recorded-interaction source into an evaluation skill bundle. What should improve,

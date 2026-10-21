@@ -127,7 +127,7 @@ just the envelope. A mismatch is a verification error.
 
 One Capsule per human rating, appended to the same CLL, chained to the
 `evaluation-report/v1` Capsule it audits (reuse of the `chain` mechanism — see
-`references/capsule-cli.md`), forming the provenance chain interaction ← report ←
+`skills/evaluation-compiler/references/capsule-cli.md`), forming the provenance chain interaction ← report ←
 rating. The sampling skill sets the chain parent to the report; the **rater sees the
 full packet defined in "Blinding"** (the interaction plus the independently-sourced
 desired-outcome materials) and none of the judge-derived report fields, so the rating
@@ -250,8 +250,9 @@ Steps:
   2. a **calibration** bundle (`<scenario>-calibrate/`) — reduces the reports and
      ratings into `calibration-summary/v1`.
 - New `assets/sampling.md` and `assets/calibration.md` under
-  `skills/evaluation-compiler/`, referenced the way `assets/aggregation.md` is. `resolved-spec.json` records the audited quantity and
-  sampling design so both skills agree.
+  `skills/evaluation-compiler/`, referenced the way `assets/aggregation.md` is.
+  `resolved-spec.json` records the audited quantity and sampling design so both
+  skills agree.
 - `human-rating/v1` is created only by the sampling-and-rating skill's
   human-in-the-loop step — never by the compiler, the evaluator, or a model
   standing in for the expert. The ratings must exist before calibration can reduce
