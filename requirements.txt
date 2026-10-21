@@ -2,6 +2,7 @@
 rfc8785  # JCS (RFC 8785) for JSON-DIGESTs: scripts/skill_record.py
 pyyaml>=6.0       # pack sources (scripts/pack_compile.py)
 jevals==0.1.4     # the Jev judge backend (scripts/judges/jev_judge.py)
+jsonschema>=4.18  # tests: compiled Evidence Contracts against the EC v0 schema (tests/test_evidence_contract.py)
 # tests only, optional: capsule-engine itself at the commit PR #96 landed on,
 # so tests/test_judge_pin_capsule_engine_96.py's RealLoaderAccepts can run
 # every judge_pin this repo builds through capsule-engine's own, real,

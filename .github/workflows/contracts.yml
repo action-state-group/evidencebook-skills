@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Published Evidence Contracts are add-only. A Result cites a contract by
+# `<id>@<version>` alone (agent-action-capsule interop profile §11.3.7), so the
+# file at contracts/<id>/<version>.json must never change once merged: a
+# changed row is a new version, in a new file. This fails a pull request that
+# modifies, deletes or renames an existing file under contracts/.
+#
+# It reads git metadata only and runs nothing from the pull request.
+name: contracts
+on:
+  pull_request:
+    paths: ["contracts/**"]
+permissions:
+  contents: read
+jobs:
+  add-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: existing contracts are unchanged
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          changed=$(git diff --name-status --no-renames "$BASE_SHA"...HEAD -- contracts/ | grep -v '^A' || true)
+          if [ -n "$changed" ]; then
+            echo "A published contract is immutable; publish a new version instead:"
+            echo "$changed"
+            exit 1
+          fi
+          echo "contracts/: additions only"
