@@ -14,7 +14,9 @@ spec["judge"]["model_id"]): a judged report counts only under the CURRENT judge 
 (scripts/judge_pin.py, recomputed here exactly as run_daily.py builds it, which
 needs --judge-cmd to report its instruction template), and a recomputed report
 only under the current pack_source_digest. A clause reworded but kept at the same
-id is therefore never combined with an older judgment of it.
+id is therefore never combined with an older judgment of it. A contract with a
+judged clause and no judge model id is refused (exit 2), never rolled up
+unscoped; only a contract whose clauses are all recomputed runs without a pin.
 
 Conflicts are refused, not resolved by order: two reports under one pin for the
 same case and clause with different verdicts (a re-judgment that disagrees) put
@@ -71,6 +73,13 @@ def _in_scope(body, contract, expected_pin, expected_pack):
     return expected_pack is None or body.get("pack_source_digest") == expected_pack
 
 
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def _is_digest(value):
+    return isinstance(value, str) and _HEX64.fullmatch(value) is not None
+
+
 def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key):
     """key(body) -> grouping key tuple prefix; returns nested dicts of
     {clause_id: (verdict, capsule_id, source_capsule_id)}. `source_capsule_id` is
@@ -90,6 +99,9 @@ def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key
         except (KeyError, TypeError) as e:
             raise RollupError(f"report {capsule_id} is malformed: missing or mistyped {e}")
         source_capsule_id = body.get("source_capsule_id")
+        if source_capsule_id is not None and not _is_digest(source_capsule_id):
+            raise RollupError(f"report {capsule_id} is malformed: source_capsule_id must be a 64-hex capsule id, "
+                              f"got {source_capsule_id!r}")
         slots.setdefault(slot, []).append((verdict, capsule_id, source_capsule_id))
     grouped = {}
     for slot, entries in slots.items():
@@ -155,18 +167,18 @@ def collect_reports(capsulectl, profile, contract, expected_pin=None, expected_p
 def resolve_expected_pin(capsulectl, spec, judge_model_id, judge_cmd, root, work, timeout=DEFAULT_JUDGE_TIMEOUT):
     """The current compiled spec's judge_pin_digest, built exactly as
     scripts/run_daily.py builds it (scripts/judge_pin.py) -- or None when no model
-    id is available (a hand-authored contract predating judge.model_id), in which
-    case the rollup runs unscoped by pin. Needs the judge command, which reports
-    the instruction template it sends."""
+    id is available. None is only usable for a contract with no judged clause
+    (require_pin_for_judged_clauses refuses it otherwise). Needs the judge
+    command, which reports the instruction template it sends."""
     if not judge_model_id:
         return None
-    if not judge_cmd:
-        raise EvidenceUnavailable("--judge-cmd is required to recompute the judge pin "
-                                  "(the pin covers the instruction template the judge reports)")
     judge = spec.get("judge")
     if not isinstance(judge, dict) or not judge.get("prompt") or not judge.get("axes"):
         raise EvidenceUnavailable("a judge model id was given, but the contract has no judge prompt and axes "
                                   "to pin it against")
+    if not judge_cmd:
+        raise EvidenceUnavailable("--judge-cmd is required to recompute the judge pin "
+                                  "(the pin covers the instruction template the judge reports)")
     pin_path = work / "judge-pin.json"
     pin_path.write_text(json.dumps(pin_input(spec, root, judge_model_id, describe_judge(judge_cmd, timeout))))
     return run(capsulectl, "judge", "pin", str(pin_path))["judge_pin_digest"]
@@ -256,12 +268,28 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
 
 
 def resolve_judge_model_id(cli_judge_model_id, spec):
-    """--judge-model-id, or spec["judge"]["model_id"] when present -- fails
-    closed to None (never scoped by pin, same as before this flag existed)
-    rather than raising, since a hand-authored contract may carry no "judge"
-    key at all (run_daily.py's own sibling lookup, min_confidence, already
-    defends this the same way)."""
-    return cli_judge_model_id or (spec.get("judge") or {}).get("model_id")
+    """--judge-model-id, or spec["judge"]["model_id"] when present, else None.
+    Never raises on a missing or non-mapping "judge" key ("judge": "jev",
+    "judge": []): a hand-written contract gets None here, and
+    require_pin_for_judged_clauses then decides whether the rollup may run."""
+    judge = spec.get("judge")
+    return cli_judge_model_id or (judge.get("model_id") if isinstance(judge, dict) else None)
+
+
+def require_pin_for_judged_clauses(spec, expected_pin):
+    """Fail closed: a contract with any judged clause rolls up only under a
+    pin. Without one, _in_scope would accept a judged report under ANY
+    judge_pin_digest, so an older rule's `met` under the same contract and
+    clause id could be rolled up as satisfied for the current contract. A
+    contract with no judged clause (every clause recomputed) has no pin to
+    scope by and runs on pack_source_digest alone."""
+    if expected_pin is not None:
+        return
+    judged = sorted(cid for cid, tier in clause_tiers(spec).items() if tier == "judged")
+    if judged:
+        raise EvidenceUnavailable(f"the contract has {len(judged)} judged clause(s) (e.g. {judged[0]!r}) but no judge "
+                                  "model id to pin them to: pass --judge-model-id, or compile the contract with "
+                                  "judge.model_id; refusing to roll up judged reports unscoped by pin")
 
 
 def main(argv):
@@ -282,8 +310,9 @@ def main(argv):
                      help="the pinned judge's model id, as given to run_daily.py --judge-model-id. "
                           "Defaults to spec['judge']['model_id'] when present (every "
                           "scripts/pack_compile.py-compiled contract carries one). When neither is "
-                          "available, the rollup is not pin-scoped: reports are combined by contract "
-                          "and clause id alone, as before this flag existed.")
+                          "available and the contract has a judged clause, the rollup refuses "
+                          "(evidence_unavailable, exit 2); a contract with no judged clause runs "
+                          "scoped by pack_source_digest alone.")
     args = ap.parse_args(argv)
 
     spec = json.loads(args.spec.read_text())
@@ -305,6 +334,7 @@ def main(argv):
     try:
         expected_pin = resolve_expected_pin(args.capsulectl, spec, judge_model_id, args.judge_cmd, root, work,
                                             args.judge_timeout)
+        require_pin_for_judged_clauses(spec, expected_pin)
         by_case, bodies = collect_reports(args.capsulectl, args.profile, contract, expected_pin, expected_pack,
                                           conflicts)
         by_day = group_reports_by_day(bodies, contract, expected_pin, expected_pack, conflicts)

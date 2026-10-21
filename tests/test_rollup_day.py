@@ -18,8 +18,8 @@ from capsulectl_calls import EvidenceUnavailable  # noqa: E402
 from result_v0 import headline_from_result  # noqa: E402
 from rollup import RollupError, all_criteria_from_clauses, all_required_met, checks_from_clauses  # noqa: E402
 from rollup_day import (clause_tiers, day_document, group_reports, group_reports_by_day,  # noqa: E402
-                        partition_stale, resolve_expected_pin, resolve_judge_model_id, rollup_case,
-                        safe_filename)
+                        partition_stale, require_pin_for_judged_clauses, resolve_expected_pin,
+                        resolve_judge_model_id, rollup_case, safe_filename)
 
 CLAUSES = [
     {"id": "policy_compliance.confirmed_before_acting", "check_id": "policy_compliance", "tier": "judged"},
@@ -37,6 +37,7 @@ ALL_CRITERIA = all_criteria_from_clauses(CLAUSES)
 TIERS = {c["id"]: c["tier"] for c in CLAUSES}
 CONTRACT_REF = "airline-support-outcomes@1.3.0"
 ALL_MET_WITH_DIGESTS = {c: ("met", f"{i:064x}", None) for i, c in enumerate(ALL_CRITERIA)}
+CASE_A_CAPSULE = "ca" * 32  # a case record capsule id: 64 lowercase hex, like every book capsule id
 
 
 class SafeFilename(unittest.TestCase):
@@ -74,11 +75,19 @@ class GroupReports(unittest.TestCase):
         # record (result_v0.claim_for) with no by-hand step.
         bodies = [
             ("cap1", self._report("case-a", "policy_compliance.confirmed_before_acting", "met",
-                                  source_capsule_id="case-a-capsule")),
+                                  source_capsule_id=CASE_A_CAPSULE)),
         ]
         grouped = group_reports(bodies, self.CONTRACT)
         self.assertEqual(grouped["case-a"]["policy_compliance.confirmed_before_acting"],
-                         ("met", "cap1", "case-a-capsule"))
+                         ("met", "cap1", CASE_A_CAPSULE))
+
+    def test_a_malformed_source_capsule_id_names_the_report(self):
+        clause = "policy_compliance.confirmed_before_acting"
+        for bad in ({"x": 1}, "not-a-digest", "AB" * 32, 7):
+            with self.subTest(bad=bad):
+                bodies = [("cap-bad", self._report("case-a", clause, "met", source_capsule_id=bad))]
+                with self.assertRaisesRegex(RollupError, "cap-bad"):
+                    group_reports(bodies, self.CONTRACT)
 
     def test_a_different_contracts_reports_never_mix_into_the_same_case(self):
         # Same case_id, same clause_id, two different contracts (e.g. the original
@@ -167,7 +176,7 @@ class GroupReportsByDay(unittest.TestCase):
     def test_groups_by_period_then_case_then_clause(self):
         bodies = [
             ("cap1", self._report("case-a", "policy_compliance.confirmed_before_acting",
-                                   "met", "day:2026-09-23", source_capsule_id="case-a-capsule")),
+                                   "met", "day:2026-09-23", source_capsule_id=CASE_A_CAPSULE)),
             ("cap2", self._report("case-b", "policy_compliance.confirmed_before_acting",
                                    "not_met", "day:2026-09-24")),
         ]
@@ -175,7 +184,7 @@ class GroupReportsByDay(unittest.TestCase):
         self.assertEqual(sorted(grouped), ["day:2026-09-23", "day:2026-09-24"])
         self.assertEqual(
             grouped["day:2026-09-23"]["case-a"]["policy_compliance.confirmed_before_acting"],
-            ("met", "cap1", "case-a-capsule"),
+            ("met", "cap1", CASE_A_CAPSULE),
         )
         self.assertEqual(
             grouped["day:2026-09-24"]["case-b"]["policy_compliance.confirmed_before_acting"],
@@ -236,6 +245,11 @@ class ResolveJudgeModelId(unittest.TestCase):
     def test_a_judge_key_with_no_model_id_is_also_none(self):
         self.assertIsNone(resolve_judge_model_id(None, {"judge": {}}))
 
+    def test_a_non_mapping_judge_is_none_not_an_attribute_error(self):
+        for judge in ("jev", [], 7):
+            with self.subTest(judge=judge):
+                self.assertIsNone(resolve_judge_model_id(None, {"judge": judge}))
+
 
 class ResolveExpectedPin(unittest.TestCase):
     def test_no_model_id_means_no_pin_scoping(self):
@@ -249,17 +263,72 @@ class ResolveExpectedPin(unittest.TestCase):
         # The pin covers the instruction template the judge reports; without the
         # judge command it cannot be recomputed, so the rollup refuses.
         with self.assertRaisesRegex(EvidenceUnavailable, "--judge-cmd is required"):
-            resolve_expected_pin("capsulectl-should-not-run", {"judge": {}}, "jev-1.13.0", None, None, None)
+            resolve_expected_pin("capsulectl-should-not-run",
+                                 {"judge": {"prompt": "judge-prompt.md", "axes": "axes.json"}},
+                                 "jev-1.13.0", None, None, None)
 
     def test_a_model_id_against_a_contract_with_no_judge_section_is_refused(self):
         # --judge-model-id given, but the contract carries no judge prompt/axes
         # to pin: refused as unavailable evidence, never a KeyError, and the
         # judge command is never run.
-        for spec in ({}, {"judge": {}}, {"judge": {"prompt": "judge-prompt.md"}}):
-            with self.subTest(spec=spec):
-                with self.assertRaisesRegex(EvidenceUnavailable, "no judge prompt and axes"):
-                    resolve_expected_pin("capsulectl-should-not-run", spec, "jev-1.13.0",
-                                         "judge-cmd-should-not-run", None, None)
+        for spec in ({}, {"judge": {}}, {"judge": {"prompt": "judge-prompt.md"}}, {"judge": "jev"}, {"judge": []}):
+            for judge_cmd in ("judge-cmd-should-not-run", None):
+                with self.subTest(spec=spec, judge_cmd=judge_cmd):
+                    # Checked before --judge-cmd, so the user is told the real
+                    # problem first (Ethan's review of 6aa4fbb).
+                    with self.assertRaisesRegex(EvidenceUnavailable, "no judge prompt and axes"):
+                        resolve_expected_pin("capsulectl-should-not-run", spec, "jev-1.13.0",
+                                             judge_cmd, None, None)
+
+
+class RequirePinForJudgedClauses(unittest.TestCase):
+    """Ethan's review of 6aa4fbb: with no `judge` section the rollup ran
+    unscoped by pin, so an old pin's `met` could roll up as satisfied for the
+    current contract. A contract with any judged clause now refuses."""
+
+    JUDGED = {"clauses": [{"id": "a.one", "check_id": "a", "tier": "judged"},
+                          {"id": "a.two", "check_id": "a", "tier": "recomputed"}]}
+    RECOMPUTED_ONLY = {"clauses": [{"id": "a.two", "check_id": "a", "tier": "recomputed"}]}
+
+    def test_judged_clauses_and_no_pin_is_refused(self):
+        with self.assertRaisesRegex(EvidenceUnavailable, "judged clause"):
+            require_pin_for_judged_clauses(self.JUDGED, None)
+
+    def test_judged_clauses_under_a_pin_pass(self):
+        require_pin_for_judged_clauses(self.JUDGED, "ab" * 32)
+
+    def test_a_recomputed_only_contract_runs_without_a_pin(self):
+        require_pin_for_judged_clauses(self.RECOMPUTED_ONLY, None)
+
+    def test_a_tier_switch_to_recomputed_counts_as_recomputed(self):
+        spec = {"switches": {"flag_x": True},
+                "clauses": [{"id": "a.one", "check_id": "a", "tier": "judged",
+                             "tier_switch": {"flag": "flag_x", "tier_when_on": "recomputed"}}]}
+        require_pin_for_judged_clauses(spec, None)
+
+    def test_no_judge_section_and_only_old_pin_reports_produces_no_result(self):
+        # End to end through main(): a contract with no `judge` section, a
+        # book holding only an older pin's judged `met`, no --judge-model-id.
+        # Exit 2 with evidence_unavailable, and no Result v0 written.
+        import io
+        import json as _json
+        import tempfile
+        from contextlib import redirect_stdout
+        from rollup_day import main
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            spec_path = d / "demo" / "x" / "compiled.json"
+            spec_path.parent.mkdir(parents=True)
+            spec_path.write_text(_json.dumps({"contract": "x/v1", "contract_ref": "x@0.1.0",
+                                              "clauses": [{"id": "a.one", "check_id": "a", "tier": "judged"}]}))
+            out = d / "out"
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                rc = main(["--profile", "p", "--spec", str(spec_path), "--capsulectl", "capsulectl-should-not-run",
+                           "--generated-at", "2026-10-20T00:00:00Z", "--out", str(out)])
+            self.assertEqual(rc, 2, buf.getvalue())
+            self.assertIn("evidence_unavailable", _json.loads(buf.getvalue()))
+            self.assertEqual([p.name for p in out.rglob("*.json")], [])
 
 
 class PartitionStale(unittest.TestCase):

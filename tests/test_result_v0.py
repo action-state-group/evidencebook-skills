@@ -215,19 +215,24 @@ class BuildResultV0ForDay(unittest.TestCase):
         case_rollups = [
             ("case-a", ALL_MET, {}, self.TIERS),
             ("case-b", ALL_MET, {}, self.TIERS),
+            ("case-c", ALL_MET, {}, self.TIERS),
         ]
         clause = "policy_compliance.confirmed_before_acting"
-        source_capsule_ids = {"case-a": {clause: "capsule-a"}, "case-b": {clause: "capsule-b"}}
+        source_capsule_ids = {"case-a": {clause: "capsule-a"}, "case-b": {clause: "capsule-b"}}  # no case-c
         doc = build_result_v0_for_day("day:2026-09-23", case_rollups, "2026-09-23T23:59:59Z",
                                        ALL_CRITERIA, CONTRACT_REF, source_capsule_ids=source_capsule_ids)
         claim_a = next(c for c in doc["claims"] if c["id"] == f"case-a::{clause}")
         claim_b = next(c for c in doc["claims"] if c["id"] == f"case-b::{clause}")
         self.assertEqual(claim_a["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-a"}])
         self.assertEqual(claim_b["evidence"], [{"digest_alg": "SHA-256", "digest": "capsule-b"}])
-        # a case missing from source_capsule_ids is never fabricated a citation
+        # a criterion missing from a case's own map is never fabricated a citation
         other_claim = next(c for c in doc["claims"]
                            if c["id"] == f"case-a::{next(c2 for c2 in ALL_CRITERIA if c2 != clause)}")
         self.assertEqual(other_claim["evidence"], [])
+        # and neither is any claim of a case missing from source_capsule_ids altogether
+        case_c_claims = [c for c in doc["claims"] if c["id"].startswith("case-c::")]
+        self.assertEqual(len(case_c_claims), len(ALL_CRITERIA))
+        self.assertTrue(all(c["evidence"] == [] for c in case_c_claims), case_c_claims)
 
     def test_buckets_still_partition_every_claim_exactly_once_across_cases(self):
         mixed = dict(self.TIERS)
