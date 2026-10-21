@@ -87,7 +87,10 @@ card the wiring adds a `producer_note`, which the renderer shows under its own
 "Producer's note · presentation text, not evidence" label; the card's own
 checks and wording come from the sealed reports, not from the block. The
 obligation card labels the producer's mapping itself, so its block is copied
-unchanged. The renderers don't yet compare the block against the sealed digest
+unchanged. Known gap: the obligation card's header doesn't yet name the
+obligation titles, test names, not-evaluable notes or the quality protocol as
+the producer's wording, so those show with no label; that text is the
+renderer's, and it is listed in #29's viewer follow-up. The renderers don't yet compare the block against the sealed digest
 (issue #29's viewer follow-up), so until they do the page keeps its
 "not evidence" labels. `--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it

@@ -4,17 +4,14 @@
 #
 # This is the shape a mesh-llm settlement report would take over this engine
 # -- what a node served, what it earned, what it paid for what it consumed, grouped by
-# day -- NOT a working spec against real data: mesh-llm has no
-# shipped sealed-record schema yet, so every field name and the `record_type`
-# value below (`mesh-settlement-exchange/v1`) is this job's own placeholder,
-# invented to give the shape something concrete to read, not a name mesh-llm
-# has committed to. Nothing in evidencebook-skills' tests runs this spec
-# against a live book; scripts/report_spec.py's own engine (select_record_rows,
-# the `fields:`/`join` projection, evaluate_group) is exercised instead with
-# synthetic rows shaped like this draft's own record (tests/test_report_spec.py,
-# and this job's BUILD.md section on the mesh-llm draft), which is as far as
-# "it fits the format" can be demonstrated before a real export exists. It
-# stays a DRAFT until Mesh range bundles verify (AAC #339).
+# day -- NOT a working spec against real data. Every field name and the
+# `record_type` value below (`mesh-settlement-exchange/v1`) is this draft's own
+# placeholder, not a name Mesh has committed to for its export. Nothing in
+# evidencebook-skills' tests runs this spec against a live book;
+# scripts/report_spec.py's own engine (select_record_rows, the `fields:`
+# projection, evaluate_group) is exercised instead with synthetic rows shaped
+# like this draft's own record (tests/test_mesh_llm_draft_spec.py). It stays a
+# labelled DRAFT until Mesh range bundles verify (AAC #339).
 #
 # Grouped by day only, never by counterparty: a per-peer summary reads like a
 # reputation score of the other node, which this report does not make.

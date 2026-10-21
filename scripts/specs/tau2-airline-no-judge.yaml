@@ -48,6 +48,12 @@ metrics:
   - name: cancellation_count
     source: cancel_results
     op: count
+  # Conversations with at least one cancellation: one conversation can cancel
+  # two reservations, so the claim below counts conversations, not calls.
+  - name: cancelling_conversation_count
+    source: cancel_results
+    op: count_distinct
+    field: case_id
   - name: refund_count
     source: refund_entries
     op: count
@@ -68,7 +74,7 @@ claims:
       no more conversations end in a cancellation than there were
       conversations that day
     kind: threshold
-    metric: cancellation_count
+    metric: cancelling_conversation_count
     op: "<="
     value: conversation_count
 
@@ -81,12 +87,14 @@ claims:
 
   # A forall claim over a cross-record (ledger-reconciliation) derived field:
   # "every refund amount stated equals the payment record" -- every refund
-  # entry a cancellation produced exactly offsets an earlier charge of the
-  # same amount in that reservation's own payment_history.
+  # entry a cancellation produced exactly offsets a charge of the same amount
+  # in that reservation's own payment_history. Order is not checked.
   - id: refund_amount_matches_payment_record
     description: >-
       every refund recorded in a reservation's payment_history exactly
-      offsets an earlier charge of the same amount in that same reservation
+      offsets a charge of the same amount in that same reservation's
+      payment_history (each charge offsets at most one refund; order is not
+      checked)
     kind: forall
     source: refund_entries
     assert: __has_offset_match

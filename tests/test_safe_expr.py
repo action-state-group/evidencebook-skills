@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
-from safe_expr import ExprError, eval_expr  # noqa: E402
+from safe_expr import ExprError, MissingField, eval_expr  # noqa: E402
 
 
 class Literals(unittest.TestCase):
@@ -21,8 +21,12 @@ class Names(unittest.TestCase):
     def test_name_looked_up_in_row(self):
         self.assertEqual(eval_expr("amount", {"amount": 42}), 42)
 
-    def test_missing_name_is_none_not_an_error(self):
-        self.assertIsNone(eval_expr("amount", {}))
+    def test_missing_name_raises_missing_field_never_none(self):
+        with self.assertRaises(MissingField):
+            eval_expr("amount", {})
+
+    def test_present_null_is_none(self):
+        self.assertIsNone(eval_expr("amount", {"amount": None}))
 
 
 class Comparisons(unittest.TestCase):
@@ -38,10 +42,49 @@ class Comparisons(unittest.TestCase):
         with self.assertRaises(ExprError):
             eval_expr("amount < 0", {})
 
-    def test_equality_against_a_missing_field_is_false_not_an_error(self):
-        # == is a safe default to leave total (None == 42 is unambiguously False),
-        # unlike ordering, which has no sane answer for an absent value.
-        self.assertFalse(eval_expr("amount == 42", {}))
+    def test_equality_against_a_missing_field_is_missing_not_false(self):
+        with self.assertRaises(MissingField):
+            eval_expr("amount == 42", {})
+
+
+class MissingNeverPassesANegation(unittest.TestCase):
+    """A record without `status` must never read as `status != 'failed'`."""
+
+    def test_not_equal(self):
+        with self.assertRaises(MissingField):
+            eval_expr("status != 'failed'", {})
+
+    def test_not_in(self):
+        with self.assertRaises(MissingField):
+            eval_expr("status not in ['failed', 'void']", {})
+
+    def test_not(self):
+        with self.assertRaises(MissingField):
+            eval_expr("not status", {})
+
+    def test_missing_field_is_an_expr_error(self):
+        self.assertTrue(issubclass(MissingField, ExprError))
+
+    def test_present_values_still_negate(self):
+        self.assertTrue(eval_expr("status != 'failed'", {"status": "ok"}))
+        self.assertTrue(eval_expr("not status", {"status": None}))
+
+
+class ShortCircuit(unittest.TestCase):
+    def test_and_stops_at_the_first_false_operand(self):
+        self.assertFalse(eval_expr("amount != None and amount > 0", {"amount": None}))
+
+    def test_or_stops_at_the_first_true_operand(self):
+        self.assertTrue(eval_expr("amount == None or amount > 0", {"amount": None}))
+        self.assertTrue(eval_expr("ok or missing_field > 0", {"ok": True}))
+
+    def test_a_later_operand_is_still_read_when_it_decides(self):
+        with self.assertRaises(MissingField):
+            eval_expr("ok and missing_field > 0", {"ok": True})
+
+    def test_results_are_bools(self):
+        self.assertIs(eval_expr("a and b", {"a": 1, "b": 2}), True)
+        self.assertIs(eval_expr("a or b", {"a": 0, "b": ""}), False)
 
     def test_in_and_not_in(self):
         self.assertTrue(eval_expr("amount in [1, 2, 3]", {"amount": 2}))

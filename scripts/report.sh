@@ -28,8 +28,10 @@
 # from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
 # for that step, or your own producer's own sealing). Every capsulectl call
 # below runs in the CALLER's own environment (HOME/XDG_CONFIG_HOME
-# unchanged) unless --work is given, in which case intermediate files (never
-# the final --out) live under it.
+# unchanged). Intermediate files (never the final --out) go in a fresh,
+# empty run directory: under --work when given (a new run.XXXXXX inside it,
+# so a reused --work never mixes an earlier run's results into this one),
+# else a temp directory.
 #
 # --card defaults to the spec's own `presentation.card` (report-spec path)
 # or, on the judged path, the card the pack's own presentation block selects
@@ -42,7 +44,16 @@
 # --judge-cmd/--judge-model-id are read from the compiled pack by default (its
 # own judge.model_id) and almost never need to be given explicitly.
 #
-# --title sets the page title (default: the Result v0's own view title).
+# --title sets the page title (default: the Result v0's own view title). It is
+# written into the Result's view.title BEFORE book result build, so the title
+# the page shows is the sealed one.
+#
+# The judged path reports exactly the days in --date..--to: rollup_day.py
+# writes a result for every day in the book under the current pin, and only
+# result-v0-<day>.json for each day in the range is taken. A day in the range
+# with no result stops the run. --judge-backend sets JEV_JUDGE_BACKEND
+# explicitly (mock or jev), so an inherited JEV_JUDGE_BACKEND=mock can never
+# run the mock under a live model id.
 # --attach-input-originals passes the same flag to `capsulectl disclose`, so
 # each cited case record's original input -- the full conversation transcript,
 # tool calls and results -- is carried in the bundle and shown on the page. It
@@ -87,8 +98,12 @@ if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
 fi
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-WORK=${WORK:-$(mktemp -d)}
-mkdir -p "$WORK"
+if [[ -n "$WORK" ]]; then
+  mkdir -p "$WORK"
+  WORK=$(mktemp -d "$WORK/run.XXXXXX")
+else
+  WORK=$(mktemp -d)
+fi
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'report.sh: FAIL -- %s\n' "$*" >&2; exit 1; }
 
@@ -134,21 +149,19 @@ if [[ "$MODE" == "no-judge" ]]; then
 else
   JUDGE_MODEL_ID=${JUDGE_MODEL_ID:-$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['judge']['model_id'])" "$SPEC")}
   JUDGE_CMD=${JUDGE_CMD:-"python3 $REPO/scripts/judges/jev_judge.py"}
+  # Set in BOTH branches, never inherited: a caller's JEV_JUDGE_BACKEND=mock
+  # must not run the mock while the report records a live model id.
   if [[ "$JUDGE_BACKEND" == "mock" ]]; then
+    export JEV_JUDGE_BACKEND=mock
     EFFECTIVE_MODEL_ID="$JUDGE_MODEL_ID (mock backend, no model read the conversation)"
   else
+    export JEV_JUDGE_BACKEND=jev
     EFFECTIVE_MODEL_ID="$JUDGE_MODEL_ID"
   fi
   for day in "${DATES[@]}"; do
-    step "daily-judge-and-close: $day"
-    if [[ "$JUDGE_BACKEND" == "mock" ]]; then
-      JEV_JUDGE_BACKEND=mock python3 "$REPO/scripts/run_daily.py" --profile "$PROFILE" --spec "$SPEC" \
-        --capsulectl "$CAPSULECTL" --judge-cmd "$JUDGE_CMD" --judge-model-id "$EFFECTIVE_MODEL_ID" \
-        --date "$day" --out "$WORK/runs"
-    else
-      python3 "$REPO/scripts/run_daily.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
-        --judge-cmd "$JUDGE_CMD" --judge-model-id "$EFFECTIVE_MODEL_ID" --date "$day" --out "$WORK/runs"
-    fi
+    step "daily-judge-and-close: $day (JEV_JUDGE_BACKEND=$JEV_JUDGE_BACKEND)"
+    python3 "$REPO/scripts/run_daily.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
+      --judge-cmd "$JUDGE_CMD" --judge-model-id "$EFFECTIVE_MODEL_ID" --date "$day" --out "$WORK/runs"
   done
   step "rollup_day.py: the all-required rollup, pin-scoped to the current compiled pack"
   # rollup_day.py recomputes the judge pin to scope the rollup to it, and the pin
@@ -160,10 +173,23 @@ else
   DEFAULT_CARD=outcome
 fi
 
-# one result-v0-<day>.json per day either path just wrote; merge if more than one.
-shopt -s nullglob
-DAY_RESULTS=("$WORK"/rollup/result-v0-*.json)
-shopt -u nullglob
+# The results this run reports on; merge if more than one. $WORK is this
+# run's own fresh directory, so nothing from an earlier run is in it.
+if [[ "$MODE" == "judged" ]]; then
+  # rollup_day.py writes every day in the book under this pin (and an
+  # unknown-period file): take exactly the days in the range, each required.
+  DAY_RESULTS=()
+  for day in "${DATES[@]}"; do
+    f="$WORK/rollup/result-v0-$day.json"
+    [[ -f "$f" ]] || fail "no judged result for $day (rollup_day.py wrote none) -- not reporting a range with a missing day"
+    DAY_RESULTS+=("$f")
+  done
+else
+  # report_spec.py already kept only --date-from..--date-to.
+  shopt -s nullglob
+  DAY_RESULTS=("$WORK"/rollup/result-v0-*.json)
+  shopt -u nullglob
+fi
 [[ ${#DAY_RESULTS[@]} -ge 1 ]] || fail "no result-v0-*.json written for ${DATES[0]}..${DATES[-1]} -- nothing to report on"
 if [[ ${#DAY_RESULTS[@]} -eq 1 ]]; then
   RESULT_V0="${DAY_RESULTS[0]}"
@@ -183,9 +209,23 @@ else
   else
     TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
   fi
-  RESULT_V0="$WORK/rollup/result-v0-merged.json"
+  RESULT_V0="$WORK/result-v0-merged.json"
   python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to ${DATES[-1]}" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
+fi
+
+# --title goes into the Result's own view.title before it is sealed, so the
+# page's title is the signed one, never a post-seal replacement.
+if [[ -n "$TITLE_OVERRIDE" ]]; then
+  step "set the Result v0's view.title before sealing"
+  TITLED_RESULT_V0="$WORK/result-v0-titled.json"
+  python3 -c "
+import json, sys
+doc = json.load(open(sys.argv[1]))
+doc.setdefault('view', {})['title'] = sys.argv[3]
+json.dump(doc, open(sys.argv[2], 'w'), indent=2)
+" "$RESULT_V0" "$TITLED_RESULT_V0" "$TITLE_OVERRIDE"
+  RESULT_V0="$TITLED_RESULT_V0"
 fi
 
 # The judged path's presentation block: its digest is pinned in the Result v0
@@ -248,12 +288,12 @@ fi
 CARD=${CARD:-$DEFAULT_CARD}
 
 PRESENTATION_FILE="$WORK/presentation.json"
+# The title the page shows is the sealed Result's own (--title, if given, was
+# written into it before sealing).
 python3 -c "
 import json, sys
-result_v0_path, out_path, override = sys.argv[1], sys.argv[2], sys.argv[3]
-title = override or json.load(open(result_v0_path))['view']['title']
-json.dump({'title': title}, open(out_path, 'w'))
-" "$RESULT_V0" "$PRESENTATION_FILE" "$TITLE_OVERRIDE"
+json.dump({'title': json.load(open(sys.argv[1]))['view']['title']}, open(sys.argv[2], 'w'))
+" "$RESULT_V0" "$PRESENTATION_FILE"
 
 step "capsulectl book report build: render $OUT (--card $CARD)"
 mkdir -p "$(dirname "$OUT")"

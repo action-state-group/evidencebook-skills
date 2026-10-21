@@ -7,11 +7,19 @@ subscripting, or calls at all -- and this module refuses every node outside a
 fixed whitelist rather than trying to sandbox a fuller language.
 
 Grammar: comparisons (==, !=, <, <=, >, >=, in, not in), boolean combinators
-(and, or, not), arithmetic (+, -, *, /, %, unary -), names (looked up in the
-row dict; a name the row doesn't carry evaluates to None, same "absent is
-never pass" discipline as the rest of this repo -- a comparison against None
-is almost always False, never silently True), literals (str/int/float/bool/
-None), and list/tuple display (for `in`/`not in` against a literal set)."""
+(and, or, not -- `and`/`or` short-circuit left to right, so a guard such as
+`amount != None and amount > 0` stops at its first false operand), arithmetic
+(+, -, *, /, %, unary -), names (looked up in the row dict), literals
+(str/int/float/bool/None), and list/tuple display (for `in`/`not in` against a
+literal set).
+
+A name the row does not carry at all raises MissingField (an ExprError), the
+moment the expression reads it. It is never None: a field that is present
+and null is a value, a field that is absent is missing evidence, and missing
+evidence never passes -- `status != 'failed'`, `status not in [...]` and
+`not status` over a row with no `status` would all be silently true if absent
+read as None. Callers (scripts/report_spec.py) turn MissingField into
+not_evaluable, never met."""
 import ast
 
 _ALLOWED_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod)
@@ -24,6 +32,15 @@ class ExprError(ValueError):
     coerced, so a spec bug fails the run closed instead of mis-scoring a claim."""
 
 
+class MissingField(ExprError):
+    """The expression read a name the row does not carry. Missing evidence,
+    not a spec bug: a caller scores it not_evaluable."""
+
+    def __init__(self, name):
+        super().__init__(f"field {name!r} is missing from this row")
+        self.name = name
+
+
 def _node_eval(node, row):
     if isinstance(node, ast.Expression):
         return _node_eval(node.body, row)
@@ -32,7 +49,9 @@ def _node_eval(node, row):
             return node.value
         raise ExprError(f"unsupported literal: {node.value!r}")
     if isinstance(node, ast.Name):
-        return row.get(node.id)
+        if node.id not in row:
+            raise MissingField(node.id)
+        return row[node.id]
     if isinstance(node, (ast.List, ast.Tuple)):
         return [_node_eval(e, row) for e in node.elts]
     if isinstance(node, ast.UnaryOp):
@@ -46,8 +65,16 @@ def _node_eval(node, row):
                 raise ExprError(f"unary '-' over a non-numeric value ({operand!r}): {e}") from e
         raise ExprError(f"unsupported unary operator: {type(node.op).__name__}")
     if isinstance(node, ast.BoolOp):
-        values = [_node_eval(v, row) for v in node.values]
-        return all(values) if isinstance(node.op, ast.And) else any(values)
+        # Short-circuit, in order: an operand after the deciding one is never
+        # evaluated, so it can't raise.
+        is_and = isinstance(node.op, ast.And)
+        for v in node.values:
+            value = bool(_node_eval(v, row))
+            if is_and and not value:
+                return False
+            if not is_and and value:
+                return True
+        return is_and
     if isinstance(node, ast.BinOp):
         if not isinstance(node.op, _ALLOWED_BINOPS):
             raise ExprError(f"unsupported operator: {type(node.op).__name__}")

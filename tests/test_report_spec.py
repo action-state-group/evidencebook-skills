@@ -8,6 +8,7 @@ evaluate_group, and build_report_from_records over an in-memory rows_by_name
 evaluation, isolated from I/O).
 """
 import datetime
+import json
 import pathlib
 import shutil
 import sys
@@ -17,7 +18,7 @@ from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
-from report_spec import (ReportSpecError, _offset_matches, apply_field_projections,  # noqa: E402
+from report_spec import (UNREADABLE, MetricUnknown, ReportSpecError, _offset_matches, apply_field_projections,  # noqa: E402
                           build_documents, build_rows, compute_metric, contract_ref,
                           evaluate_group, extract_flatten_rows, extract_tool_result_rows,
                           get_path, load_spec, render_title, safe_filename, select_record_rows)
@@ -134,13 +135,28 @@ class ExtractToolResultRows(unittest.TestCase):
         rows = extract_tool_result_rows([self.CASE_ROW], "book_reservation")
         self.assertEqual(rows, [])
 
-    def test_unparseable_tool_result_is_skipped(self):
-        messages = [
-            {"role": "assistant", "tool_calls": [{"id": "c1", "name": "cancel_reservation"}]},
-            {"role": "tool", "tool_call_id": "c1", "content": "not json"},
-        ]
-        row = dict(self.CASE_ROW, __messages=messages)
-        self.assertEqual(extract_tool_result_rows([row], "cancel_reservation"), [])
+    def _one_result(self, content=None, with_result=True):
+        messages = [{"role": "assistant", "tool_calls": [{"id": "c1", "name": "cancel_reservation"}]}]
+        if with_result:
+            messages.append({"role": "tool", "tool_call_id": "c1", "content": content})
+        return extract_tool_result_rows([dict(self.CASE_ROW, __messages=messages)], "cancel_reservation")
+
+    def test_unparseable_tool_result_is_an_unreadable_row_not_skipped(self):
+        # Skipped, it read as "no cancellation" and a forall over it was met.
+        for rows in (self._one_result("not json"), self._one_result('["a list"]'),
+                     self._one_result(with_result=False), self._one_result("")):
+            self.assertEqual(len(rows), 1)
+            self.assertIn(UNREADABLE, rows[0])
+            self.assertEqual(rows[0]["__capsule_id"], "cap1")
+            self.assertEqual(rows[0]["day"], "2026-09-23")
+
+    def test_a_result_setting_a_protected_field_is_unreadable_and_keeps_provenance(self):
+        for field in ("__capsule_id", "day", "case_id", "__unreadable"):
+            rows = self._one_result(json.dumps({"reservation_id": "R1", field: "elsewhere"}))
+            self.assertIn(UNREADABLE, rows[0])
+            self.assertEqual(rows[0]["__capsule_id"], "cap1")
+            self.assertEqual(rows[0]["day"], "2026-09-23")
+            self.assertEqual(rows[0]["case_id"], "tau2:airline:task-1:trial-0")
 
 
 class ExtractFlattenRows(unittest.TestCase):
@@ -187,15 +203,47 @@ class ExtractFlattenRows(unittest.TestCase):
         self.assertEqual(rows[0]["amount"], -430)
         self.assertTrue(rows[0]["__has_offset_match"])
 
-    def test_non_list_field_is_skipped_not_a_crash(self):
-        parent = [{"__capsule_id": "cap1", "payment_history": "not-a-list"}]
-        self.assertEqual(extract_flatten_rows(parent, "payment_history"), [])
+    def test_missing_or_non_list_field_is_an_unreadable_row_not_a_crash(self):
+        for parent in ([{"__capsule_id": "cap1", "payment_history": "not-a-list"}],
+                       [{"__capsule_id": "cap1"}],
+                       [{"__capsule_id": "cap1", "payment_history": None}]):
+            rows = extract_flatten_rows(parent, "payment_history")
+            self.assertEqual(len(rows), 1)
+            self.assertIn(UNREADABLE, rows[0])
+            self.assertEqual(rows[0]["__capsule_id"], "cap1")
 
-    def test_non_dict_entries_are_skipped(self):
+    def test_an_empty_list_is_no_rows_not_unreadable(self):
+        self.assertEqual(extract_flatten_rows([{"__capsule_id": "cap1", "payment_history": []}],
+                                              "payment_history"), [])
+
+    def test_non_dict_entries_are_unreadable_rows(self):
         parent = [{"__capsule_id": "cap1", "payment_history": [1, 2, {"amount": 3}]}]
         rows = extract_flatten_rows(parent, "payment_history")
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(sum(UNREADABLE in r for r in rows), 2)
+        self.assertEqual(rows[2]["amount"], 3)
+
+    def test_an_unreadable_parent_stays_unreadable(self):
+        parent = [{"__capsule_id": "cap1", "day": "d1", UNREADABLE: "result missing"}]
+        rows = extract_flatten_rows(parent, "payment_history")
+        self.assertEqual(rows, [{"__capsule_id": "cap1", "day": "d1", UNREADABLE: "result missing"}])
+
+    def test_a_child_entry_never_overwrites_provenance_or_grouping(self):
+        for field, value in (("__capsule_id", "unrelated"), ("day", "2026-01-01"), ("case_id", "other"),
+                             ("region", "eu")):
+            parent = [{"__capsule_id": "cap1", "day": "d1", "case_id": "c1", "region": "us",
+                       "payment_history": [{"amount": -5, field: value}]}]
+            rows = extract_flatten_rows(parent, "payment_history", protected=("day", "case_id", "region"))
+            self.assertEqual(len(rows), 1)
+            self.assertIn(UNREADABLE, rows[0])
+            self.assertEqual((rows[0]["__capsule_id"], rows[0]["day"], rows[0]["case_id"], rows[0]["region"]),
+                             ("cap1", "d1", "c1", "us"))
+
+    def test_an_entry_the_where_cannot_decide_is_kept_unreadable(self):
+        parent = [{"__capsule_id": "cap1", "payment_history": [{"payment_id": "p1"}, {"amount": 5}]}]
+        rows = extract_flatten_rows(parent, "payment_history", where="amount < 0")
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["amount"], 3)
+        self.assertIn(UNREADABLE, rows[0])
 
     def test_two_refunds_of_the_same_amount_do_not_both_match_one_charge(self):
         # claude-security finding, this job (CWE-697): the offset-match used
@@ -259,9 +307,31 @@ class ComputeMetric(unittest.TestCase):
         metric = {"name": "n", "op": "sum", "field": "amount", "where": "amount < 0", "abs": True}
         self.assertEqual(compute_metric(metric, self.ROWS), 80)
 
-    def test_sum_over_a_row_missing_the_field_treats_it_as_zero(self):
-        rows = [{"amount": 10}, {"other": 1}]
-        self.assertEqual(compute_metric({"name": "n", "op": "sum", "field": "amount"}, rows), 10)
+    def test_sum_over_a_row_missing_the_field_is_unknown_never_zero(self):
+        for bad in ({"other": 1}, {"amount": None}, {"amount": ""}, {"amount": []}, {"amount": True},
+                    {"amount": float("nan")}, {"amount": float("inf")}):
+            with self.assertRaises(MetricUnknown, msg=repr(bad)):
+                compute_metric({"name": "n", "op": "sum", "field": "amount"}, [{"amount": 10}, bad])
+
+    def test_sum_reads_a_dotted_field(self):
+        rows = [{"amount": {"msat": 10}}, {"amount": {"msat": 5}}]
+        self.assertEqual(compute_metric({"name": "n", "op": "sum", "field": "amount.msat"}, rows), 15)
+
+    def test_an_unreadable_row_makes_every_metric_unknown(self):
+        rows = [{"amount": 10}, {UNREADABLE: "result missing"}]
+        for metric in ({"name": "n", "op": "count"}, {"name": "n", "op": "sum", "field": "amount"}):
+            with self.assertRaises(MetricUnknown):
+                compute_metric(metric, rows)
+
+    def test_a_where_over_a_missing_field_is_unknown(self):
+        with self.assertRaises(MetricUnknown):
+            compute_metric({"name": "n", "op": "count", "where": "status != 'void'"}, [{"amount": 1}])
+
+    def test_count_distinct(self):
+        rows = [{"case_id": "a"}, {"case_id": "a"}, {"case_id": "b"}]
+        self.assertEqual(compute_metric({"name": "n", "op": "count_distinct", "field": "case_id"}, rows), 2)
+        with self.assertRaises(MetricUnknown):
+            compute_metric({"name": "n", "op": "count_distinct", "field": "case_id"}, [{"x": 1}])
 
     def test_unknown_op_fails_closed(self):
         with self.assertRaises(ReportSpecError):
@@ -296,7 +366,8 @@ class EvaluateGroup(unittest.TestCase):
         verdicts, digests, metrics = evaluate_group(self.SPEC, "d1", rows_by_name, "day")
         self.assertEqual(verdicts["bounded"], "met")
         self.assertEqual(metrics, {"conversation_count": 2, "cancellation_count": 1})
-        self.assertEqual(digests["bounded"], ["c1"])
+        # both sides of `cancellation_count <= conversation_count` are cited
+        self.assertEqual(digests["bounded"], ["c1", "c2"])
 
     def test_threshold_not_met(self):
         rows_by_name = {
@@ -323,11 +394,53 @@ class EvaluateGroup(unittest.TestCase):
         self.assertEqual(verdicts["has_activity"], "not_met")
         self.assertEqual(digests["has_activity"], ["c1"])
 
-    def test_forall_is_vacuously_met_with_no_rows(self):
+    def test_a_claim_over_no_rows_is_not_evaluable_never_vacuously_met(self):
+        # A claim citing no record can't be recomputed from the disclosure.
         rows_by_name = {"conversations": [], "cancellations": []}
-        verdicts, digests, _ = evaluate_group(self.SPEC, "d1", rows_by_name, "day")
-        self.assertEqual(verdicts["has_activity"], "met")
+        reasons = {}
+        verdicts, digests, _ = evaluate_group(self.SPEC, "d1", rows_by_name, "day", reasons)
+        self.assertEqual(verdicts["has_activity"], "not_evaluable")
+        self.assertEqual(verdicts["bounded"], "not_evaluable")
         self.assertEqual(digests["has_activity"], [])
+        self.assertIn("has_activity", reasons)
+
+    def test_a_forall_over_an_unreadable_tool_result_is_not_evaluable_not_met(self):
+        spec = dict(self.SPEC, claims=[{"id": "refunded", "kind": "forall", "source": "cancellations",
+                                         "assert": "refunded == True"}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1", "tool_call_count": 1}],
+                        "cancellations": [{"day": "d1", "__capsule_id": "c1", UNREADABLE: "result not JSON"}]}
+        reasons = {}
+        verdicts, digests, _ = evaluate_group(spec, "d1", rows_by_name, "day", reasons)
+        self.assertEqual(verdicts["refunded"], "not_evaluable")
+        self.assertEqual(digests["refunded"], ["c1"])
+        self.assertIn("unreadable", reasons["refunded"])
+
+    def test_a_forall_reading_a_missing_field_is_not_evaluable(self):
+        spec = dict(self.SPEC, claims=[{"id": "ok", "kind": "forall", "source": "conversations",
+                                         "assert": "status != 'failed'"}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1"}], "cancellations": []}
+        verdicts, _, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts["ok"], "not_evaluable")
+
+    def test_a_threshold_over_an_unknown_sum_is_not_evaluable_never_met(self):
+        spec = {"sources": [{"name": "x", "kind": "record"}],
+                "metrics": [{"name": "paid", "source": "x", "op": "sum", "field": "amount_msat"}],
+                "claims": [{"id": "under_limit", "kind": "threshold", "metric": "paid", "op": "<=", "value": 100}]}
+        rows_by_name = {"x": [{"day": "d1", "__capsule_id": "a", "amount_msat": 10},
+                              {"day": "d1", "__capsule_id": "b"}]}
+        verdicts, digests, metrics = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts["under_limit"], "not_evaluable")
+        self.assertIsNone(metrics["paid"])
+        self.assertEqual(digests["under_limit"], ["a", "b"])
+
+    def test_a_threshold_whose_value_side_is_unknown_is_not_evaluable(self):
+        spec = dict(self.SPEC, metrics=[
+            {"name": "conversation_count", "source": "conversations", "op": "count"},
+            {"name": "cancellation_count", "source": "cancellations", "op": "count"}])
+        rows_by_name = {"conversations": [{"day": "d1", "__capsule_id": "c1", UNREADABLE: "bad"}],
+                        "cancellations": [{"day": "d1", "__capsule_id": "c1"}]}
+        verdicts, _, _ = evaluate_group(spec, "d1", rows_by_name, "day")
+        self.assertEqual(verdicts["bounded"], "not_evaluable")
 
     def test_only_this_groups_own_rows_count(self):
         rows_by_name = {
@@ -375,8 +488,15 @@ class EvaluateGroup(unittest.TestCase):
                 {"day": "d1", "__capsule_id": "consumed-1", "direction": "consumed"},
             ],
         }
+        # The left side cites only the served row its where kept; the right
+        # side (all_count) cites every exchange it counted. Both are cited, so
+        # the disclosure can recompute `served_count <= all_count`.
         _, digests, _ = evaluate_group(spec, "d1", rows_by_name, "day")
-        self.assertEqual(digests["bounded"], ["served-1"])
+        self.assertEqual(digests["bounded"], ["consumed-1", "served-1"])
+        spec_left_only = dict(spec, claims=[{"id": "small", "kind": "threshold", "metric": "served_count",
+                                              "op": "<=", "value": 5}])
+        _, digests, _ = evaluate_group(spec_left_only, "d1", rows_by_name, "day")
+        self.assertEqual(digests["small"], ["served-1"])
 
     def test_a_misspelled_metric_source_fails_closed_not_silently_zero(self):
         # desk-review finding: group_rows.get(m["source"], []) let a typo'd
@@ -472,7 +592,13 @@ class RenderTitle(unittest.TestCase):
 
 class SafeFilename(unittest.TestCase):
     def test_path_separators_never_survive(self):
-        self.assertEqual(safe_filename("../../etc/passwd"), ".._.._etc_passwd")
+        name = safe_filename("../../etc/passwd")
+        self.assertTrue(name.startswith(".._.._etc_passwd-"))
+        self.assertNotIn("/", name)
+
+    def test_keys_that_escape_alike_never_share_a_file(self):
+        self.assertNotEqual(safe_filename("peer/a"), safe_filename("peer_a"))
+        self.assertEqual(safe_filename("peer_a"), "peer_a")
 
     def test_ordinary_group_key_is_readable(self):
         self.assertEqual(safe_filename("2026-09-23"), "2026-09-23")
@@ -539,6 +665,52 @@ claims: [{id: has_activity, kind: forall, source: conversations, assert: "True"}
 """)
         spec = load_spec(path)
         self.assertEqual(spec["id"], "x")
+
+    def test_a_metric_named_title_or_period_is_refused_at_load(self):
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-load-spec-"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        for name in ("title", "period"):
+            path = self._write(tmp, f"""
+spec_version: report-spec/v1
+id: x
+version: 1
+sources: [{{name: conversations, kind: case}}]
+metrics: [{{name: {name}, source: conversations, op: count}}]
+claims: [{{id: has_activity, kind: forall, source: conversations, assert: "True"}}]
+""")
+            with self.assertRaisesRegex(ReportSpecError, "reserved"):
+                load_spec(path)
+
+
+class Tau2NoJudgeSpec(unittest.TestCase):
+    """scripts/specs/tau2-airline-no-judge.yaml over hand-built rows."""
+    SPEC = load_spec(pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/tau2-airline-no-judge.yaml")
+
+    def _rows(self, cancels):
+        conversations = [{"case_id": "c1", "day": "d1", "__capsule_id": "k1", "tool_call_count": 3},
+                         {"case_id": "c2", "day": "d1", "__capsule_id": "k2", "tool_call_count": 1}]
+        cancel_results = [dict(c, case_id="c1", day="d1", __capsule_id="k1") for c in cancels]
+        refund_entries = extract_flatten_rows(cancel_results, "payment_history", "amount", "amount < 0")
+        return {"conversations": conversations, "cancel_results": cancel_results,
+                "refund_entries": refund_entries}
+
+    def test_one_conversation_cancelling_two_reservations_still_meets_the_bound(self):
+        cancels = [{"reservation_id": r, "payment_history": [{"amount": 100}, {"amount": -100}]}
+                   for r in ("R1", "R2")]
+        verdicts, _, metrics = evaluate_group(self.SPEC, "d1", self._rows(cancels), "day")
+        self.assertEqual(metrics["cancellation_count"], 2)
+        self.assertEqual(metrics["cancelling_conversation_count"], 1)
+        self.assertEqual(verdicts["cancellation_volume_bounded"], "met")
+        self.assertEqual(verdicts["refund_amount_matches_payment_record"], "met")
+
+    def test_a_cancellation_with_no_payment_history_is_not_evaluable_never_met(self):
+        verdicts, _, metrics = evaluate_group(self.SPEC, "d1", self._rows([{"reservation_id": "R1"}]), "day")
+        self.assertEqual(verdicts["refund_amount_matches_payment_record"], "not_evaluable")
+        self.assertIsNone(metrics["total_refunded"])
+
+    def test_title_shows_unknown_for_an_unknown_metric(self):
+        _, _, metrics = evaluate_group(self.SPEC, "d1", self._rows([{"reservation_id": "R1"}]), "day")
+        self.assertIn("unknown refunds", render_title(self.SPEC, "d1", metrics))
 
 
 if __name__ == "__main__":

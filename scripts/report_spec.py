@@ -64,10 +64,12 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
         #   `where:` (optional, evaluated after __has_offset_match so it can
         #   read it) keeps only matching entries.
     metrics:
-      - name: <referenced by threshold claims and the report title>
+      - name: <referenced by threshold claims and the report title; not
+              "title" or "period", which the title template already uses>
         source: <a source name>
-        op: count | sum
-        field: <dotted into the row, required for sum>
+        op: count | count_distinct | sum
+        field: <dotted into the row, required for sum and count_distinct;
+                sum needs a finite, non-boolean number on every row>
         where: <optional safe_expr string, filters rows before aggregating>
         abs: <optional bool, sum only -- abs() of the total, for signed ledgers>
     claims:
@@ -81,8 +83,8 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
         kind: forall
         source: <a source name>
         assert: <safe_expr string over one row of that source; must hold for
-                 EVERY row in this group for the claim to be met -- vacuously
-                 met when the group has no rows for that source>
+                 EVERY row in this group for the claim to be met -- not_evaluable
+                 when the group has no rows for that source>
     presentation:
       card: <one of capsule-cli's reportCards, e.g. "outcome", "settlement">
       title_template: <a str.format() template over {title}, {period}, and
@@ -93,32 +95,78 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
                        for a custom metrics block), so the computed sums/counts
                        surface in the report's title line, not as a new field>
 
-Every claim this module computes is met or not_met, never not_evaluable: a
-deterministic computation over records that exist has no missing-judge
-uncertainty to express. A group with zero rows for a forall claim's source
-reads as met (vacuously -- nothing in it violates the assertion), not
-not_evaluable, same convention a universally-quantified "every X satisfies P"
-statement uses when there are no Xs.
+Fail-closed: missing or unreadable evidence is not_evaluable, never met and
+never zero. A claim is met or not_met only when every row it reads could be
+read and carries every field its expression reads. Otherwise it is
+not_evaluable:
+- a tool result that is missing, not JSON or not an object, a ledger list
+  that is missing or not a list, or an entry that is not an object or tries
+  to set a provenance/grouping field, is kept as an UNREADABLE row, never
+  skipped;
+- an expression that reads a field the row does not carry (safe_expr
+  MissingField; absent is never None);
+- a sum over a value that is not a finite number;
+- a claim that cites no record (a forall over zero rows, a threshold whose
+  metrics aggregate nothing): nobody could recompute it from the disclosure.
+A threshold claim cites the records behind EVERY metric it uses, its `value`
+side included. summary.json lists each not_evaluable claim's reason per group.
 """
 import argparse
+import ast
 import datetime
+import hashlib
 import json
+import math
 import pathlib
+import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import case_id_of, list_capsules, parse_rfc3339, payload  # noqa: E402
 from result_v0 import build_result_v0_for_day  # noqa: E402
 from rollup import RollupError  # noqa: E402
-from safe_expr import ExprError, eval_expr  # noqa: E402
+from safe_expr import ExprError, MissingField, eval_expr  # noqa: E402
 
 _SCALAR_TYPES = (str, int, float, bool, type(None))
+
+# A row whose evidence could not be read (a tool result that is missing, not
+# JSON or not an object; a ledger list that is missing or not a list; an entry
+# that is not an object or tries to set a protected field) is KEPT, marked with
+# this key and the reason. It is never dropped: a dropped row makes a forall
+# vacuously true and a count or sum too small. Any metric or claim over a
+# source holding one is not_evaluable.
+UNREADABLE = "__unreadable"
+
+# Fields a tool result or ledger entry may never set on its row: the
+# provenance (every "__" field, e.g. __capsule_id) and grouping fields the
+# engine carries from the parent. Setting one could move a row to another
+# group or make a claim cite an unrelated record.
+_ALWAYS_PROTECTED = ("day", "case_id")
+
+# Metric names the title template already uses for its own fields.
+_RESERVED_METRIC_NAMES = ("title", "period")
 
 
 class ReportSpecError(ValueError):
     """A report spec named a source/metric/claim shape this engine refuses to
     guess about -- a config bug fails the run closed, same discipline as
     rollup.RollupError for the judged path."""
+
+
+class MetricUnknown(ReportSpecError):
+    """A metric's value can't be known from the evidence: a row it aggregates
+    is unreadable, misses the field, or holds a value that isn't a finite
+    number. evaluate_group scores every claim that uses it not_evaluable."""
+
+
+def _is_protected(key, protected):
+    return key.startswith("__") or key in protected
+
+
+def _unreadable_row(carried, reason):
+    row = dict(carried)
+    row[UNREADABLE] = reason
+    return row
 
 
 def get_path(obj, dotted_path):
@@ -130,6 +178,18 @@ def get_path(obj, dotted_path):
     for part in dotted_path.split("."):
         if not isinstance(cur, dict) or part not in cur:
             return None
+        cur = cur[part]
+    return cur
+
+
+_MISSING = object()
+
+
+def _get_path_or_missing(obj, dotted_path):
+    cur = obj
+    for part in dotted_path.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return _MISSING
         cur = cur[part]
     return cur
 
@@ -153,7 +213,13 @@ def apply_field_projections(row, body, fields):
     the output, never silently resolved by guessing the author's intent."""
     for name, projection in fields.items():
         if isinstance(projection, str):
-            row[name] = get_path(body, projection)
+            # A path the body does not carry leaves the field ABSENT, never
+            # None: an expression reading it raises MissingField
+            # (scripts/safe_expr.py), so missing evidence never passes. A
+            # path holding JSON null projects None, which is a value.
+            value = _get_path_or_missing(body, projection)
+            if value is not _MISSING:
+                row[name] = value
         elif isinstance(projection, dict) and "join" in projection:
             sep = projection.get("sep", "/")
             row[name] = sep.join(str(row.get(part)) for part in projection["join"])
@@ -247,24 +313,38 @@ def select_record_rows(capsulectl, profile, match=None, fields=None, date_from=N
     return rows
 
 
-def extract_tool_result_rows(parent_rows, tool_name, fields=None):
+def extract_tool_result_rows(parent_rows, tool_name, fields=None, protected=_ALWAYS_PROTECTED):
     """One row per matching tool call in each parent (case) row: the parsed
     result's own fields, plus the parent's carried SCALARS ONLY (case_id,
     day, __capsule_id) -- `_scalars_only` drops the parent's own
     `__messages` (and any other list/dict field) before it ever reaches this
     row, so a safe_expr claim never sees it. A further `flatten` source
     reads its own raw list fields straight out of `result`/`row`, not from
-    a carried `__messages`."""
+    a carried `__messages`.
+
+    A call whose result is missing, not JSON or not an object is not
+    skipped: it becomes an UNREADABLE row (the call happened; what it
+    returned can't be read), so every claim over this source is
+    not_evaluable rather than vacuously met. So does a result that tries to
+    set a protected field (`protected`, plus every "__" field)."""
     fields = fields or {}
     out = []
     for i, prow in enumerate(parent_rows):
         carried = _scalars_only(prow)
         for j, (call, result) in enumerate(_tool_results(prow.get("__messages"), tool_name)):
+            row_id = f"{prow['case_id']}::{tool_name}::{j}"
             if not isinstance(result, dict):
+                out.append(dict(_unreadable_row(carried, f"{tool_name} result {j} is missing, not JSON "
+                                                         f"or not an object"), __row_id=row_id))
+                continue
+            clash = sorted(k for k in result if _is_protected(k, protected))
+            if clash:
+                out.append(dict(_unreadable_row(carried, f"{tool_name} result {j} sets protected "
+                                                         f"field(s) {clash!r}"), __row_id=row_id))
                 continue
             row = dict(result)
             row.update(carried)
-            row["__row_id"] = f"{prow['case_id']}::{tool_name}::{j}"
+            row["__row_id"] = row_id
             apply_field_projections(row, result, fields)
             out.append(row)
     return out
@@ -299,25 +379,44 @@ def _offset_matches(amounts):
     return matched
 
 
-def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None):
+def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None, protected=_ALWAYS_PROTECTED):
     """One row per entry of the list at `path` on each parent row, carrying
     the parent's scalar fields plus the entry's own. `match_offsets_field`,
     when given, computes __has_offset_match via _offset_matches() -- a
     generic ledger-reconciliation primitive, not specific to any one
     domain's field names. `where` (a safe_expr string, evaluated per
     candidate row, AFTER __has_offset_match is set so it can read it) keeps
-    only matching entries."""
+    only matching entries.
+
+    Fail-closed: a parent that is unreadable, a `path` that is missing or not
+    a list, an entry that is not an object or sets a protected field
+    (`protected`, plus every "__" field), and an entry whose `where` reads a
+    field it does not carry each yield an UNREADABLE row instead of being
+    skipped. An empty list yields no rows: that is a ledger with no entries,
+    not an unreadable one."""
     out = []
     for prow in parent_rows:
+        carried = _scalars_only(prow)
+        if UNREADABLE in prow:  # the parent couldn't be read: neither can its list
+            out.append(dict(carried))
+            continue
         items = prow.get(path)
         if not isinstance(items, list):
+            out.append(_unreadable_row(carried, f"{path!r} is missing or not a list"))
             continue
-        carried = _scalars_only(prow)
         amounts = [it.get(match_offsets_field) if isinstance(it, dict) else None for it in items] \
             if match_offsets_field else None
         offset_matches = _offset_matches(amounts) if match_offsets_field is not None else None
         for i, item in enumerate(items):
             if not isinstance(item, dict):
+                out.append(_unreadable_row(carried, f"{path}[{i}] is not an object"))
+                continue
+            # A child entry never overwrites the parent's provenance or
+            # grouping fields: that could move a failing row to another group
+            # or make a claim cite an unrelated record.
+            clash = sorted(k for k in item if _is_protected(k, protected))
+            if clash:
+                out.append(_unreadable_row(carried, f"{path}[{i}] sets protected field(s) {clash!r}"))
                 continue
             row = dict(carried)
             row.update(_scalars_only(item))
@@ -325,6 +424,11 @@ def extract_flatten_rows(parent_rows, path, match_offsets_field=None, where=None
                 row["__has_offset_match"] = offset_matches[i]
             try:
                 keep = where is None or eval_expr(where, row)
+            except MissingField as e:
+                # The filter can't be decided for this entry, so it can't be
+                # filtered out either: kept, unreadable.
+                out.append(_unreadable_row(carried, f"{path}[{i}]: where {where!r}: {e}"))
+                continue
             except ExprError as e:
                 raise ReportSpecError(f"flatten source {path!r}: where {where!r}: {e}") from e
             if keep:
@@ -336,6 +440,7 @@ def build_rows(spec, capsulectl, profile, date_from=None, date_to=None):
     """name -> list of rows, for every source the spec declares, in order
     (a source may name an earlier source as its own `from`)."""
     rows_by_name, kind_by_name = {}, {}
+    protected = tuple(_ALWAYS_PROTECTED) + (spec.get("group_by", "day"),)
     for source in spec["sources"]:
         kind = source["kind"]
         if kind == "case":
@@ -357,13 +462,14 @@ def build_rows(spec, capsulectl, profile, date_from=None, date_to=None):
                 raise ReportSpecError(
                     f"source {source['name']!r}: `from: {source['from']!r}` must be a `kind: case` "
                     f"source (it is {kind_by_name.get(source['from'])!r})")
-            rows_by_name[source["name"]] = extract_tool_result_rows(parent, source["tool_name"], source.get("fields"))
+            rows_by_name[source["name"]] = extract_tool_result_rows(parent, source["tool_name"], source.get("fields"),
+                                                                    protected)
         elif kind == "flatten":
             parent = rows_by_name.get(source["from"])
             if parent is None:
                 raise ReportSpecError(f"source {source['name']!r}: unknown `from` source {source['from']!r}")
             rows_by_name[source["name"]] = extract_flatten_rows(
-                parent, source["path"], source.get("match_offsets_field"), source.get("where"))
+                parent, source["path"], source.get("match_offsets_field"), source.get("where"), protected)
         else:
             raise ReportSpecError(f"source {source['name']!r}: unknown kind {kind!r}")
         kind_by_name[source["name"]] = kind
@@ -375,39 +481,112 @@ def metric_rows(metric, rows):
     nothing else. The single place both compute_metric() and a threshold
     claim's own evidence (evaluate_group()) go through, so a claim citing
     "the records it was computed from" (this module's own docstring promise)
-    can never cite a row the metric's where clause filtered out."""
-    return [r for r in rows if metric.get("where") is None or eval_expr(metric["where"], r)]
+    can never cite a row the metric's where clause filtered out.
+
+    Raises MetricUnknown when a row is unreadable or its `where` reads a field
+    the row does not carry: whether that row counts can't be decided."""
+    unreadable = [r[UNREADABLE] for r in rows if UNREADABLE in r]
+    if unreadable:
+        raise MetricUnknown(f"metric {metric['name']!r}: {len(unreadable)} unreadable row(s), "
+                            f"e.g. {unreadable[0]}")
+    kept = []
+    for r in rows:
+        try:
+            if metric.get("where") is None or eval_expr(metric["where"], r):
+                kept.append(r)
+        except MissingField as e:
+            raise MetricUnknown(f"metric {metric['name']!r}: where {metric['where']!r}: {e}") from e
+    return kept
+
+
+def _row_value(row, field):
+    """A row's `field`: the flat key when the row carries it, else a dotted
+    path into the row's own nested values. _MISSING when neither."""
+    if field in row:
+        return row[field]
+    return _get_path_or_missing(row, field) if "." in field else _MISSING
 
 
 def compute_metric(metric, rows):
+    """count, count_distinct (rows with distinct values of `field`) or sum.
+    sum requires a finite, non-boolean number on every row it aggregates: a
+    missing field, null, "", a list or a bool is never counted as zero or
+    one. Any of those raises MetricUnknown, so the claim reads
+    not_evaluable."""
     rows = metric_rows(metric, rows)
-    if metric["op"] == "count":
+    op = metric["op"]
+    if op == "count":
         return len(rows)
-    if metric["op"] == "sum":
-        field = metric["field"]
-        try:
-            total = sum((r.get(field) or 0) for r in rows)
-        except TypeError as e:
-            raise ReportSpecError(f"metric {metric['name']!r}: field {field!r} is not numeric on some row: {e}") from e
+    if op in ("sum", "count_distinct"):
+        field = metric.get("field")
+        if not field:
+            raise ReportSpecError(f"metric {metric['name']!r}: op {op!r} needs a `field`")
+        values = []
+        for r in rows:
+            v = _row_value(r, field)
+            if v is _MISSING:
+                raise MetricUnknown(f"metric {metric['name']!r}: a row has no {field!r}")
+            values.append(v)
+        if op == "count_distinct":
+            if any(not isinstance(v, (str, int, float)) or isinstance(v, bool) for v in values):
+                raise MetricUnknown(f"metric {metric['name']!r}: {field!r} is not a scalar id on some row")
+            return len(set(values))
+        for v in values:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+                raise MetricUnknown(f"metric {metric['name']!r}: field {field!r} is not a finite number "
+                                    f"on some row ({v!r})")
+        total = sum(values)
         return abs(total) if metric.get("abs") else total
-    raise ReportSpecError(f"metric {metric['name']!r}: unknown op {metric['op']!r}")
+    raise ReportSpecError(f"metric {metric['name']!r}: unknown op {op!r}")
+
+
+def _expr_names(expr):
+    """The metric names a threshold claim's `value` expression reads."""
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as e:
+        raise ReportSpecError(f"not a valid expression: {expr!r}: {e}") from e
+    return sorted({n.id for n in ast.walk(tree) if isinstance(n, ast.Name)})
+
+
+def _cited(rows):
+    return {r["__capsule_id"] for r in rows if "__capsule_id" in r}
 
 
 _OPS = {"<=": lambda a, b: a <= b, ">=": lambda a, b: a >= b, "<": lambda a, b: a < b,
         ">": lambda a, b: a > b, "==": lambda a, b: a == b, "!=": lambda a, b: a != b}
 
 
-def evaluate_group(spec, group_key, rows_by_name, group_field):
+def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None):
     """One group's (criterion_verdicts, report_digests, metric_values) --
-    every claim in the spec, evaluated over only this group's own rows."""
+    every claim in the spec, evaluated over only this group's own rows.
+
+    Fail-closed: a claim is not_evaluable, never met, when
+    - a row it reads is unreadable (UNREADABLE), or its expression reads a
+      field the row does not carry (safe_expr.MissingField);
+    - a metric it uses is unknown (MetricUnknown: unreadable rows, a missing
+      field, a sum over a value that isn't a finite number);
+    - it cites no record at all (a forall over zero rows, a threshold whose
+      metrics aggregate nothing): a claim nobody can recompute from the
+      disclosed records proves nothing.
+    A threshold claim cites the records of EVERY metric it uses, its `value`
+    side included, so the disclosure can recompute both sides. `reasons`, when
+    given, is filled with {claim id: why it is not_evaluable}; metric_values
+    holds None for an unknown metric."""
+    reasons = {} if reasons is None else reasons
     group_rows = {name: [r for r in rows if r.get(group_field) == group_key] for name, rows in rows_by_name.items()}
 
-    metric_values = {}
+    metric_values, metric_cited, metric_unknown = {}, {}, {}
     for m in spec.get("metrics", []):
         if m["source"] not in group_rows:
             raise ReportSpecError(f"metric {m['name']!r}: unknown source {m['source']!r}")
         try:
             metric_values[m["name"]] = compute_metric(m, group_rows[m["source"]])
+            metric_cited[m["name"]] = _cited(metric_rows(m, group_rows[m["source"]]))
+        except MetricUnknown as e:
+            metric_values[m["name"]] = None
+            metric_unknown[m["name"]] = str(e)
+            metric_cited[m["name"]] = _cited(group_rows[m["source"]])
         except ExprError as e:
             raise ReportSpecError(f"metric {m['name']!r}: where {m.get('where')!r}: {e}") from e
 
@@ -419,29 +598,58 @@ def evaluate_group(spec, group_key, rows_by_name, group_field):
             metric_name = claim["metric"]
             if metric_name not in metric_values:
                 raise ReportSpecError(f"claim {cid!r}: unknown metric {metric_name!r}")
-            left = metric_values[metric_name]
+            op = claim["op"]
+            if op not in _OPS:
+                raise ReportSpecError(f"claim {cid!r}: unknown op {op!r}")
             value = claim["value"]
+            used = [metric_name]
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                if not isinstance(value, str):
+                    raise ReportSpecError(f"claim {cid!r}: value must be a number or an expression, got {value!r}")
+                for name in _expr_names(value):
+                    if name not in metric_values:
+                        raise ReportSpecError(f"claim {cid!r}: value {value!r} names unknown metric {name!r}")
+                    used.append(name)
+            cited = set().union(*(metric_cited[n] for n in used))
+            digests[cid] = sorted(cited)
+            unknown = [n for n in used if n in metric_unknown]
+            if unknown:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = metric_unknown[unknown[0]]
+                continue
+            left = metric_values[metric_name]
             try:
                 right = value if isinstance(value, (int, float)) else eval_expr(value, metric_values)
             except ExprError as e:
                 raise ReportSpecError(f"claim {cid!r}: value {value!r}: {e}") from e
-            op = claim["op"]
-            if op not in _OPS:
-                raise ReportSpecError(f"claim {cid!r}: unknown op {op!r}")
-            metric = spec_metric(spec, metric_name)
-            source_rows = metric_rows(metric, group_rows[metric["source"]])
+            if not cited:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = "no record behind any metric this claim uses"
+                continue
             verdicts[cid] = "met" if _OPS[op](left, right) else "not_met"
-            digests[cid] = sorted({r["__capsule_id"] for r in source_rows if "__capsule_id" in r})
         elif kind == "forall":
             if claim["source"] not in group_rows:
                 raise ReportSpecError(f"claim {cid!r}: unknown source {claim['source']!r}")
             source_rows = group_rows[claim["source"]]
+            digests[cid] = sorted(_cited(source_rows))
+            unreadable = [r[UNREADABLE] for r in source_rows if UNREADABLE in r]
+            if unreadable:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = f"{len(unreadable)} unreadable row(s), e.g. {unreadable[0]}"
+                continue
+            if not digests[cid]:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = f"no {claim['source']!r} rows in this group: nothing to check"
+                continue
             try:
                 ok = all(eval_expr(claim["assert"], r) for r in source_rows)
+            except MissingField as e:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = f"assert {claim['assert']!r}: {e}"
+                continue
             except ExprError as e:
                 raise ReportSpecError(f"claim {cid!r}: assert {claim['assert']!r}: {e}") from e
             verdicts[cid] = "met" if ok else "not_met"
-            digests[cid] = sorted({r["__capsule_id"] for r in source_rows if "__capsule_id" in r})
         else:
             raise ReportSpecError(f"claim {cid!r}: unknown kind {kind!r}")
     return verdicts, digests, metric_values
@@ -463,15 +671,23 @@ def render_title(spec, group_key, metric_values):
     if not template:
         return f"{spec.get('title', spec['id'])} -- {group_key}"
     try:
-        return template.format(title=spec.get("title", spec["id"]), period=group_key, **metric_values)
+        shown = {k: ("unknown" if v is None else v) for k, v in metric_values.items()}
+        return template.format(title=spec.get("title", spec["id"]), period=group_key, **shown)
     except (KeyError, IndexError) as e:
         raise ReportSpecError(f"presentation.title_template {template!r} names a field this spec "
                                f"doesn't compute: {e}") from e
 
 
 def safe_filename(value):
-    import re
-    return re.sub(r"[^A-Za-z0-9._-]", "_", str(value))
+    """A group key as a file-name part: unchanged when it is already
+    [A-Za-z0-9._-]+ (a day, "2026-10-01"); otherwise the escaped form plus a
+    digest of the original key, so two keys that escape alike ("peer/a",
+    "peer_a") never share a file."""
+    value = str(value)
+    escaped = re.sub(r"[^A-Za-z0-9._-]", "_", value)
+    if escaped == value:
+        return value
+    return f"{escaped}-{hashlib.sha256(value.encode()).hexdigest()[:12]}"
 
 
 def build_documents(spec, rows_by_name, generated_at):
@@ -499,7 +715,8 @@ def build_documents(spec, rows_by_name, generated_at):
 
     docs, group_results = {}, []
     for group_key in group_keys:
-        verdicts, digests, metric_values = evaluate_group(spec, group_key, rows_by_name, group_field)
+        reasons = {}
+        verdicts, digests, metric_values = evaluate_group(spec, group_key, rows_by_name, group_field, reasons)
         try:
             doc = build_result_v0_for_day(
                 f"{group_field}:{group_key}", [(str(group_key), verdicts, digests, tiers)],
@@ -508,7 +725,10 @@ def build_documents(spec, rows_by_name, generated_at):
             raise ReportSpecError(f"group {group_key!r}: {e}") from e
         doc["view"]["title"] = render_title(spec, group_key, metric_values)
         docs[group_key] = doc
-        group_results.append({group_field: str(group_key), "claims": len(doc["claims"]), "metrics": metric_values})
+        entry = {group_field: str(group_key), "claims": len(doc["claims"]), "metrics": metric_values}
+        if reasons:
+            entry["not_evaluable"] = reasons
+        group_results.append(entry)
     return docs, group_results
 
 
@@ -523,6 +743,9 @@ def build_report_from_records(spec, capsulectl, profile, generated_at, out_dir, 
     docs, group_results = build_documents(spec, rows_by_name, generated_at)
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    names = [safe_filename(k) for k in docs]
+    if len(set(names)) != len(names):
+        raise ReportSpecError(f"two groups map to one result file: {sorted(docs)!r}")
     for group_key, entry in zip(docs, group_results):
         out_path = out_dir / f"result-v0-{safe_filename(group_key)}.json"
         out_path.write_text(json.dumps(docs[group_key], indent=2))
@@ -544,6 +767,10 @@ def load_spec(path):
     for key in ("id", "version", "sources", "claims"):
         if not spec.get(key):
             raise ReportSpecError(f"{path}: missing or empty required key {key!r}")
+    for m in spec.get("metrics", []) or []:
+        if m.get("name") in _RESERVED_METRIC_NAMES:
+            raise ReportSpecError(f"{path}: metric name {m['name']!r} is reserved (the title template's own "
+                                  f"{{{m['name']}}}); rename it")
     return spec
 
 

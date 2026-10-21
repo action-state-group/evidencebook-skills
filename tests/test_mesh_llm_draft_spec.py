@@ -1,6 +1,6 @@
-"""scripts/specs/mesh-llm-settlement-draft.yaml is a DRAFT: mesh-llm has no
-shipped sealed-record export format yet, so there is no live book to run it
-against (see the spec file's own header). This is as far as "the spec format
+"""scripts/specs/mesh-llm-settlement-draft.yaml is a DRAFT: its record shape is
+a placeholder, not Mesh's committed export, and it stays a DRAFT until Mesh
+range bundles verify (AAC #339; see the spec file's own header). This is as far as "the spec format
 fits mesh-llm's use case" can be demonstrated today -- the YAML loads as a
 valid report-spec/v1 document, and the engine's real evaluate_group/
 build_documents functions (no mocking, no reimplementation) produce a sensible
