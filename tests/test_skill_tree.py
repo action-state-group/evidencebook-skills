@@ -23,11 +23,12 @@ SKILLS = ROOT / "skills"
 _TITLE = r"""(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?"""
 _LINK = re.compile(r"\]\(\s*(?:<([^>\n]*)>|([^)\s]+))" + _TITLE + r"\s*\)"
                    r"|^ {0,3}\[(?!\^)[^\]]+\]:\s*(?:<([^>\n]*)>|(\S+))", re.M)
-# Code is not Markdown: fenced blocks, indented blocks and code spans are dropped
-# before links are read.
-_FENCED = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*[ \t]*$", re.M | re.S)
-_INDENTED = re.compile(r"(?:\A|\n[ \t]*\n)((?: {4}|\t)[^\n]*(?:\n(?: {4}|\t)[^\n]*)*)")
-_CODE_SPAN = re.compile(r"(`+)(?!`).*?(?<!`)\1(?!`)", re.S)
+# Code is not Markdown: fenced blocks (an unclosed one runs to the end of the
+# file) and one-line code spans are dropped before links are read. Indented code
+# blocks are not told apart from list continuations, so they are read: a link
+# example there fails loudly rather than a real broken link passing.
+_FENCED = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?(?:^ {0,3}\1[`~]*[ \t]*$|\Z)", re.M | re.S)
+_CODE_SPAN = re.compile(r"(`+)(?!`)[^\n]*?(?<!`)\1(?!`)")
 _FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
 _NAME = re.compile(r"^name:\s*(\S+)\s*$", re.M)
 
@@ -60,9 +61,7 @@ def _exists_exactly(base, rel):
 
 def _prose(text):
     """text with its code blocks and code spans removed."""
-    text = _FENCED.sub("", text)
-    text = _INDENTED.sub("\n\n", text)
-    return _CODE_SPAN.sub("", text)
+    return _CODE_SPAN.sub("", _FENCED.sub("", text))
 
 
 def broken_links(path):
@@ -144,11 +143,15 @@ class BrokenLinkCheckBites(unittest.TestCase):
             doc = base / "doc.md"
             doc.write_text("[a](single.md 'title') [b](paren.md (title)) [c](<has space.md>)\n"
                            "[d](dangling.md) [e](here.md/../here.md) [f](/root-gone.md)\n"
-                           "[g](here.md \"t\") [h](<here.md>) [^1]: a footnote, not a link\n\n"
-                           "```\n[code](fenced.md)\n```\n\n    [code](indented.md)\n\n"
-                           "a `[span](spanned.md)` and ``[span](double.md)`` in prose\n")
+                           "[g](here.md \"t\") [h](<here.md>)\n[^1]: footnote.md\n\n"
+                           "```\n[code](fenced.md)\n```\n\n"
+                           "a `[span](spanned.md)` and ``[span](double.md)`` in prose\n\n"
+                           "- item\n\n    [continued](list-gone.md)\n\n"
+                           "a stray ` here\n\nand [after](after-gone.md) a ` there\n\n"
+                           "```\n[unclosed](fence.md)\n")
             self.assertEqual(broken_links(doc), ["single.md", "paren.md", "has space.md", "dangling.md",
-                                                 "here.md/../here.md", "/root-gone.md"])
+                                                 "here.md/../here.md", "/root-gone.md", "list-gone.md",
+                                                 "after-gone.md"])
 
     def test_a_name_only_in_the_body_is_not_the_skill_name(self):
         self.assertIsNone(skill_name("---\ndescription: x\n---\nname: impostor\n"))
