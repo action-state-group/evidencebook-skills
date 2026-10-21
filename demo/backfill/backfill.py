@@ -30,6 +30,9 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "scripts"))
+from capsulectl_calls import check_agent_model  # noqa: E402
+
 OPERATOR = "tau2-demo"
 DEVELOPER = "tau2@backfill-v1"
 
@@ -80,7 +83,12 @@ def case_block(domain: str, task_id: object, trial: object, agent_llm: object, w
     if with_model:
         if not isinstance(agent_llm, str) or not agent_llm:
             raise SystemExit("--case-model: the results file names no agent_info.llm")
-        case["agent_model"] = agent_llm
+        try:  # checked here, before sealing: the book is append-only
+            case["agent_model"] = check_agent_model(agent_llm)
+        except ValueError:
+            raise SystemExit(f"--case-model: agent model {agent_llm!r} can't go in a case id; it must match "
+                             f"[A-Za-z0-9._-]+ (no ':' or '/'). Rename the agent_info.llm in the results "
+                             f"file, or backfill without --case-model")
     return case
 
 

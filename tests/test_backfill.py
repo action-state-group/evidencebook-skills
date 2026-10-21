@@ -94,11 +94,31 @@ class CaseModel(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "names no agent_info.llm"):
             self._run(RESULTS, "--case-model")
 
-    def test_case_id_refuses_a_model_with_a_colon(self):
+    def test_case_id_refuses_a_model_with_a_colon_or_a_slash(self):
         sys.path.insert(0, str(ROOT / "scripts"))
         from capsulectl_calls import case_id_of
-        with self.assertRaisesRegex(ValueError, "without ':'"):
-            case_id_of({"benchmark": "tau2", "domain": "airline", "task_id": "1", "trial": 0, "agent_model": "a:b"})
+        for model in ("a:b", "openai/gpt-4.1", "", "anthropic.claude-3-v1:0"):
+            with self.assertRaisesRegex(ValueError, r"\[A-Za-z0-9\._-\]\+"):
+                case_id_of({"benchmark": "tau2", "domain": "airline", "task_id": "1", "trial": 0,
+                            "agent_model": model})
+
+    def test_a_model_every_reader_would_refuse_is_refused_at_seal_time(self):
+        # The book is append-only: a model that can't go in a case id is
+        # refused before any seal request is written, not when it is read.
+        for llm in ("anthropic.claude-3-5-sonnet-20240620-v1:0", "openai/gpt-4.1"):
+            d = pathlib.Path(self.enterContext(tempfile.TemporaryDirectory()))
+            (d / "results.json").write_text(json.dumps(dict(RESULTS, info=dict(RESULTS["info"],
+                                                                               agent_info={"llm": llm}))))
+            with self.assertRaises(SystemExit) as cm, contextlib.redirect_stdout(io.StringIO()):
+                backfill.main(["--results", str(d / "results.json"), "--out", str(d / "out"), "--case-model"])
+            self.assertIn("can't go in a case id", str(cm.exception.code))
+            self.assertIn(repr(llm), str(cm.exception.code))
+            self.assertEqual(list((d / "out").glob("*.json")) if (d / "out").exists() else [], [])
+
+    def test_a_model_without_a_colon_or_a_slash_is_sealed(self):
+        out = self._run(dict(RESULTS, info=dict(RESULTS["info"], agent_info={"llm": "gpt-4.1-2025-04-14"})),
+                        "--case-model")
+        self.assertEqual(out["task-1.json"]["payload"]["case"]["agent_model"], "gpt-4.1-2025-04-14")
 
 
 if __name__ == "__main__":

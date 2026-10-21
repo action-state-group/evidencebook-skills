@@ -66,6 +66,17 @@ class CheckedRatings(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not one of met, not_evaluable, not_met$"):
             checked_ratings([{"case_id": "a", "rating": "out_of_scope"}], self.SAMPLE)
 
+    def test_out_of_scope_is_refused_on_a_never_out_of_scope_clause_even_with_the_switch_on(self):
+        # "b"'s sampled report is on a clause marked never_out_of_scope: the
+        # judge could never answer it, so the rating would be sealed and count
+        # against the judge as a disagreement.
+        with self.assertRaisesRegex(ValueError, "'b' is not one of met, not_evaluable, not_met$"):
+            checked_ratings([{"case_id": "b", "rating": "out_of_scope"}], self.SAMPLE,
+                            allow_out_of_scope=True, never_out_of_scope_cases={"b"})
+        ratings = [{"case_id": "a", "rating": "out_of_scope"}, {"case_id": "b", "rating": "met"}]
+        self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True,
+                                         never_out_of_scope_cases={"b"}), ratings)
+
     def test_out_of_scope_is_a_rating_when_the_contract_allows_it(self):
         ratings = [{"case_id": "a", "rating": "out_of_scope"}, {"case_id": "b", "rating": "met"}]
         self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True), ratings)

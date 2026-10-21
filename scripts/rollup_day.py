@@ -61,10 +61,11 @@ from run_daily import effective_tier  # noqa: E402
 
 def safe_filename(case_id):
     """Same convention as demo/backfill/backfill.py's own safe_name(): case_id is
-    built only from fixed literals and dataset fields (run_daily.py:99,
-    demo/backfill/backfill.py:74-87) so this isn't a reachable path-traversal
-    sink today, but a report body is still book-sourced data, not a trusted
-    literal -- never interpolate it into a filesystem path unescaped."""
+    built from fixed literals and dataset fields, plus the agent model when a
+    case was sealed with backfill --case-model (capsulectl_calls.check_agent_model
+    restricts it to [A-Za-z0-9._-]+). A report body is still book-sourced data,
+    not a trusted literal -- never interpolate it into a filesystem path
+    unescaped. scripts/run_weekly.py's blind packet names use this too."""
     return re.sub(r"[^A-Za-z0-9._-]", "_", case_id)
 
 
