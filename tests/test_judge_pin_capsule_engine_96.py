@@ -104,7 +104,7 @@ class LiteralPinHashes(unittest.TestCase):
     def test_a_real_judge_bundle_pin_carries_the_pinned_literals(self):
         pack = compiled_pack()
         document = judge_bundle.run(pack, {
-            "bundle_kind": judge_bundle.BUNDLE_KIND, "root": "literal-hash-check",
+            "bundle_kind": judge_bundle.BUNDLE_KIND, "root": CAPSULE_ID,
             "records": [{"capsule_id": CAPSULE_ID}],
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
@@ -144,7 +144,7 @@ class PinCoversTheQuestions(unittest.TestCase):
         pins = []
         for facts in (FACTS, {**FACTS, "note": "different evidence"}):
             document = judge_bundle.run(pack, {
-                "bundle_kind": judge_bundle.BUNDLE_KIND, "root": "evidence-independence",
+                "bundle_kind": judge_bundle.BUNDLE_KIND, "root": CAPSULE_ID,
                 "records": [{"capsule_id": CAPSULE_ID}],
                 "disclosures": {CAPSULE_ID: facts}, "completeness": {"payloads_mode": "selected", "missing": []},
             }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
@@ -174,7 +174,7 @@ class RealLoaderAccepts(unittest.TestCase):
     def test_judge_bundle_default_whole_pack_pin_is_accepted(self):
         pack = compiled_pack()
         document = judge_bundle.run(pack, {
-            "bundle_kind": judge_bundle.BUNDLE_KIND, "root": "real-loader-check",
+            "bundle_kind": judge_bundle.BUNDLE_KIND, "root": CAPSULE_ID,
             "records": [{"capsule_id": CAPSULE_ID}],
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, None, None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
