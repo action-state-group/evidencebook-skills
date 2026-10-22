@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -266,6 +267,26 @@ class Switches(unittest.TestCase):
         self.assertEqual(clauses[1]["claim_switch"], source["checks"][0]["criteria"][1]["claim_switch"])
         self.assertNotIn("tier_switch", clauses[1])
         self.assertNotIn("claim_switch", clauses[0])
+
+
+class PackTitle(unittest.TestCase):
+    def test_a_known_pack_compiles_its_title(self):
+        source = minimal_source()
+        source["pack_id"] = "airline-support-outcomes"
+        self.assertEqual(build_compiled_json(source, "demo/test-pack")["title"], "Airline support outcomes")
+
+    def test_an_unknown_pack_compiles_with_no_title(self):
+        self.assertNotIn("title", build_compiled_json(minimal_source(), "demo/test-pack"))
+
+    def test_the_title_moves_neither_the_source_digest_nor_the_prompt(self):
+        source = minimal_source()
+        source["pack_id"] = "airline-support-outcomes"
+        with mock.patch.dict("pack_compile.PACK_TITLES", {"airline-support-outcomes": "Another name"}):
+            renamed = compile_pack(source, "demo/test-pack")
+        named = compile_pack(source, "demo/test-pack")
+        self.assertNotEqual(named[0]["title"], renamed[0]["title"])
+        self.assertEqual(named[0]["pack_source_digest"], renamed[0]["pack_source_digest"])
+        self.assertEqual(named[1:], renamed[1:])
 
 
 class ReferenceFiles(unittest.TestCase):

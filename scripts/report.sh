@@ -202,22 +202,10 @@ if [[ ${#DAY_RESULTS[@]} -eq 1 ]]; then
   RESULT_V0="${DAY_RESULTS[0]}"
 else
   step "merge_results.py: combine ${#DAY_RESULTS[@]} days into one Result v0"
-  # $MODE (already known, not re-sniffed) picks the field: a report-spec/v1
-  # YAML's own `title`, or a compiled pack contract's `contract` id -- yaml.safe_load
-  # parses well-formed JSON without error (JSON is a YAML subset), so trying the
-  # YAML read first and falling back to JSON on a parse failure never reaches the
-  # JSON branch for a compiled pack (its title key is simply absent, not a parse
-  # error), which silently fell back to the literal $SPEC path. Branching on $MODE
-  # reads the field that actually exists for each kind instead of guessing from
-  # which parse happened not to throw.
-  if [[ "$MODE" == "no-judge" ]]; then
-    # same fallback scripts/report_spec.py's own render_title() uses: title, else id.
-    TITLE=$(python3 -c "import yaml,sys; s=yaml.safe_load(open(sys.argv[1])); print(s.get('title', s['id']))" "$SPEC")
-  else
-    TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
-  fi
   RESULT_V0="$WORK/result-v0-merged.json"
-  python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to $LAST_DATE" \
+  # merge_results.py composes the title from the spec's own name (result_v0.report_title),
+  # so only ASCII crosses the shell here.
+  python3 "$REPO/scripts/merge_results.py" --spec "$SPEC" --period "${DATES[0]} to $LAST_DATE" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 

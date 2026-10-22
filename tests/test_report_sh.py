@@ -187,6 +187,14 @@ class ReportShJudgedPath(unittest.TestCase):
         page = json.loads((self.capture / "page-presentation.json").read_text())
         self.assertEqual(page["title"], "October, airline support")
 
+    def test_a_range_is_titled_with_the_pack_title(self):
+        spec = json.loads(self.spec.read_text())
+        spec["title"] = "Stub pack"
+        self.spec.write_text(json.dumps(spec))
+        proc = self.run_report("--date", "2026-10-01", "--to", "2026-10-02")
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertEqual(self.sealed()["view"]["title"], "Stub pack — 2026-10-01 to 2026-10-02")
+
     def test_without_title_the_page_shows_the_sealed_results_own(self):
         proc = self.run_report("--date", "2026-10-01")
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)

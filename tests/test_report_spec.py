@@ -656,7 +656,7 @@ class ContractRef(unittest.TestCase):
 class RenderTitle(unittest.TestCase):
     def test_default_title_with_no_template(self):
         self.assertEqual(render_title({"id": "x", "title": "Tau2 report"}, "2026-09-23", {}),
-                          "Tau2 report -- 2026-09-23")
+                          "Tau2 report \u2014 2026-09-23")
 
     def test_template_fills_in_metrics(self):
         spec = {"id": "x", "title": "Tau2 report",
