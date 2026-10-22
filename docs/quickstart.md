@@ -17,10 +17,10 @@ obligations a single conversation can show).
 5. [Judge, from the next UTC day](#5-judge-from-the-next-utc-day)
 6. [Go live](#6-go-live)
 
-Every command on this page was run top to bottom in an empty directory
-against capsulectl `v0.1.0-rc18` (the GitHub release, checksums verified)
-and Python packages from PyPI. Output shown is from that run, trimmed. Where
-a step needed something the run did not have, the page says so.
+Every command on this page was run top to bottom in an empty directory on
+Linux (x86_64), against capsulectl `v0.1.0-rc18` (the GitHub release,
+checksums verified) and Python packages from PyPI, with the judge called
+live. Output shown is from that run, trimmed.
 
 You need `curl`, `git`, `jq`, Python 3.11 or later, and bash 4 or later
 (`scripts/report.sh` uses it; on macOS, `brew install bash`).
@@ -48,8 +48,8 @@ shasum -a 256 -c --ignore-missing SHA256SUMS    # on Linux: sha256sum -c --ignor
 ```
 
 ```
-capsulectl-v0.1.0-rc18-darwin-arm64: OK
-capsulectl-v0.1.0-rc18-plugin-book-darwin-arm64: OK
+capsulectl-v0.1.0-rc18-linux-amd64: OK
+capsulectl-v0.1.0-rc18-plugin-book-linux-amd64: OK
 ```
 
 The release also carries a Sigstore bundle. This page checks only the
@@ -173,8 +173,8 @@ capsulectl cll checkpoint create --profile airline | jq -c '{checkpoint, indexed
     "digest": "f405b2996f6431e316b2bde41233a0b31e14edac4a58434f47911e68bc365185"
   },
   "source_asserted_at": "2025-07-19T16:06:37.787845Z",
-  "import_batch": "backfill:2026-10-21T03:46:43Z#1",
-  "imported_at": "2026-10-21T03:46:43Z",
+  "import_batch": "backfill:2026-10-22T00:05:27Z#1",
+  "imported_at": "2026-10-22T00:05:27Z",
   "time_rung": "self_attested"
 }
 {"checkpoint":34,"indexed_sequence":18}
@@ -208,7 +208,7 @@ grep -n "tier: recomputed" -B10 packs/eu-ai-act-obligations/pack-source.yaml | g
 
 ```
 282-        label: "AI disclosure before the first substantive turn"
-369-        label: "Allowed-action rules (compiled)"
+373-        card_label: "Allowed-action rules (compiled): eligibility checked; reason not checked"
 ```
 
 To define your own, copy a pack and change it. This copy turns one judged
@@ -372,28 +372,23 @@ jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rul
 grep -A1 "book report build: render" $QS/outcomes.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
 ```
 
-What live verdicts look like, as a **pre-recorded sample, not from this
-page's run**: a live hosted Jev run on 2026-10-17 judged the same
-conversation (task 1, trial 0, claude-3-7-sonnet agent) against an earlier
-compile of the outcomes pack. Each answer is a verdict and the judge's
-confidence:
-
 ```
-policy_compliance.confirmed_before_acting              met  0.97
-policy_compliance.within_fare_rules                    met  0.56
-policy_compliance.no_unrequested_actions               met  0.83
-task_resolution.right_reservation                      met  0.93
-task_resolution.right_change                           met  0.60
-task_resolution.done_in_full                           met  0.52
-grounded_communication.prices_from_system              met  0.85
-grounded_communication.refunds_match_payment_records   met  0.91
-grounded_communication.no_invented_policy              met  0.51
+{"cases":6,"reports":54,"verdicts":{"out_of_scope":8,"met":39,"not_met":7},"judge_pin_digest":"3b47531fad2bc119f5a0b8a8df5cc4dec2defd83dd22c27166e97aedc996a892"}
+tau2:airline:task-0:trial-0::policy_compliance.within_fare_rules  judged  met
+tau2:airline:task-19:trial-0::policy_compliance.within_fare_rules  judged  met
+tau2:airline:task-1:trial-0::policy_compliance.within_fare_rules  judged  met
+tau2:airline:task-7:trial-0::policy_compliance.within_fare_rules  judged  met
+tau2:airline:task-9:trial-0::policy_compliance.within_fare_rules  judged  met
+{"card":"outcome","claims":46,"verdict":"VALID","verification":"pass","page":"written"}
 ```
 
-In that conversation the agent cancelled a reservation about 29 hours after
-it was booked, outside the 24-hour window, and the judge took the agent's
-word for it. That is what the switch in step 3 is for. Your pack, with
-"Within fare rules" recomputed:
+Six conversations, nine criteria each: 54 sealed judgments. Task 4 has no
+"Within fare rules" claim because the judge answered `out_of_scope` there,
+and a criterion that does not apply is set aside. The judge called "Within
+fare rules" met in the other five. In task 1 the agent cancelled a
+reservation about 29 hours after it was booked, outside the 24-hour window,
+and the judge took the agent's word for it. That is what the switch in
+step 3 is for. Your pack, with "Within fare rules" recomputed:
 
 ```sh
 scripts/report.sh --spec demo/my-airline-pack/compiled.json --profile airline \
@@ -402,6 +397,21 @@ scripts/report.sh --spec demo/my-airline-pack/compiled.json --profile airline \
 jq -r '.claims[] | select(.requirement_ref == "policy_compliance.within_fare_rules") | "\(.id)  \(.tier)  \(.verdict)"' \
   $QS/run-my-pack/last-run/rollup/result-v0-$DAY.json
 ```
+
+```
+tau2:airline:task-0:trial-0::policy_compliance.within_fare_rules  recomputed  met
+tau2:airline:task-19:trial-0::policy_compliance.within_fare_rules  recomputed  not_met
+tau2:airline:task-1:trial-0::policy_compliance.within_fare_rules  recomputed  not_met
+tau2:airline:task-4:trial-0::policy_compliance.within_fare_rules  recomputed  met
+tau2:airline:task-7:trial-0::policy_compliance.within_fare_rules  recomputed  not_met
+tau2:airline:task-9:trial-0::policy_compliance.within_fare_rules  recomputed  not_met
+```
+
+The deterministic check marks four conversations not met where the judge
+said met, task 1 among them, and answers task 4 as well. On the page,
+"resolved correctly" drops from 2 of 6 to 0 of 6, and "Within fare rules"
+now lists four conversations under "Why conversations missed". Look at
+those conversations before you trust either answer.
 
 And the EU AI Act pack. `--attach-input-originals` puts each conversation's
 full transcript in the bundle so the page can show it. It is off by default
@@ -413,6 +423,10 @@ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json --profile airl
   --judge-backend live --attach-input-originals \
   --title "EU AI Act obligations: airline support agent" > $QS/eu.log
 grep -A1 "book report build: render" $QS/eu.log | tail -1 | jq -c '{card, claims, verdict, verification, page}'
+```
+
+```
+{"card":"obligation","claims":52,"verdict":"VALID","verification":"pass","page":"written"}
 ```
 
 ### Adjudication on or off
@@ -442,30 +456,57 @@ pack go to the judge, read each row's effective tier the way
 python3 -c 'import json, sys; sys.path.insert(0, "scripts"); import run_daily as rd; spec = json.load(open(sys.argv[1])); sw = spec.get("switches") or {}; [print("%-10s %s" % (rd.effective_tier(c, sw), c["id"])) for c in spec["clauses"]]' demo/my-airline-pack/compiled.json
 ```
 
+```
+judged     policy_compliance.confirmed_before_acting
+recomputed policy_compliance.within_fare_rules
+judged     policy_compliance.no_unrequested_actions
+judged     task_resolution.right_reservation
+judged     task_resolution.right_change
+judged     task_resolution.done_in_full
+judged     grounded_communication.prices_from_system
+judged     grounded_communication.refunds_match_payment_records
+judged     grounded_communication.no_invented_policy
+```
+
+The card's "Held pending adjudication" and "Human spot checks" are a
+different step: weekly blind re-grades by a person, read from
+`calibration-summary/v1` records. This walk-through seals none, so the page
+shows 0 held and "no calibration-summary/v1 records cited".
+
 **Reading a judged card.** `$QS/outcomes.html` reads at two levels:
 
 - **The summary**: the pack and version, the period (each backfilled
   conversation is dated by its own "source says" time, which the card marks
   as self-attested), and the counts: conversations resolved, missed, and
   criterion judgments that did not apply. The page recomputes every count
-  from the claims and the records they cite.
+  from the claims and the records they cite. This run's card:
+
+  ```
+  Outcomes pack  airline-support-outcomes v1.5.0
+  Period  2025-07-01 – 2025-09-29    Sealed  2026-10-21    Conversations  6
+  Conversations resolved correctly   2 of 6
+  Conversations missed               4 of 6
+  Criterion judgments not applicable 8
+  ```
 - **The detail**: open a count to see its conversations. Under "Why
   conversations missed", each criterion lists the conversations that missed
   it.
 
 Below that, three blocks say who stands behind the numbers:
 
-- **The judge** ("What ran"): the contract and version, the judge model id,
-  the judge pin digest, and the prompt and axes digests.
+- **The judge** ("What ran"): the contract and version, the judge model id
+  (`jev-1.13.0`), the judge pin digest, and the prompt and axes digests.
 - **The witness** ("Receipts"): here, "self-witnessed: no
   transparency-service receipt".
 - **The verification** ("Checked on this page" and "Not checked on this
   page"), as in step 4.
 
-The EU AI Act page uses the obligation card, which the pack selects. By
-the pack's own rule it reports no resolved roll-up and no overall
-compliance percentage: each test is a count of sessions met, not met or not
-evaluable.
+The EU AI Act page uses the obligation card, which the pack selects. It
+opens with a summary per obligation (article, applicability date, status),
+then a table per test: its type (recomputed or judged), the population of
+sessions it applied to, exceptions and not evaluable, then findings. In its
+own words: "Results are stated as counts of sessions; no overall compliance
+percentage is given."
 
 **Changing the words.** The words on a card come from the pack: check
 questions, criterion labels and text, obligation titles. Edit them in
@@ -496,7 +537,7 @@ Backfilling is for logs you already have. Going forward, record as you go:
   ```
 
   ```
-  {"capsule_id":"1dfc7cd0d8e7e6772e6f4254271c6fdb64d7c800b80c8151bd2ad3985d9d6553"}
+  {"capsule_id":"3510cf137745dbac5d19e2bdec5a72316dcb41f1b7b941ec412c32e8823189e7"}
   ```
 
 - **Tool calls.** Run `capsulectl book backfill run` from cron (or your
@@ -540,7 +581,7 @@ print(checkpoint.mmr_size, checkpoint.witnesses)
 ```
 
 ```
-e0416a0bd641ee6daca4475b995ed0a750237f18955a47019c582bf6a1da1ef6 checkpoint_queued
+050ae0e8b214acb21e42a3d8e7daa4c7ad3b44fd3e314a431cd487f4c4159f58 checkpoint_queued
 1 []
 ```
 
