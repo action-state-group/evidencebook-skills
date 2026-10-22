@@ -339,6 +339,13 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     }
 
 
+def report_title(spec, label):
+    """A Result's title: the pack's own title (scripts/pack_compile.py's
+    PACK_TITLES), else its contract id, then what the Result covers (a day,
+    or a bundle's root)."""
+    return f"{spec.get('title') or spec.get('contract') or spec.get('contract_ref')} -- {label}"
+
+
 def headline_from_result(document):
     """The headline, from a day document alone: {"cases", "resolved"}. Claims are
     regrouped by the `<case_id>::` prefix of their id; a case is resolved exactly

@@ -188,9 +188,6 @@ def _build_eu_ai_act_presentation(source):
     }
 
 
-# The report-template registry: this is the "pluggable" seam. Adding a template
-# means registering a builder here; selecting one no one registered is a
-# validation failure (see validate_source), never a silent fallback to this one.
 # Each pack's name for people, which report titles use. Kept here, keyed by
 # pack_id, not in the pack source: the judge pin carries pack_source_digest, a
 # hash over the whole pack source, so a field there would move every pin. A pack
@@ -201,6 +198,9 @@ PACK_TITLES = {
     "asg/everyday-rules": "Everyday Rules",
 }
 
+# The report-template registry: this is the "pluggable" seam. Adding a template
+# means registering a builder here; selecting one no one registered is a
+# validation failure (see validate_source), never a silent fallback to this one.
 REPORT_TEMPLATES = {
     "outcome-report/v1": _build_outcome_report_presentation,
     "eu-ai-act-compliance/v1": _build_eu_ai_act_presentation,

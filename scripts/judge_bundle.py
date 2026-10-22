@@ -126,7 +126,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "judges"))
 from capsulectl_calls import EvidenceUnavailable  # noqa: E402
 import instrument_pin  # noqa: E402
 import jev_judge  # noqa: E402
-from result_v0 import build_result_v0  # noqa: E402
+from result_v0 import build_result_v0, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 
 BUNDLE_KIND = "evidence-bundle/v2"
@@ -441,6 +441,7 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     )
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
+    document["view"]["title"] = report_title(pack, case_id)
     return document
 
 
