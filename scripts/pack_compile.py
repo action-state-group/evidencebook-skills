@@ -35,10 +35,11 @@ exactly `demo/<name>`, matching the depth scripts/run_daily.py's
   - axes.json           -- the outcome/checks/axes document judge-prompt.md and
                            compiled.json both refer to.
   - presentation.json   -- the bundle presentation extension for the selected
-                           report.template (today: outcome-report/v1). Nothing in
-                           this repo consumes it; it records the template
-                           selection and its presentation settings for the
-                           renderer that draws the report.
+                           report.template (outcome-report/v1 or
+                           eu-ai-act-compliance/v1), plus the empty
+                           contract-report/v1 opt-in for the packs in
+                           CONTRACT_REPORT_PACKS. scripts/wire_presentation.py
+                           wires it onto the bundle for the renderer.
 
 Deterministic: the same pack source compiles to byte-identical output every time
 (no wall-clock, no randomness) -- see tests/test_pack_compile.py. Refuses an
@@ -248,6 +249,18 @@ REPORT_TEMPLATE_EXTRA_VALIDATORS = {"eu-ai-act-compliance/v1": _validate_eu_ai_a
 # outcomes, and settings that are not about presenting them (pricing a resolution,
 # for one) belong to a product that consumes the report, not to the pack.
 REPORT_KEYS = ("template", "percentages")
+
+# agent-action-capsule spec/contract-report-v1.md section 1: a producer's opt-in
+# to the contract-report view, wired onto the bundle as a closed empty object
+# beside the pack's own report.template block (scripts/wire_presentation.py).
+CONTRACT_REPORT_KEY = "contract-report/v1"
+
+# The packs that opt in, by pack_id. Kept here rather than as a pack-source
+# setting on purpose: the judge pin carries pack_source_digest, a hash over the
+# whole pack source (scripts/judge_pin.py), so adding a presentation-only field
+# to pack-source.yaml would move both packs' judge pins and start a new pin
+# scope for work already judged. Opting in changes presentation.json only.
+CONTRACT_REPORT_PACKS = frozenset({"eu-ai-act-obligations", "airline-support-outcomes"})
 
 
 def validate_source(source):
@@ -734,7 +747,12 @@ def build_judge_prompt(source, out_rel):
 
 def build_presentation_json(source):
     template = source["report"]["template"]
-    return {template: REPORT_TEMPLATES[template](source)}
+    presentation = {template: REPORT_TEMPLATES[template](source)}
+    if source.get("pack_id") in CONTRACT_REPORT_PACKS:
+        # The closed empty object agent-action-capsule spec/contract-report-v1.md
+        # section 1 defines: never words, data or flags, just the opt-in.
+        presentation[CONTRACT_REPORT_KEY] = {}
+    return presentation
 
 
 def compile_pack(source, out_rel):

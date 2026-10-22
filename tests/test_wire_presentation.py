@@ -5,6 +5,7 @@ disclosed bundle's extensions, and the report card it selects.
 """
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from wire_presentation import (  # noqa: E402
-    CARD_FOR_TEMPLATE, MAX_NOTE_LINE, MAX_NOTE_LINES, MAX_NOTE_TITLE, PRODUCER_NOTE_LINES,
-    PRODUCER_NOTE_TITLE, PRODUCER_TERMS_LINE, WireError, wire)
+    CARD_FOR_TEMPLATE, CONTRACT_REPORT_KEY, DIGEST_MEMBER, LABEL_UNSIGNED, MAX_NOTE_LINE, MAX_NOTE_LINES,
+    MAX_NOTE_TITLE, PRODUCER_NOTE_LINES, PRODUCER_NOTE_TITLE, PRODUCER_TERMS_LINE, WireError,
+    digest_member, presentation_label, seal, wire)
 
 BUNDLE = {"records": [{"capsule_id": "ab" * 32}],
           "extensions": {"producer-key/v1": {"public_key": "cd" * 32}}}
@@ -106,6 +108,99 @@ class Wire(unittest.TestCase):
         for bundle in ([], {"extensions": []}):
             with self.assertRaises(WireError):
                 wire(bundle, self.BLOCK)
+
+
+class ContractReportV1(unittest.TestCase):
+    """agent-action-capsule spec/contract-report-v1.md section 1: a producer's
+    opt-in, a closed empty object carried beside the pack's own template block,
+    never in place of it. Its own {} content is never digested (nothing in it
+    to sign), but its ENGAGEMENT is covered like every extension: digest_member
+    folds in a `contract_report` flag, present only when engaged, so `wire`
+    refuses a presentation.json whose opt-in disagrees with what was sealed."""
+
+    WITH_BOTH = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}, CONTRACT_REPORT_KEY: {}}
+
+    def test_wired_beside_the_template_block_unchanged(self):
+        wired, template, card = wire(BUNDLE, self.WITH_BOTH)
+        self.assertEqual((template, card), ("eu-ai-act-compliance/v1", "obligation"))
+        self.assertEqual(wired["extensions"][CONTRACT_REPORT_KEY], {})
+        self.assertEqual(wired["extensions"]["eu-ai-act-compliance/v1"],
+                         self.WITH_BOTH["eu-ai-act-compliance/v1"])
+
+    def test_a_non_empty_block_is_refused_never_wired(self):
+        for bad in ({"x": 1}, {"enabled": True}, []):
+            with self.subTest(bad=bad):
+                presentation = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []},
+                                CONTRACT_REPORT_KEY: bad}
+                with self.assertRaisesRegex(WireError, "must be exactly"):
+                    wire(BUNDLE, presentation)
+
+    def test_alone_with_no_template_block_is_refused(self):
+        with self.assertRaisesRegex(WireError, "0 report-template block"):
+            wire(BUNDLE, {CONTRACT_REPORT_KEY: {}})
+
+    def test_a_pack_that_does_not_opt_in_wires_no_such_key(self):
+        wired, _, _ = wire(BUNDLE, Wire.BLOCK)
+        self.assertNotIn(CONTRACT_REPORT_KEY, wired["extensions"])
+
+    def test_an_extension_already_on_the_bundle_is_never_overwritten(self):
+        bundle = {"extensions": {CONTRACT_REPORT_KEY: {}}}
+        with self.assertRaisesRegex(WireError, f"{re.escape(CONTRACT_REPORT_KEY)}.*refusing to overwrite"):
+            wire(bundle, self.WITH_BOTH)
+
+    def test_the_sealed_digest_distinguishes_engagement_though_the_block_itself_is_never_hashed(self):
+        # The block's own {} bytes never enter block_digest (nothing to sign),
+        # but digest_member's "digest" field (the template block's hash) is
+        # identical either way -- only the sibling "contract_report" flag
+        # differs, and only when engaged, so a pack that never opts in keeps
+        # the exact three-key member this existed before contract-report/v1.
+        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        sealed_without, _, _ = seal({"result_version": "evidence-result-v0"}, without)
+        sealed_with, _, _ = seal({"result_version": "evidence-result-v0"}, self.WITH_BOTH)
+        self.assertNotIn("contract_report", sealed_without[DIGEST_MEMBER])
+        self.assertEqual(sealed_without[DIGEST_MEMBER]["digest"], sealed_with[DIGEST_MEMBER]["digest"])
+        self.assertEqual(sealed_with[DIGEST_MEMBER]["contract_report"], True)
+
+    def test_wiring_refuses_when_the_opt_in_disagrees_with_what_was_sealed(self):
+        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        sealed, _, _ = seal({"result_version": "evidence-result-v0"}, without)
+        # sealed WITHOUT contract_report, but the bundle is wired WITH it:
+        with self.assertRaises(WireError):
+            wire(BUNDLE, self.WITH_BOTH, sealed_digest=sealed[DIGEST_MEMBER])
+        sealed_with, _, _ = seal({"result_version": "evidence-result-v0"}, self.WITH_BOTH)
+        # and the reverse: sealed WITH it, wired WITHOUT:
+        with self.assertRaises(WireError):
+            wire(BUNDLE, without, sealed_digest=sealed_with[DIGEST_MEMBER])
+        # consistent on both sides wires cleanly:
+        wired, _, _ = wire(BUNDLE, self.WITH_BOTH, sealed_digest=sealed_with[DIGEST_MEMBER])
+        self.assertIn(CONTRACT_REPORT_KEY, wired["extensions"])
+
+    def test_presentation_label_reads_unsigned_when_only_the_opt_in_disagrees(self):
+        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        sealed, _, _ = seal({"result_version": "evidence-result-v0"}, without)
+        bundle = {"root": "r", "disclosures": {"r": {"agent_input": sealed}},
+                  "extensions": {"eu-ai-act-compliance/v1": without["eu-ai-act-compliance/v1"],
+                                 CONTRACT_REPORT_KEY: {}}}
+        self.assertEqual(presentation_label(bundle), (LABEL_UNSIGNED, "eu-ai-act-compliance/v1"))
+
+    def test_presentation_label_reads_unsigned_when_a_sealed_opt_in_is_mutated_to_non_empty(self):
+        # A legitimately sealed-and-wired bundle, then the engaged block itself
+        # is mutated post-wire (a bad patch, a hand edit) to carry a member --
+        # no longer the closed {} opt-in prepare_block only ever writes. The
+        # label must not still read producer-signed just because the KEY is
+        # present: its content no longer matches what was sealed as engaged.
+        sealed, _, _ = seal({"result_version": "evidence-result-v0"}, self.WITH_BOTH)
+        bundle = {"root": "r", "disclosures": {"r": {"agent_input": sealed}},
+                  "extensions": {"eu-ai-act-compliance/v1": self.WITH_BOTH["eu-ai-act-compliance/v1"],
+                                 CONTRACT_REPORT_KEY: {"malicious": "payload"}}}
+        self.assertEqual(presentation_label(bundle), (LABEL_UNSIGNED, "eu-ai-act-compliance/v1"))
+
+    def test_wiring_never_writes_a_non_empty_block_even_when_the_template_block_is_disabled(self):
+        # The refusal to wire an unknown/disabled template block must happen
+        # before this key is ever copied onto a bundle -- no partial wiring.
+        presentation = {"eu-ai-act-compliance/v1": {"enabled": False}, CONTRACT_REPORT_KEY: {}}
+        with self.assertRaises(WireError):
+            wire(BUNDLE, presentation)
 
 
 class ProducerNote(unittest.TestCase):
