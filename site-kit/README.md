@@ -16,7 +16,7 @@ rebuild them yourself. Nothing here depends on the people who made it.
 | `homepage/terms-pack.md` | the homepage explainer text, as one paragraph |
 | `MANIFEST.txt` | sha256 and size of every file, the verify result for each page and bundle, and the versions used |
 
-The pages were drawn with capsule-viewer `5a86acef1697735e2121d417b3b2a34db96dfd6b` (PR #48 head: #41, #42 and #48).
+The pages were drawn with capsule-viewer `b7c5cf707bbedfa15a80ba185a670c7a7ee7be39` (PR #48 head: #41, #42 and #48).
 
 The records are tau2-bench airline runs (four agent models), replayed into
 September 2025 and sealed into an evidence book. Sizes and hashes are in
@@ -118,13 +118,13 @@ requests that capsulectl does not ship yet:
 - #42 `desk/report-provenance-line`: who judged, who witnessed and what verified, on the front
 - #48 `desk/contract-report-module`: one view, wording packs (#46)
 
-#41 is merged to capsule-viewer `main`. #42 is open, based on `main`. #48 is
-open, stacked on #42. The pages here were built from the #48 head,
-`5a86acef1697735e2121d417b3b2a34db96dfd6b`, which is #41 plus #42 plus #48
+#41 and #42 are merged to capsule-viewer `main`. #48 is
+open, based on `main`. The pages here were built from the #48 head,
+`b7c5cf707bbedfa15a80ba185a670c7a7ee7be39`, which is #41 plus #42 plus #48
 (the wording packs, and capsule-viewer's own `scripts/render-report.mjs`).
 Each page names the build it was drawn with:
-`capsule-viewer 0.1.0 at 5a86acef1697`. Both PRs may still move before they
-merge; the commit stays fetchable by its sha, as below.
+`capsule-viewer 0.1.0 at b7c5cf707bbe`. The PR may still move before it
+merges; the commit stays fetchable by its sha, as below.
 
 ## rebuild with the new layout, before capsulectl ships it
 
@@ -132,7 +132,7 @@ Needs `git` and Node 20 or newer (checked with Node 24.18.1, npm 11.16.0).
 Run from the `site-kit/` directory:
 
 ```bash
-CV=5a86acef1697735e2121d417b3b2a34db96dfd6b   # capsule-viewer #48 head (#41 + #42 + #48)
+CV=b7c5cf707bbedfa15a80ba185a670c7a7ee7be39   # capsule-viewer #48 head (#41 + #42 + #48)
 git clone -q https://github.com/action-state-group/capsule-viewer.git
 git -C capsule-viewer fetch -q origin $CV
 git -C capsule-viewer checkout -q $CV
