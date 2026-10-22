@@ -214,7 +214,8 @@ else
     # same fallback scripts/report_spec.py's own render_title() uses: title, else id.
     TITLE=$(python3 -c "import yaml,sys; s=yaml.safe_load(open(sys.argv[1])); print(s.get('title', s['id']))" "$SPEC")
   else
-    TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
+    # the pack's own title (scripts/pack_compile.py's PACK_TITLES), else its contract id.
+    TITLE=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1])); print(s.get('title') or s['contract'])" "$SPEC")
   fi
   RESULT_V0="$WORK/result-v0-merged.json"
   python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to $LAST_DATE" \

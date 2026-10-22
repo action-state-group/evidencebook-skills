@@ -316,6 +316,12 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
                                    source_capsule_ids=source_capsule_ids), skipped
 
 
+def day_title(spec, day_label):
+    """A day's Result title: the pack's own title (scripts/pack_compile.py's
+    PACK_TITLES), else its contract id, then the day."""
+    return f"{spec.get('title') or spec['contract']} -- {day_label}"
+
+
 def resolve_judge_model_id(cli_judge_model_id, spec):
     """--judge-model-id, or spec["judge"]["model_id"] when present, else None.
     Never raises on a missing or non-mapping "judge" key ("judge": "jev",
@@ -422,6 +428,7 @@ def main(argv):
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
+            day_doc["view"]["title"] = day_title(spec, day_label)
             out_path = args.out / f"result-v0-{safe_filename(day_label)}.json"
             out_path.write_text(json.dumps(day_doc, indent=2))
             entry.update(cases=headline_from_result(day_doc)["cases"], claims=len(day_doc["claims"]),

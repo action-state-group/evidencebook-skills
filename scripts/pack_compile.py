@@ -191,6 +191,16 @@ def _build_eu_ai_act_presentation(source):
 # The report-template registry: this is the "pluggable" seam. Adding a template
 # means registering a builder here; selecting one no one registered is a
 # validation failure (see validate_source), never a silent fallback to this one.
+# Each pack's name for people, which report titles use. Kept here, keyed by
+# pack_id, not in the pack source: the judge pin carries pack_source_digest, a
+# hash over the whole pack source, so a field there would move every pin. A pack
+# with no entry compiles without a title, and reports fall back to its contract id.
+PACK_TITLES = {
+    "airline-support-outcomes": "Airline support outcomes",
+    "eu-ai-act-obligations": "EU AI Act obligations",
+    "asg/everyday-rules": "Everyday Rules",
+}
+
 REPORT_TEMPLATES = {
     "outcome-report/v1": _build_outcome_report_presentation,
     "eu-ai-act-compliance/v1": _build_eu_ai_act_presentation,
@@ -621,6 +631,8 @@ def build_compiled_json(source, out_rel):
         compiled["judge"]["min_confidence"] = source["judge"]["min_confidence"]
     if source["judge"].get("reference_files") is not None:
         compiled["judge"]["reference_files"] = dict(source["judge"]["reference_files"])
+    if source["pack_id"] in PACK_TITLES:
+        compiled["title"] = PACK_TITLES[source["pack_id"]]
     if source.get("switches"):
         compiled["switches"] = dict(source["switches"])
     if source.get("switches_note"):
