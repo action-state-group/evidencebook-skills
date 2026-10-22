@@ -43,7 +43,7 @@ on the tau2 airline book. Still pending: the `capsulectl-engine` plugin, so a co
   names. With no peer bundle held, the Close is unilateral (every correlated exchange in
   it reads `INSUFFICIENT`) and the run log says so; it is not a lesser Close, it is an
   honest one for a single-party contract. A contract with no counterparty passes the
-  compiled placeholder (`capsulectl close` requires the flag today) and never invents a
+  compiled placeholder (`capsulectl book close` requires the flag today) and never invents a
   party. `close` refuses a day that has not ended, so a run closes the previous day: the
   reports a run seals are committed on the day it runs, so the judgments of day D's
   cases, made on D+1, are covered by the Close for D+1, sealed by the next run. `close` also refuses a

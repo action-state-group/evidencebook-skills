@@ -14,6 +14,9 @@ way.
 
 ## Contents
 
+- [`docs/quickstart.md`](docs/quickstart.md) — the Terms Packs quick start:
+  agent logs into a book, a pack, a judged and a no-judge report, then
+  recording as you go.
 - [`skills/`](skills/) — every skill in this repository, one directory each, with
   its `SKILL.md` and an `AGENTS.md` copy. [`skills/README.md`](skills/README.md)
   lists them.

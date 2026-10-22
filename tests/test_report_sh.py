@@ -10,6 +10,7 @@ from --work, the judge backend it sets, and the title it seals.
 import json
 import os
 import pathlib
+import re
 import shutil
 import stat
 import subprocess
@@ -18,7 +19,9 @@ import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BASH = shutil.which("bash")
+# REPORT_SH_BASH picks the bash that runs report.sh (e.g. /bin/bash on macOS,
+# which is 3.2), so the same tests prove it on the oldest bash it supports.
+BASH = os.environ.get("REPORT_SH_BASH") or shutil.which("bash")
 
 STUB_RUN_DAILY = r'''#!/usr/bin/env python3
 import json, os, sys
@@ -177,6 +180,32 @@ class ReportShJudgedPath(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
         page = json.loads((self.capture / "page-presentation.json").read_text())
         self.assertEqual(page["title"], self.sealed()["view"]["title"])
+
+
+# Bash 4+ constructs that stop report.sh on bash 3.2, macOS's /bin/bash.
+BASH4_ONLY = re.compile(
+    r"\b(mapfile|readarray)\b"              # bash 4.0 builtins
+    r"|\b(declare|local|typeset)\s+-[a-zA-Z]*[An]"  # associative arrays, namerefs
+    r"|\$\{[A-Za-z_][A-Za-z_0-9]*(\[[^]]*\])?(,,?|\^\^?)"  # case conversion
+    r"|\$\{[A-Za-z_][A-Za-z_0-9]*\[-[0-9]+\]\}"  # negative subscripts (4.3)
+    r"|\$\{[A-Za-z_][A-Za-z_0-9]*@[QEPAaKUuL]\}"  # parameter transformations (4.4)
+    r"|&>>|;;&|\bcoproc\b|\bwait\s+-n\b|\[\[\s+-v\b|\$EPOCH(SECONDS|REALTIME)"
+)
+
+
+class ReportShRunsOnBash32(unittest.TestCase):
+    """report.sh is run by the quick start on macOS, whose /bin/bash is 3.2.
+    The tests above run it under REPORT_SH_BASH (set it to /bin/bash on a Mac,
+    or to a bash 3.2 build); this one checks the text for bash 4+ constructs
+    on any machine."""
+
+    def test_no_bash4_only_constructs(self):
+        hits = []
+        for n, line in enumerate((ROOT / "scripts" / "report.sh").read_text().splitlines(), 1):
+            code = line.split("#", 1)[0] if line.lstrip().startswith("#") else line
+            if BASH4_ONLY.search(code):
+                hits.append(f"{n}: {line.strip()}")
+        self.assertEqual(hits, [])
 
 
 if __name__ == "__main__":

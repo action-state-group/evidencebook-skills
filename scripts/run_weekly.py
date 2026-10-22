@@ -214,7 +214,7 @@ def main(argv):
                             for p in summary["pins"]]
 
         # 6. The week's Close; unilateral, no peer bundle is held.
-        close_args = ["close", "--profile", profile, "--period", "week", "--date", str(day),
+        close_args = ["book", "close", "--profile", profile, "--period", "week", "--date", str(day),
                       "--counterparty", spec["counterparty"]]
         capsule_out, bundle_out = out / "close.json", out / "close-bundle.json"
         if not capsule_out.exists():

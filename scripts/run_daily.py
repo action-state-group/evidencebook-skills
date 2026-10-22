@@ -409,7 +409,7 @@ def main(argv):
         log["verdicts"] = verdicts
 
         # 5. Seal the day's Close. No peer bundle is held: it is unilateral.
-        close_args = ["close", "--profile", profile, "--period", "day", "--date", str(day),
+        close_args = ["book", "close", "--profile", profile, "--period", "day", "--date", str(day),
                       "--counterparty", spec["counterparty"]]
         capsule_out, bundle_out = out / "close.json", out / "close-bundle.json"
         if not capsule_out.exists():
