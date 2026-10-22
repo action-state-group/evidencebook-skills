@@ -193,7 +193,7 @@ class ReportShJudgedPath(unittest.TestCase):
         self.spec.write_text(json.dumps(spec))
         proc = self.run_report("--date", "2026-10-01", "--to", "2026-10-02")
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
-        self.assertEqual(self.sealed()["view"]["title"], "Stub pack -- 2026-10-01 to 2026-10-02")
+        self.assertEqual(self.sealed()["view"]["title"], "Stub pack — 2026-10-01 to 2026-10-02")
 
     def test_without_title_the_page_shows_the_sealed_results_own(self):
         proc = self.run_report("--date", "2026-10-01")

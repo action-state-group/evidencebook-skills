@@ -492,7 +492,7 @@ class MonthOfBundles(unittest.TestCase):
     def test_a_bundle_result_is_titled_with_the_pack_title(self):
         doc = judge_bundle.run(compiled_pack(), disclosed_bundle(FACTS, root="bundle-oct-01"), ["9"], None,
                                "jev-1.13.0", GENERATED_AT, backend=fixed_backend("met"))
-        self.assertEqual(doc["view"]["title"], "Everyday Rules -- bundle-oct-01")
+        self.assertEqual(doc["view"]["title"], "Everyday Rules — bundle-oct-01")
 
     def test_two_capsule_id_runs_on_one_bundle_merge(self):
         # Narrowed runs on one bundle share its root; the claim id is scoped to

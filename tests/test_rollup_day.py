@@ -336,10 +336,10 @@ class RequirePinForJudgedClauses(unittest.TestCase):
 class ReportTitle(unittest.TestCase):
     def test_the_pack_title_and_the_bare_day(self):
         spec = {"contract": "airline-support-outcomes/v1", "title": "Airline support outcomes"}
-        self.assertEqual(report_title(spec, "2026-10-01"), "Airline support outcomes -- 2026-10-01")
+        self.assertEqual(report_title(spec, "2026-10-01"), "Airline support outcomes — 2026-10-01")
 
     def test_a_pack_with_no_title_falls_back_to_its_contract_id(self):
-        self.assertEqual(report_title({"contract": "x/v1"}, "2026-10-01"), "x/v1 -- 2026-10-01")
+        self.assertEqual(report_title({"contract": "x/v1"}, "2026-10-01"), "x/v1 — 2026-10-01")
 
 
 class PartitionStale(unittest.TestCase):

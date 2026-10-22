@@ -343,7 +343,7 @@ def report_title(spec, label):
     """A Result's title: the pack's own title (scripts/pack_compile.py's
     PACK_TITLES), else its contract id, then what the Result covers (a day,
     or a bundle's root)."""
-    return f"{spec.get('title') or spec.get('contract') or spec.get('contract_ref')} -- {label}"
+    return f"{spec.get('title') or spec.get('contract') or spec.get('contract_ref')} — {label}"
 
 
 def headline_from_result(document):

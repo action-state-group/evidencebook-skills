@@ -218,7 +218,7 @@ else
     TITLE=$(python3 -c "import json,sys; s=json.load(open(sys.argv[1])); print(s.get('title') or s['contract'])" "$SPEC")
   fi
   RESULT_V0="$WORK/result-v0-merged.json"
-  python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to $LAST_DATE" \
+  python3 "$REPO/scripts/merge_results.py" --title "$TITLE — ${DATES[0]} to $LAST_DATE" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 
