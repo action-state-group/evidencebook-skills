@@ -37,7 +37,7 @@
 spec_version: report-spec/v1
 id: mesh-llm-settlement-draft
 version: 1
-title: "Mesh-llm node settlement -- served / earned / paid per day (DRAFT)"
+title: "Mesh-LLM node settlement (DRAFT)"
 group_by: day
 
 sources:
@@ -89,6 +89,8 @@ claims:
 
 presentation:
   card: settlement
-  title_template: >-
-    {title} -- {period}: {exchange_count} exchanges, {tokens_served_total}
-    tokens served, {earned_msat} msat earned, {paid_msat} msat paid
+  # "\u2014" is the em dash every report title uses (result_v0.report_title),
+  # and "\u00b7" a middle dot before the day's counts; both escaped so this file
+  # stays ASCII under any locale.
+  title_template: "{title} \u2014 {period} \u00b7 {exchange_count} exchanges, {tokens_served_total}
+    tokens served, {earned_msat} msat earned, {paid_msat} msat paid"
