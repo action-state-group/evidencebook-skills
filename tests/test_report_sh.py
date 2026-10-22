@@ -20,6 +20,19 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASH = shutil.which("bash")
 
+
+def _system_bash_3():
+    """macOS's /bin/bash, which is still bash 3.2, when this machine has it: report.sh
+    must run there, and a bash 5 earlier on PATH (Homebrew, or Linux CI) would hide a
+    bash-4-only construct."""
+    if not os.path.exists("/bin/bash"):
+        return None
+    out = subprocess.run(["/bin/bash", "-c", "echo ${BASH_VERSINFO[0]}"], capture_output=True, text=True)
+    return "/bin/bash" if out.stdout.strip() == "3" else None
+
+
+BASH_3 = _system_bash_3()
+
 STUB_RUN_DAILY = r'''#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ["STUB_LOG"], "a") as f:
@@ -73,6 +86,8 @@ def _exe(path, text):
 
 @unittest.skipIf(BASH is None or shutil.which("jq") is None, "needs bash and jq")
 class ReportShJudgedPath(unittest.TestCase):
+    bash = BASH
+
     def setUp(self):
         self.tmp = pathlib.Path(tempfile.mkdtemp(prefix="test-report-sh-"))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
@@ -97,7 +112,7 @@ class ReportShJudgedPath(unittest.TestCase):
         env.update({"STUB_LOG": str(self.log), "STUB_CAPTURE": str(self.capture), "STUB_DAYS": days,
                     "PATH": f"{pathlib.Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"})
         env.update(env_extra or {})
-        cmd = [BASH, str(self.tmp / "scripts" / "report.sh"), "--spec", str(self.spec), "--profile", "p",
+        cmd = [self.bash, str(self.tmp / "scripts" / "report.sh"), "--spec", str(self.spec), "--profile", "p",
                "--out", str(self.tmp / "report.html"), "--capsulectl", str(self.ctl),
                "--work", str(work or self.tmp / "work"), *args]
         return subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
@@ -177,6 +192,13 @@ class ReportShJudgedPath(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
         page = json.loads((self.capture / "page-presentation.json").read_text())
         self.assertEqual(page["title"], self.sealed()["view"]["title"])
+
+
+
+@unittest.skipIf(BASH_3 is None or shutil.which("jq") is None, "needs /bin/bash 3.x (macOS) and jq")
+class ReportShJudgedPathBash3(ReportShJudgedPath):
+    """Every case above again under bash 3.2."""
+    bash = BASH_3
 
 
 if __name__ == "__main__":
