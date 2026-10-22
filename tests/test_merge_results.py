@@ -9,7 +9,9 @@ import contextlib
 import io
 import json
 import pathlib
+import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -69,6 +71,50 @@ class MainOrchestration(unittest.TestCase):
         summary = json.loads(printed)
         self.assertEqual(summary["claims"], 2)
         self.assertEqual(summary["inputs"], 2)
+
+    def _merge_with_spec(self, spec_name, spec_text):
+        spec = self.work / spec_name
+        spec.write_text(spec_text)
+        d1 = self._write("d1.json", doc("d1::x", "met"))
+        d2 = self._write("d2.json", doc("d2::x", "met"))
+        out = self.work / "merged.json"
+        code, _ = self._run(["--spec", str(spec), "--period", "2026-10-01 to 2026-10-02",
+                              "--generated-at", "2026-09-25T00:00:00Z", "--out", str(out), str(d1), str(d2)])
+        self.assertEqual(code, 0)
+        return json.loads(out.read_text())["view"]["title"]
+
+    def test_a_compiled_pack_titles_the_range_with_its_own_title(self):
+        title = self._merge_with_spec("compiled.json", json.dumps(
+            {"contract": "airline-support-outcomes/v1", "title": "Airline support outcomes"}))
+        self.assertEqual(title, "Airline support outcomes \u2014 2026-10-01 to 2026-10-02")
+
+    def test_a_report_spec_titles_the_range_with_its_title(self):
+        title = self._merge_with_spec("spec.yaml", "spec_version: report-spec/v1\nid: tau2-x\ntitle: Tau2 report\n")
+        self.assertEqual(title, "Tau2 report \u2014 2026-10-01 to 2026-10-02")
+
+    def test_title_and_spec_are_mutually_exclusive_and_spec_needs_a_period(self):
+        d1 = self._write("d1.json", doc("d1::x", "met"))
+        spec = self._write("compiled.json", {"contract": "x/v1"})
+        base = ["--generated-at", "2026-09-25T00:00:00Z", "--out", str(self.work / "m.json"), str(d1)]
+        for extra in ([], ["--title", "t", "--spec", str(spec), "--period", "p"], ["--spec", str(spec)]):
+            with self.subTest(extra=extra), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as cm:
+                    main(extra + base)
+                self.assertEqual(cm.exception.code, 2)
+
+    def test_the_title_survives_a_c_locale(self):
+        # report.sh passes only ASCII; the em dash is composed inside Python,
+        # so the sealed title doesn't depend on the caller's locale.
+        spec = self._write("compiled.json", {"contract": "x/v1", "title": "Pack"})
+        d1 = self._write("d1.json", doc("d1::x", "met"))
+        d2 = self._write("d2.json", doc("d2::x", "met"))
+        out = self.work / "merged.json"
+        script = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "merge_results.py"
+        env = dict(os.environ, LC_ALL="C", LANG="C", PYTHONUTF8="0")
+        subprocess.run([sys.executable, str(script), "--spec", str(spec), "--period", "2026-10-01 to 2026-10-02",
+                        "--generated-at", "2026-09-25T00:00:00Z", "--out", str(out), str(d1), str(d2)],
+                       check=True, capture_output=True, env=env)
+        self.assertEqual(json.loads(out.read_text())["view"]["title"], "Pack \u2014 2026-10-01 to 2026-10-02")
 
     def test_a_single_input_still_produces_a_valid_merged_document(self):
         d1 = self._write("d1.json", doc("d1::x", "met"))

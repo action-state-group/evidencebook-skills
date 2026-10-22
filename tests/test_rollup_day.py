@@ -338,6 +338,10 @@ class ReportTitle(unittest.TestCase):
         spec = {"contract": "airline-support-outcomes/v1", "title": "Airline support outcomes"}
         self.assertEqual(report_title(spec, "2026-10-01"), "Airline support outcomes — 2026-10-01")
 
+    def test_a_report_spec_with_no_title_falls_back_to_its_id(self):
+        self.assertEqual(report_title({"spec_version": "report-spec/v1", "id": "tau2-x"}, "2026-10-01"),
+                         "tau2-x \u2014 2026-10-01")
+
     def test_a_pack_with_no_title_falls_back_to_its_contract_id(self):
         self.assertEqual(report_title({"contract": "x/v1"}, "2026-10-01"), "x/v1 — 2026-10-01")
 

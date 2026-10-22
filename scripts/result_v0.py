@@ -339,11 +339,17 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     }
 
 
+TITLE_SEPARATOR = " \u2014 "
+
+
 def report_title(spec, label):
-    """A Result's title: the pack's own title (scripts/pack_compile.py's
-    PACK_TITLES), else its contract id, then what the Result covers (a day,
-    or a bundle's root)."""
-    return f"{spec.get('title') or spec.get('contract') or spec.get('contract_ref')} — {label}"
+    """A Result's title: the spec's own name, then what the Result covers (a
+    day, a range, or a bundle's root). A compiled pack's name is its title
+    (scripts/pack_compile.py's PACK_TITLES), else its contract id; a
+    report-spec/v1 spec's is its title, else its id. The one place report
+    titles are composed, so every report path uses the same separator."""
+    name = spec.get("title") or spec.get("contract") or spec.get("id") or spec.get("contract_ref")
+    return f"{name}{TITLE_SEPARATOR}{label}"
 
 
 def headline_from_result(document):
