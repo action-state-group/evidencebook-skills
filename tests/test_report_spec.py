@@ -679,7 +679,7 @@ class WorkedSpecTitles(unittest.TestCase):
         metrics = {"conversation_count": 10, "cancellation_count": 3, "refund_count": 2,
                    "total_refunded": 150, "tool_call_count": 40}
         self.assertEqual(render_title(spec, "2026-10-01", metrics),
-                         "Airline support: cancellations and refunds \u2014 2026-10-01: 10 conversations, "
+                         "Airline support: cancellations and refunds \u2014 2026-10-01 \u00b7 10 conversations, "
                          "3 cancellations, 2 refunds totaling $150, 40 tool calls")
         self.assertEqual(report_title(spec, "2026-10-01 to 2026-10-03"),
                          "Airline support: cancellations and refunds \u2014 2026-10-01 to 2026-10-03")
@@ -688,7 +688,7 @@ class WorkedSpecTitles(unittest.TestCase):
         spec = load_spec(self.SPECS / "mesh-llm-settlement-draft.yaml")
         metrics = {"exchange_count": 4, "tokens_served_total": 900, "earned_msat": 12, "paid_msat": 7}
         self.assertEqual(render_title(spec, "2026-10-01", metrics),
-                         "Mesh-llm node settlement (DRAFT) \u2014 2026-10-01: 4 exchanges, 900 tokens served, "
+                         "Mesh-LLM node settlement (DRAFT) \u2014 2026-10-01 \u00b7 4 exchanges, 900 tokens served, "
                          "12 msat earned, 7 msat paid")
 
     def test_the_spec_files_are_ascii(self):

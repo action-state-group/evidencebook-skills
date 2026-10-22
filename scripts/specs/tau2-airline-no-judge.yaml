@@ -109,7 +109,8 @@ claims:
 presentation:
   card: outcome
   # "\u2014" is the em dash every report title uses (result_v0.report_title),
-  # escaped so this file stays ASCII under any locale.
-  title_template: "{title} \u2014 {period}: {conversation_count} conversations,
+  # and "\u00b7" a middle dot before the day's counts; both escaped so this file
+  # stays ASCII under any locale.
+  title_template: "{title} \u2014 {period} \u00b7 {conversation_count} conversations,
     {cancellation_count} cancellations, {refund_count} refunds totaling
     ${total_refunded}, {tool_call_count} tool calls"
