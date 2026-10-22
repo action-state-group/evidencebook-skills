@@ -125,9 +125,17 @@ while cur <= b:
     print(cur.isoformat())
     cur += d.timedelta(days=1)
 " "$DATE" "${TO:-}")
-mapfile -t DATES <<< "$DATES_RAW"
+# Read into an array with a plain while-read loop, not mapfile/readarray:
+# this script runs on bash 3.2 (macOS's /bin/bash), which has neither, nor
+# negative array subscripts -- LAST_DAY is the last element instead.
+DATES=()
+while IFS= read -r line; do
+  if [[ -n "$line" ]]; then DATES+=("$line"); fi
+done <<< "$DATES_RAW"
 [[ ${#DATES[@]} -ge 1 ]] || fail "empty date range"
-GENERATED_AT="${DATES[-1]}T23:59:59Z"
+FIRST_DAY=${DATES[0]}
+LAST_DAY=${DATES[${#DATES[@]}-1]}
+GENERATED_AT="${LAST_DAY}T23:59:59Z"
 
 # --spec's own kind: report-spec/v1 (no judge) or a compiled pack contract (judged).
 MODE=$(python3 -c "
@@ -147,7 +155,7 @@ mkdir -p "$WORK/rollup"
 if [[ "$MODE" == "no-judge" ]]; then
   step "report_spec.py: deterministic claims from the sealed records, no judge"
   python3 "$REPO/scripts/report_spec.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
-    --generated-at "$GENERATED_AT" --out "$WORK/rollup" --date-from "${DATES[0]}" --date-to "${DATES[-1]}"
+    --generated-at "$GENERATED_AT" --out "$WORK/rollup" --date-from "$FIRST_DAY" --date-to "$LAST_DAY"
   DEFAULT_CARD=$(python3 -c "import yaml,sys; print((yaml.safe_load(open(sys.argv[1])).get('presentation') or {}).get('card', 'outcome'))" "$SPEC")
 else
   JUDGE_MODEL_ID=${JUDGE_MODEL_ID:-$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['judge']['model_id'])" "$SPEC")}
@@ -193,7 +201,7 @@ else
   DAY_RESULTS=("$WORK"/rollup/result-v0-*.json)
   shopt -u nullglob
 fi
-[[ ${#DAY_RESULTS[@]} -ge 1 ]] || fail "no result-v0-*.json written for ${DATES[0]}..${DATES[-1]} -- nothing to report on"
+[[ ${#DAY_RESULTS[@]} -ge 1 ]] || fail "no result-v0-*.json written for $FIRST_DAY..$LAST_DAY -- nothing to report on"
 if [[ ${#DAY_RESULTS[@]} -eq 1 ]]; then
   RESULT_V0="${DAY_RESULTS[0]}"
 else
@@ -213,7 +221,7 @@ else
     TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
   fi
   RESULT_V0="$WORK/result-v0-merged.json"
-  python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to ${DATES[-1]}" \
+  python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- $FIRST_DAY to $LAST_DAY" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 
