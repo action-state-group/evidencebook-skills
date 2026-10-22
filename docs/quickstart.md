@@ -18,38 +18,57 @@ obligations a single conversation can show).
 6. [Go live](#6-go-live)
 
 Every command on this page was run top to bottom in an empty directory on
-Linux (x86_64), against capsulectl `v0.1.0-rc18` (the GitHub release,
+Linux (x86_64), against capsulectl `v0.1.0-rc19` (the GitHub release,
 checksums verified) and Python packages from PyPI, with the judge called
-live. Output shown is from that run, trimmed.
+live. Output shown is from that run, trimmed; step 5 says which judgment
+its output comes from.
 
-You need `curl`, `git`, `jq`, Python 3.11 or later, and bash 4 or later
-(`scripts/report.sh` uses it; on macOS, `brew install bash`).
+You need `curl`, `git`, `jq` and Python 3.11 or later. `scripts/report.sh`
+runs on any bash from 3.2 up, so macOS's own `/bin/bash` is enough. The
+release has binaries for macOS on Apple silicon and for Linux on x86_64 and
+arm64.
 
 ## 1. Install
 
 Work in an empty directory. `QS` names it for the rest of the page.
 
+capsulectl keeps its profiles under `$XDG_CONFIG_HOME/capsule` (by default
+`~/.config/capsule`) and its plugins under `$HOME/.local/lib/capsulectl`,
+and has no flag that moves either. So `env.sh` points `HOME`, `TMPDIR` and
+the XDG directories inside `QS`. Every file this page writes, pip's cache
+and temporary files included, then lands in `quickstart/`. The exports hold
+only in this shell: use a new terminal for the page, and close it when you
+are done. capsulectl refuses to install a plugin on a path another user
+could change, so make `quickstart/` somewhere only you can write to, such
+as your home directory (`umask 022` keeps the directories the page makes
+that way). If it refuses, it names the `chmod` that fixes it.
+
 ```sh
-mkdir quickstart && cd quickstart && export QS=$PWD
+umask 022 && mkdir quickstart && cd quickstart
+printf 'umask 022\nexport QS=%s\nexport HOME=$QS/home TMPDIR=$QS/tmp XDG_CONFIG_HOME=$QS/home/.config XDG_DATA_HOME=$QS/home/.local/share XDG_CACHE_HOME=$QS/home/.cache\nexport PATH=$QS/bin:$PATH\n' "$PWD" > env.sh
+. ./env.sh && mkdir -p $TMPDIR $XDG_CONFIG_HOME $XDG_DATA_HOME $XDG_CACHE_HOME
 ```
 
 Download capsulectl and its book plugin, and check both against the
 release's `SHA256SUMS`:
 
 ```sh
-V=v0.1.0-rc18
+V=v0.1.0-rc19
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m); case $ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac
 U=https://github.com/action-state-group/capsule-cli/releases/download/$V
 curl -fsSLO $U/SHA256SUMS
 curl -fsSLO $U/capsulectl-$V-$OS-$ARCH
 curl -fsSLO $U/capsulectl-$V-plugin-book-$OS-$ARCH
-shasum -a 256 -c --ignore-missing SHA256SUMS    # on Linux: sha256sum -c --ignore-missing SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
 ```
 
+On Linux without `shasum`, the same check is
+`sha256sum -c --ignore-missing SHA256SUMS`.
+
 ```
-capsulectl-v0.1.0-rc18-linux-amd64: OK
-capsulectl-v0.1.0-rc18-plugin-book-linux-amd64: OK
+capsulectl-v0.1.0-rc19-linux-amd64: OK
+capsulectl-v0.1.0-rc19-plugin-book-linux-amd64: OK
 ```
 
 The release also carries a Sigstore bundle. This page checks only the
@@ -59,18 +78,18 @@ checksums.
 mkdir -p bin
 install -m 755 capsulectl-$V-$OS-$ARCH bin/capsulectl
 install -m 755 capsulectl-$V-plugin-book-$OS-$ARCH bin/capsulectl-book
-export PATH=$QS/bin:$PATH
 capsulectl --version
 capsulectl plugin install bin/capsulectl-book | jq -r .version_check
 ```
 
 ```
-capsulectl v0.1.0-rc18 (commit 459aea37ad313c21d07ccb00391b60b33910abef)
-matches capsulectl v0.1.0-rc18
+capsulectl v0.1.0-rc19 (commit 3acdeeebb3585eb0c4baf608f31c8144dbaabbc5)
+matches capsulectl v0.1.0-rc19
 ```
 
 Get the packs and scripts, and a Python environment with the three packages
-they use:
+they use. Until pull request #30 merges, the quick start's own files are
+only on its branch, so add `--branch desk/quickstart` to the clone.
 
 ```sh
 git clone -q https://github.com/action-state-group/evidencebook-skills.git
@@ -94,7 +113,7 @@ capsulectl store init --profile airline
 ```
 
 ```
-{"log_id":"airline-support","spec_version":"capsule-cli-result/v1","status":"initialized"}
+{"log_id":"airline-support","spec_version":"capsule-cli-result/v1","status":"initialized","voice":"silent"}
 ```
 
 ## 2. Logs into a book
@@ -173,8 +192,8 @@ capsulectl cll checkpoint create --profile airline | jq -c '{checkpoint, indexed
     "digest": "f405b2996f6431e316b2bde41233a0b31e14edac4a58434f47911e68bc365185"
   },
   "source_asserted_at": "2025-07-19T16:06:37.787845Z",
-  "import_batch": "backfill:2026-10-22T00:05:27Z#1",
-  "imported_at": "2026-10-22T00:05:27Z",
+  "import_batch": "backfill:2026-10-22T03:09:27Z#1",
+  "imported_at": "2026-10-22T03:09:27Z",
   "time_rung": "self_attested"
 }
 {"checkpoint":34,"indexed_sequence":18}
@@ -310,7 +329,7 @@ fetched; the bundle is inside the page, and the page re-checks it before it
 shows anything. This run's page opens with:
 
 ```
-Tau2 airline support -- report from records, no judge -- 2026-10-21: 6 conversations, 6 cancellations, 7 refunds totaling $8101, 43 tool calls
+Tau2 airline support -- report from records, no judge -- 2026-10-22: 6 conversations, 6 cancellations, 7 refunds totaling $8101, 43 tool calls
 Bundle verification passed
 ```
 
@@ -332,9 +351,14 @@ Then each claim, its verdict, its tier (`recomputed`) and its grade
 ## 5. Judge, from the next UTC day
 
 A judged report closes whole UTC days, and a day can be closed only once it
-has ended. Records you put in the book today are judged from 00:00 UTC
-tomorrow. Run this section then, from the directory that holds
-`quickstart/`.
+has ended: records appended on UTC day D can be judged from 00:00 UTC on
+D+1. Run this section then, in a new terminal, from the directory that
+holds `quickstart/`. This page's run judged the book its steps 1 to 4
+filled the previous UTC day, and the output below is from that book's
+first judgment. Judging a day again under the same pin only adds
+judgments. Where a live judge now answers a criterion differently, the
+rollup lists that conversation under `cases_conflicting` and leaves it out
+of the report rather than pick an answer.
 
 `report.sh` runs the same chain as in step 4, with a judge in front:
 `scripts/run_daily.py` judges every conversation the book took in that day,
@@ -358,10 +382,10 @@ chain with placeholder verdicts, and the sealed reports and the page then
 name the model as "(mock backend, no model read the conversation)".
 Recomputed rows are real either way. This page's run judged live.
 
+Set `TYPESAFE_API_KEY` to your Jev key first.
+
 ```sh
-# the next UTC day, from the directory that holds quickstart/
-cd quickstart && export QS=$PWD PATH=$PWD/bin:$PATH && . venv/bin/activate && cd evidencebook-skills
-# export TYPESAFE_API_KEY=...    your Jev key
+. quickstart/env.sh && . $QS/venv/bin/activate && cd $QS/evidencebook-skills
 DAY=$(capsulectl cll list --profile airline --limit 1000 | jq -r '[.entries[].appended_at[:10]] | min')
 scripts/report.sh --spec demo/airline-support-outcomes/compiled.json --profile airline \
   --date $DAY --out $QS/outcomes.html --work $QS/run-outcomes --capsulectl $QS/bin/capsulectl \
@@ -414,8 +438,11 @@ now lists four conversations under "Why conversations missed". Look at
 those conversations before you trust either answer.
 
 And the EU AI Act pack. `--attach-input-originals` puts each conversation's
-full transcript in the bundle so the page can show it. It is off by default
-because it discloses the conversations themselves, not only their digests:
+full transcript in the bundle, under `disclosures`. It is off by default
+because it discloses the conversations themselves, not only their digests.
+In `v0.1.0-rc19` the obligation card does not show those transcripts: each
+finding reads "Transcript: not in this bundle" although the bundle carries
+them.
 
 ```sh
 scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json --profile airline \
@@ -518,7 +545,7 @@ and a block changed afterwards reads as unsigned producer text. The words
 are still the producer's, not evidence: every verdict and count comes from
 the signed claims.
 Changing any field moves the judge pin (above), so judge again after a
-wording change. `--title` sets the page title. In `v0.1.0-rc18` the two
+wording change. `--title` sets the page title. In `v0.1.0-rc19` the two
 result cards are built in; wording packs (`aac.wording-pack/v0`) apply to
 presentation modules a plugin installs, not to these cards.
 
@@ -537,7 +564,7 @@ Backfilling is for logs you already have. Going forward, record as you go:
   ```
 
   ```
-  {"capsule_id":"3510cf137745dbac5d19e2bdec5a72316dcb41f1b7b941ec412c32e8823189e7"}
+  {"capsule_id":"9bc7ea63326622f028f775d3ce74d8f22553b5b83052926ce562bd29594a0706"}
   ```
 
 - **Tool calls.** Run `capsulectl book backfill run` from cron (or your
@@ -563,6 +590,12 @@ pip install -q capsule-emit==0.12.0
 export CAPSULE_WITNESS_URL=http://127.0.0.1:8765
 ```
 
+Run this Python in the same shell, from `$QS/evidencebook-skills` (the
+folder the page has been working in since step 2), with the venv active:
+`python3`, then paste it. `seal()` writes its ledger into the current
+folder: `ledger.jsonl`, `ledger.jsonl.lock`, and the key it signs with,
+`ledger.jsonl.signing_key.pem`.
+
 ```python
 from capsule_emit import seal, push
 
@@ -581,7 +614,7 @@ print(checkpoint.mmr_size, checkpoint.witnesses)
 ```
 
 ```
-050ae0e8b214acb21e42a3d8e7daa4c7ad3b44fd3e314a431cd487f4c4159f58 checkpoint_queued
+c943e887789e11db02954657fd7403d08f29d808a1876ffd97e3961fb5f1242f checkpoint_queued
 1 []
 ```
 
