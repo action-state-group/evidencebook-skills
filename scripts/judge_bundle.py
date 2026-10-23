@@ -145,8 +145,15 @@ other formats do (presentation/v1, evaluation-report/v1); a reader refuses one
 it does not know. The sidecar cites its Result by digest, never by path: a
 sidecar whose result_sha256 does not match the Result in hand is not that
 Result's sidecar.
-An abstention document (every row not_evaluable, no judge call) gets a sidecar
-too, with the same selection. The Result is written first, then the sidecar.
+judged_selection.requirement_refs and .out_of_scope hold the compiled pack's
+clause ids. Recomputing the pin's prompt_template_hash also needs
+scripts/judges/jev_judge.py at the revision that produced the Result: the hash
+folds in the judge's instruction template digest, which covers that file's own
+source. An abstention document (every row not_evaluable, no judge call) gets a
+sidecar too: its judged_selection is the selection asked for, not rows sent,
+its out_of_scope is empty, and no claim carries a judge_pin. The sidecar is
+staged before the Result is written and moved into place after it, so a
+failed write never leaves a Result without its sidecar.
 
 Exit codes: 0 on a successful run (whatever the verdicts), 1 on a malformed
 request (the "bad input" cases above), 2 on a judge backend failure, 3 when the
@@ -159,6 +166,7 @@ guessed verdict; never a partial document on stdout.
 import argparse
 import hashlib
 import json
+import os
 import pathlib
 import sys
 
@@ -628,6 +636,17 @@ def main(argv):
               file=sys.stderr)
         return 1
     sidecar_path = args.sidecar or sidecar_path_for(args.out)
+    # Both refused before the judge is consulted: a sidecar written over its own
+    # Result would leave a sidecar citing bytes that no longer exist, and a
+    # missing directory would fail only after the Result was written.
+    if args.out is not None and sidecar_path.resolve() == args.out.resolve():
+        print("bad input: --sidecar names the same file as --out; the sidecar would overwrite its Result",
+              file=sys.stderr)
+        return 1
+    for path in ([args.out] if args.out is not None else []) + [sidecar_path]:
+        if not path.resolve().parent.is_dir():
+            print(f"bad input: no directory to write {path} into", file=sys.stderr)
+            return 1
 
     judge_model_id = args.judge_model_id or jev_judge.PINNED_MODEL
     rule_ids = [r.strip() for r in args.rule_ids.split(",") if r.strip()] if args.rule_ids else None
@@ -653,12 +672,22 @@ def main(argv):
 
     out_text = json.dumps(document, indent=2) + "\n"
     out_bytes = out_text.encode("utf-8")
-    if args.out:
-        args.out.write_bytes(out_bytes)
-    else:
-        sys.stdout.write(out_text)
-        sys.stdout.flush()
-    sidecar_path.write_text(json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n")
+    sidecar_text = json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n"
+    # The sidecar is staged beside its final path before the Result goes out,
+    # so a write failure never leaves a Result without its sidecar on disk.
+    staged = sidecar_path.with_name(f".{sidecar_path.name}.{os.getpid()}.tmp")
+    try:
+        staged.write_text(sidecar_text)
+        if args.out:
+            args.out.write_bytes(out_bytes)
+        else:
+            sys.stdout.write(out_text)
+            sys.stdout.flush()
+        os.replace(staged, sidecar_path)
+    except OSError as e:
+        staged.unlink(missing_ok=True)
+        print(f"bad input: could not write the Result and its sidecar: {e}", file=sys.stderr)
+        return 1
     return 0
 
 

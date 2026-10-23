@@ -462,12 +462,14 @@ def backend_kind(backend=None):
 def sealed_model_id(model_id, backend=None):
     """The model id a judge pin may name for an answer from `backend`: the
     operator's id unchanged for the real backend; for any other backend, the
-    id with the backend stamped on it (unless it already names it), so a pin
-    over a stand-in's answer never passes as a named real model."""
+    id with the backend stamped on it (unless it already carries the stamp,
+    "(<backend> backend", as report.sh's ids do), so a pin over a stand-in's
+    answer never passes as a named real model. An id that merely contains the
+    backend's name ("hammock-judge-1") is not stamped."""
     kind = backend_kind(backend)
     if kind == "jev":
         return model_id
-    if kind.lower() in (model_id or "").lower():
+    if f"({kind} backend".lower() in (model_id or "").lower():
         return model_id
     return f"{model_id} ({kind} backend, no model read the evidence)"
 

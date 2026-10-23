@@ -58,14 +58,21 @@ say it is the mock (`run_daily.py` seals that id before the judge answers), and
 sidecar `<result>.judge.json` (`--out day.json` gives `day.judge.json`; with the
 Result on stdout, `--sidecar PATH` is required). The sidecar holds
 `spec_version` (`judge-sidecar/v1`, the format id and its version; any change to
-the sidecar's keys or their meaning is a new version), `result_sha256`, the sha256 of the exact Result bytes written, and
-`judged_selection`: the rows sent to the judge in order (`rule_ids`,
-`requirement_refs`), which came back `out_of_scope` (claims[] omits those), and
-`allow_out_of_scope`. With the pack, the Result and its sidecar, a reader
-recomputes the pin's `prompt_template_hash` and `input_refs`. The Result itself
-adds no top-level key beyond the evidence-result-v0 schema's own. When every
-selected row comes back `out_of_scope` there is no Result and no sidecar: the
-run exits 3 and prints the judged selection on stderr.
+the sidecar's keys or their meaning is a new version), `result_sha256`, the
+sha256 of the exact Result bytes written, and `judged_selection`: the rows
+selected for the judge in order (`rule_ids`, and `requirement_refs`, the
+compiled pack's clause ids), the requirement refs among them that came back
+`out_of_scope` (`out_of_scope`; claims[] omits those), and `allow_out_of_scope`.
+With the pack, the Result, its sidecar and `scripts/judges/jev_judge.py` at the
+revision that produced the Result, a reader recomputes the pin's
+`prompt_template_hash` and `input_refs`: the hash folds in the judge's
+instruction template digest, which covers that file's own source. On an
+abstention (a withheld or declared-incomplete bundle, or a missing or
+undisclosed record) no judge call is made: `judged_selection` is the selection
+asked for, `out_of_scope` is empty, and no claim carries a `judge_pin`. The
+Result itself adds no top-level key beyond the evidence-result-v0 schema's own.
+When every selected row comes back `out_of_scope` there is no Result and no
+sidecar: the run exits 3 and prints the judged selection on stderr.
 
 ## Failure behaviour
 

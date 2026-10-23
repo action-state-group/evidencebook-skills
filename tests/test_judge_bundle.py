@@ -697,6 +697,13 @@ class JudgePin(unittest.TestCase):
         self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", "jev"), "jev-1.13.0")
         self.assertIn("mock backend", jev_judge.sealed_model_id("jev-1.13.0", fixed_backend("met")))
 
+    def test_only_the_stamp_counts_as_naming_the_stand_in(self):
+        # An id that merely contains the backend's name is stamped; one that
+        # already carries the stamp (report.sh's wording) is left as is.
+        self.assertIn("(mock backend", jev_judge.sealed_model_id("hammock-judge-1", fixed_backend("met")))
+        stamped = "jev-1.13.0 (mock backend, no model read the conversation)"
+        self.assertEqual(jev_judge.sealed_model_id(stamped, fixed_backend("met")), stamped)
+
     def test_run_refuses_to_seal_a_pin_when_no_selected_clause_declares_an_input_ref(self):
         pack = compiled_pack()
         with self.assertRaisesRegex(judge_bundle.BadInput, "judge_input_refs"):
@@ -876,6 +883,45 @@ class JudgeSidecar(unittest.TestCase):
         self.assertEqual(proc.stdout, "")
         self.assertEqual(list(self.tmp.glob("*.judge.json")), [])
 
+    def test_a_sidecar_on_the_result_s_own_path_is_refused_before_judging(self):
+        out = self.tmp / "r.json"
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--out", str(out), "--sidecar", str(out))
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("same file as --out", proc.stderr)
+        self.assertFalse(out.exists())
+
+    def test_a_sidecar_with_no_directory_is_refused_before_the_result_is_written(self):
+        out = self.tmp / "r.json"
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--out", str(out),
+                         "--sidecar", str(self.tmp / "nope" / "x.json"))
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("no directory", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertFalse(out.exists())
+
+    def test_a_failed_result_write_leaves_no_sidecar_behind(self):
+        # --out names a directory: its parent exists, so the write itself fails.
+        out = self.tmp / "r.json"
+        out.mkdir()
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--out", str(out))
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual([p.name for p in self.tmp.iterdir() if p.name != "bundle.json"], ["r.json"])
+
+    def test_an_unknown_backend_is_a_backend_failure_exit_2(self):
+        import os
+        b = self.tmp / "bundle.json"
+        b.write_text(json.dumps(disclosed_bundle(FACTS)))
+        proc = subprocess.run(
+            [sys.executable, JUDGE_BUNDLE_PATH, "--bundle", str(b),
+             "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled" / "compiled.json"),
+             "--generated-at", GENERATED_AT, "--rule-ids", "2", "--out", str(self.tmp / "r.json")],
+            capture_output=True, text=True, env=dict(os.environ, JEV_JUDGE_BACKEND="no-such-backend"),
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("judge backend failure", proc.stderr)
+        self.assertFalse((self.tmp / "r.json").exists())
+
     def test_a_non_json_result_name_gets_the_suffix_appended(self):
         self.assertEqual(judge_bundle.sidecar_path_for(pathlib.Path("/x/result")), pathlib.Path("/x/result.judge.json"))
 
@@ -920,6 +966,20 @@ class PartialDisclosureIsNeverJudgedSilently(unittest.TestCase):
 
     def test_narrowing_to_a_present_record_of_an_incomplete_bundle_is_not_evaluable(self):
         self._assert_abstained(self._incomplete(), CAPSULE_ID)
+
+    def test_a_narrowed_run_over_an_incomplete_bundle_abstains_on_every_row(self):
+        bundle = self._incomplete()
+        document = judge_bundle.run(compiled_pack(), bundle, ["9"], None, "jev-1.13.0", GENERATED_AT,
+                                    backend=never_called_backend())
+        cited = [{"digest_alg": "SHA-256", "digest": judge_bundle.abstention_citation(bundle, None)}]
+        by_rule = {c["rule_id"]: c for c in document["claims"]}
+        self.assertEqual(by_rule["9"]["rationale"], judge_bundle.REASON_BUNDLE_INCOMPLETE)
+        for rule_id, claim in by_rule.items():
+            self.assertEqual(claim["verdict"], "not_evaluable")
+            self.assertNotIn("judge_pin", claim)
+            self.assertEqual(claim["evidence"], cited)
+            if rule_id != "9":
+                self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
 
     def test_payloads_mode_none_with_disclosures_is_refused(self):
         bundle = disclosed_bundle(FACTS)

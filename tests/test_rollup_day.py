@@ -659,6 +659,18 @@ AIRLINE_SPEC = REPO / "demo" / "airline-support-outcomes" / "compiled.json"
 STUB_JUDGE = f"{sys.executable} {REPO / 'tests' / 'stub_judge.py'}"
 
 
+class CountExcludedWithoutAPin(unittest.TestCase):
+    def test_a_contract_with_no_pin_counts_only_pack_source_mismatches(self):
+        # No judge model id, no pin: a judged report is in scope whatever its
+        # pin, so only a recomputed report from another pack source is excluded.
+        bodies = [("a", {"record_type": "evaluation-report/v1", "contract": "c", "judge_pin_digest": "1" * 64}),
+                  ("b", {"record_type": "evaluation-report/v1", "contract": "c", "pack_source_digest": "2" * 64}),
+                  ("c", {"record_type": "evaluation-report/v1", "contract": "c", "pack_source_digest": "3" * 64}),
+                  ("d", {"record_type": "evaluation-report/v1", "contract": "other", "pack_source_digest": "2" * 64})]
+        self.assertEqual(rollup_day.count_excluded(bodies, "c", None, "3" * 64),
+                         {"judge_pin_mismatch": 0, "pack_source_mismatch": 1})
+
+
 class ScopingExclusionsAreCounted(unittest.TestCase):
     """Reports left out by pin or pack scoping are counted in the summary, so a
     rollup under a model id the reports were not sealed under never reports
