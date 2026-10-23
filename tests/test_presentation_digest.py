@@ -29,8 +29,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from result_v0 import build_result_v0_for_day  # noqa: E402
 from rollup import all_criteria_from_clauses  # noqa: E402
 from wire_presentation import (  # noqa: E402
-    DIGEST_ALG, DIGEST_MEMBER, LABEL_SIGNED, LABEL_UNSIGNED, PRODUCER_NOTE_LINES, PRODUCER_TERMS_LINE,
-    SEALED_NOTE_LINES, SEALED_TERMS_LINE, WireError,
+    CARD_FOR_TEMPLATE, DIGEST_ALG, DIGEST_MEMBER, LABEL_SIGNED, LABEL_UNSIGNED, PRODUCER_NOTE_LINES,
+    PRODUCER_TERMS_LINE, SEALED_NOTE_LINES, SEALED_TERMS_LINE, WireError,
     block_digest, jcs, prepare_block, presentation_label, seal, sealed_result_of, wire)
 
 AIRLINE = json.loads((ROOT / "demo/airline-support-outcomes/presentation.json").read_text())
@@ -128,7 +128,8 @@ class SealRoundTrip(unittest.TestCase):
         self.assertTrue(DIGEST_MEMBER.startswith("x-"))
 
     def test_the_member_carries_no_wording(self):
-        # section 6: the bundle never supplies the page's wording; the Result pins a digest, not text
+        # section 6: the bundle never supplies the page's wording; the Result pins a digest, not text.
+        # AIRLINE opts into contract-report/v1, which carries nothing to sign: the member is unchanged.
         sealed, _, _ = seal(result_doc(), AIRLINE)
         self.assertEqual(set(sealed[DIGEST_MEMBER]), {"template", "digest_alg", "digest"})
 
@@ -206,7 +207,7 @@ class Tamper(unittest.TestCase):
     def test_wiring_refuses_a_block_that_does_not_match_the_sealed_digest(self):
         sealed, _, _ = seal(result_doc(), AIRLINE)
         edited = copy.deepcopy(AIRLINE)
-        (template, block), = edited.items()
+        (template, block), = {k: v for k, v in edited.items() if k in CARD_FOR_TEMPLATE}.items()
         edited[template] = tamper_one_character(block)
         with self.assertRaises(WireError):
             wire(book_bundle(sealed), edited, sealed_digest=sealed[DIGEST_MEMBER])

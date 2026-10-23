@@ -313,5 +313,6 @@
       "cadence": "weekly",
       "note": "Blind human re-grades through skills/weekly-blind-expert: run_weekly.py draws per_stratum reports from each verdict stratum across this pack's reports, recomputed tests included. No re-grade has run yet, and the report says so."
     }
-  }
+  },
+  "contract-report/v1": {}
 }

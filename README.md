@@ -87,7 +87,9 @@ $ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
 Both converge on the same tail (`capsulectl book result build` → checkpoint →
 `disclose` → `book report build`). On the judged path the pack's compiled
 `presentation.json` block is wired onto the bundle
-(`scripts/wire_presentation.py`) and picks the card: `eu-ai-act-compliance/v1`
+(`scripts/wire_presentation.py`), with the empty `contract-report/v1` opt-in
+beside it for `eu-ai-act-obligations` and `airline-support-outcomes`, and picks
+the card: `eu-ai-act-compliance/v1`
 → `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
 own text (check questions, criterion wording, obligation titles and
 plain-language summaries), added after `disclose`, outside the signed records.

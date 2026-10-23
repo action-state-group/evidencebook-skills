@@ -7,7 +7,10 @@
     wire_presentation.py label --bundle wired.json
 
 scripts/pack_compile.py writes a presentation.json beside every compiled.json:
-exactly one block, keyed by the pack's report template (REPORT_TEMPLATES there).
+exactly one template block, keyed by the pack's report template (REPORT_TEMPLATES
+there), plus, for the packs in CONTRACT_REPORT_PACKS, the empty
+"contract-report/v1": {} opt-in beside it (agent-action-capsule
+spec/contract-report-v1.md section 1), copied onto `extensions` as-is.
 The report renderer (capsulectl book report build, agent-action-capsule's
 built-in manifests) picks its view by that same key on the bundle's `extensions`:
 
@@ -70,8 +73,10 @@ Fails closed, never guesses:
   - a presentation.json carrying no block this module knows, or a key it
     doesn't know, is refused (a renamed template would otherwise render as a
     silent fallback page);
-  - more than one known block is refused (the compliance view forbids the
-    outcome-report extension; one pack compiles to one template);
+  - more than one template block is refused (the compliance view forbids the
+    outcome-report extension; one pack compiles to one template). The
+    contract-report/v1 opt-in may sit beside the one template block, and must
+    be exactly {};
   - a bundle that already carries the extension is refused rather than
     overwritten;
   - an outcome-report/v1 block whose own producer_note would, with the lines
@@ -92,6 +97,16 @@ CARD_FOR_TEMPLATE = {
     "outcome-report/v1": "outcome",
     "eu-ai-act-compliance/v1": "obligation",
 }
+
+# agent-action-capsule spec/contract-report-v1.md section 1: a producer's opt-in
+# to the contract-report view, a closed empty object (scripts/pack_compile.py's
+# CONTRACT_REPORT_PACKS). It carries no words, so nothing here digests it: like
+# every extension it is covered by the bundle digest (section 1). It sits
+# beside the pack's report-template block, which stays because capsule-viewer's
+# contract-report module reads its grouping data from that block
+# (contractReportInput), until the section 5 migration writes the opt-in in
+# its place. No renderer in this repo reads it.
+CONTRACT_REPORT_KEY = "contract-report/v1"
 
 # The templates whose renderer draws a `producer_note` from the block (under its
 # own fixed "Producer's note ... not evidence" label). Only outcome-report/v1's
@@ -149,17 +164,25 @@ def prepare_block(presentation, sealed=False):
     """Pure: (template key, the block exactly as it is wired, the card that
     renders it). An outcome-report/v1 block gets the producer_note that labels
     it (see producer_note; `sealed` picks the lines that name the sealed
-    digest); any other block is copied verbatim. The argument is not modified."""
+    digest); any other block is copied verbatim. A presentation.json may also
+    carry CONTRACT_REPORT_KEY beside the one template block (checked here, but
+    not returned: its own {} content is never noted, just copied by `wire`
+    as-is). The argument is not modified."""
     if not isinstance(presentation, dict) or not presentation:
         raise WireError("presentation.json is empty or not a JSON object")
-    unknown = sorted(set(presentation) - set(CARD_FOR_TEMPLATE))
+    known = set(CARD_FOR_TEMPLATE) | {CONTRACT_REPORT_KEY}
+    unknown = sorted(set(presentation) - known)
     if unknown:
         raise WireError(f"presentation.json carries block(s) this report does not know: {unknown!r} "
-                        f"(known: {sorted(CARD_FOR_TEMPLATE)!r})")
-    if len(presentation) != 1:
-        raise WireError(f"presentation.json carries {len(presentation)} blocks {sorted(presentation)!r}; "
-                        "one pack compiles to exactly one")
-    (template, block), = presentation.items()
+                        f"(known: {sorted(known)!r})")
+    if CONTRACT_REPORT_KEY in presentation and presentation[CONTRACT_REPORT_KEY] != {}:
+        raise WireError(f"{CONTRACT_REPORT_KEY} must be exactly {{}} (a closed, empty opt-in: no words, "
+                        "data or flags)")
+    template_items = {k: v for k, v in presentation.items() if k in CARD_FOR_TEMPLATE}
+    if len(template_items) != 1:
+        raise WireError(f"presentation.json carries {len(template_items)} report-template block(s) "
+                        f"{sorted(template_items)!r}; one pack compiles to exactly one")
+    (template, block), = template_items.items()
     if not isinstance(block, dict):
         raise WireError(f"{template} block is not a JSON object")
     if block.get("enabled") is not True:
@@ -174,7 +197,11 @@ def wire(bundle, presentation, sealed_digest=None):
     """Pure: (a new bundle with the block on its extensions, the template key,
     the card that renders it). With `sealed_digest` (the Result's
     x-presentation-digest member), the block is built with the sealed note and
-    must hash to that digest, or it is refused. Neither argument is modified."""
+    must hash to that digest, or it is refused. When presentation.json also
+    carries CONTRACT_REPORT_KEY, that closed empty object is wired beside the
+    template block as-is; it carries nothing to sign, and the bundle digest
+    covers it like every extension (section 1). A bundle that already carries
+    the opt-in is refused, never overwritten. Neither argument is modified."""
     if not isinstance(bundle, dict):
         raise WireError("bundle is not a JSON object")
     template, block, card = prepare_block(presentation, sealed=sealed_digest is not None)
@@ -183,11 +210,15 @@ def wire(bundle, presentation, sealed_digest=None):
         raise WireError("bundle.extensions is not a JSON object")
     if extensions and template in extensions:
         raise WireError(f"bundle already carries a {template} extension; refusing to overwrite it")
+    if extensions and CONTRACT_REPORT_KEY in extensions:
+        raise WireError(f"bundle already carries a {CONTRACT_REPORT_KEY} extension; refusing to overwrite it")
     if sealed_digest is not None and sealed_digest != digest_member(template, block):
         raise WireError(f"the {template} block to wire does not match the digest sealed in the Result "
                         f"({DIGEST_MEMBER}); refusing to wire words the producer did not sign")
     wired = copy.deepcopy(bundle)
     wired.setdefault("extensions", {})[template] = block
+    if CONTRACT_REPORT_KEY in presentation:
+        wired["extensions"][CONTRACT_REPORT_KEY] = {}
     return wired, template, card
 
 

@@ -103,5 +103,6 @@
       "grounded_communication.refunds_match_payment_records": "Refunds match payment records",
       "grounded_communication.no_invented_policy": "No invented policy"
     }
-  }
+  },
+  "contract-report/v1": {}
 }

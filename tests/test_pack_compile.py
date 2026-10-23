@@ -156,6 +156,14 @@ class ValidateSource(unittest.TestCase):
         issues = validate_source(source)
         self.assertTrue(any("percentages must be a boolean" in i for i in issues))
 
+    def test_contract_report_is_not_a_pack_source_setting(self):
+        # The opt-in lives in CONTRACT_REPORT_PACKS, not the pack source: a
+        # pack-source field would move pack_source_digest and the judge pin.
+        source = minimal_source()
+        source["report"]["contract_report"] = True
+        issues = validate_source(source)
+        self.assertTrue(any("report.contract_report is not a report setting" in i for i in issues))
+
     def test_an_unknown_report_setting_is_refused(self):
         # The report presents outcomes; any other setting belongs to a product.
         source = minimal_source()
@@ -451,6 +459,31 @@ class CompilePack(unittest.TestCase):
         self.assertTrue(block["percentages"])
         self.assertEqual(set(block), {"enabled", "percentages", "terms", "reason_codes"})
 
+    def test_a_pack_not_opted_in_carries_no_block(self):
+        _, _, _, presentation = compile_pack(minimal_source(), "demo/test-pack")
+        self.assertNotIn(pack_compile.CONTRACT_REPORT_KEY, presentation)
+
+    def test_an_opted_in_pack_gets_exactly_an_empty_object_beside_the_template_block(self):
+        source = minimal_source()
+        _, _, _, plain = compile_pack(copy.deepcopy(source), "demo/test-pack")
+        source["pack_id"] = sorted(pack_compile.CONTRACT_REPORT_PACKS)[0]
+        compiled, _, _, presentation = compile_pack(copy.deepcopy(source), "demo/test-pack")
+        self.assertEqual(presentation[pack_compile.CONTRACT_REPORT_KEY], {})
+        self.assertIn("outcome-report/v1", presentation)  # the earlier block is kept, not replaced
+        # Never words, data or flags (spec section 1): opting in changes
+        # nothing about the earlier block's own content.
+        self.assertEqual(presentation["outcome-report/v1"], plain["outcome-report/v1"])
+
+    def test_opting_in_never_moves_the_pack_source_digest(self):
+        # The judge pin carries pack_source_digest: the opt-in must not touch it.
+        for name in sorted(pack_compile.CONTRACT_REPORT_PACKS):
+            with self.subTest(name):
+                source = _strip_strings(yaml.safe_load((REPO_ROOT / "packs" / name / "pack-source.yaml").read_text()))
+                compiled, _, _, presentation = compile_pack(copy.deepcopy(source), f"demo/{name}")
+                self.assertEqual(presentation[pack_compile.CONTRACT_REPORT_KEY], {})
+                committed = json.loads((REPO_ROOT / "demo" / name / "compiled.json").read_text())
+                self.assertEqual(compiled["pack_source_digest"], committed["pack_source_digest"])
+
     def test_every_rubric_switch_flip_changes_the_pack_source_digest(self):
         # The judge pin carries pack_source_digest (scripts/judge_pin.py), so a
         # switch flip or a claim_when_on edit moves the pin.
@@ -497,6 +530,45 @@ class AirlinePinUnchanged(unittest.TestCase):
         self.assertEqual(prompt, committed)
         self.assertIn("the transcript shows the criterion was satisfied", prompt)
         self.assertNotIn("the evidence shows the criterion was satisfied", prompt)
+
+
+class ContractReportShippedPacks(unittest.TestCase):
+    """eu-ai-act-obligations and airline-support-outcomes (agent-action-capsule
+    spec/contract-report-v1.md): both opt in, so their compiled bundles carry
+    the block exactly {} beside their earlier card. everyday-rules does not opt
+    in, and no other pack's compiled output is touched by this."""
+
+    def _compiled(self, name):
+        source = _strip_strings(yaml.safe_load((REPO_ROOT / "packs" / name / "pack-source.yaml").read_text()))
+        return compile_pack(source, f"demo/{name}")
+
+    def test_eu_and_airline_carry_the_block_exactly_empty_beside_their_card(self):
+        for name, card in (("eu-ai-act-obligations", "eu-ai-act-compliance/v1"),
+                            ("airline-support-outcomes", "outcome-report/v1")):
+            with self.subTest(name):
+                _, _, _, presentation = self._compiled(name)
+                self.assertEqual(presentation[pack_compile.CONTRACT_REPORT_KEY], {})
+                self.assertIn(card, presentation)
+                self.assertTrue(presentation[card]["enabled"])
+
+    def test_everyday_rules_opts_in_to_nothing(self):
+        source = _strip_strings(yaml.safe_load(
+            (REPO_ROOT / "packs" / "everyday-rules" / "pack-source.yaml").read_text()))
+        self.assertNotIn(source["pack_id"], pack_compile.CONTRACT_REPORT_PACKS)
+        _, _, _, presentation = compile_pack(source, "packs/everyday-rules/compiled")
+        self.assertNotIn(pack_compile.CONTRACT_REPORT_KEY, presentation)
+
+    def test_compiled_presentation_json_matches_the_committed_copy(self):
+        # What report.sh wires and seals is the committed demo/ file: it must be
+        # exactly what the compiler writes for the pack, opt-in included.
+        for name in ("eu-ai-act-obligations", "airline-support-outcomes"):
+            with self.subTest(name):
+                source = _strip_strings(yaml.safe_load(
+                    (REPO_ROOT / "packs" / name / "pack-source.yaml").read_text()))
+                _, _, _, presentation = compile_pack(source, f"packs/{name}/compiled")
+                committed = json.loads((REPO_ROOT / "demo" / name / "presentation.json").read_text())
+                self.assertEqual(presentation, committed)
+                self.assertEqual(committed[pack_compile.CONTRACT_REPORT_KEY], {})
 
 
 class WritePack(unittest.TestCase):
