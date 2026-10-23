@@ -69,7 +69,9 @@ compiled pack's clause ids), the requirement refs among them that came back
 With the pack, the Result, its sidecar and the `scripts/judges/jev_judge.py`
 whose sha256 equals the sidecar's `judge_source_sha256`, a reader recomputes the
 pin's `prompt_template_hash` and `input_refs`. That file renders every question
-and computes the hash, so the sidecar names it exactly, by digest. On an
+and computes the hash, so the sidecar names it exactly, by digest. Its
+questions are `jevals.ChoiceEval` subclasses, which neither digest covers: use
+the jevals version pinned in that revision's `requirements.txt`. On an
 abstention (a withheld or declared-incomplete bundle, or a missing or
 undisclosed record) no judge call is made: `judged_selection` is the selection
 asked for, `out_of_scope` is empty, no claim carries a `judge_pin`, and

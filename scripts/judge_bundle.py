@@ -154,7 +154,9 @@ produced the Result, the part of the judge prompt_template_hash folds in.
 judge_source_sha256 is the sha256 of that judge's scripts/judges/jev_judge.py
 bytes: the file that renders every question (build_eval) and computes
 prompt_template_hash. Recomputing the pin needs that file exactly, and the
-sidecar names it by digest rather than leave it to a guess. An abstention document (every row not_evaluable, no judge call) gets a
+sidecar names it by digest rather than leave it to a guess; its questions are
+jevals.ChoiceEval subclasses, so use the jevals version pinned in that
+revision's requirements.txt. An abstention document (every row not_evaluable, no judge call) gets a
 sidecar too: its judged_selection is the selection asked for, not rows sent,
 its out_of_scope is empty, no claim carries a judge_pin, and its
 instruction_template_digest and judge_source_sha256 are those of the judge in
