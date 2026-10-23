@@ -9,7 +9,10 @@ The key set matches capsule-engine's `judge_pin` (capsule-engine PR #96,
 `input_refs`, `model_hosting`.
 
   - model_id: the judge model id this run actually used (overridable by an
-    auditor's re-run under a different model id; same input, same clauses).
+    auditor's re-run under a different model id; same input, same clauses),
+    with the backend stamped on it whenever that is not the real one
+    (jev_judge.sealed_model_id): a mock's answer never seals under a bare
+    real model name.
   - prompt_template_hash: jev_judge.compiled_prompt_digest(clauses, ...) --
     the SHA-256 hex digest of the prompt actually sent for the judged clauses:
     the instruction template plus each clause's compiled question and answer

@@ -672,12 +672,28 @@ class JudgePin(unittest.TestCase):
                                     GENERATED_AT, backend=fixed_backend("met"))
         claim = document["claims"][0]
         self.assertIn("judge_pin_digest", claim)
-        self.assertEqual(claim["judge_pin"]["model_id"], "jev-1.13.0")
+        self.assertEqual(claim["judge_pin"]["model_id"], jev_judge.sealed_model_id("jev-1.13.0", fixed_backend("met")))
         self.assertEqual(claim["judge_pin"]["model_hosting"], "hosted")
         # rule 9's own judge_input_refs (packs/everyday-rules/pack-source.yaml)
         self.assertEqual(claim["judge_pin"]["input_refs"], ["amount_minor", "currency", "recurrence"])
         # ... never a record/capsule_id -- that stays in evidence[] (above tests), not the pin.
         self.assertNotIn(CAPSULE_ID, claim["judge_pin"]["input_refs"])
+
+    def test_a_mock_backend_stamps_itself_in_the_pin_never_a_named_real_model(self):
+        """A pin sealed over a mock backend's answer names the mock: the
+        operator's model id alone ("jev-1.13.0") would say a real model read
+        the evidence when none did."""
+        pack = compiled_pack()
+        document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
+                                    GENERATED_AT, backend=fixed_backend("met"))
+        model_id = document["claims"][0]["judge_pin"]["model_id"]
+        self.assertNotEqual(model_id, "jev-1.13.0")
+        self.assertIn("mock backend", model_id)
+        self.assertTrue(model_id.startswith("jev-1.13.0"))
+
+    def test_the_real_backend_seals_the_model_id_unchanged(self):
+        self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", "jev"), "jev-1.13.0")
+        self.assertIn("mock backend", jev_judge.sealed_model_id("jev-1.13.0", fixed_backend("met")))
 
     def test_run_refuses_to_seal_a_pin_when_no_selected_clause_declares_an_input_ref(self):
         pack = compiled_pack()
@@ -711,6 +727,18 @@ class CliSmoke(unittest.TestCase):
         document = json.loads(proc.stdout)
         self.assertEqual(document["result_version"], "evidence-result-v0")
         self.assertTrue(document["claims"])
+
+    def test_the_cli_under_the_mock_backend_stamps_the_pin(self):
+        # Rule 2, not rule 9: the mock's verdict is a hash of the question, and
+        # rule 9's mock answer on these facts is out_of_scope (no claim to stamp).
+        proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        document = json.loads(proc.stdout)
+        # Only the judged rule carries a pin; every unselected rule is a
+        # not_evaluable claim with none.
+        judged = [claim for claim in document["claims"] if "judge_pin" in claim]
+        self.assertEqual(len(judged), 1)
+        self.assertIn("mock backend", judged[0]["judge_pin"]["model_id"])
 
     def test_withheld_bundle_runs_end_to_end_all_not_evaluable(self):
         proc = self._run(withheld_bundle())
