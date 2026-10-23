@@ -837,7 +837,8 @@ class JudgeSidecar(unittest.TestCase):
 
     def _assert_sidecar_cites(self, sidecar_path, result_bytes, rule_ids):
         sidecar = json.loads(sidecar_path.read_text())
-        self.assertEqual(set(sidecar), {"result_sha256", "judged_selection"})
+        self.assertEqual(set(sidecar), {"spec_version", "result_sha256", "judged_selection"})
+        self.assertEqual(sidecar["spec_version"], "judge-sidecar/v1")
         self.assertEqual(sidecar["result_sha256"], __import__("hashlib").sha256(result_bytes).hexdigest())
         self.assertEqual(sidecar["judged_selection"]["rule_ids"], rule_ids)
         self.assertTrue(sidecar["judged_selection"]["allow_out_of_scope"])

@@ -57,7 +57,8 @@ say it is the mock (`run_daily.py` seals that id before the judge answers), and
 `scripts/judge_bundle.py` writes the Result document and, next to it, a judge
 sidecar `<result>.judge.json` (`--out day.json` gives `day.judge.json`; with the
 Result on stdout, `--sidecar PATH` is required). The sidecar holds
-`result_sha256`, the sha256 of the exact Result bytes written, and
+`spec_version` (`judge-sidecar/v1`, the format id and its version; any change to
+the sidecar's keys or their meaning is a new version), `result_sha256`, the sha256 of the exact Result bytes written, and
 `judged_selection`: the rows sent to the judge in order (`rule_ids`,
 `requirement_refs`), which came back `out_of_scope` (claims[] omits those), and
 `allow_out_of_scope`. With the pack, the Result and its sidecar, a reader

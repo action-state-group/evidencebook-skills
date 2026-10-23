@@ -135,12 +135,16 @@ claims, aggregate, view). What the judge run adds beside it goes in a sidecar
 file, by default `<result>.judge.json` next to the Result (RESULT.json ->
 RESULT.judge.json):
 
-    {"result_sha256": "<sha256 hex of the exact Result bytes written>",
+    {"spec_version": "judge-sidecar/v1",
+     "result_sha256": "<sha256 hex of the exact Result bytes written>",
      "judged_selection": {"rule_ids": [...], "requirement_refs": [...],
                           "out_of_scope": [...], "allow_out_of_scope": true}}
 
-The sidecar cites its Result by digest, never by path: a sidecar whose
-result_sha256 does not match the Result in hand is not that Result's sidecar.
+spec_version names the format and its version in one value, as this repo's
+other formats do (presentation/v1, evaluation-report/v1); a reader refuses one
+it does not know. The sidecar cites its Result by digest, never by path: a
+sidecar whose result_sha256 does not match the Result in hand is not that
+Result's sidecar.
 An abstention document (every row not_evaluable, no judge call) gets a sidecar
 too, with the same selection. The Result is written first, then the sidecar.
 
@@ -168,6 +172,9 @@ from result_v0 import build_result_v0, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 
 BUNDLE_KIND = "evidence-bundle/v2"
+# The judge sidecar's format id and version (see "Judge sidecar" above). A
+# public format: any change to its keys or their meaning is a new version.
+JUDGE_SIDECAR_VERSION = "judge-sidecar/v1"
 
 REASON_PAYLOAD_WITHHELD = "payload withheld"
 REASON_RECORD_DECLARED_MISSING = "record declared missing"
@@ -591,6 +598,7 @@ def judge_sidecar(result_bytes, selection):
     """The judge sidecar for one Result: what the run judged, citing the Result
     by the sha256 of the exact bytes written."""
     return {
+        "spec_version": JUDGE_SIDECAR_VERSION,
         "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
         "judged_selection": selection,
     }

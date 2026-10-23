@@ -39,7 +39,10 @@ way.
   renders (nothing in this repository reads it). `airline-support-outcomes` and
   `eu-ai-act-obligations` compile to `demo/<name>/` and run through the two cron
   skills; `everyday-rules` compiles to `packs/everyday-rules/compiled/` and is
-  judged with `scripts/judge_bundle.py`, not the skills.
+  judged with `scripts/judge_bundle.py`, not the skills. Beside each Result it
+  writes a judge sidecar, `<result>.judge.json` (format `judge-sidecar/v1`,
+  described in [`docs/jev-judge.md`](docs/jev-judge.md)), recording which rows
+  the judge was sent.
 - [`contracts/`](contracts/) — published Evidence Contracts, one file per
   version at `contracts/<id>/<version>.json`. A pack source or a report spec
   stays the authoring form; `scripts/evidence_contract.py` compiles it to an
