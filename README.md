@@ -78,7 +78,7 @@ $ scripts/report.sh --spec scripts/specs/tau2-airline-no-judge.yaml \
 $ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
     --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
 
-# judged, EU AI Act obligations -- renders on the obligation card, with transcripts
+# judged, EU AI Act obligations -- opens as the contract-report page, with transcripts
 $ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
     --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl \
     --attach-input-originals --title "EU AI Act obligations: airline support agent"
@@ -88,9 +88,10 @@ Both converge on the same tail (`capsulectl book result build` → checkpoint �
 `disclose` → `book report build`). On the judged path the pack's compiled
 `presentation.json` block is wired onto the bundle
 (`scripts/wire_presentation.py`), with the empty `contract-report/v1` opt-in
-beside it for `eu-ai-act-obligations` and `airline-support-outcomes`, and picks
-the card: `eu-ai-act-compliance/v1`
-→ `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
+beside it for `eu-ai-act-obligations` and `airline-support-outcomes`. Current
+viewers open such a bundle as the contract-report page. The older block picks a
+card only on viewers that predate that page: `eu-ai-act-compliance/v1` →
+`obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
 own text (check questions, criterion wording, obligation titles and
 plain-language summaries), added after `disclose`, outside the signed records.
 Its digest is not: before `result build`, `wire_presentation.py seal` pins
@@ -103,11 +104,11 @@ with `wire_presentation.py label`: a block that matches is the producer's
 signed wording, and a block changed by even one character afterwards reads as
 "unsigned producer text". The words stay presentation, never evidence: every
 verdict and count comes from the signed claims, and page wording still comes
-from the renderer, never the bundle (presentation contract §6). On the outcome
-card the wiring adds a `producer_note`, which the renderer shows under its own
-"Producer's note · presentation text, not evidence" label; the card's own
-checks and wording come from the sealed reports, not from the block. The
-obligation card labels the producer's mapping itself, so its block is copied
+from the renderer, never the bundle (presentation contract §6). The wiring
+adds a `producer_note` to the `outcome-report/v1` block, which the renderer
+shows under its own "Producer's note · presentation text, not evidence"
+label. On the older cards, the outcome card's own checks and wording come from
+the sealed reports, not from the block, and the obligation card labels the producer's mapping itself, so its block is copied
 unchanged. Known gap: the obligation card's header doesn't yet name the
 obligation titles, test names, not-evaluable notes or the quality protocol as
 the producer's wording, so those show with no label; that text is the
