@@ -129,14 +129,8 @@ class SealRoundTrip(unittest.TestCase):
 
     def test_the_member_carries_no_wording(self):
         # section 6: the bundle never supplies the page's wording; the Result pins a digest, not text.
-        # AIRLINE now opts into contract-report/v1 (evidencebook-skills), so its own
-        # member also carries that engagement flag -- never any of the block's words.
+        # AIRLINE opts into contract-report/v1, which carries nothing to sign: the member is unchanged.
         sealed, _, _ = seal(result_doc(), AIRLINE)
-        self.assertEqual(set(sealed[DIGEST_MEMBER]), {"template", "digest_alg", "digest", "contract_report"})
-
-    def test_a_pack_that_does_not_opt_in_seals_the_three_key_member_unchanged(self):
-        without_contract_report = {k: v for k, v in AIRLINE.items() if k != "contract-report/v1"}
-        sealed, _, _ = seal(result_doc(), without_contract_report)
         self.assertEqual(set(sealed[DIGEST_MEMBER]), {"template", "digest_alg", "digest"})
 
     def test_the_sealed_outcome_note_says_the_digest_is_pinned_and_it_is_not_evidence(self):

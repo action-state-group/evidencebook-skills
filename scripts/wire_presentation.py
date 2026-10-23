@@ -99,11 +99,13 @@ CARD_FOR_TEMPLATE = {
 }
 
 # agent-action-capsule spec/contract-report-v1.md section 1: a producer's opt-in
-# to the contract-report view, a closed empty object carried beside the pack's
-# own report-template block, never in place of it (scripts/pack_compile.py's
-# CONTRACT_REPORT_PACKS). No renderer in this repo reads it; it rides
-# on bundle.extensions unchanged for agent-action-capsule's own contract-report
-# module to resolve on.
+# to the contract-report view, a closed empty object (scripts/pack_compile.py's
+# CONTRACT_REPORT_PACKS). It carries no words, so nothing here digests it: like
+# every extension it is covered by the bundle digest (section 1). It sits
+# beside the pack's report-template block, which stays because capsule-viewer's
+# contract-report module reads its grouping data from that block
+# (contractReportInput), until the section 5 migration writes the opt-in in
+# its place. No renderer in this repo reads it.
 CONTRACT_REPORT_KEY = "contract-report/v1"
 
 # The templates whose renderer draws a `producer_note` from the block (under its
@@ -165,8 +167,7 @@ def prepare_block(presentation, sealed=False):
     digest); any other block is copied verbatim. A presentation.json may also
     carry CONTRACT_REPORT_KEY beside the one template block (checked here, but
     not returned: its own {} content is never noted, just copied by `wire`
-    as-is -- `wire` and `seal` separately cover its ENGAGEMENT via
-    digest_member's `contract_report` flag). The argument is not modified."""
+    as-is). The argument is not modified."""
     if not isinstance(presentation, dict) or not presentation:
         raise WireError("presentation.json is empty or not a JSON object")
     known = set(CARD_FOR_TEMPLATE) | {CONTRACT_REPORT_KEY}
@@ -198,11 +199,9 @@ def wire(bundle, presentation, sealed_digest=None):
     x-presentation-digest member), the block is built with the sealed note and
     must hash to that digest, or it is refused. When presentation.json also
     carries CONTRACT_REPORT_KEY, that closed empty object is wired beside the
-    template block; its own content is never digested (section 1: it carries
-    nothing to sign), but its ENGAGEMENT is covered like every extension --
-    `sealed_digest`'s own `contract_report` field (digest_member) must agree
-    with whether presentation.json carries the key, or wiring is refused the
-    same way a changed template block is. Neither argument is modified."""
+    template block as-is; it carries nothing to sign, and the bundle digest
+    covers it like every extension (section 1). A bundle that already carries
+    the opt-in is refused, never overwritten. Neither argument is modified."""
     if not isinstance(bundle, dict):
         raise WireError("bundle is not a JSON object")
     template, block, card = prepare_block(presentation, sealed=sealed_digest is not None)
@@ -211,15 +210,14 @@ def wire(bundle, presentation, sealed_digest=None):
         raise WireError("bundle.extensions is not a JSON object")
     if extensions and template in extensions:
         raise WireError(f"bundle already carries a {template} extension; refusing to overwrite it")
-    has_contract_report = CONTRACT_REPORT_KEY in presentation
-    if extensions and has_contract_report and CONTRACT_REPORT_KEY in extensions:
+    if extensions and CONTRACT_REPORT_KEY in extensions:
         raise WireError(f"bundle already carries a {CONTRACT_REPORT_KEY} extension; refusing to overwrite it")
-    if sealed_digest is not None and sealed_digest != digest_member(template, block, contract_report=has_contract_report):
+    if sealed_digest is not None and sealed_digest != digest_member(template, block):
         raise WireError(f"the {template} block to wire does not match the digest sealed in the Result "
                         f"({DIGEST_MEMBER}); refusing to wire words the producer did not sign")
     wired = copy.deepcopy(bundle)
     wired.setdefault("extensions", {})[template] = block
-    if has_contract_report:
+    if CONTRACT_REPORT_KEY in presentation:
         wired["extensions"][CONTRACT_REPORT_KEY] = {}
     return wired, template, card
 
@@ -256,20 +254,9 @@ def block_digest(block):
     return hashlib.sha256(jcs(block)).hexdigest()
 
 
-def digest_member(template, block, contract_report=False):
-    """The x-presentation-digest member value for this wired block. Section 1
-    says CONTRACT_REPORT_KEY "is covered by the bundle digest like every
-    extension"; it carries no content of its own to hash, so its ENGAGEMENT
-    rides as a sibling field instead, present only when engaged -- a pack
-    that never opts in gets the exact same three-key member as before this
-    existed, so no existing sealed digest moves. When present, `wire`'s own
-    equality check against the sealed member (below) refuses a presentation
-    whose contract_report engagement differs from what was sealed, the same
-    way it already refuses a changed template block."""
-    member = {"template": template, "digest_alg": DIGEST_ALG, "digest": block_digest(block)}
-    if contract_report:
-        member["contract_report"] = True
-    return member
+def digest_member(template, block):
+    """The x-presentation-digest member value for this wired block."""
+    return {"template": template, "digest_alg": DIGEST_ALG, "digest": block_digest(block)}
 
 
 def seal(result, presentation):
@@ -284,7 +271,7 @@ def seal(result, presentation):
         raise WireError(f"the Result already carries {DIGEST_MEMBER}; refusing to overwrite it")
     template, block, card = prepare_block(presentation, sealed=True)
     sealed = copy.deepcopy(result)
-    sealed[DIGEST_MEMBER] = digest_member(template, block, contract_report=CONTRACT_REPORT_KEY in presentation)
+    sealed[DIGEST_MEMBER] = digest_member(template, block)
     return sealed, template, card
 
 
@@ -320,13 +307,7 @@ def presentation_label(bundle):
     template None) when the bundle carries no known block -- that page renders
     as today, with no label. The Result's signature is the verifier's check,
     not this one: this only compares the block against what the signed Result
-    pins. Nothing here touches a verdict or a count.
-
-    A CONTRACT_REPORT_KEY on the bundle counts as engaged here only when it is
-    still exactly {} (the only shape `wire` ever writes); a value mutated
-    after wiring -- not a closed, empty opt-in -- is not engaged, so it can
-    never match a sealed `contract_report: true` and the label reads unsigned,
-    the same consequence a changed template block already has."""
+    pins. Nothing here touches a verdict or a count."""
     extensions = bundle.get("extensions") if isinstance(bundle, dict) else None
     if not isinstance(extensions, dict):
         return None, None
@@ -337,12 +318,10 @@ def presentation_label(bundle):
     result = sealed_result_of(bundle)
     sealed = result.get(DIGEST_MEMBER) if isinstance(result, dict) else None
     block = extensions[template]
-    contract_report_engaged = extensions.get(CONTRACT_REPORT_KEY) == {}
     try:
-        # Reuse digest_member's own shape rather than re-deriving it field by
-        # field, so a future field added there is covered here too.
-        matches = (isinstance(sealed, dict) and isinstance(block, dict)
-                   and sealed == digest_member(template, block, contract_report=contract_report_engaged))
+        matches = (isinstance(sealed, dict) and sealed.get("template") == template
+                   and sealed.get("digest_alg") == DIGEST_ALG and isinstance(block, dict)
+                   and sealed.get("digest") == block_digest(block))
     except WireError:
         matches = False
     return (LABEL_SIGNED if matches else LABEL_UNSIGNED), template
