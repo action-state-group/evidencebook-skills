@@ -656,13 +656,45 @@ class ContractRef(unittest.TestCase):
 class RenderTitle(unittest.TestCase):
     def test_default_title_with_no_template(self):
         self.assertEqual(render_title({"id": "x", "title": "Tau2 report"}, "2026-09-23", {}),
-                          "Tau2 report -- 2026-09-23")
+                          "Tau2 report \u2014 2026-09-23")
 
     def test_template_fills_in_metrics(self):
         spec = {"id": "x", "title": "Tau2 report",
                 "presentation": {"title_template": "{title} ({period}): {conversation_count} conversations"}}
         self.assertEqual(render_title(spec, "2026-09-23", {"conversation_count": 5}),
                           "Tau2 report (2026-09-23): 5 conversations")
+
+
+class WorkedSpecTitles(unittest.TestCase):
+    """The two worked specs' titles as a page shows them: one day through the
+    spec's own title_template, a range through result_v0.report_title, and both
+    start "<name> \u2014 ". The spec files stay ASCII (the separator is a YAML
+    escape), so they read the same under any locale."""
+
+    SPECS = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "specs"
+
+    def test_the_tau2_spec_titles_a_day_and_a_range(self):
+        from result_v0 import report_title
+        spec = load_spec(self.SPECS / "tau2-airline-no-judge.yaml")
+        metrics = {"conversation_count": 10, "cancellation_count": 3, "refund_count": 2,
+                   "total_refunded": 150, "tool_call_count": 40}
+        self.assertEqual(render_title(spec, "2026-10-01", metrics),
+                         "Airline support: cancellations and refunds \u2014 2026-10-01 \u00b7 10 conversations, "
+                         "3 cancellations, 2 refunds totaling $150, 40 tool calls")
+        self.assertEqual(report_title(spec, "2026-10-01 to 2026-10-03"),
+                         "Airline support: cancellations and refunds \u2014 2026-10-01 to 2026-10-03")
+
+    def test_the_mesh_draft_spec_titles_a_day(self):
+        spec = load_spec(self.SPECS / "mesh-llm-settlement-draft.yaml")
+        metrics = {"exchange_count": 4, "tokens_served_total": 900, "earned_msat": 12, "paid_msat": 7}
+        self.assertEqual(render_title(spec, "2026-10-01", metrics),
+                         "Mesh-LLM node settlement (DRAFT) \u2014 2026-10-01 \u00b7 4 exchanges, 900 tokens served, "
+                         "12 msat earned, 7 msat paid")
+
+    def test_the_spec_files_are_ascii(self):
+        for path in sorted(self.SPECS.glob("*.yaml")):
+            with self.subTest(spec=path.name):
+                path.read_bytes().decode("ascii")
 
 
 class SafeFilename(unittest.TestCase):

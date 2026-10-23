@@ -125,9 +125,13 @@ while cur <= b:
     print(cur.isoformat())
     cur += d.timedelta(days=1)
 " "$DATE" "${TO:-}")
-mapfile -t DATES <<< "$DATES_RAW"
+# A read loop, not mapfile, and LAST_DATE, not a negative index: both need bash 4,
+# and macOS still ships bash 3.2 as /bin/bash.
+DATES=()
+while IFS= read -r day; do DATES+=("$day"); done <<< "$DATES_RAW"
 [[ ${#DATES[@]} -ge 1 ]] || fail "empty date range"
-GENERATED_AT="${DATES[-1]}T23:59:59Z"
+LAST_DATE=${DATES[${#DATES[@]}-1]}
+GENERATED_AT="${LAST_DATE}T23:59:59Z"
 
 # --spec's own kind: report-spec/v1 (no judge) or a compiled pack contract (judged).
 MODE=$(python3 -c "
@@ -147,7 +151,7 @@ mkdir -p "$WORK/rollup"
 if [[ "$MODE" == "no-judge" ]]; then
   step "report_spec.py: deterministic claims from the sealed records, no judge"
   python3 "$REPO/scripts/report_spec.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
-    --generated-at "$GENERATED_AT" --out "$WORK/rollup" --date-from "${DATES[0]}" --date-to "${DATES[-1]}"
+    --generated-at "$GENERATED_AT" --out "$WORK/rollup" --date-from "${DATES[0]}" --date-to "$LAST_DATE"
   DEFAULT_CARD=$(python3 -c "import yaml,sys; print((yaml.safe_load(open(sys.argv[1])).get('presentation') or {}).get('card', 'outcome'))" "$SPEC")
 else
   JUDGE_MODEL_ID=${JUDGE_MODEL_ID:-$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['judge']['model_id'])" "$SPEC")}
@@ -193,27 +197,15 @@ else
   DAY_RESULTS=("$WORK"/rollup/result-v0-*.json)
   shopt -u nullglob
 fi
-[[ ${#DAY_RESULTS[@]} -ge 1 ]] || fail "no result-v0-*.json written for ${DATES[0]}..${DATES[-1]} -- nothing to report on"
+[[ ${#DAY_RESULTS[@]} -ge 1 ]] || fail "no result-v0-*.json written for ${DATES[0]}..$LAST_DATE -- nothing to report on"
 if [[ ${#DAY_RESULTS[@]} -eq 1 ]]; then
   RESULT_V0="${DAY_RESULTS[0]}"
 else
   step "merge_results.py: combine ${#DAY_RESULTS[@]} days into one Result v0"
-  # $MODE (already known, not re-sniffed) picks the field: a report-spec/v1
-  # YAML's own `title`, or a compiled pack contract's `contract` id -- yaml.safe_load
-  # parses well-formed JSON without error (JSON is a YAML subset), so trying the
-  # YAML read first and falling back to JSON on a parse failure never reaches the
-  # JSON branch for a compiled pack (its title key is simply absent, not a parse
-  # error), which silently fell back to the literal $SPEC path. Branching on $MODE
-  # reads the field that actually exists for each kind instead of guessing from
-  # which parse happened not to throw.
-  if [[ "$MODE" == "no-judge" ]]; then
-    # same fallback scripts/report_spec.py's own render_title() uses: title, else id.
-    TITLE=$(python3 -c "import yaml,sys; s=yaml.safe_load(open(sys.argv[1])); print(s.get('title', s['id']))" "$SPEC")
-  else
-    TITLE=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['contract'])" "$SPEC")
-  fi
   RESULT_V0="$WORK/result-v0-merged.json"
-  python3 "$REPO/scripts/merge_results.py" --title "$TITLE -- ${DATES[0]} to ${DATES[-1]}" \
+  # merge_results.py composes the title from the spec's own name (result_v0.report_title),
+  # so only ASCII crosses the shell here.
+  python3 "$REPO/scripts/merge_results.py" --spec "$SPEC" --period "${DATES[0]} to $LAST_DATE" \
     --generated-at "$GENERATED_AT" --out "$RESULT_V0" "${DAY_RESULTS[@]}"
 fi
 

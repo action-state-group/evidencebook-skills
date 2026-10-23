@@ -134,7 +134,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import case_id_of, list_capsules, parse_rfc3339, payload  # noqa: E402
-from result_v0 import build_result_v0_for_day  # noqa: E402
+from result_v0 import build_result_v0_for_day, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 from safe_expr import ExprError, MissingField, eval_expr  # noqa: E402
 
@@ -762,7 +762,7 @@ def contract_ref(spec):
 def render_title(spec, group_key, metric_values):
     template = (spec.get("presentation") or {}).get("title_template")
     if not template:
-        return f"{spec.get('title', spec['id'])} -- {group_key}"
+        return report_title(spec, group_key)
     try:
         shown = {k: ("unknown" if v is None else v) for k, v in metric_values.items()}
         return template.format(title=spec.get("title", spec["id"]), period=group_key, **shown)

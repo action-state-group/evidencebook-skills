@@ -31,7 +31,9 @@ way.
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
   `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
   `everyday-rules`). `scripts/pack_compile.py` compiles one into four files:
-  `compiled.json`, the contract the run scripts read; `judge-prompt.md` and
+  `compiled.json`, the contract the run scripts read, with the pack's `title`
+  for report titles (`PACK_TITLES` in the compiler, outside the pack source so
+  naming a pack never moves its judge pin); `judge-prompt.md` and
   `axes.json`, which `scripts/judge_pin.py` hashes into the judge pin; and
   `presentation.json`, the bundle presentation extension a report viewer
   renders (nothing in this repository reads it). `airline-support-outcomes` and

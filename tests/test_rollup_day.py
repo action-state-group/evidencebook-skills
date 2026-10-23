@@ -17,7 +17,7 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
 from capsulectl_calls import EvidenceUnavailable  # noqa: E402
-from result_v0 import headline_from_result  # noqa: E402
+from result_v0 import headline_from_result, report_title  # noqa: E402
 from rollup import RollupError, all_criteria_from_clauses, all_required_met, checks_from_clauses  # noqa: E402
 from rollup_day import (case_tiers, clause_tiers, day_document, group_reports, group_reports_by_day,  # noqa: E402
                         partition_stale, report_determinations, require_pin_for_judged_clauses,
@@ -331,6 +331,19 @@ class RequirePinForJudgedClauses(unittest.TestCase):
             self.assertEqual(rc, 2, buf.getvalue())
             self.assertIn("evidence_unavailable", _json.loads(buf.getvalue()))
             self.assertEqual([p.name for p in out.rglob("*.json")], [])
+
+
+class ReportTitle(unittest.TestCase):
+    def test_the_pack_title_and_the_bare_day(self):
+        spec = {"contract": "airline-support-outcomes/v1", "title": "Airline support outcomes"}
+        self.assertEqual(report_title(spec, "2026-10-01"), "Airline support outcomes — 2026-10-01")
+
+    def test_a_report_spec_with_no_title_falls_back_to_its_id(self):
+        self.assertEqual(report_title({"spec_version": "report-spec/v1", "id": "tau2-x"}, "2026-10-01"),
+                         "tau2-x \u2014 2026-10-01")
+
+    def test_a_pack_with_no_title_falls_back_to_its_contract_id(self):
+        self.assertEqual(report_title({"contract": "x/v1"}, "2026-10-01"), "x/v1 — 2026-10-01")
 
 
 class PartitionStale(unittest.TestCase):
