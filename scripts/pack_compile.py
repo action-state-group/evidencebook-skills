@@ -62,6 +62,11 @@ import yaml
 
 TIERS = {"judged", "recomputed"}
 
+# scripts/result_v0.py's CASE_SEPARATOR, repeated here rather than imported so
+# this compiler keeps no dependency on the rollup modules: a day document's
+# claim id is <case_id>::<clause_id>, so no check or criterion id may carry it.
+CASE_SEPARATOR = "::"
+
 # capsule-engine's own closed vocabulary for judge_pin.input_refs (PR #96,
 # "judge_pin for mode: judged obligations", `capsule_engine/packs/schema.py`'s
 # `NORMALIZED_ACTION_FIELDS`, commit 9069cf70aa562b42c9983d7277ec1ce2e1e34ce5).
@@ -330,6 +335,10 @@ def validate_source(source):
         if not isinstance(check_id, str) or not check_id.strip():
             issues.append(f"{where}.id must be a non-empty string")
             check_id = None
+        elif CASE_SEPARATOR in check_id:
+            issues.append(f"{where}.id {check_id!r} contains {CASE_SEPARATOR!r}, the separator a day "
+                          "document's claim ids use between case id and clause id")
+            check_id = None
         elif check_id in seen_check_ids:
             issues.append(f"duplicate check id: {check_id!r}")
         else:
@@ -349,6 +358,13 @@ def validate_source(source):
             crit_id = crit.get("id")
             if not isinstance(crit_id, str) or not crit_id.strip():
                 issues.append(f"{cwhere}.id must be a non-empty string")
+                crit_id = None
+            elif CASE_SEPARATOR in crit_id:
+                # A day document's claim id is <case_id>::<clause_id>, regrouped on
+                # the LAST "::" (scripts/result_v0.py:headline_from_result): a clause
+                # id carrying it would split one case into two.
+                issues.append(f"{cwhere}.id {crit_id!r} contains {CASE_SEPARATOR!r}, the separator a day "
+                              "document's claim ids use between case id and clause id")
                 crit_id = None
             for key in ("label", "text"):
                 if not isinstance(crit.get(key), str) or not crit[key].strip():

@@ -106,6 +106,22 @@ class ValidateSource(unittest.TestCase):
         issues = validate_source(source)
         self.assertTrue(any("duplicate criterion id" in i for i in issues), issues)
 
+    def test_a_case_separator_in_a_criterion_or_check_id_is_refused(self):
+        # A day document's claim id is <case_id>::<clause_id>, regrouped by
+        # scripts/result_v0.py's headline_from_result() on the LAST "::": a
+        # clause id carrying "::" would put part of itself into the case id,
+        # so one case would count as two.
+        for where in ("criterion", "check"):
+            source = minimal_source()
+            if where == "criterion":
+                source["checks"][0]["criteria"][0]["id"] = "one::two"
+            else:
+                source["checks"][0]["id"] = "a::b"
+            issues = validate_source(source)
+            self.assertTrue(any("'::'" in i for i in issues), (where, issues))
+        import result_v0
+        self.assertEqual(pack_compile.CASE_SEPARATOR, result_v0.CASE_SEPARATOR)
+
     def test_bad_tier_is_refused(self):
         source = minimal_source()
         source["checks"][0]["criteria"][0]["tier"] = "vibes"
