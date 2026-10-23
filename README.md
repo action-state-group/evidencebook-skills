@@ -78,7 +78,7 @@ $ scripts/report.sh --spec scripts/specs/tau2-airline-no-judge.yaml \
 $ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
     --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl
 
-# judged, EU AI Act obligations -- renders on the obligation card, with transcripts
+# judged, EU AI Act obligations -- opens as the contract-report page, with transcripts
 $ scripts/report.sh --spec demo/eu-ai-act-obligations/compiled.json \
     --profile tau2 --date 2026-10-01 --out report.html --capsulectl capsulectl \
     --attach-input-originals --title "EU AI Act obligations: airline support agent"
@@ -88,9 +88,10 @@ Both converge on the same tail (`capsulectl book result build` → checkpoint �
 `disclose` → `book report build`). On the judged path the pack's compiled
 `presentation.json` block is wired onto the bundle
 (`scripts/wire_presentation.py`), with the empty `contract-report/v1` opt-in
-beside it for `eu-ai-act-obligations` and `airline-support-outcomes`, and picks
-the card: `eu-ai-act-compliance/v1`
-→ `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
+beside it for `eu-ai-act-obligations` and `airline-support-outcomes`. Current
+viewers open such a bundle as the contract-report page. The older block picks a
+card only on viewers that predate that page: `eu-ai-act-compliance/v1` →
+`obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
 own text (check questions, criterion wording, obligation titles and
 plain-language summaries), added after `disclose`, outside the signed records.
 Its digest is not: before `result build`, `wire_presentation.py seal` pins
