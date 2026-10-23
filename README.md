@@ -104,12 +104,11 @@ with `wire_presentation.py label`: a block that matches is the producer's
 signed wording, and a block changed by even one character afterwards reads as
 "unsigned producer text". The words stay presentation, never evidence: every
 verdict and count comes from the signed claims, and page wording still comes
-from the renderer, never the bundle (presentation contract §6). On the older
-cards, the wiring adds a `producer_note` to the outcome card, and the renderer
-shows it under its own
-"Producer's note · presentation text, not evidence" label; the card's own
-checks and wording come from the sealed reports, not from the block. The
-obligation card labels the producer's mapping itself, so its block is copied
+from the renderer, never the bundle (presentation contract §6). The wiring
+adds a `producer_note` to the `outcome-report/v1` block, which the renderer
+shows under its own "Producer's note · presentation text, not evidence"
+label. On the older cards, the outcome card's own checks and wording come from
+the sealed reports, not from the block, and the obligation card labels the producer's mapping itself, so its block is copied
 unchanged. Known gap: the obligation card's header doesn't yet name the
 obligation titles, test names, not-evaluable notes or the quality protocol as
 the producer's wording, so those show with no label; that text is the
