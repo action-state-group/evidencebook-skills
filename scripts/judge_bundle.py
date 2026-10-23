@@ -477,9 +477,11 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
 
     all_criteria = tuple(c["id"] for c in all_clauses)
     criterion_verdicts = {cid: answers[cid]["verdict"] for cid in all_criteria}
-    if all(v == "out_of_scope" for v in criterion_verdicts.values()):
+    if actually_judged and all(criterion_verdicts[cid] == "out_of_scope" for cid in selected_ids):
         # Known only once the judge has answered -- no row of this pack is
-        # never_out_of_scope, so no selection can rule it out beforehand.
+        # never_out_of_scope, so no selection can rule it out beforehand. Only
+        # the selected rows count: the not_evaluable claims for rules outside
+        # --rule-ids say nothing was judged there, not that anything applied.
         raise NothingApplied(judged_selection(clauses, criterion_verdicts))
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
