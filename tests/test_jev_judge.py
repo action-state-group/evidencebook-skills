@@ -329,6 +329,53 @@ class PinnedInstructions(unittest.TestCase):
             jev_judge.INSTRUCTION_TEMPLATE = original
         self.assertEqual(jev_judge.instruction_template_digest(), before)
 
+    def test_the_digest_moves_when_the_state_layout_moves(self):
+        """The state the judge is sent (which fields, built how) is part of
+        what it sends: adding, renaming or reshaping a state field moves the
+        pin, for the mode it belongs to only."""
+        transcript = jev_judge.instruction_template_digest("transcript")
+        disclosed = jev_judge.instruction_template_digest("disclosed_facts")
+        original = jev_judge._transcript_state
+
+        def _transcript_state(self, s):
+            return dict(original(self, s), extra_field=None)
+        try:
+            jev_judge._transcript_state = _transcript_state
+            self.assertNotEqual(jev_judge.instruction_template_digest("transcript"), transcript)
+            self.assertEqual(jev_judge.instruction_template_digest("disclosed_facts"), disclosed)
+        finally:
+            jev_judge._transcript_state = original
+        self.assertEqual(jev_judge.instruction_template_digest("transcript"), transcript)
+
+        original_sample = jev_judge._disclosed_facts_sample if hasattr(jev_judge, "_disclosed_facts_sample") else None
+        self.assertIsNotNone(original_sample, "each mode's sample builder is named in _MODE")
+
+        def _disclosed_facts_sample(request):
+            return original_sample(request)
+        try:
+            jev_judge._disclosed_facts_sample = _disclosed_facts_sample
+            self.assertNotEqual(jev_judge.instruction_template_digest("disclosed_facts"), disclosed)
+            self.assertEqual(jev_judge.instruction_template_digest("transcript"), transcript)
+        finally:
+            jev_judge._disclosed_facts_sample = original_sample
+
+    def test_the_digest_moves_when_an_airline_facts_extractor_moves(self):
+        """policy_current_time and reservation_timestamps (scripts/airline_facts.py)
+        compute fields the transcript-mode judge is sent; a change to either
+        moves the transcript pin."""
+        before = jev_judge.instruction_template_digest("transcript")
+        for name in ("policy_current_time", "reservation_timestamps"):
+            original = getattr(jev_judge, name)
+
+            def changed(*args, _original=original):
+                return _original(*args)
+            try:
+                setattr(jev_judge, name, changed)
+                self.assertNotEqual(jev_judge.instruction_template_digest("transcript"), before, name)
+            finally:
+                setattr(jev_judge, name, original)
+        self.assertEqual(jev_judge.instruction_template_digest("transcript"), before)
+
     def test_build_eval_sends_exactly_the_pinned_template(self):
         clause = SAMPLE_REQUEST["clause"]
         expected = jev_judge.INSTRUCTION_TEMPLATE.format(clause_id=clause["id"], claim=clause["claim"],
@@ -336,14 +383,17 @@ class PinnedInstructions(unittest.TestCase):
         self.assertEqual(jev_judge.build_eval(clause).instructions, expected)
 
     def test_transcript_mode_digest_is_pinned_to_the_literal_hash(self):
-        """The literal digest airline-support-outcomes' pin has always sealed
-        (computed independently from base commit e4a4fca, before disclosed_facts
-        mode existed). A future edit to CHOICE_OPTIONS, OUT_OF_SCOPE_OPTION,
-        INSTRUCTION_TEMPLATE or OUT_OF_SCOPE_INSTRUCTIONS -- or to how
+        """The literal digest airline-support-outcomes' pin seals. It moved once,
+        deliberately, from 279fddab... when the basis was widened to the state
+        layout and the airline_facts extractors (judged reports sealed under the
+        old pin stop counting in a rollup under the new one, and are counted as
+        excluded). A future edit to CHOICE_OPTIONS, OUT_OF_SCOPE_OPTION,
+        INSTRUCTION_TEMPLATE, OUT_OF_SCOPE_INSTRUCTIONS, _transcript_sample,
+        _transcript_state or scripts/airline_facts.py -- or to how
         instruction_template_digest() builds its basis dict -- moves this literal
         and must fail this test loudly, not drift silently."""
         self.assertEqual(jev_judge.instruction_template_digest(mode="transcript"),
-                         "279fddab6c80ce00b778bd869ac9112104acc3cadfc1d4e20f75f03312abe68f")
+                         "cd2885de0caf311f61738b3b618415ab11084ce5856f8af8f6331d319c7bcd3d")
 
     def test_disclosed_facts_mode_never_shares_transcript_mode_wording(self):
         """disclosed_facts has its own options dict (DISCLOSED_FACTS_CHOICE_OPTIONS/

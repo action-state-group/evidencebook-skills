@@ -10,9 +10,12 @@ moves, so two more digests and the confidence threshold ride in sampling_params
     (scripts/pack_compile.py:source_digest). Every criterion edit and every switch
     flip (out_of_scope_verdict, done_in_full_refusal_aware, a claim_when_on
     rewording) changes it.
-  - instruction_template_digest: the digest of the instruction template the judge
-    command actually sends to its model, as the judge command itself reports it
-    (`{"describe": true}` on stdin -> `{"instruction_template_digest": ...}`).
+  - instruction_template_digest: the digest of what the judge command sends to
+    its model besides the clause wording and the evidence values -- for
+    scripts/judges/jev_judge.py the instruction template, options and state layout
+    (sample builder, state() function, airline_facts extractors) -- as the judge
+    command itself reports it (`{"describe": true}` on stdin ->
+    `{"instruction_template_digest": ...}`).
     judge-prompt.md is pinned too, but a judge that builds its instructions in code
     is pinned by what it sends, not by a file it may never read.
   - min_confidence_micros: the compiled judge.min_confidence, scaled to an integer
