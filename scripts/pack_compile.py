@@ -723,7 +723,8 @@ def _join_evidence(evidence):
 # pack that is transcript-shaped also gets "the transcript" wording there, never a
 # generic "the evidence" that a transcript-reading judge never actually said.
 # Changing any of these moves airline's judge-prompt.md, and the judge pin that
-# hashes it (scripts/judge_pin.py's prompt_digest) -- see tests/test_judge_pin_airline.py.
+# hashes it (scripts/judge_pin.py's prompt_digest) -- see tests/test_pack_compile.py
+# (AirlinePinUnchanged, CommittedOutputsAreCompilerOutput).
 _LEGACY_JUDGE_SUBJECT = "one recorded conversation"
 _LEGACY_JUDGE_EVIDENCE = [
     "the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their "
