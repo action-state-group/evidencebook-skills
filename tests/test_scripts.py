@@ -122,3 +122,20 @@ class CheckedAnswer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CitedTestsExist(unittest.TestCase):
+    """A script, skill or doc that points a reader at a test file names one
+    that exists: scripts/pack_compile.py once cited a
+    tests/test_judge_pin_airline.py that never did."""
+
+    def test_every_cited_test_file_exists(self):
+        import re
+        root = pathlib.Path(__file__).resolve().parents[1]
+        cited = set()
+        for base in ("scripts", "skills", "docs"):
+            for path in (root / base).rglob("*"):
+                if path.suffix in (".py", ".md", ".sh") and path.is_file():
+                    cited.update(re.findall(r"tests/[A-Za-z0-9_./-]+\.(?:py|sh)", path.read_text()))
+        self.assertTrue(cited)
+        self.assertEqual(sorted(c for c in cited if not (root / c).exists()), [])

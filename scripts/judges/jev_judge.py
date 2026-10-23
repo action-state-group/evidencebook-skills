@@ -28,7 +28,9 @@ Two request shapes on stdin, both built by run_daily.py:
            tests/test_jev_judge.py by counting MockBackend.calls.
 
   describe {"describe": true} -- prints {"instruction_template_digest", "pinned_model"}:
-           the digest of the instruction template build_eval() sends, which
+           the digest of the instruction template build_eval() sends AND the
+           state layout it sends with it (sample builder, state() function, the
+           airline_facts.py extractors that compute state fields), which
            scripts/judge_pin.py folds into the judge pin. The pin covers what this
            judge actually sends to its model, not only judge-prompt.md (which this
            script does not read).
@@ -94,7 +96,9 @@ Backend selection:
                            two different strings with nothing else cross-checking them.
 
 The tests never call the real backend: every test and demo run uses
-JEV_JUDGE_BACKEND=mock.
+JEV_JUDGE_BACKEND=mock. Under the mock the CLI refuses a judge_model_id that does
+not name the mock (sealed_model_id()), so a judge pin over a hashed stand-in
+never names a real model.
 
 Calibration: against a 15-conversation set rated by a human expert, this judge
 (jev-1.13.0, the nine-criterion rubric) returned 6 false passes -- met where the
@@ -126,6 +130,7 @@ attacker-reachable text at all. Left as a flagged, open risk rather than a false
 of having solved it.
 """
 import hashlib
+import inspect
 import json
 import os
 import pathlib
@@ -272,15 +277,23 @@ def _disclosed_facts_state(self, s):
 # captured by value: tests/test_jev_judge.py reassigns jev_judge.INSTRUCTION_TEMPLATE
 # directly to prove the pin moves, and a value snapshotted here at import time would
 # never see that reassignment.
+#
+# sample_fn/state_fn/extractors are named too, and their SOURCE is hashed into the
+# mode's instruction_template_digest: what the judge is sent is the template plus
+# the state, so a state field added, renamed or computed differently (the sample
+# builder, the state() layout, or an airline_facts extractor feeding it) moves the
+# pin exactly as a template edit does.
 _MODE = {
     "transcript": {"template": "INSTRUCTION_TEMPLATE", "out_of_scope_instructions": "OUT_OF_SCOPE_INSTRUCTIONS",
                   "options": "CHOICE_OPTIONS", "out_of_scope_option": "OUT_OF_SCOPE_OPTION",
-                  "state_fn": _transcript_state},
+                  "sample_fn": "_transcript_sample", "state_fn": "_transcript_state",
+                  "extractors": ("policy_current_time", "reservation_timestamps")},
     "disclosed_facts": {"template": "DISCLOSED_FACTS_INSTRUCTION_TEMPLATE",
                         "out_of_scope_instructions": "DISCLOSED_FACTS_OUT_OF_SCOPE_INSTRUCTIONS",
                         "options": "DISCLOSED_FACTS_CHOICE_OPTIONS",
                         "out_of_scope_option": "DISCLOSED_FACTS_OUT_OF_SCOPE_OPTION",
-                        "state_fn": _disclosed_facts_state},
+                        "sample_fn": "_disclosed_facts_sample", "state_fn": "_disclosed_facts_state",
+                        "extractors": ()},
 }
 
 
@@ -300,20 +313,45 @@ def _mode_out_of_scope_option(mode):
     return globals()[_MODE[mode]["out_of_scope_option"]]
 
 
+def _mode_fn(mode, key):
+    return globals()[_MODE[mode][key]]
+
+
+def _source_digest(obj):
+    return hashlib.sha256(inspect.getsource(obj).encode()).hexdigest()
+
+
+def _state_layout_basis(mode):
+    """What decides the state the judge is sent, besides the evidence values:
+    the source of this mode's sample builder and state() function, and the
+    source of the whole module each extractor feeding the sample comes from
+    (scripts/airline_facts.py for the transcript mode -- its private helpers
+    and patterns included). Source, not behaviour: an edit to any of these, a
+    comment included, moves the pin; a pin that over-moves costs a re-judgment,
+    one that under-moves seals a verdict under a judge that no longer exists."""
+    extractors = {}
+    for name in _MODE[mode]["extractors"]:
+        fn = globals()[name]
+        extractors[name] = _source_digest(inspect.getmodule(fn) or fn)
+    return {"sample_fn": _source_digest(_mode_fn(mode, "sample_fn")),
+            "state_fn": _source_digest(_mode_fn(mode, "state_fn")),
+            "extractors": extractors}
+
+
 def instruction_template_digest(mode="transcript"):
     """SHA-256 over everything build_eval() puts in front of the model for this
-    mode, besides the clause's own wording and the evidence itself: the template,
-    the out_of_scope paragraph and the answer options -- every one of them looked
-    up from `_MODE` by name, so each mode's own four pieces move only that mode's
-    digest, never the other's. No "mode" key rides in the basis itself: the basis
-    is exactly the transcript mode's original shape (pinned since before
-    disclosed_facts existed, airline's own pin depends on it byte-for-byte), and a
-    second mode is distinguished by its own template/options content, not by a
-    label added to the hash."""
+    mode, besides the clause's own wording and the evidence values themselves:
+    the template, the out_of_scope paragraph, the answer options, and the state
+    layout (_state_layout_basis: the sample builder, the state() function and the
+    extractors that compute state fields) -- every one of them looked up from
+    `_MODE` by name, so each mode's own pieces move only that mode's digest,
+    never the other's. No "mode" key rides in the basis itself: a mode is
+    distinguished by its own content, not by a label added to the hash."""
     if mode not in MODES:
         raise JudgeError(f"mode {mode!r} is not one of {list(MODES)}")
     basis = {"template": _mode_template(mode), "out_of_scope_instructions": _mode_out_of_scope_instructions(mode),
-             "options": _mode_options(mode), "out_of_scope_option": _mode_out_of_scope_option(mode)}
+             "options": _mode_options(mode), "out_of_scope_option": _mode_out_of_scope_option(mode),
+             "state_layout": _state_layout_basis(mode)}
     return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()
 
 
@@ -395,16 +433,49 @@ def build_eval(clause, allow_out_of_scope=False, mode="transcript"):
             "instructions": instructions,
             "options": options,
             "good": ("met",),
-            "state": _MODE[mode]["state_fn"],
+            "state": _mode_fn(mode, "state_fn"),
         },
     )()
 
 
-def resolve_backend():
+def _env_backend():
     mode = (os.environ.get("JEV_JUDGE_BACKEND") or "jev").strip().lower()
     if mode not in BACKENDS:
         raise JudgeError(f"JEV_JUDGE_BACKEND={mode!r} is not one of {list(BACKENDS)}; refusing rather "
                          "than guessing which backend was meant")
+    return mode
+
+
+def backend_kind(backend=None):
+    """"jev" for the real backend; "mock" for jevals.MockBackend (or
+    JEV_JUDGE_BACKEND=mock when no backend object is given); otherwise the
+    injected backend object's class name. Only "jev" is a named real model."""
+    if backend is None:
+        return _env_backend()
+    if isinstance(backend, str):
+        return backend
+    if isinstance(backend, jevals.MockBackend):
+        return "mock"
+    return type(backend).__name__
+
+
+def sealed_model_id(model_id, backend=None):
+    """The model id a judge pin may name for an answer from `backend`: the
+    operator's id unchanged for the real backend; for any other backend, the
+    id with the backend stamped on it (unless it already carries the stamp,
+    "(<backend> backend", as report.sh's ids do), so a pin over a stand-in's
+    answer never passes as a named real model. An id that merely contains the
+    backend's name ("hammock-judge-1") is not stamped."""
+    kind = backend_kind(backend)
+    if kind == "jev":
+        return model_id
+    if f"({kind} backend".lower() in (model_id or "").lower():
+        return model_id
+    return f"{model_id} ({kind} backend, no model read the evidence)"
+
+
+def resolve_backend():
+    mode = _env_backend()
     if mode == "mock":
         return jevals.MockBackend(fn=_mock_fn)
     os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
@@ -422,11 +493,17 @@ def _mode_from_request(request):
 
 
 def _sample_from_request(request):
-    if _mode_from_request(request) == "disclosed_facts":
-        facts = request.get("disclosed_facts")
-        if not isinstance(facts, dict):
-            raise JudgeError("request.disclosed_facts must be a JSON object")
-        return Sample({"disclosed_facts": facts})
+    return _mode_fn(_mode_from_request(request), "sample_fn")(request)
+
+
+def _disclosed_facts_sample(request):
+    facts = request.get("disclosed_facts")
+    if not isinstance(facts, dict):
+        raise JudgeError("request.disclosed_facts must be a JSON object")
+    return Sample({"disclosed_facts": facts})
+
+
+def _transcript_sample(request):
     agent_interaction = request.get("agent_interaction")
     messages = (agent_interaction or {}).get("messages") if isinstance(agent_interaction, dict) else None
     if not isinstance(messages, list) or not messages:
@@ -450,6 +527,20 @@ def _check_model_pin(request, be):
                 "judge_pin_digest would misstate which model judged. Pass "
                 f"--judge-model-id {PINNED_MODEL!r} exactly."
             )
+
+
+def _refuse_unstamped_stand_in(request):
+    """At the CLI edge (what run_daily.py calls, after it has already sealed
+    request["judge_model_id"] into the judge pin): any backend other than the
+    real one must be named in that id, or the pin would name a model that never
+    read the evidence."""
+    kind = backend_kind()
+    wanted = request.get("judge_model_id") if isinstance(request, dict) else None
+    if kind != "jev" and sealed_model_id(wanted, kind) != wanted:
+        raise JudgeError(
+            f"JEV_JUDGE_BACKEND={kind} but --judge-model-id {wanted!r} does not say so; a judge pin "
+            f"naming it would pass a {kind} stand-in off as a real model. Name the backend in the id, "
+            f"e.g. {sealed_model_id(wanted or PINNED_MODEL, kind)!r}.")
 
 
 def _min_confidence(request):
@@ -559,10 +650,12 @@ def main(argv):
             result = {"instruction_template_digest": instruction_template_digest(mode),
                      "pinned_model": PINNED_MODEL, "pinned_model_name": PINNED_MODEL_NAME,
                      "pinned_model_version": PINNED_MODEL_VERSION}
-        elif isinstance(request, dict) and "clauses" in request:
-            result = {"answers": judge_many(request)}
         else:
-            result = judge(request)
+            _refuse_unstamped_stand_in(request)
+            if isinstance(request, dict) and "clauses" in request:
+                result = {"answers": judge_many(request)}
+            else:
+                result = judge(request)
     except (KeyError, TypeError, ValueError) as e:
         print(f"malformed judge request: {type(e).__name__}: {e}", file=sys.stderr)
         return 1

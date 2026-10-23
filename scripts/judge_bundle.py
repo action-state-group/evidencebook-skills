@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Judge a whole evidence-bundle/v2 file against a compiled pack's rows
 (packs/everyday-rules/pack-source.yaml, compiled by scripts/pack_compile.py),
-and print one Evidence Result v0 document.
+and write one Evidence Result v0 document plus its judge sidecar.
 
     python3 scripts/judge_bundle.py --bundle BUNDLE.json --pack COMPILED.json \\
-        --generated-at 2026-10-08T00:00:00Z [--capsule-id ID] [--rule-ids 8,9,26] \\
-        [--judge-model-id jev-1.13.0]
+        --generated-at 2026-10-08T00:00:00Z --out RESULT.json [--capsule-id ID] \\
+        [--rule-ids 8,9,26] [--judge-model-id jev-1.13.0]
+
+writes RESULT.json and, next to it, RESULT.judge.json (see "Judge sidecar"
+below). Without --out the Result goes to stdout and --sidecar PATH is required.
 
 Bundle shape (evidence-bundle/v2 -- capsule-cli's `internal/cli/bundle.go`,
 `AssembleBundle`): a top-level object with `bundle_kind`, `records` (a list of
@@ -39,6 +42,10 @@ so there is no single record's worth of them to narrow to.
 
 Fail-closed rules, never inferred:
 
+  contradictory        completeness that is not a mapping, an unknown
+  completeness         records_mode/payloads_mode, or payloads_mode "none"
+                       beside a populated disclosures map: refused as bad
+                       input (exit 1) before anything is judged.
   WITHHELD bundle      completeness.payloads_mode == "none" AND no
                        "disclosures" key at all (capsule-anchor's countersign
                        `parse_bundle` rule, reused verbatim). Checked first,
@@ -58,6 +65,14 @@ Fail-closed rules, never inferred:
                        missing"; otherwise "record not found in bundle".
                        Every in-scope row: not_evaluable, citing the root
                        record -- never an inferred verdict.
+  declared incomplete  the bundle says records are missing
+                       (completeness.records_mode "declared_incomplete", or a
+                       non-empty completeness.missing): never judged as if it
+                       were whole, narrowed or not. Every in-scope row:
+                       not_evaluable, reason "bundle declares missing
+                       records", citing abstention_citation()'s record.
+                       Checked after the two narrowing reasons above for a
+                       target that is itself absent.
   payload withheld     (--capsule-id narrowing only) the named record exists
                        in `records[]` but has no entry (or an empty one) in
                        `disclosures`. Every in-scope row: not_evaluable,
@@ -93,7 +108,12 @@ batch's pin, same as it was decided from the batch's one shared request, not
 a request of its own. A reader of the pin alone learns what kind of fact
 THIS CALL's shared judge request could read from, across every clause
 batched into it; evidence[] on each claim itself still says WHICH record
-that specific claim was actually judged from. A fail-closed abstention
+that specific claim was actually judged from. The judged selection
+(`judged_selection`: the rows sent, in order, and which came back out_of_scope
+-- claims[] omits those) is recorded in the judge sidecar, not the Result, so a
+reader holding the pack, the Result and its sidecar recomputes the pin's
+prompt_template_hash and input_refs without being told which rows were asked.
+A fail-closed abstention
 (withheld/missing/undisclosed, above) carries no pin: no model was ever
 consulted, so no judge identity is sealed on it -- only the reason. Its
 evidence[] cites only the record the run was asked about: the --capsule-id
@@ -109,14 +129,53 @@ No forbidden vocabulary: every string this script emits (rationale, reasons) is
 either the judge's own answer or one of the fixed reason strings above -- checked
 by tests/test_forbidden_vocabulary.py against vocab/forbidden-vocabulary.yaml.
 
+Judge sidecar: the Result document carries only the top-level keys of the
+evidence-result-v0 schema's EvidenceResult (result_version, generated_at,
+claims, aggregate, view). What the judge run adds beside it goes in a sidecar
+file, by default `<result>.judge.json` next to the Result (RESULT.json ->
+RESULT.judge.json):
+
+    {"spec_version": "judge-sidecar/v1",
+     "result_sha256": "<sha256 hex of the exact Result bytes written>",
+     "instruction_template_digest": "<jev_judge's disclosed_facts digest>",
+     "judge_source_sha256": "<sha256 hex of scripts/judges/jev_judge.py's bytes>",
+     "judged_selection": {"rule_ids": [...], "requirement_refs": [...],
+                          "out_of_scope": [...], "allow_out_of_scope": true}}
+
+spec_version names the format and its version in one value, as this repo's
+other formats do (presentation/v1, evaluation-report/v1); a reader refuses one
+it does not know. The sidecar cites its Result by digest, never by path: a
+sidecar whose result_sha256 does not match the Result in hand is not that
+Result's sidecar.
+judged_selection.requirement_refs and .out_of_scope hold the compiled pack's
+clause ids. instruction_template_digest is
+jev_judge.instruction_template_digest("disclosed_facts") of the judge that
+produced the Result, the part of the judge prompt_template_hash folds in.
+judge_source_sha256 is the sha256 of that judge's scripts/judges/jev_judge.py
+bytes: the file that renders every question (build_eval) and computes
+prompt_template_hash. Recomputing the pin needs that file exactly, and the
+sidecar names it by digest rather than leave it to a guess; its questions are
+jevals.ChoiceEval subclasses, so use the jevals version pinned in that
+revision's requirements.txt. An abstention document (every row not_evaluable, no judge call) gets a
+sidecar too: its judged_selection is the selection asked for, not rows sent,
+its out_of_scope is empty, no claim carries a judge_pin, and its
+instruction_template_digest and judge_source_sha256 are those of the judge in
+the tree, which did not run. The sidecar is
+moved into place before the Result is published (both are staged first), so
+a failed write never leaves a Result without its sidecar.
+
 Exit codes: 0 on a successful run (whatever the verdicts), 1 on a malformed
-request (the "bad input" cases above), 2 on a judge backend failure. Never a
+request (the "bad input" cases above), 2 on a judge backend failure, 3 when the
+judge answered out_of_scope on every selected row (no claim to make: a Result v0
+document needs at least one; the judged selection goes to stderr). Never a
 guessed verdict; never a partial document on stdout.
 
     JEV_JUDGE_BACKEND=mock python3 scripts/judge_bundle.py --bundle ... --pack ...
 """
 import argparse
+import hashlib
 import json
+import os
 import pathlib
 import sys
 
@@ -130,12 +189,19 @@ from result_v0 import build_result_v0, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 
 BUNDLE_KIND = "evidence-bundle/v2"
+# The judge sidecar's format id and version (see "Judge sidecar" above). A
+# public format: any change to its keys or their meaning is a new version.
+JUDGE_SIDECAR_VERSION = "judge-sidecar/v1"
 
 REASON_PAYLOAD_WITHHELD = "payload withheld"
 REASON_RECORD_DECLARED_MISSING = "record declared missing"
 REASON_RECORD_NOT_FOUND = "record not found in bundle"
 REASON_NOTHING_DISCLOSED = "no disclosed record in this bundle"
 REASON_NOT_SELECTED = "not judged in this run: outside the --rule-ids selection"
+REASON_BUNDLE_INCOMPLETE = "bundle declares missing records"
+
+RECORDS_MODES = ("complete", "declared_incomplete")
+PAYLOADS_MODES = ("none", "selected", "all")
 
 
 class BadInput(Exception):
@@ -144,6 +210,16 @@ class BadInput(Exception):
 
 class JudgeBackendFailure(Exception):
     """The judge backend itself failed (not a malformed request)."""
+
+
+class NothingApplied(Exception):
+    """The judge answered out_of_scope on every selected row: there is no claim
+    to put in a Result v0 document (its claims[] needs at least one). The
+    judge's own answer, not bad input; `selection` is judged_selection()."""
+
+    def __init__(self, selection):
+        super().__init__(f"every selected row was judged out_of_scope: {selection['requirement_refs']}")
+        self.selection = selection
 
 
 def load_json(path, what):
@@ -155,14 +231,21 @@ def load_json(path, what):
         raise BadInput(f"{what} {path!r} is not valid JSON: {e}")
 
 
-def load_pack(path):
-    pack = load_json(path, "pack")
+def check_pack(pack, where):
+    """Every clause this script will read carries the fields it reads: an id, a
+    claim and a check_id (request_clauses() sends all three to the judge)."""
     if not isinstance(pack, dict) or not isinstance(pack.get("clauses"), list) or not pack["clauses"]:
-        raise BadInput(f"pack {path!r} carries no clauses -- not a compiled pack")
+        raise BadInput(f"pack {where!r} carries no clauses -- not a compiled pack")
     for clause in pack["clauses"]:
         if not isinstance(clause, dict) or not clause.get("id") or not clause.get("claim"):
-            raise BadInput(f"pack {path!r} carries a clause with no id/claim: {clause!r}")
+            raise BadInput(f"pack {where!r} carries a clause with no id/claim: {clause!r}")
+        if not isinstance(clause.get("check_id"), str) or not clause["check_id"]:
+            raise BadInput(f"pack {where!r} carries a clause with no check_id: {clause['id']!r}")
     return pack
+
+
+def load_pack(path):
+    return check_pack(load_json(path, "pack"), path)
 
 
 def select_clauses(pack, rule_ids):
@@ -199,13 +282,43 @@ def load_bundle(path):
     return bundle
 
 
+def completeness_of(bundle):
+    """bundle.completeness, checked: a mapping (absent reads as {}), records_mode
+    and payloads_mode each absent or a known value, missing absent or a list,
+    and never payloads_mode "none" beside a populated disclosures map -- a
+    bundle that says it disclosed no payloads and then discloses some
+    contradicts itself, and which half to believe is not this script's call."""
+    completeness = bundle.get("completeness")
+    if completeness is None:
+        completeness = {}
+    if not isinstance(completeness, dict):
+        raise BadInput(f"bundle.completeness must be a mapping, got {type(completeness).__name__}")
+    for key, known in (("records_mode", RECORDS_MODES), ("payloads_mode", PAYLOADS_MODES)):
+        if key in completeness and completeness[key] not in known:
+            raise BadInput(f"bundle.completeness.{key} {completeness[key]!r} is not one of {list(known)}")
+    if "missing" in completeness and not isinstance(completeness["missing"], list):
+        raise BadInput("bundle.completeness.missing must be a list")
+    if completeness.get("payloads_mode") == "none" and bundle.get("disclosures"):
+        raise BadInput("bundle.completeness.payloads_mode is \"none\" but bundle.disclosures discloses "
+                       "payloads: the bundle contradicts itself")
+    return completeness
+
+
+def declares_incomplete(bundle):
+    """True when the bundle itself says records are missing: records_mode
+    "declared_incomplete", or a non-empty completeness.missing. Such a bundle is
+    never judged as if it were whole -- a missing record may be exactly the one
+    a rule turns on."""
+    completeness = completeness_of(bundle)
+    return completeness.get("records_mode") == "declared_incomplete" or bool(completeness.get("missing"))
+
+
 def is_withheld(bundle):
     """capsule-anchor's countersign `parse_bundle` rule, reused verbatim: a bundle
     is WITHHELD when completeness.payloads_mode is "none" and it carries no
     `disclosures` key at all (not merely an empty one -- key absence is the
     signal)."""
-    completeness = bundle.get("completeness") or {}
-    return completeness.get("payloads_mode") == "none" and "disclosures" not in bundle
+    return completeness_of(bundle).get("payloads_mode") == "none" and "disclosures" not in bundle
 
 
 def _bundle_records(bundle):
@@ -253,7 +366,7 @@ def resolve_target(bundle, capsule_id):
     record = next((r for r in records if isinstance(r, dict) and r.get("capsule_id") == capsule_id), None)
     if record is not None:
         return record, None
-    missing = (bundle.get("completeness") or {}).get("missing") or []
+    missing = completeness_of(bundle).get("missing") or []
     reason = REASON_RECORD_DECLARED_MISSING if capsule_id in missing else REASON_RECORD_NOT_FOUND
     return None, reason
 
@@ -301,6 +414,11 @@ def judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=None):
         record, reason = resolve_target(bundle, capsule_id)
         if record is None:
             return not_evaluable_answers(clauses, reason), [], False
+
+    if declares_incomplete(bundle):
+        return not_evaluable_answers(clauses, REASON_BUNDLE_INCOMPLETE), [], False
+
+    if capsule_id:
         facts = _bundle_disclosures(bundle).get(capsule_id) or None
         if facts is None:
             return not_evaluable_answers(clauses, REASON_PAYLOAD_WITHHELD), [], False
@@ -355,12 +473,24 @@ def build_judge_pin(judge_model_id, input_refs, clauses):
 
 
 def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backend=None):
+    """The Result v0 document alone; run_judged() also returns the judged
+    selection that goes in the judge sidecar."""
+    document, _selection = run_judged(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at,
+                                      backend=backend)
+    return document
+
+
+def run_judged(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backend=None):
     """Everything between "have a loaded pack and bundle" and "have a Result v0
-    document": pulled out of main() so a test can inject a mock backend without
+    document and its judged selection" (returned as a pair; the selection goes
+    in the judge sidecar, never on the document): pulled out of main() so a
+    test can inject a mock backend without
     going through the CLI/JEV_JUDGE_BACKEND environment seam, the same way
     tests/test_jev_judge.py calls jev_judge.judge()/judge_many() directly. Raises
     BadInput/RollupError/EvidenceUnavailable/OSError for bad input, JudgeBackendFailure
     for a judge backend failure -- main() is the only place that catches them."""
+    check_pack(pack, pack.get("contract_ref") if isinstance(pack, dict) else None)
+    completeness_of(bundle)
     clauses = select_clauses(pack, rule_ids)
     # A pure function of the pack and this --rule-ids selection, independent of
     # the bundle: refused here, before the judge is ever consulted (never after
@@ -389,6 +519,9 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
                            "so a not_evaluable claim has no record to cite")
     if unselected and citation is None:
         raise no_citation
+    # A pin over a stand-in backend's answer names the stand-in, never only the
+    # operator's (real-looking) model id: jev_judge.sealed_model_id().
+    judge_model_id = jev_judge.sealed_model_id(judge_model_id, backend)
     answers, target_ids, actually_judged = judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=backend)
     if not actually_judged and citation is None:
         raise no_citation
@@ -398,6 +531,12 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
 
     all_criteria = tuple(c["id"] for c in all_clauses)
     criterion_verdicts = {cid: answers[cid]["verdict"] for cid in all_criteria}
+    if actually_judged and all(criterion_verdicts[cid] == "out_of_scope" for cid in selected_ids):
+        # Known only once the judge has answered -- no row of this pack is
+        # never_out_of_scope, so no selection can rule it out beforehand. Only
+        # the selected rows count: the not_evaluable claims for rules outside
+        # --rule-ids say nothing was judged there, not that anything applied.
+        raise NothingApplied(judged_selection(clauses, criterion_verdicts))
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
     rule_ids_by_clause = {c["id"]: c["rule_id"] for c in all_clauses if c.get("rule_id")}
@@ -442,7 +581,46 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
     document["view"]["title"] = report_title(pack, case_id)
-    return document
+    return document, judged_selection(clauses, criterion_verdicts)
+
+
+def judged_selection(clauses, criterion_verdicts):
+    """What this call put in front of the judge, recorded in the judge sidecar: the
+    selected rows (rule_ids and requirement_refs, in the order sent) and which
+    of them came back out_of_scope. claims[] omits an out_of_scope row (Result
+    v0 has no such verdict), yet the pin's prompt_template_hash and input_refs
+    cover every row sent; with this, a reader holding the pack, the document and
+    its sidecar recomputes both (select the pack's clauses by requirement_ref,
+    then jev_judge.compiled_prompt_digest(request_clauses(...),
+    allow_out_of_scope, "disclosed_facts") and declared_input_refs(...)). Not a
+    key of the Result document: evidence-result-v0's EvidenceResult admits no
+    key beyond its own (judge_sidecar())."""
+    return {
+        "rule_ids": [c.get("rule_id") for c in clauses],
+        "requirement_refs": [c["id"] for c in clauses],
+        "out_of_scope": [c["id"] for c in clauses if criterion_verdicts.get(c["id"]) == "out_of_scope"],
+        "allow_out_of_scope": ALLOW_OUT_OF_SCOPE,
+    }
+
+
+def sidecar_path_for(result_path):
+    """`<result>.judge.json` next to the Result: RESULT.json -> RESULT.judge.json,
+    any other name gets .judge.json appended."""
+    name = result_path.name
+    stem = name[:-len(".json")] if name.endswith(".json") else name
+    return result_path.with_name(stem + ".judge.json")
+
+
+def judge_sidecar(result_bytes, selection):
+    """The judge sidecar for one Result: what the run judged, citing the Result
+    by the sha256 of the exact bytes written."""
+    return {
+        "spec_version": JUDGE_SIDECAR_VERSION,
+        "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+        "instruction_template_digest": jev_judge.instruction_template_digest("disclosed_facts"),
+        "judge_source_sha256": hashlib.sha256(pathlib.Path(jev_judge.__file__).read_bytes()).hexdigest(),
+        "judged_selection": selection,
+    }
 
 
 def main(argv):
@@ -458,7 +636,31 @@ def main(argv):
                          "judged rules are claimed not_evaluable, so a partial run never reads as a full pass")
     ap.add_argument("--judge-model-id", default=None, help="defaults to the judge this script pins (jev_judge.PINNED_MODEL)")
     ap.add_argument("--out", type=pathlib.Path, default=None, help="write the Result v0 document here (default: stdout)")
+    ap.add_argument("--sidecar", type=pathlib.Path, default=None,
+                    help="write the judge sidecar here (default: <out>.judge.json next to --out; "
+                         "required when the Result goes to stdout)")
     args = ap.parse_args(argv)
+    if args.out is None and args.sidecar is None:
+        # Refused before the judge is consulted: a Result on stdout with no
+        # sidecar would drop the judged selection the pin is recomputed from.
+        print("bad input: the Result goes to stdout, so --sidecar PATH is required for its judge sidecar",
+              file=sys.stderr)
+        return 1
+    sidecar_path = args.sidecar or sidecar_path_for(args.out)
+    # Both refused before the judge is consulted: a sidecar written over its own
+    # Result would leave a sidecar citing bytes that no longer exist, and a
+    # missing directory would fail only after the Result was written.
+    if args.out is not None and sidecar_path.resolve() == args.out.resolve():
+        print("bad input: --sidecar names the same file as --out; the sidecar would overwrite its Result",
+              file=sys.stderr)
+        return 1
+    for path in ([args.out] if args.out is not None else []) + [sidecar_path]:
+        if not path.resolve().parent.is_dir():
+            print(f"bad input: no directory to write {path} into", file=sys.stderr)
+            return 1
+        if path.is_dir():
+            print(f"bad input: {path} is a directory, not a file to write", file=sys.stderr)
+            return 1
 
     judge_model_id = args.judge_model_id or jev_judge.PINNED_MODEL
     rule_ids = [r.strip() for r in args.rule_ids.split(",") if r.strip()] if args.rule_ids else None
@@ -466,19 +668,59 @@ def main(argv):
     try:
         pack = load_pack(args.pack)
         bundle = load_bundle(args.bundle)
-        document = run(pack, bundle, rule_ids, args.capsule_id, judge_model_id, args.generated_at)
+        document, selection = run_judged(pack, bundle, rule_ids, args.capsule_id, judge_model_id,
+                                         args.generated_at)
+    except jev_judge.JudgeError as e:  # e.g. an unknown JEV_JUDGE_BACKEND, before any call
+        print(f"judge backend failure: {e}", file=sys.stderr)
+        return 2
     except (BadInput, RollupError, EvidenceUnavailable, OSError) as e:
         print(f"bad input: {e}", file=sys.stderr)
         return 1
     except JudgeBackendFailure as e:
         print(f"judge backend failure: {e}", file=sys.stderr)
         return 2
+    except NothingApplied as e:
+        print(f"nothing applied: {e}", file=sys.stderr)
+        print(json.dumps({"judged_selection": e.selection}, indent=2), file=sys.stderr)
+        return 3
 
     out_text = json.dumps(document, indent=2) + "\n"
-    if args.out:
-        args.out.write_text(out_text)
-    else:
-        sys.stdout.write(out_text)
+    out_bytes = out_text.encode("utf-8")
+    sidecar_text = json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n"
+    # Both are staged beside their final paths, the sidecar is moved into place
+    # first and the Result published only after it, so a failed write never
+    # leaves a Result without its sidecar. A sidecar already at the path is set
+    # aside, not overwritten, until the Result is out: if publishing fails, the
+    # earlier pair is left exactly as it was.
+    tag = f"{os.getpid()}.tmp"
+    staged_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.{tag}")
+    earlier_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.earlier.{tag}")
+    staged_out = args.out.with_name(f".{args.out.name}.{tag}") if args.out else None
+    set_aside = placed = False
+    try:
+        staged_sidecar.write_text(sidecar_text)
+        if staged_out:
+            staged_out.write_bytes(out_bytes)
+        if sidecar_path.exists():
+            os.replace(sidecar_path, earlier_sidecar)
+            set_aside = True
+        os.replace(staged_sidecar, sidecar_path)
+        placed = True
+        if staged_out:
+            os.replace(staged_out, args.out)
+        else:
+            sys.stdout.write(out_text)
+            sys.stdout.flush()
+    except OSError as e:
+        for path in (staged_sidecar, staged_out, sidecar_path if placed else None):
+            if path is not None:
+                path.unlink(missing_ok=True)
+        if set_aside:
+            os.replace(earlier_sidecar, sidecar_path)
+        print(f"bad input: could not write the Result and its sidecar: {e}", file=sys.stderr)
+        return 1
+    if set_aside:
+        earlier_sidecar.unlink(missing_ok=True)
     return 0
 
 

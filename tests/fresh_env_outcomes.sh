@@ -11,6 +11,15 @@
 # criteria at the full 50-case scale, with every record verifying and every
 # bundle passing.
 #
+# Then the compiled airline-support-outcomes pack (demo/airline-support-outcomes,
+# from packs/airline-support-outcomes/pack-source.yaml) runs on a second book,
+# end to end through the paths the tau2 contract never takes: out_of_scope
+# answers (the pack's out_of_scope_verdict switch), never_out_of_scope clauses
+# that are never offered it, a min_confidence threshold (a recompiled variant at
+# 0.95, above the mock's 0.9), a recomputed clause, and pin and pack_source_digest
+# scoping in the rollup (each pack's rollup counts the other's reports as
+# excluded, never combines them).
+#
 #   tests/fresh_env_outcomes.sh [LOG_FILE]
 #
 # Environment (all optional):
@@ -20,6 +29,8 @@
 #   CLI_REF      capsule-cli commit to build capsulectl from
 #   CASES        how many tau2 airline tasks to put in the book (default: 50, the
 #                full trial-0 set of the claude-3-7-sonnet results file)
+#   AIRLINE_CASES how many of them the airline-support-outcomes phase judges
+#                (default: 12)
 #
 # No model runs anywhere: JEV_JUDGE_BACKEND=mock makes scripts/judges/jev_judge.py a
 # deterministic hash-of-request stand-in (see its own docstring) -- no
@@ -32,6 +43,7 @@ SKILLS_REF=${SKILLS_REF:-main}
 CLI_REPO=${CLI_REPO:-https://github.com/action-state-group/capsule-cli.git}
 CLI_REF=${CLI_REF:-6dadefd}
 CASES=${CASES:-50}
+AIRLINE_CASES=${AIRLINE_CASES:-12}
 CRITERIA=9
 
 work=$(mktemp -d)
@@ -59,7 +71,7 @@ step "build capsulectl and the test fixture from source"
 ctl=$work/bin/capsulectl
 "$ctl" --version
 
-step "a venv with the scripts' requirements (jevals for scripts/judges/jev_judge.py, rfc8785 for JSON-DIGESTs)"
+step "a venv with the scripts' requirements (jevals for scripts/judges/jev_judge.py, pyyaml for scripts/pack_compile.py, rfc8785 for JSON-DIGESTs)"
 python3 -m venv "$work/venv"
 "$work/venv/bin/pip" install --quiet --upgrade pip
 "$work/venv/bin/pip" install --quiet -r "$work/skills/requirements.txt"
@@ -143,7 +155,90 @@ bundle=$(jq -r .close.bundle "$work/daily.json")
 printf '%s: ' "$(basename "$(dirname "$bundle")")/$(basename "$bundle")"
 "$work/bin/bookfixture" aac-verify "$bundle" || fail "$bundle does not verify"
 
+# ---------------------------------------------------------------------------
+# The compiled airline-support-outcomes pack, on a second book.
+# ---------------------------------------------------------------------------
+AIRLINE_MODEL="jev-1.13.0 (mock backend, no model read the conversation)"
+AIRLINE_SPEC=demo/airline-support-outcomes/compiled.json
+VARIANT_SPEC=demo/airline-support-outcomes-variant/compiled.json
+NEVER_OOS='["grounded_communication.no_invented_policy","task_resolution.done_in_full"]'
+[[ $(jq -c '[.clauses[] | select(.never_out_of_scope) | .id] | sort' "$AIRLINE_SPEC") == "$NEVER_OOS" ]] \
+  || fail "$AIRLINE_SPEC's never_out_of_scope clauses are not $NEVER_OOS"
+[[ $(jq -r '.switches.out_of_scope_verdict' "$AIRLINE_SPEC") == true ]] || fail "$AIRLINE_SPEC has out_of_scope off"
+a_reports=$((AIRLINE_CASES * CRITERIA))
+
+step "an airline-support-outcomes book: $AIRLINE_CASES of the same sealed cases on $day"
+"$ctl" profile create --name airline --type jsonl --jsonl-path "$work/airline-store" \
+  --namespace tau2 --log-id tau2-airline --operator tau2-demo \
+  --signing-key-file "$work/producer.seed" --trusted-key "$(jq -r .public_key "$work/producer.json")" \
+  --checkpoint-signing-key-file "$work/checkpoint.seed" --checkpoint-trusted-key "$(jq -r .public_key "$work/checkpoint.json")"
+"$ctl" store init --profile airline
+"$work/bin/bookfixture" seed --store "$work/airline-store" --log-id tau2-airline --operator tau2-demo --namespace tau2 \
+  --signing-key-file "$work/producer.seed" --checkpoint-key-file "$work/checkpoint.seed" --at "${day}T12:00:00Z" \
+  $(ls "$work/cases"/task-*.json | sort | head -n "$AIRLINE_CASES")
+
+step "daily-judge-and-close, airline pack: out_of_scope on, two clauses never_out_of_scope"
+JEV_JUDGE_BACKEND=mock python3 scripts/run_daily.py --profile airline --spec "$AIRLINE_SPEC" --capsulectl "$ctl" \
+  --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id "$AIRLINE_MODEL" \
+  --date "$day" --out "$work/airline/base" | tee "$work/airline-daily.json"
+[[ $(jq '.reports | length' "$work/airline-daily.json") -eq "$a_reports" ]] || fail "airline: not $a_reports reports"
+a_oos=$(jq '.verdicts.out_of_scope // 0' "$work/airline-daily.json")
+[[ "$a_oos" -gt 0 ]] || fail "airline: no out_of_scope verdict, so the out_of_scope path never ran"
+
+step "the airline rollup: out_of_scope excluded, never_out_of_scope never out_of_scope"
+JEV_JUDGE_BACKEND=mock python3 scripts/rollup_day.py --profile airline --spec "$AIRLINE_SPEC" --capsulectl "$ctl" \
+  --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id "$AIRLINE_MODEL" \
+  --generated-at "${day}T23:59:59Z" --out "$work/airline/rollup-base" >"$work/airline-rollup-base.json"
+jq -e ".cases_complete == $AIRLINE_CASES and (.cases_incomplete | length) == 0 and (.cases_conflicting | length) == 0
+       and .reports_excluded == {\"judge_pin_mismatch\": 0, \"pack_source_mismatch\": 0}" \
+  "$work/airline-rollup-base.json" >/dev/null || fail "airline rollup is not $AIRLINE_CASES complete cases with nothing excluded"
+excluded_na=$(jq -s 'map(.aggregate.coverage.excluded_not_applicable) | add' "$work/airline/rollup-base"/result-v0-*.json)
+[[ "$excluded_na" -eq "$a_oos" ]] || fail "airline day documents exclude $excluded_na not-applicable criteria, not the $a_oos out_of_scope verdicts"
+never_oos_hits=$(jq -s --argjson ids "$NEVER_OOS" \
+  '[.[] | select(.criterion_verdicts) | .criterion_verdicts | to_entries[] | select((.key | IN($ids[])) and .value == "out_of_scope")] | length' \
+  "$work/airline/rollup-base"/tau2_*.json)
+[[ "$never_oos_hits" -eq 0 ]] || fail "a never_out_of_scope clause was answered out_of_scope $never_oos_hits time(s)"
+printf 'airline: %s reports, %s out_of_scope (all excluded from claims), never_out_of_scope clauses never out_of_scope\n' "$a_reports" "$a_oos"
+
+step "a variant of the pack: within_fare_rules recomputed, judge.min_confidence 0.95 (the mock answers at 0.9)"
+python3 - "$work/airline-variant.yaml" <<'EOF'
+import sys, yaml
+source = yaml.safe_load(open("packs/airline-support-outcomes/pack-source.yaml"))
+source["switches"]["within_fare_rules_recomputed"] = True
+source["judge"]["min_confidence"] = 0.95
+open(sys.argv[1], "w").write(yaml.safe_dump(source, sort_keys=False))
+EOF
+python3 scripts/pack_compile.py compile "$work/airline-variant.yaml" --out demo/airline-support-outcomes-variant >/dev/null
+[[ $(jq -r .pack_source_digest "$VARIANT_SPEC") != $(jq -r .pack_source_digest "$AIRLINE_SPEC") ]] || fail "the variant kept the pack_source_digest"
+JEV_JUDGE_BACKEND=mock python3 scripts/run_daily.py --profile airline --spec "$VARIANT_SPEC" --capsulectl "$ctl" \
+  --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id "$AIRLINE_MODEL" \
+  --date "$day" --out "$work/airline/variant" | tee "$work/airline-variant-daily.json"
+[[ $(jq '.reports | length' "$work/airline-variant-daily.json") -eq "$a_reports" ]] || fail "variant: not $a_reports reports"
+JEV_JUDGE_BACKEND=mock python3 scripts/rollup_day.py --profile airline --spec "$VARIANT_SPEC" --capsulectl "$ctl" \
+  --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id "$AIRLINE_MODEL" \
+  --generated-at "${day}T23:59:59Z" --out "$work/airline/rollup-variant" >"$work/airline-rollup-variant.json"
+jq -e ".cases_complete == $AIRLINE_CASES and .reports_excluded == {\"judge_pin_mismatch\": $a_reports, \"pack_source_mismatch\": 0}" \
+  "$work/airline-rollup-variant.json" >/dev/null || fail "variant rollup did not count the base pack's $a_reports judged reports as excluded"
+below=$(jq -s '[.[] | select(.criterion_verdicts) | .criterion_verdicts | to_entries[]
+                | select(.key != "policy_compliance.within_fare_rules" and .value != "not_evaluable")] | length' \
+  "$work/airline/rollup-variant"/tau2_*.json)
+[[ "$below" -eq 0 ]] || fail "min_confidence 0.95: $below judged verdict(s) taken despite the mock's 0.9 confidence"
+printf 'variant: every judged clause not_evaluable below min_confidence; base reports excluded by pin\n'
+
+step "the base pack's rollup again: the variant's reports are excluded by pin and by pack_source_digest"
+JEV_JUDGE_BACKEND=mock python3 scripts/rollup_day.py --profile airline --spec "$AIRLINE_SPEC" --capsulectl "$ctl" \
+  --judge-cmd "python3 scripts/judges/jev_judge.py" --judge-model-id "$AIRLINE_MODEL" \
+  --generated-at "${day}T23:59:59Z" --out "$work/airline/rollup-base-again" >"$work/airline-rollup-base-again.json"
+jq -e ".reports_excluded == {\"judge_pin_mismatch\": $((AIRLINE_CASES * (CRITERIA - 1))), \"pack_source_mismatch\": $AIRLINE_CASES}" \
+  "$work/airline-rollup-base-again.json" >/dev/null || fail "base rollup did not count the variant's judged and recomputed reports as excluded"
+diff <(jq -c '[.cases_complete, .cases_resolved, [.day_results[].headline]]' "$work/airline-rollup-base.json") \
+     <(jq -c '[.cases_complete, .cases_resolved, [.day_results[].headline]]' "$work/airline-rollup-base-again.json") >/dev/null \
+  || fail "the variant's reports changed the base pack's rollup"
+printf 'base rollup unchanged; %s judged + %s recomputed variant reports excluded\n' "$((AIRLINE_CASES * (CRITERIA - 1)))" "$AIRLINE_CASES"
+
 step "summary"
 jq -c '{day, cases, reports: (.reports | length), verdicts, close}' "$work/daily.json"
 cat "$work/rollup-summary.json"
+jq -c '{airline: {reports: (.reports | length), verdicts}}' "$work/airline-daily.json"
+jq -c '{airline_variant: {reports: (.reports | length), verdicts}}' "$work/airline-variant-daily.json"
 printf 'elapsed: %ss\nFRESH-ENV-OUTCOMES: PASS\n' "$(($(date +%s) - start))"
