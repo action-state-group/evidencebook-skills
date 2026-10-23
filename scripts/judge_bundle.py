@@ -138,6 +138,7 @@ RESULT.judge.json):
     {"spec_version": "judge-sidecar/v1",
      "result_sha256": "<sha256 hex of the exact Result bytes written>",
      "instruction_template_digest": "<jev_judge's disclosed_facts digest>",
+     "judge_source_sha256": "<sha256 hex of scripts/judges/jev_judge.py's bytes>",
      "judged_selection": {"rule_ids": [...], "requirement_refs": [...],
                           "out_of_scope": [...], "allow_out_of_scope": true}}
 
@@ -149,12 +150,15 @@ Result's sidecar.
 judged_selection.requirement_refs and .out_of_scope hold the compiled pack's
 clause ids. instruction_template_digest is
 jev_judge.instruction_template_digest("disclosed_facts") of the judge that
-produced the Result. prompt_template_hash folds it in, and it covers
-scripts/judges/jev_judge.py's own source, so recomputing the pin needs that
-file at a revision whose digest equals this one: the sidecar names which judge
-to fetch, never leaves it to a guess. An abstention document (every row not_evaluable, no judge call) gets a
+produced the Result, the part of the judge prompt_template_hash folds in.
+judge_source_sha256 is the sha256 of that judge's scripts/judges/jev_judge.py
+bytes: the file that renders every question (build_eval) and computes
+prompt_template_hash. Recomputing the pin needs that file exactly, and the
+sidecar names it by digest rather than leave it to a guess. An abstention document (every row not_evaluable, no judge call) gets a
 sidecar too: its judged_selection is the selection asked for, not rows sent,
-its out_of_scope is empty, and no claim carries a judge_pin. The sidecar is
+its out_of_scope is empty, no claim carries a judge_pin, and its
+instruction_template_digest and judge_source_sha256 are those of the judge in
+the tree, which did not run. The sidecar is
 moved into place before the Result is published (both are staged first), so
 a failed write never leaves a Result without its sidecar.
 
@@ -612,6 +616,7 @@ def judge_sidecar(result_bytes, selection):
         "spec_version": JUDGE_SIDECAR_VERSION,
         "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
         "instruction_template_digest": jev_judge.instruction_template_digest("disclosed_facts"),
+        "judge_source_sha256": hashlib.sha256(pathlib.Path(jev_judge.__file__).read_bytes()).hexdigest(),
         "judged_selection": selection,
     }
 
@@ -682,14 +687,21 @@ def main(argv):
     sidecar_text = json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n"
     # Both are staged beside their final paths, the sidecar is moved into place
     # first and the Result published only after it, so a failed write never
-    # leaves a Result without its sidecar.
-    staged_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.{os.getpid()}.tmp")
-    staged_out = args.out.with_name(f".{args.out.name}.{os.getpid()}.tmp") if args.out else None
-    placed = False
+    # leaves a Result without its sidecar. A sidecar already at the path is set
+    # aside, not overwritten, until the Result is out: if publishing fails, the
+    # earlier pair is left exactly as it was.
+    tag = f"{os.getpid()}.tmp"
+    staged_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.{tag}")
+    earlier_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.earlier.{tag}")
+    staged_out = args.out.with_name(f".{args.out.name}.{tag}") if args.out else None
+    set_aside = placed = False
     try:
         staged_sidecar.write_text(sidecar_text)
         if staged_out:
             staged_out.write_bytes(out_bytes)
+        if sidecar_path.exists():
+            os.replace(sidecar_path, earlier_sidecar)
+            set_aside = True
         os.replace(staged_sidecar, sidecar_path)
         placed = True
         if staged_out:
@@ -701,8 +713,12 @@ def main(argv):
         for path in (staged_sidecar, staged_out, sidecar_path if placed else None):
             if path is not None:
                 path.unlink(missing_ok=True)
+        if set_aside:
+            os.replace(earlier_sidecar, sidecar_path)
         print(f"bad input: could not write the Result and its sidecar: {e}", file=sys.stderr)
         return 1
+    if set_aside:
+        earlier_sidecar.unlink(missing_ok=True)
     return 0
 
 

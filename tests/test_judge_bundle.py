@@ -846,7 +846,9 @@ class JudgeSidecar(unittest.TestCase):
     def _assert_sidecar_cites(self, sidecar_path, result_bytes, rule_ids):
         sidecar = json.loads(sidecar_path.read_text())
         self.assertEqual(set(sidecar), {"spec_version", "result_sha256", "instruction_template_digest",
-                                        "judged_selection"})
+                                        "judge_source_sha256", "judged_selection"})
+        self.assertEqual(sidecar["judge_source_sha256"], __import__("hashlib").sha256(
+            pathlib.Path(jev_judge.__file__).read_bytes()).hexdigest())
         self.assertEqual(sidecar["instruction_template_digest"],
                          jev_judge.instruction_template_digest("disclosed_facts"))
         self.assertEqual(sidecar["spec_version"], "judge-sidecar/v1")
@@ -955,6 +957,46 @@ class JudgeSidecar(unittest.TestCase):
                 self.assertEqual(code, 1, err.getvalue())
                 self.assertEqual(out.getvalue(), "")
                 self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["bundle.json"])
+
+    def test_a_failed_result_move_leaves_the_earlier_pair_intact(self):
+        # An earlier Result and its sidecar are at the paths; the new Result's
+        # final move fails after the new sidecar is in place: the earlier
+        # sidecar comes back, byte for byte, and nothing is left over.
+        import os
+        out, side = self.tmp / "r.json", self.tmp / "r.judge.json"
+        out.write_text("earlier result\n")
+        side.write_text("earlier sidecar\n")
+        b = self.tmp / "bundle.json"
+        b.write_text(json.dumps(disclosed_bundle(FACTS)))
+        argv = ["--bundle", str(b), "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled" / "compiled.json"),
+                "--generated-at", GENERATED_AT, "--rule-ids", "2", "--out", str(out)]
+        real_replace = os.replace
+
+        def failing_replace(src, dst):
+            if pathlib.Path(dst) == out:
+                raise PermissionError("no")
+            return real_replace(src, dst)
+        env = dict(os.environ)
+        try:
+            os.environ["JEV_JUDGE_BACKEND"] = "mock"
+            with mock.patch.object(judge_bundle.os, "replace", failing_replace), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                code = judge_bundle.main(argv)
+        finally:
+            os.environ.clear()
+            os.environ.update(env)
+        self.assertEqual(code, 1)
+        self.assertEqual(out.read_text(), "earlier result\n")
+        self.assertEqual(side.read_text(), "earlier sidecar\n")
+        self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), ["bundle.json", "r.json", "r.judge.json"])
+
+    def test_a_rerun_replaces_the_earlier_pair(self):
+        out = self.tmp / "r.json"
+        for _ in range(2):
+            proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--out", str(out))
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        self._assert_sidecar_cites(self.tmp / "r.judge.json", out.read_bytes(), ["2"])
+        self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), ["bundle.json", "r.json", "r.judge.json"])
 
     def test_an_unknown_backend_is_a_backend_failure_exit_2(self):
         import os

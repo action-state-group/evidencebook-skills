@@ -60,18 +60,21 @@ Result on stdout, `--sidecar PATH` is required). The sidecar holds
 `spec_version` (`judge-sidecar/v1`, the format id and its version; any change to
 the sidecar's keys or their meaning is a new version), `result_sha256`, the
 sha256 of the exact Result bytes written, `instruction_template_digest`, the
-judge's `disclosed_facts` instruction template digest, and `judged_selection`: the rows
+judge's `disclosed_facts` instruction template digest, `judge_source_sha256`,
+the sha256 of the judge's `scripts/judges/jev_judge.py` bytes, and
+`judged_selection`: the rows
 selected for the judge in order (`rule_ids`, and `requirement_refs`, the
 compiled pack's clause ids), the requirement refs among them that came back
 `out_of_scope` (`out_of_scope`; claims[] omits those), and `allow_out_of_scope`.
-With the pack, the Result, its sidecar and `scripts/judges/jev_judge.py` at a
-revision whose `instruction_template_digest("disclosed_facts")` equals the
-sidecar's, a reader recomputes the pin's `prompt_template_hash` and
-`input_refs`. The hash folds that digest in, and the digest covers the judge
-file's own source, so the sidecar names which judge revision to use. On an
+With the pack, the Result, its sidecar and the `scripts/judges/jev_judge.py`
+whose sha256 equals the sidecar's `judge_source_sha256`, a reader recomputes the
+pin's `prompt_template_hash` and `input_refs`. That file renders every question
+and computes the hash, so the sidecar names it exactly, by digest. On an
 abstention (a withheld or declared-incomplete bundle, or a missing or
 undisclosed record) no judge call is made: `judged_selection` is the selection
-asked for, `out_of_scope` is empty, and no claim carries a `judge_pin`. The
+asked for, `out_of_scope` is empty, no claim carries a `judge_pin`, and
+`instruction_template_digest` and `judge_source_sha256` are those of the judge
+in the tree, which did not run. The
 Result itself adds no top-level key beyond the evidence-result-v0 schema's own.
 When every selected row comes back `out_of_scope` there is no Result and no
 sidecar: the run exits 3 and prints the judged selection on stderr.
