@@ -137,6 +137,7 @@ RESULT.judge.json):
 
     {"spec_version": "judge-sidecar/v1",
      "result_sha256": "<sha256 hex of the exact Result bytes written>",
+     "instruction_template_digest": "<jev_judge's disclosed_facts digest>",
      "judged_selection": {"rule_ids": [...], "requirement_refs": [...],
                           "out_of_scope": [...], "allow_out_of_scope": true}}
 
@@ -146,14 +147,16 @@ it does not know. The sidecar cites its Result by digest, never by path: a
 sidecar whose result_sha256 does not match the Result in hand is not that
 Result's sidecar.
 judged_selection.requirement_refs and .out_of_scope hold the compiled pack's
-clause ids. Recomputing the pin's prompt_template_hash also needs
-scripts/judges/jev_judge.py at the revision that produced the Result: the hash
-folds in the judge's instruction template digest, which covers that file's own
-source. An abstention document (every row not_evaluable, no judge call) gets a
+clause ids. instruction_template_digest is
+jev_judge.instruction_template_digest("disclosed_facts") of the judge that
+produced the Result. prompt_template_hash folds it in, and it covers
+scripts/judges/jev_judge.py's own source, so recomputing the pin needs that
+file at a revision whose digest equals this one: the sidecar names which judge
+to fetch, never leaves it to a guess. An abstention document (every row not_evaluable, no judge call) gets a
 sidecar too: its judged_selection is the selection asked for, not rows sent,
 its out_of_scope is empty, and no claim carries a judge_pin. The sidecar is
-staged before the Result is written and moved into place after it, so a
-failed write never leaves a Result without its sidecar.
+moved into place before the Result is published (both are staged first), so
+a failed write never leaves a Result without its sidecar.
 
 Exit codes: 0 on a successful run (whatever the verdicts), 1 on a malformed
 request (the "bad input" cases above), 2 on a judge backend failure, 3 when the
@@ -608,6 +611,7 @@ def judge_sidecar(result_bytes, selection):
     return {
         "spec_version": JUDGE_SIDECAR_VERSION,
         "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+        "instruction_template_digest": jev_judge.instruction_template_digest("disclosed_facts"),
         "judged_selection": selection,
     }
 
@@ -647,6 +651,9 @@ def main(argv):
         if not path.resolve().parent.is_dir():
             print(f"bad input: no directory to write {path} into", file=sys.stderr)
             return 1
+        if path.is_dir():
+            print(f"bad input: {path} is a directory, not a file to write", file=sys.stderr)
+            return 1
 
     judge_model_id = args.judge_model_id or jev_judge.PINNED_MODEL
     rule_ids = [r.strip() for r in args.rule_ids.split(",") if r.strip()] if args.rule_ids else None
@@ -673,19 +680,27 @@ def main(argv):
     out_text = json.dumps(document, indent=2) + "\n"
     out_bytes = out_text.encode("utf-8")
     sidecar_text = json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n"
-    # The sidecar is staged beside its final path before the Result goes out,
-    # so a write failure never leaves a Result without its sidecar on disk.
-    staged = sidecar_path.with_name(f".{sidecar_path.name}.{os.getpid()}.tmp")
+    # Both are staged beside their final paths, the sidecar is moved into place
+    # first and the Result published only after it, so a failed write never
+    # leaves a Result without its sidecar.
+    staged_sidecar = sidecar_path.with_name(f".{sidecar_path.name}.{os.getpid()}.tmp")
+    staged_out = args.out.with_name(f".{args.out.name}.{os.getpid()}.tmp") if args.out else None
+    placed = False
     try:
-        staged.write_text(sidecar_text)
-        if args.out:
-            args.out.write_bytes(out_bytes)
+        staged_sidecar.write_text(sidecar_text)
+        if staged_out:
+            staged_out.write_bytes(out_bytes)
+        os.replace(staged_sidecar, sidecar_path)
+        placed = True
+        if staged_out:
+            os.replace(staged_out, args.out)
         else:
             sys.stdout.write(out_text)
             sys.stdout.flush()
-        os.replace(staged, sidecar_path)
     except OSError as e:
-        staged.unlink(missing_ok=True)
+        for path in (staged_sidecar, staged_out, sidecar_path if placed else None):
+            if path is not None:
+                path.unlink(missing_ok=True)
         print(f"bad input: could not write the Result and its sidecar: {e}", file=sys.stderr)
         return 1
     return 0

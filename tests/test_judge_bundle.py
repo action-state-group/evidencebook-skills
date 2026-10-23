@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -844,7 +845,10 @@ class JudgeSidecar(unittest.TestCase):
 
     def _assert_sidecar_cites(self, sidecar_path, result_bytes, rule_ids):
         sidecar = json.loads(sidecar_path.read_text())
-        self.assertEqual(set(sidecar), {"spec_version", "result_sha256", "judged_selection"})
+        self.assertEqual(set(sidecar), {"spec_version", "result_sha256", "instruction_template_digest",
+                                        "judged_selection"})
+        self.assertEqual(sidecar["instruction_template_digest"],
+                         jev_judge.instruction_template_digest("disclosed_facts"))
         self.assertEqual(sidecar["spec_version"], "judge-sidecar/v1")
         self.assertEqual(sidecar["result_sha256"], __import__("hashlib").sha256(result_bytes).hexdigest())
         self.assertEqual(sidecar["judged_selection"]["rule_ids"], rule_ids)
@@ -899,14 +903,58 @@ class JudgeSidecar(unittest.TestCase):
         self.assertNotIn("Traceback", proc.stderr)
         self.assertFalse(out.exists())
 
-    def test_a_failed_result_write_leaves_no_sidecar_behind(self):
-        # --out names a directory: its parent exists, so the write itself fails.
+    def test_a_directory_as_the_result_is_refused_and_leaves_no_sidecar(self):
         out = self.tmp / "r.json"
         out.mkdir()
         proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", "--out", str(out))
         self.assertEqual(proc.returncode, 1, proc.stderr)
         self.assertNotIn("Traceback", proc.stderr)
         self.assertEqual([p.name for p in self.tmp.iterdir() if p.name != "bundle.json"], ["r.json"])
+
+    def test_a_directory_as_the_sidecar_is_refused_before_judging(self):
+        for extra in (("--out", str(self.tmp / "r.json")), ()):
+            with self.subTest(stdout=not extra):
+                (self.tmp / "side").mkdir(exist_ok=True)
+                proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "2", *extra,
+                                 "--sidecar", str(self.tmp / "side"))
+                self.assertEqual(proc.returncode, 1, proc.stderr)
+                self.assertIn("is a directory", proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertFalse((self.tmp / "r.json").exists())
+
+    def test_a_failed_sidecar_move_publishes_no_result(self):
+        # The sidecar's final move fails after both files are staged: neither
+        # the Result file nor stdout carries a Result, and nothing is left over.
+        import os
+        for to_stdout in (False, True):
+            with self.subTest(stdout=to_stdout), tempfile.TemporaryDirectory() as tmp:
+                tmp = pathlib.Path(tmp)
+                b = tmp / "bundle.json"
+                b.write_text(json.dumps(disclosed_bundle(FACTS)))
+                argv = ["--bundle", str(b), "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled"
+                                                         / "compiled.json"),
+                        "--generated-at", GENERATED_AT, "--rule-ids", "2", "--sidecar", str(tmp / "s.json")]
+                if not to_stdout:
+                    argv += ["--out", str(tmp / "r.json")]
+                real_replace = os.replace
+
+                def failing_replace(src, dst):
+                    if pathlib.Path(dst).name == "s.json":
+                        raise PermissionError("no")
+                    return real_replace(src, dst)
+                out, err = io.StringIO(), io.StringIO()
+                env = dict(os.environ)
+                try:
+                    os.environ["JEV_JUDGE_BACKEND"] = "mock"
+                    with mock.patch.object(judge_bundle.os, "replace", failing_replace), \
+                            contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        code = judge_bundle.main(argv)
+                finally:
+                    os.environ.clear()
+                    os.environ.update(env)
+                self.assertEqual(code, 1, err.getvalue())
+                self.assertEqual(out.getvalue(), "")
+                self.assertEqual(sorted(p.name for p in tmp.iterdir()), ["bundle.json"])
 
     def test_an_unknown_backend_is_a_backend_failure_exit_2(self):
         import os
