@@ -126,7 +126,9 @@ either the judge's own answer or one of the fixed reason strings above -- checke
 by tests/test_forbidden_vocabulary.py against vocab/forbidden-vocabulary.yaml.
 
 Exit codes: 0 on a successful run (whatever the verdicts), 1 on a malformed
-request (the "bad input" cases above), 2 on a judge backend failure. Never a
+request (the "bad input" cases above), 2 on a judge backend failure, 3 when the
+judge answered out_of_scope on every selected row (no claim to make: a Result v0
+document needs at least one; the judged selection goes to stderr). Never a
 guessed verdict; never a partial document on stdout.
 
     JEV_JUDGE_BACKEND=mock python3 scripts/judge_bundle.py --bundle ... --pack ...
@@ -164,6 +166,16 @@ class BadInput(Exception):
 
 class JudgeBackendFailure(Exception):
     """The judge backend itself failed (not a malformed request)."""
+
+
+class NothingApplied(Exception):
+    """The judge answered out_of_scope on every selected row: there is no claim
+    to put in a Result v0 document (its claims[] needs at least one). The
+    judge's own answer, not bad input; `selection` is judged_selection()."""
+
+    def __init__(self, selection):
+        super().__init__(f"every selected row was judged out_of_scope: {selection['requirement_refs']}")
+        self.selection = selection
 
 
 def load_json(path, what):
@@ -465,6 +477,10 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
 
     all_criteria = tuple(c["id"] for c in all_clauses)
     criterion_verdicts = {cid: answers[cid]["verdict"] for cid in all_criteria}
+    if all(v == "out_of_scope" for v in criterion_verdicts.values()):
+        # Known only once the judge has answered -- no row of this pack is
+        # never_out_of_scope, so no selection can rule it out beforehand.
+        raise NothingApplied(judged_selection(clauses, criterion_verdicts))
     tiers = {cid: "judged" for cid in all_criteria}
     rationales = {cid: answers[cid].get("rationale", "") for cid in all_criteria}
     rule_ids_by_clause = {c["id"]: c["rule_id"] for c in all_clauses if c.get("rule_id")}
@@ -562,6 +578,10 @@ def main(argv):
     except JudgeBackendFailure as e:
         print(f"judge backend failure: {e}", file=sys.stderr)
         return 2
+    except NothingApplied as e:
+        print(f"nothing applied: {e}", file=sys.stderr)
+        print(json.dumps({"judged_selection": e.selection}, indent=2), file=sys.stderr)
+        return 3
 
     out_text = json.dumps(document, indent=2) + "\n"
     if args.out:

@@ -8,7 +8,9 @@ stable, and only ever sealed on a claim the judge actually ran on.
 
     python3 -m unittest discover -s tests -p 'test_*.py'
 """
+import contextlib
 import copy
+import io
 import json
 import pathlib
 import subprocess
@@ -742,6 +744,46 @@ class JudgedSelectionIsRecorded(unittest.TestCase):
         self.assertNotEqual(jev_judge.compiled_prompt_digest(judge_bundle.request_clauses(from_claims), True,
                                                              mode="disclosed_facts"),
                             pin["prompt_template_hash"])
+
+
+class EveryRowOutOfScope(unittest.TestCase):
+    """A judged run whose every selected row comes back out_of_scope has no
+    claim to put in a Result v0 document (claims needs at least one). That is
+    the judge's answer, not the caller's bad input: it is reported as its own
+    outcome (exit 3), with the judged selection, and never as exit 1."""
+
+    def _backend(self):
+        return jevals.MockBackend(fn=lambda qid, q, state: "out_of_scope")
+
+    def test_run_raises_nothing_applied_with_the_selection(self):
+        with self.assertRaises(judge_bundle.NothingApplied) as cm:
+            judge_bundle.run(compiled_pack(), disclosed_bundle(FACTS), ["9", "10"], None, "jev-1.13.0",
+                             GENERATED_AT, backend=self._backend())
+        self.assertEqual(cm.exception.selection["rule_ids"], ["9", "10"])
+        self.assertEqual(cm.exception.selection["out_of_scope"], cm.exception.selection["requirement_refs"])
+
+    def test_the_cli_exits_3_not_bad_input(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            b = pathlib.Path(tmp) / "bundle.json"
+            b.write_text(json.dumps(disclosed_bundle(FACTS)))
+            argv = ["--bundle", str(b), "--pack", str(ROOT / "packs" / "everyday-rules" / "compiled" / "compiled.json"),
+                    "--generated-at", GENERATED_AT, "--rule-ids", "9"]
+            original, env = jev_judge.resolve_backend, dict(os.environ)
+            err, out = io.StringIO(), io.StringIO()
+            try:
+                os.environ["JEV_JUDGE_BACKEND"] = "mock"
+                jev_judge.resolve_backend = self._backend
+                with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                    code = judge_bundle.main(argv)
+            finally:
+                jev_judge.resolve_backend = original
+                os.environ.clear()
+                os.environ.update(env)
+        self.assertEqual(code, 3, err.getvalue())
+        self.assertEqual(out.getvalue(), "")
+        self.assertNotIn("bad input", err.getvalue())
+        self.assertIn("out_of_scope", err.getvalue())
 
 
 def never_called_backend():
