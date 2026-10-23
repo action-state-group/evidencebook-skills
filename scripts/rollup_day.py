@@ -17,6 +17,8 @@ only under the current pack_source_digest. A clause reworded but kept at the sam
 id is therefore never combined with an older judgment of it. A contract with a
 judged clause and no judge model id is refused (exit 2), never rolled up
 unscoped; only a contract whose clauses are all recomputed runs without a pin.
+Every report of this contract that scoping leaves out is counted in the
+summary's "reports_excluded", by reason.
 
 Conflicts are refused, not resolved by order: two reports under one pin for the
 same case and clause with different verdicts (a re-judgment that disagrees) put
@@ -87,6 +89,21 @@ _HEX64 = re.compile(r"[0-9a-f]{64}")
 
 def _is_digest(value):
     return isinstance(value, str) and _HEX64.fullmatch(value) is not None
+
+
+def count_excluded(capsule_bodies, contract, expected_pin, expected_pack):
+    """How many of this contract's evaluation-report/v1 records scoping left
+    out, by reason: a judged report under another judge pin, a recomputed
+    report under another pack source. Reported in the summary so a rollup that
+    finds nothing current says what it set aside, never a bare zero."""
+    counts = {"judge_pin_mismatch": 0, "pack_source_mismatch": 0}
+    for _capsule_id, body in capsule_bodies:
+        if not isinstance(body, dict) or body.get("record_type") != "evaluation-report/v1":
+            continue
+        if body.get("contract") != contract or _in_scope(body, contract, expected_pin, expected_pack):
+            continue
+        counts["judge_pin_mismatch" if "judge_pin_digest" in body else "pack_source_mismatch"] += 1
+    return counts
 
 
 def _group(capsule_bodies, contract, expected_pin, expected_pack, conflicts, key):
@@ -403,7 +420,8 @@ def main(argv):
                           "scripts/pack_compile.py-compiled contract carries one). When neither is "
                           "available and the contract has a judged clause, the rollup refuses "
                           "(evidence_unavailable, exit 2); a contract with no judged clause runs "
-                          "scoped by pack_source_digest alone.")
+                          "scoped by pack_source_digest alone. Judged reports "
+                          "under any other pin are excluded and counted in the summary's reports_excluded.")
     args = ap.parse_args(argv)
 
     spec = json.loads(args.spec.read_text())
@@ -476,6 +494,7 @@ def main(argv):
         "cases_complete": len(complete),
         "cases_incomplete": incomplete,
         "cases_conflicting": [{"case_id": c, "clauses": v} for c, v in sorted(conflicts.items())],
+        "reports_excluded": count_excluded(bodies, contract, expected_pin, expected_pack),
         "day_results": day_entries,
         "judge_pin_digest": expected_pin,
     }
