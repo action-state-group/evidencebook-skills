@@ -62,3 +62,11 @@ a backend error, an answer outside the allowed verdicts, or an answer below the
 pinned `min_confidence` (recorded `not_evaluable`). `run_daily.py` runs each call
 under `--judge-timeout` and treats a timeout or non-JSON output as
 `evidence unavailable`.
+
+`scripts/judge_bundle.py` never sends a partially disclosed bundle to the judge as
+if it were whole: a bundle that declares records missing (`records_mode`
+`declared_incomplete`, or a non-empty `missing[]`) gets `not_evaluable` on every
+row with the reason `bundle declares missing records`, and no judge call or pin;
+a bundle whose completeness contradicts itself (`payloads_mode` `none` beside
+disclosed payloads, an unknown mode, a completeness that is not a mapping) is
+refused as bad input.

@@ -702,6 +702,94 @@ class JudgePin(unittest.TestCase):
                              GENERATED_AT, backend=fixed_backend("met"))
 
 
+def never_called_backend():
+    return jevals.MockBackend(fn=lambda qid, q, state: (_ for _ in ()).throw(
+        AssertionError("the judge must never be called over a partially disclosed bundle")))
+
+
+class PartialDisclosureIsNeverJudgedSilently(unittest.TestCase):
+    """A bundle that declares records missing (records_mode declared_incomplete,
+    or a non-empty missing[]) is never judged as if it were whole: every row is
+    not_evaluable with that reason, no judge call, no pin. A bundle whose
+    completeness contradicts itself (payloads_mode none with disclosures) is
+    refused as bad input."""
+
+    def _incomplete(self, records_mode="declared_incomplete", missing=(OTHER_CAPSULE_ID,)):
+        bundle = disclosed_bundle(FACTS)
+        bundle["completeness"]["records_mode"] = records_mode
+        bundle["completeness"]["missing"] = list(missing)
+        return bundle
+
+    def _assert_abstained(self, bundle, capsule_id):
+        # Every claim still cites a record (agent-action-capsule#353): the one
+        # abstention_citation() picks, never an empty evidence list.
+        document = judge_bundle.run(compiled_pack(), bundle, None, capsule_id, "jev-1.13.0", GENERATED_AT,
+                                    backend=never_called_backend())
+        cited = judge_bundle.abstention_citation(bundle, capsule_id)
+        self.assertIsNotNone(cited)
+        self.assertEqual(len(document["claims"]), 13)
+        for claim in document["claims"]:
+            self.assertEqual(claim["verdict"], "not_evaluable")
+            self.assertEqual(claim["rationale"], judge_bundle.REASON_BUNDLE_INCOMPLETE)
+            self.assertNotIn("judge_pin", claim)
+            self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": cited}])
+
+    def test_declared_incomplete_is_not_evaluable_without_a_judge_call(self):
+        self._assert_abstained(self._incomplete(), None)
+
+    def test_a_non_empty_missing_list_alone_is_enough(self):
+        self._assert_abstained(self._incomplete(records_mode="complete"), None)
+
+    def test_narrowing_to_a_present_record_of_an_incomplete_bundle_is_not_evaluable(self):
+        self._assert_abstained(self._incomplete(), CAPSULE_ID)
+
+    def test_payloads_mode_none_with_disclosures_is_refused(self):
+        bundle = disclosed_bundle(FACTS)
+        bundle["completeness"]["payloads_mode"] = "none"
+        with self.assertRaisesRegex(judge_bundle.BadInput, "payloads_mode"):
+            judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT,
+                             backend=never_called_backend())
+
+    def test_an_unknown_records_or_payloads_mode_is_refused(self):
+        for key, value in (("records_mode", "mostly"), ("payloads_mode", "some")):
+            bundle = disclosed_bundle(FACTS)
+            bundle["completeness"][key] = value
+            with self.assertRaisesRegex(judge_bundle.BadInput, key):
+                judge_bundle.run(compiled_pack(), bundle, None, None, "jev-1.13.0", GENERATED_AT,
+                                 backend=never_called_backend())
+
+
+class MalformedInputIsBadInputNotATraceback(unittest.TestCase):
+    def _cli(self, bundle, pack):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            b, p = pathlib.Path(tmp) / "bundle.json", pathlib.Path(tmp) / "pack.json"
+            b.write_text(json.dumps(bundle))
+            p.write_text(json.dumps(pack))
+            return subprocess.run([sys.executable, JUDGE_BUNDLE_PATH, "--bundle", str(b), "--pack", str(p),
+                                   "--generated-at", GENERATED_AT], capture_output=True, text=True,
+                                  env=dict(os.environ, JEV_JUDGE_BACKEND="mock"))
+
+    def test_a_non_mapping_completeness_is_bad_input(self):
+        for completeness in (["complete"], "complete", 7):
+            bundle = disclosed_bundle(FACTS)
+            bundle["completeness"] = completeness
+            proc = self._cli(bundle, compiled_pack())
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("completeness", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+            self.assertEqual(proc.stdout, "")
+
+    def test_a_clause_without_check_id_is_bad_input(self):
+        pack = compiled_pack()
+        del pack["clauses"][0]["check_id"]
+        proc = self._cli(disclosed_bundle(FACTS), pack)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("check_id", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(proc.stdout, "")
+
+
 class CliSmoke(unittest.TestCase):
     """End-to-end CLI runs against the real compiled pack, JEV_JUDGE_BACKEND=mock."""
 

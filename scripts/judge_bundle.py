@@ -39,6 +39,10 @@ so there is no single record's worth of them to narrow to.
 
 Fail-closed rules, never inferred:
 
+  contradictory        completeness that is not a mapping, an unknown
+  completeness         records_mode/payloads_mode, or payloads_mode "none"
+                       beside a populated disclosures map: refused as bad
+                       input (exit 1) before anything is judged.
   WITHHELD bundle      completeness.payloads_mode == "none" AND no
                        "disclosures" key at all (capsule-anchor's countersign
                        `parse_bundle` rule, reused verbatim). Checked first,
@@ -58,6 +62,14 @@ Fail-closed rules, never inferred:
                        missing"; otherwise "record not found in bundle".
                        Every in-scope row: not_evaluable, citing the root
                        record -- never an inferred verdict.
+  declared incomplete  the bundle says records are missing
+                       (completeness.records_mode "declared_incomplete", or a
+                       non-empty completeness.missing): never judged as if it
+                       were whole, narrowed or not. Every in-scope row:
+                       not_evaluable, reason "bundle declares missing
+                       records", citing abstention_citation()'s record.
+                       Checked after the two narrowing reasons above for a
+                       target that is itself absent.
   payload withheld     (--capsule-id narrowing only) the named record exists
                        in `records[]` but has no entry (or an empty one) in
                        `disclosures`. Every in-scope row: not_evaluable,
@@ -136,6 +148,10 @@ REASON_RECORD_DECLARED_MISSING = "record declared missing"
 REASON_RECORD_NOT_FOUND = "record not found in bundle"
 REASON_NOTHING_DISCLOSED = "no disclosed record in this bundle"
 REASON_NOT_SELECTED = "not judged in this run: outside the --rule-ids selection"
+REASON_BUNDLE_INCOMPLETE = "bundle declares missing records"
+
+RECORDS_MODES = ("complete", "declared_incomplete")
+PAYLOADS_MODES = ("none", "selected", "all")
 
 
 class BadInput(Exception):
@@ -155,14 +171,21 @@ def load_json(path, what):
         raise BadInput(f"{what} {path!r} is not valid JSON: {e}")
 
 
-def load_pack(path):
-    pack = load_json(path, "pack")
+def check_pack(pack, where):
+    """Every clause this script will read carries the fields it reads: an id, a
+    claim and a check_id (request_clauses() sends all three to the judge)."""
     if not isinstance(pack, dict) or not isinstance(pack.get("clauses"), list) or not pack["clauses"]:
-        raise BadInput(f"pack {path!r} carries no clauses -- not a compiled pack")
+        raise BadInput(f"pack {where!r} carries no clauses -- not a compiled pack")
     for clause in pack["clauses"]:
         if not isinstance(clause, dict) or not clause.get("id") or not clause.get("claim"):
-            raise BadInput(f"pack {path!r} carries a clause with no id/claim: {clause!r}")
+            raise BadInput(f"pack {where!r} carries a clause with no id/claim: {clause!r}")
+        if not isinstance(clause.get("check_id"), str) or not clause["check_id"]:
+            raise BadInput(f"pack {where!r} carries a clause with no check_id: {clause['id']!r}")
     return pack
+
+
+def load_pack(path):
+    return check_pack(load_json(path, "pack"), path)
 
 
 def select_clauses(pack, rule_ids):
@@ -199,13 +222,43 @@ def load_bundle(path):
     return bundle
 
 
+def completeness_of(bundle):
+    """bundle.completeness, checked: a mapping (absent reads as {}), records_mode
+    and payloads_mode each absent or a known value, missing absent or a list,
+    and never payloads_mode "none" beside a populated disclosures map -- a
+    bundle that says it disclosed no payloads and then discloses some
+    contradicts itself, and which half to believe is not this script's call."""
+    completeness = bundle.get("completeness")
+    if completeness is None:
+        completeness = {}
+    if not isinstance(completeness, dict):
+        raise BadInput(f"bundle.completeness must be a mapping, got {type(completeness).__name__}")
+    for key, known in (("records_mode", RECORDS_MODES), ("payloads_mode", PAYLOADS_MODES)):
+        if key in completeness and completeness[key] not in known:
+            raise BadInput(f"bundle.completeness.{key} {completeness[key]!r} is not one of {list(known)}")
+    if "missing" in completeness and not isinstance(completeness["missing"], list):
+        raise BadInput("bundle.completeness.missing must be a list")
+    if completeness.get("payloads_mode") == "none" and bundle.get("disclosures"):
+        raise BadInput("bundle.completeness.payloads_mode is \"none\" but bundle.disclosures discloses "
+                       "payloads: the bundle contradicts itself")
+    return completeness
+
+
+def declares_incomplete(bundle):
+    """True when the bundle itself says records are missing: records_mode
+    "declared_incomplete", or a non-empty completeness.missing. Such a bundle is
+    never judged as if it were whole -- a missing record may be exactly the one
+    a rule turns on."""
+    completeness = completeness_of(bundle)
+    return completeness.get("records_mode") == "declared_incomplete" or bool(completeness.get("missing"))
+
+
 def is_withheld(bundle):
     """capsule-anchor's countersign `parse_bundle` rule, reused verbatim: a bundle
     is WITHHELD when completeness.payloads_mode is "none" and it carries no
     `disclosures` key at all (not merely an empty one -- key absence is the
     signal)."""
-    completeness = bundle.get("completeness") or {}
-    return completeness.get("payloads_mode") == "none" and "disclosures" not in bundle
+    return completeness_of(bundle).get("payloads_mode") == "none" and "disclosures" not in bundle
 
 
 def _bundle_records(bundle):
@@ -253,7 +306,7 @@ def resolve_target(bundle, capsule_id):
     record = next((r for r in records if isinstance(r, dict) and r.get("capsule_id") == capsule_id), None)
     if record is not None:
         return record, None
-    missing = (bundle.get("completeness") or {}).get("missing") or []
+    missing = completeness_of(bundle).get("missing") or []
     reason = REASON_RECORD_DECLARED_MISSING if capsule_id in missing else REASON_RECORD_NOT_FOUND
     return None, reason
 
@@ -301,6 +354,11 @@ def judge_bundle(bundle, clauses, capsule_id, judge_model_id, backend=None):
         record, reason = resolve_target(bundle, capsule_id)
         if record is None:
             return not_evaluable_answers(clauses, reason), [], False
+
+    if declares_incomplete(bundle):
+        return not_evaluable_answers(clauses, REASON_BUNDLE_INCOMPLETE), [], False
+
+    if capsule_id:
         facts = _bundle_disclosures(bundle).get(capsule_id) or None
         if facts is None:
             return not_evaluable_answers(clauses, REASON_PAYLOAD_WITHHELD), [], False
@@ -361,6 +419,8 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     tests/test_jev_judge.py calls jev_judge.judge()/judge_many() directly. Raises
     BadInput/RollupError/EvidenceUnavailable/OSError for bad input, JudgeBackendFailure
     for a judge backend failure -- main() is the only place that catches them."""
+    check_pack(pack, pack.get("contract_ref") if isinstance(pack, dict) else None)
+    completeness_of(bundle)
     clauses = select_clauses(pack, rule_ids)
     # A pure function of the pack and this --rule-ids selection, independent of
     # the bundle: refused here, before the judge is ever consulted (never after
