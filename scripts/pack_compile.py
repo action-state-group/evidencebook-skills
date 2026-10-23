@@ -420,6 +420,20 @@ def validate_source(source):
                     issues.append(f"{cwhere}.recompute_precheck must be a non-empty string")
                 elif tier != "judged":
                     issues.append(f"{cwhere}.recompute_precheck applies only to a tier 'judged' criterion")
+            # What an out_of_scope answer means for this row (e.g. "the situation
+            # the rule is about never came up"), compiled into the claim beside
+            # met/not_met -- so a row whose met_means names a situation is never
+            # answered met when that situation never arose. Only where the row
+            # can be answered out_of_scope at all.
+            if "out_of_scope_means" in crit:
+                oos = crit["out_of_scope_means"]
+                if not isinstance(oos, str) or not oos.strip():
+                    issues.append(f"{cwhere}.out_of_scope_means must be a non-empty string")
+                elif not switches.get("out_of_scope_verdict"):
+                    issues.append(f"{cwhere}.out_of_scope_means is set but switches.out_of_scope_verdict is "
+                                  "off: the judge is never offered out_of_scope")
+                elif crit.get("never_out_of_scope"):
+                    issues.append(f"{cwhere}.out_of_scope_means contradicts never_out_of_scope")
             # The normalized action fields this criterion's own judge prompt
             # declares it reads -- capsule-engine #96's input_refs vocabulary
             # (NORMALIZED_ACTION_FIELDS, above). Optional: a criterion whose
@@ -590,6 +604,8 @@ def judge_claim(crit):
         parts.append("Answer met when: " + crit["met_means"].strip() + ".")
     if crit.get("not_met_means"):
         parts.append("Answer not_met when: " + crit["not_met_means"].strip() + ".")
+    if crit.get("out_of_scope_means"):
+        parts.append("Answer out_of_scope when: " + crit["out_of_scope_means"].strip() + ".")
     if crit.get("scope_note"):
         parts.append("Scope: " + " ".join(crit["scope_note"].split()))
     return "\n".join(parts)
