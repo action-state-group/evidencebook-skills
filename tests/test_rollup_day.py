@@ -731,6 +731,21 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         self.assertEqual(summary["cases_judged"], 0)
         self.assertEqual(summary["reports_excluded"]["judge_pin_mismatch"], len(self.spec["clauses"]))
 
+    def test_an_empty_judge_model_id_is_refused_not_read_as_no_pin(self):
+        # argparse accepts --judge-model-id ''; it used to roll up every judged
+        # report unscoped (exit 0, cases_judged 1, judge_pin_mismatch 0).
+        for model_id in ("", "  "):
+            with self.subTest(model_id=model_id):
+                argv = ["--profile", "p", "--spec", str(AIRLINE_SPEC), "--capsulectl", self.ctl,
+                        "--judge-cmd", STUB_JUDGE, "--generated-at", "2026-09-24T23:59:59Z",
+                        "--out", str(self.tmp / "out"), "--judge-model-id", model_id]
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+                    rollup_day.main(argv)
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn("--judge-model-id must name the judge's model id", err.getvalue())
+                self.assertFalse((self.tmp / "out").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -423,6 +423,11 @@ def main(argv):
                           "scoped by pack_source_digest alone. Judged reports "
                           "under any other pin are excluded and counted in the summary's reports_excluded.")
     args = ap.parse_args(argv)
+    # An explicit blank id (an unset shell variable, say) is a caller error,
+    # never a silent fall back to the spec's model id or to no pin at all.
+    if args.judge_model_id is not None and not args.judge_model_id.strip():
+        ap.error("--judge-model-id must name the judge's model id; an empty one would admit "
+                 "reports sealed under any pin")
 
     spec = json.loads(args.spec.read_text())
     root = args.spec.resolve().parents[2]
