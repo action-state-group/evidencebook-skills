@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Judge a whole evidence-bundle/v2 file against a compiled pack's rows
 (packs/everyday-rules/pack-source.yaml, compiled by scripts/pack_compile.py),
-and print one Evidence Result v0 document.
+and write one Evidence Result v0 document plus its judge sidecar.
 
     python3 scripts/judge_bundle.py --bundle BUNDLE.json --pack COMPILED.json \\
-        --generated-at 2026-10-08T00:00:00Z [--capsule-id ID] [--rule-ids 8,9,26] \\
-        [--judge-model-id jev-1.13.0]
+        --generated-at 2026-10-08T00:00:00Z --out RESULT.json [--capsule-id ID] \\
+        [--rule-ids 8,9,26] [--judge-model-id jev-1.13.0]
+
+writes RESULT.json and, next to it, RESULT.judge.json (see "Judge sidecar"
+below). Without --out the Result goes to stdout and --sidecar PATH is required.
 
 Bundle shape (evidence-bundle/v2 -- capsule-cli's `internal/cli/bundle.go`,
 `AssembleBundle`): a top-level object with `bundle_kind`, `records` (a list of
@@ -105,11 +108,12 @@ batch's pin, same as it was decided from the batch's one shared request, not
 a request of its own. A reader of the pin alone learns what kind of fact
 THIS CALL's shared judge request could read from, across every clause
 batched into it; evidence[] on each claim itself still says WHICH record
-that specific claim was actually judged from. The document also
-records the judged selection (`judged_selection`: the rows sent, in order, and
-which came back out_of_scope -- claims[] omits those), so a reader holding the
-pack and the document recomputes the pin's prompt_template_hash and input_refs
-without being told which rows were asked. A fail-closed abstention
+that specific claim was actually judged from. The judged selection
+(`judged_selection`: the rows sent, in order, and which came back out_of_scope
+-- claims[] omits those) is recorded in the judge sidecar, not the Result, so a
+reader holding the pack, the Result and its sidecar recomputes the pin's
+prompt_template_hash and input_refs without being told which rows were asked.
+A fail-closed abstention
 (withheld/missing/undisclosed, above) carries no pin: no model was ever
 consulted, so no judge identity is sealed on it -- only the reason. Its
 evidence[] cites only the record the run was asked about: the --capsule-id
@@ -125,6 +129,21 @@ No forbidden vocabulary: every string this script emits (rationale, reasons) is
 either the judge's own answer or one of the fixed reason strings above -- checked
 by tests/test_forbidden_vocabulary.py against vocab/forbidden-vocabulary.yaml.
 
+Judge sidecar: the Result document carries only the top-level keys of the
+evidence-result-v0 schema's EvidenceResult (result_version, generated_at,
+claims, aggregate, view). What the judge run adds beside it goes in a sidecar
+file, by default `<result>.judge.json` next to the Result (RESULT.json ->
+RESULT.judge.json):
+
+    {"result_sha256": "<sha256 hex of the exact Result bytes written>",
+     "judged_selection": {"rule_ids": [...], "requirement_refs": [...],
+                          "out_of_scope": [...], "allow_out_of_scope": true}}
+
+The sidecar cites its Result by digest, never by path: a sidecar whose
+result_sha256 does not match the Result in hand is not that Result's sidecar.
+An abstention document (every row not_evaluable, no judge call) gets a sidecar
+too, with the same selection. The Result is written first, then the sidecar.
+
 Exit codes: 0 on a successful run (whatever the verdicts), 1 on a malformed
 request (the "bad input" cases above), 2 on a judge backend failure, 3 when the
 judge answered out_of_scope on every selected row (no claim to make: a Result v0
@@ -134,6 +153,7 @@ guessed verdict; never a partial document on stdout.
     JEV_JUDGE_BACKEND=mock python3 scripts/judge_bundle.py --bundle ... --pack ...
 """
 import argparse
+import hashlib
 import json
 import pathlib
 import sys
@@ -429,8 +449,18 @@ def build_judge_pin(judge_model_id, input_refs, clauses):
 
 
 def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backend=None):
+    """The Result v0 document alone; run_judged() also returns the judged
+    selection that goes in the judge sidecar."""
+    document, _selection = run_judged(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at,
+                                      backend=backend)
+    return document
+
+
+def run_judged(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backend=None):
     """Everything between "have a loaded pack and bundle" and "have a Result v0
-    document": pulled out of main() so a test can inject a mock backend without
+    document and its judged selection" (returned as a pair; the selection goes
+    in the judge sidecar, never on the document): pulled out of main() so a
+    test can inject a mock backend without
     going through the CLI/JEV_JUDGE_BACKEND environment seam, the same way
     tests/test_jev_judge.py calls jev_judge.judge()/judge_many() directly. Raises
     BadInput/RollupError/EvidenceUnavailable/OSError for bad input, JudgeBackendFailure
@@ -527,25 +557,42 @@ def run(pack, bundle, rule_ids, capsule_id, judge_model_id, generated_at, backen
     for claim in document["claims"]:
         claim["rationale"] = rationales.get(claim["requirement_ref"], "")
     document["view"]["title"] = report_title(pack, case_id)
-    document["judged_selection"] = judged_selection(clauses, criterion_verdicts)
-    return document
+    return document, judged_selection(clauses, criterion_verdicts)
 
 
 def judged_selection(clauses, criterion_verdicts):
-    """What this call put in front of the judge, recorded on the document: the
+    """What this call put in front of the judge, recorded in the judge sidecar: the
     selected rows (rule_ids and requirement_refs, in the order sent) and which
     of them came back out_of_scope. claims[] omits an out_of_scope row (Result
     v0 has no such verdict), yet the pin's prompt_template_hash and input_refs
-    cover every row sent; with this, a reader holding the pack and the document
-    alone recomputes both (select the pack's clauses by requirement_ref, then
-    jev_judge.compiled_prompt_digest(request_clauses(...), allow_out_of_scope,
-    "disclosed_facts") and declared_input_refs(...)). An extension key beyond
-    the vendored evidence-result-v0 schema, like a claim's rule_id/judge_pin."""
+    cover every row sent; with this, a reader holding the pack, the document and
+    its sidecar recomputes both (select the pack's clauses by requirement_ref,
+    then jev_judge.compiled_prompt_digest(request_clauses(...),
+    allow_out_of_scope, "disclosed_facts") and declared_input_refs(...)). Not a
+    key of the Result document: evidence-result-v0's EvidenceResult admits no
+    key beyond its own (judge_sidecar())."""
     return {
         "rule_ids": [c.get("rule_id") for c in clauses],
         "requirement_refs": [c["id"] for c in clauses],
         "out_of_scope": [c["id"] for c in clauses if criterion_verdicts.get(c["id"]) == "out_of_scope"],
         "allow_out_of_scope": ALLOW_OUT_OF_SCOPE,
+    }
+
+
+def sidecar_path_for(result_path):
+    """`<result>.judge.json` next to the Result: RESULT.json -> RESULT.judge.json,
+    any other name gets .judge.json appended."""
+    name = result_path.name
+    stem = name[:-len(".json")] if name.endswith(".json") else name
+    return result_path.with_name(stem + ".judge.json")
+
+
+def judge_sidecar(result_bytes, selection):
+    """The judge sidecar for one Result: what the run judged, citing the Result
+    by the sha256 of the exact bytes written."""
+    return {
+        "result_sha256": hashlib.sha256(result_bytes).hexdigest(),
+        "judged_selection": selection,
     }
 
 
@@ -562,7 +609,17 @@ def main(argv):
                          "judged rules are claimed not_evaluable, so a partial run never reads as a full pass")
     ap.add_argument("--judge-model-id", default=None, help="defaults to the judge this script pins (jev_judge.PINNED_MODEL)")
     ap.add_argument("--out", type=pathlib.Path, default=None, help="write the Result v0 document here (default: stdout)")
+    ap.add_argument("--sidecar", type=pathlib.Path, default=None,
+                    help="write the judge sidecar here (default: <out>.judge.json next to --out; "
+                         "required when the Result goes to stdout)")
     args = ap.parse_args(argv)
+    if args.out is None and args.sidecar is None:
+        # Refused before the judge is consulted: a Result on stdout with no
+        # sidecar would drop the judged selection the pin is recomputed from.
+        print("bad input: the Result goes to stdout, so --sidecar PATH is required for its judge sidecar",
+              file=sys.stderr)
+        return 1
+    sidecar_path = args.sidecar or sidecar_path_for(args.out)
 
     judge_model_id = args.judge_model_id or jev_judge.PINNED_MODEL
     rule_ids = [r.strip() for r in args.rule_ids.split(",") if r.strip()] if args.rule_ids else None
@@ -570,7 +627,8 @@ def main(argv):
     try:
         pack = load_pack(args.pack)
         bundle = load_bundle(args.bundle)
-        document = run(pack, bundle, rule_ids, args.capsule_id, judge_model_id, args.generated_at)
+        document, selection = run_judged(pack, bundle, rule_ids, args.capsule_id, judge_model_id,
+                                         args.generated_at)
     except jev_judge.JudgeError as e:  # e.g. an unknown JEV_JUDGE_BACKEND, before any call
         print(f"judge backend failure: {e}", file=sys.stderr)
         return 2
@@ -586,10 +644,13 @@ def main(argv):
         return 3
 
     out_text = json.dumps(document, indent=2) + "\n"
+    out_bytes = out_text.encode("utf-8")
     if args.out:
-        args.out.write_text(out_text)
+        args.out.write_bytes(out_bytes)
     else:
         sys.stdout.write(out_text)
+        sys.stdout.flush()
+    sidecar_path.write_text(json.dumps(judge_sidecar(out_bytes, selection), indent=2) + "\n")
     return 0
 
 

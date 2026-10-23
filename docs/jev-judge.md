@@ -54,6 +54,18 @@ say it is the mock (`run_daily.py` seals that id before the judge answers), and
 `scripts/judge_bundle.py` stamps the backend onto the id it seals, e.g.
 `jev-1.13.0 (mock backend, no model read the evidence)`.
 
+`scripts/judge_bundle.py` writes the Result document and, next to it, a judge
+sidecar `<result>.judge.json` (`--out day.json` gives `day.judge.json`; with the
+Result on stdout, `--sidecar PATH` is required). The sidecar holds
+`result_sha256`, the sha256 of the exact Result bytes written, and
+`judged_selection`: the rows sent to the judge in order (`rule_ids`,
+`requirement_refs`), which came back `out_of_scope` (claims[] omits those), and
+`allow_out_of_scope`. With the pack, the Result and its sidecar, a reader
+recomputes the pin's `prompt_template_hash` and `input_refs`. The Result itself
+adds no top-level key beyond the evidence-result-v0 schema's own. When every
+selected row comes back `out_of_scope` there is no Result and no sidecar: the
+run exits 3 and prints the judged selection on stderr.
+
 ## Failure behaviour
 
 Every failure is a refusal, never a guessed verdict: an unknown
