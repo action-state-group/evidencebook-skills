@@ -20,7 +20,7 @@ on the tau2 airline book. Still pending: the `capsulectl-engine` plugin, so a co
 - `cll list --profile NAME` — read the day's range: the capsules the book committed on
   the day (`appended_at`, UTC), of which the cases are those whose payload carries a
   `case`. Re-running a day seals nothing new: each report's capsule is built with a
-  timestamp fixed to the day, so the same judgment is the same capsule, and `close`
+  timestamp fixed to the day, so the same judgment is the same capsule, and `book close`
   returns the day's existing Close (`already_closed: true`).
 - `get` / `verify --capsule FILE` — resolve and authenticate each case before acting on
   it (`get --raw --output FILE`, then `verify`). Never act on an unverified record.
@@ -44,9 +44,9 @@ on the tau2 airline book. Still pending: the `capsulectl-engine` plugin, so a co
   it reads `INSUFFICIENT`) and the run log says so; it is not a lesser Close, it is an
   honest one for a single-party contract. A contract with no counterparty passes the
   compiled placeholder (`capsulectl book close` requires the flag today) and never invents a
-  party. `close` refuses a day that has not ended, so a run closes the previous day: the
+  party. `book close` refuses a day that has not ended, so a run closes the previous day: the
   reports a run seals are committed on the day it runs, so the judgments of day D's
-  cases, made on D+1, are covered by the Close for D+1, sealed by the next run. `close` also refuses a
+  cases, made on D+1, are covered by the Close for D+1, sealed by the next run. `book close` also refuses a
   book whose times are displaced by a clock jump, and a day whose exchanges were pinned
   into the next; report the refusal verbatim as `evidence unavailable` for the Close and
   never work around it.

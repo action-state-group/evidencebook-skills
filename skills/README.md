@@ -70,7 +70,7 @@ when compiled with `--out demo/<name>`, for example
 `everyday-rules` does not run through these skills: it compiles to `packs/everyday-rules/compiled/`
 and is judged with `scripts/judge_bundle.py`.
 
-A run closes the previous day, since `close` refuses a day that has not ended. The reports
+A run closes the previous day, since `book close` refuses a day that has not ended. The reports
 a run seals are committed on the day it runs, so the judgments of day D's cases, made on
 D+1, are covered by the Close for D+1. The weekly run writes the blind packets to a
 directory beside its run directory; give the reviewer that directory and nothing else.

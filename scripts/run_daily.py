@@ -21,7 +21,7 @@ API model string) is the only thing that can catch a mismatch.
         --date 2026-09-16 --out RUN_DIR
 
 Re-running a day seals nothing new: every report is published with a timestamp fixed
-to the day, so the same judgment is the same capsule, and `close` returns the day's
+to the day, so the same judgment is the same capsule, and `book close` returns the day's
 existing Close.
 
 Rubric switches: a compiled contract may carry a top-level "switches" dict and,
