@@ -87,10 +87,11 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     rule scripts/run_daily.py's build_report() follows for its own
     evaluation-report/v1 record: a recomputed clause was never judged, and citing
     a judge's identity on it would misstate what produced the verdict. `rule_id`,
-    `judge_pin_digest`, and `judge_pin` are additional keys on the claim beyond
-    the vendored evidence-result-v0 schema's own fields -- named here as a known
-    extension, never assumed schema-valid against that schema's own
-    additionalProperties rule.
+    `judge_pin_digest`, and `judge_pin` are written as one `x-judge-pin` object,
+    `{"rule_id", "pin_digest", "pin"}` (each present only when known): evidence-result-v0
+    section 8a admits a claim member only if its name begins with `x-`, and leaves the
+    member's content to its producer. A bare `rule_id` or `judge_pin*` key makes the
+    Result invalid (agent-action-capsule's neg-unprefixed-claim-member vector).
 
     `rule_id` is the bare source-rule number (packs/everyday-rules/pack-source.yaml's
     `rule_id`), when the compiled contract's clause carries one -- `requirement_ref`
@@ -153,12 +154,15 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         "proofs": [],
         "presentation": {"kind": "disclosure", "status": disclosure_status, "evidence": evidence},
     }
+    ext = {}
     if rule_id is not None:
-        claim["rule_id"] = rule_id
+        ext["rule_id"] = rule_id
     if tier == "judged" and judge_pin_digest is not None:
-        claim["judge_pin_digest"] = judge_pin_digest
+        ext["pin_digest"] = judge_pin_digest
         if judge_pin is not None:
-            claim["judge_pin"] = dict(judge_pin)
+            ext["pin"] = dict(judge_pin)
+    if ext:
+        claim["x-judge-pin"] = ext
     return claim
 
 

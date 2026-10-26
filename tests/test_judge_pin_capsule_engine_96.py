@@ -108,7 +108,7 @@ class LiteralPinHashes(unittest.TestCase):
             "records": [{"capsule_id": CAPSULE_ID}],
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
-        pin = document["claims"][0]["judge_pin"]
+        pin = document["claims"][0]["x-judge-pin"]["pin"]
         self.assertEqual(pin["prompt_template_hash"], RULE9_PROMPT_TEMPLATE_HASH)
         self.assertEqual(pin["schema_hash"], ANSWER_SCHEMA_HASH)
 
@@ -148,7 +148,7 @@ class PinCoversTheQuestions(unittest.TestCase):
                 "records": [{"capsule_id": CAPSULE_ID}],
                 "disclosures": {CAPSULE_ID: facts}, "completeness": {"payloads_mode": "selected", "missing": []},
             }, ["9"], None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
-            pins.append(document["claims"][0]["judge_pin"]["prompt_template_hash"])
+            pins.append(document["claims"][0]["x-judge-pin"]["pin"]["prompt_template_hash"])
         self.assertEqual(pins[0], pins[1])
 
 
@@ -179,7 +179,7 @@ class RealLoaderAccepts(unittest.TestCase):
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, None, None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
         for claim in document["claims"]:
-            self._assert_real_loader_accepts(claim["judge_pin"])
+            self._assert_real_loader_accepts(claim["x-judge-pin"]["pin"])
 
     def test_judge_bundle_rule9_pin_is_accepted(self):
         pin, _digest = pin_for("jev-1.13.0", judge_bundle.declared_input_refs(

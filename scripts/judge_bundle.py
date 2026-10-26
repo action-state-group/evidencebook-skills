@@ -88,7 +88,7 @@ judge: one jev_judge.judge_many() call, "disclosed_facts" mode
 the same batched request's shared state, same cost-fix packs/airline-support-outcomes
 uses for one conversation's criteria.
 
-Every claim the judge actually ran on carries judge_pin_digest/judge_pin (the
+Every claim the judge actually ran on carries an `x-judge-pin` member {rule_id, pin_digest, pin} (the
 judged-instrument pin, scripts/instrument_pin.py: model_id,
 prompt_template_hash, schema_hash, input_refs and model_hosting -- matching
 capsule-engine PR #96's own judge_pin key set -- a `judged` claim names its
