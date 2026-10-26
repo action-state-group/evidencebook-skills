@@ -107,7 +107,7 @@ def judged_claims(document):
     """The claims a run actually judged: a --rule-ids run also claims every
     unselected judged rule as not_evaluable (REASON_NOT_SELECTED), and those
     carry no judge pin and cite no record."""
-    return [c for c in document["claims"] if "judge_pin_digest" in c]
+    return [c for c in document["claims"] if "pin_digest" in c.get("x-judge-pin", {})]
 
 
 def fixed_backend(verdict):
@@ -224,7 +224,7 @@ class Withheld(unittest.TestCase):
         document = judge_bundle.run(pack, withheld_bundle(), None, None, "jev-1.13.0", GENERATED_AT)
         self.assertEqual(len(document["claims"]), 13)
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in document["claims"]))
-        self.assertTrue(all("judge_pin_digest" not in c for c in document["claims"]))
+        self.assertTrue(all("x-judge-pin" not in c or "pin_digest" not in c["x-judge-pin"] for c in document["claims"]))
         self.assertTrue(all(c["rationale"] == judge_bundle.REASON_PAYLOAD_WITHHELD for c in document["claims"]))
         # A fail-closed abstention cites only the bundle it was asked about,
         # never a record it read (it read none): a claim cites at least one
@@ -532,15 +532,15 @@ class PartialRunIsNotAFullPass(unittest.TestCase):
         document = judge_bundle.run(pack, bundle, ["9"], None, "jev-1.13.0",
                                     GENERATED_AT, backend=fixed_backend("met"))
         judged_rule_ids = {c["rule_id"] for c in pack["clauses"] if c.get("tier") == "judged"}
-        self.assertEqual({c["rule_id"] for c in document["claims"]}, judged_rule_ids)
-        by_rule = {c["rule_id"]: c for c in document["claims"]}
+        self.assertEqual({c["x-judge-pin"]["rule_id"] for c in document["claims"]}, judged_rule_ids)
+        by_rule = {c["x-judge-pin"]["rule_id"]: c for c in document["claims"]}
         self.assertEqual(by_rule["9"]["verdict"], "met")
         for rid, claim in by_rule.items():
             if rid == "9":
                 continue
             self.assertEqual(claim["verdict"], "not_evaluable")
             self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
-            self.assertNotIn("judge_pin_digest", claim)
+            self.assertNotIn("pin_digest", claim["x-judge-pin"])
             self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": bundle["root"]}])
         buckets = document["aggregate"]["buckets"]
         self.assertEqual(len(buckets["met"]), 1)
@@ -576,7 +576,7 @@ class WholeBundleDefault(unittest.TestCase):
         for claim in document["claims"]:
             cited = sorted(e["digest"] for e in claim["evidence"])
             self.assertEqual(cited, expected_ids)
-            self.assertIn("judge_pin_digest", claim)
+            self.assertIn("pin_digest", claim["x-judge-pin"])
 
     def test_every_claim_in_one_batch_carries_the_same_pin_even_a_clause_with_no_input_refs_of_its_own(self):
         # judge_batch: true -- every in-scope clause shares one jev_judge.judge_many()
@@ -589,8 +589,8 @@ class WholeBundleDefault(unittest.TestCase):
         document = judge_bundle.run(pack, bundle, ["9", "21"], None, "jev-1.13.0", GENERATED_AT,
                                     backend=fixed_backend("met"))
         self.assertEqual(len(judged_claims(document)), 2)
-        digests = {c["judge_pin_digest"] for c in judged_claims(document)}
-        pins = [c["judge_pin"] for c in judged_claims(document)]
+        digests = {c["x-judge-pin"]["pin_digest"] for c in judged_claims(document)}
+        pins = [c["x-judge-pin"]["pin"] for c in judged_claims(document)]
         self.assertEqual(len(digests), 1)
         self.assertEqual(pins[0], pins[1])
         self.assertEqual(pins[0]["input_refs"], ["amount_minor", "currency", "recurrence"])
@@ -674,13 +674,13 @@ class JudgePin(unittest.TestCase):
         document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
                                     GENERATED_AT, backend=fixed_backend("met"))
         claim = document["claims"][0]
-        self.assertIn("judge_pin_digest", claim)
-        self.assertEqual(claim["judge_pin"]["model_id"], jev_judge.sealed_model_id("jev-1.13.0", fixed_backend("met")))
-        self.assertEqual(claim["judge_pin"]["model_hosting"], "hosted")
+        self.assertIn("pin_digest", claim["x-judge-pin"])
+        self.assertEqual(claim["x-judge-pin"]["pin"]["model_id"], jev_judge.sealed_model_id("jev-1.13.0", fixed_backend("met")))
+        self.assertEqual(claim["x-judge-pin"]["pin"]["model_hosting"], "hosted")
         # rule 9's own judge_input_refs (packs/everyday-rules/pack-source.yaml)
-        self.assertEqual(claim["judge_pin"]["input_refs"], ["amount_minor", "currency", "recurrence"])
+        self.assertEqual(claim["x-judge-pin"]["pin"]["input_refs"], ["amount_minor", "currency", "recurrence"])
         # ... never a record/capsule_id -- that stays in evidence[] (above tests), not the pin.
-        self.assertNotIn(CAPSULE_ID, claim["judge_pin"]["input_refs"])
+        self.assertNotIn(CAPSULE_ID, claim["x-judge-pin"]["pin"]["input_refs"])
 
     def test_a_mock_backend_stamps_itself_in_the_pin_never_a_named_real_model(self):
         """A pin sealed over a mock backend's answer names the mock: the
@@ -689,7 +689,7 @@ class JudgePin(unittest.TestCase):
         pack = compiled_pack()
         document = judge_bundle.run(pack, disclosed_bundle(FACTS), ["9"], None, "jev-1.13.0",
                                     GENERATED_AT, backend=fixed_backend("met"))
-        model_id = document["claims"][0]["judge_pin"]["model_id"]
+        model_id = document["claims"][0]["x-judge-pin"]["pin"]["model_id"]
         self.assertNotEqual(model_id, "jev-1.13.0")
         self.assertIn("mock backend", model_id)
         self.assertTrue(model_id.startswith("jev-1.13.0"))
@@ -732,7 +732,7 @@ class JudgedSelectionIsRecorded(unittest.TestCase):
         by_rule = {c["rule_id"]: c["id"] for c in pack["clauses"]}
         # Rule 10 came back out_of_scope, so the only judged claim is rule 9's;
         # the unselected rules are pin-less not_evaluable claims.
-        self.assertEqual([c["rule_id"] for c in document["claims"] if "judge_pin" in c], ["9"])
+        self.assertEqual([c["x-judge-pin"]["rule_id"] for c in document["claims"] if "pin" in c["x-judge-pin"]], ["9"])
         self.assertNotIn("judged_selection", document)
         self.assertEqual(selection["rule_ids"], ["9", "10"])
         self.assertEqual(selection["requirement_refs"], [by_rule["9"], by_rule["10"]])
@@ -742,7 +742,7 @@ class JudgedSelectionIsRecorded(unittest.TestCase):
         pack, document, selection = self._document()
         by_id = {c["id"]: c for c in pack["clauses"]}
         clauses = [by_id[ref] for ref in selection["requirement_refs"]]
-        pin = document["claims"][0]["judge_pin"]
+        pin = document["claims"][0]["x-judge-pin"]["pin"]
         self.assertEqual(jev_judge.compiled_prompt_digest(judge_bundle.request_clauses(clauses),
                                                           selection["allow_out_of_scope"],
                                                           mode="disclosed_facts"),
@@ -1045,7 +1045,7 @@ class PartialDisclosureIsNeverJudgedSilently(unittest.TestCase):
         for claim in document["claims"]:
             self.assertEqual(claim["verdict"], "not_evaluable")
             self.assertEqual(claim["rationale"], judge_bundle.REASON_BUNDLE_INCOMPLETE)
-            self.assertNotIn("judge_pin", claim)
+            self.assertNotIn("pin", claim["x-judge-pin"])
             self.assertEqual(claim["evidence"], [{"digest_alg": "SHA-256", "digest": cited}])
 
     def test_declared_incomplete_is_not_evaluable_without_a_judge_call(self):
@@ -1062,11 +1062,11 @@ class PartialDisclosureIsNeverJudgedSilently(unittest.TestCase):
         document = judge_bundle.run(compiled_pack(), bundle, ["9"], None, "jev-1.13.0", GENERATED_AT,
                                     backend=never_called_backend())
         cited = [{"digest_alg": "SHA-256", "digest": judge_bundle.abstention_citation(bundle, None)}]
-        by_rule = {c["rule_id"]: c for c in document["claims"]}
+        by_rule = {c["x-judge-pin"]["rule_id"]: c for c in document["claims"]}
         self.assertEqual(by_rule["9"]["rationale"], judge_bundle.REASON_BUNDLE_INCOMPLETE)
         for rule_id, claim in by_rule.items():
             self.assertEqual(claim["verdict"], "not_evaluable")
-            self.assertNotIn("judge_pin", claim)
+            self.assertNotIn("pin", claim["x-judge-pin"])
             self.assertEqual(claim["evidence"], cited)
             if rule_id != "9":
                 self.assertEqual(claim["rationale"], judge_bundle.REASON_NOT_SELECTED)
@@ -1155,9 +1155,9 @@ class CliSmoke(unittest.TestCase):
         document = json.loads(proc.stdout)
         # Only the judged rule carries a pin; every unselected rule is a
         # not_evaluable claim with none.
-        judged = [claim for claim in document["claims"] if "judge_pin" in claim]
+        judged = [claim for claim in document["claims"] if "pin" in claim.get("x-judge-pin", {})]
         self.assertEqual(len(judged), 1)
-        self.assertIn("mock backend", judged[0]["judge_pin"]["model_id"])
+        self.assertIn("mock backend", judged[0]["x-judge-pin"]["pin"]["model_id"])
 
     def test_withheld_bundle_runs_end_to_end_all_not_evaluable(self):
         proc = self._run(withheld_bundle())
@@ -1170,9 +1170,9 @@ class CliSmoke(unittest.TestCase):
         proc = self._run(disclosed_bundle(FACTS), "--rule-ids", "8,26")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         document = json.loads(proc.stdout)
-        judged = {c["rule_id"] for c in document["claims"] if c["verdict"] != "not_evaluable"}
+        judged = {c["x-judge-pin"]["rule_id"] for c in document["claims"] if c["verdict"] != "not_evaluable"}
         self.assertTrue(judged <= {"8", "26"})
-        others = [c for c in document["claims"] if c["rule_id"] not in {"8", "26"}]
+        others = [c for c in document["claims"] if c["x-judge-pin"]["rule_id"] not in {"8", "26"}]
         self.assertEqual(len(others), 11)
         self.assertTrue(all(c["verdict"] == "not_evaluable" for c in others))
 
