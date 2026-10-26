@@ -531,7 +531,7 @@ class PerSessionTier(unittest.TestCase):
                                determinations=determinations)
         claim = next(c for c in per_case["result_v0"]["claims"] if c["id"] == self.CRIT)
         self.assertEqual(claim["tier"], "recomputed")
-        self.assertNotIn("judge_pin_digest", claim)
+        self.assertNotIn("pin_digest", claim.get("x-judge-pin", {}))
 
     def test_an_unknown_determination_is_refused_not_guessed(self):
         case = dict(ALL_MET_WITH_DIGESTS, **{self.CRIT: ("met", "c" * 64, None)})
@@ -596,7 +596,7 @@ class PrecheckToResultV0(unittest.TestCase):
         claims = {c["id"]: c for c in doc["claims"]}
         pre = claims[f"s-truncated::{self.ART14E}"]
         self.assertEqual((pre["tier"], pre["verdict"]), ("recomputed", "not_evaluable"))
-        self.assertNotIn("judge_pin_digest", pre)
+        self.assertNotIn("pin_digest", pre.get("x-judge-pin", {}))
         self.assertEqual(claims[f"s-judged::{self.ART14E}"]["tier"], "judged")
         # every other judged row stays judged in both sessions
         other = [c for c in doc["claims"] if c["requirement_ref"] != self.ART14E
