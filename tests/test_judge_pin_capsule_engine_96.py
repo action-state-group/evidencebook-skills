@@ -179,7 +179,7 @@ class RealLoaderAccepts(unittest.TestCase):
             "disclosures": {CAPSULE_ID: FACTS}, "completeness": {"payloads_mode": "selected", "missing": []},
         }, None, None, "jev-1.13.0", "2026-10-08T00:00:00Z", backend=fixed_backend("met"))
         for claim in document["claims"]:
-            self._assert_real_loader_accepts(claim["judge_pin"])
+            self._assert_real_loader_accepts(claim["x-judge-pin"]["pin"])
 
     def test_judge_bundle_rule9_pin_is_accepted(self):
         pin, _digest = pin_for("jev-1.13.0", judge_bundle.declared_input_refs(
