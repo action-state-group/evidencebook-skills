@@ -2,7 +2,7 @@
 """Exercise script for skills/daily-judge-and-close: run one day, end to end.
 
 It performs the skill's steps in order and calls only the verbs the skill lists:
-judge pin, cll list, get, verify, publish, close. The judge is an external command
+judge pin, cll list, get, verify, publish, book close. The judge is an external command
 (--judge-cmd) that reads one case on stdin and prints {"verdict", "rationale"};
 for every judged-tier clause this script never decides a verdict itself -- the one
 exception, a clause whose effective tier is "recomputed", is its own paragraph
@@ -21,7 +21,7 @@ API model string) is the only thing that can catch a mismatch.
         --date 2026-09-16 --out RUN_DIR
 
 Re-running a day seals nothing new: every report is published with a timestamp fixed
-to the day, so the same judgment is the same capsule, and `close` returns the day's
+to the day, so the same judgment is the same capsule, and `book close` returns the day's
 existing Close.
 
 Rubric switches: a compiled contract may carry a top-level "switches" dict and,
@@ -409,7 +409,7 @@ def main(argv):
         log["verdicts"] = verdicts
 
         # 5. Seal the day's Close. No peer bundle is held: it is unilateral.
-        close_args = ["close", "--profile", profile, "--period", "day", "--date", str(day),
+        close_args = ["book", "close", "--profile", profile, "--period", "day", "--date", str(day),
                       "--counterparty", spec["counterparty"]]
         capsule_out, bundle_out = out / "close.json", out / "close-bundle.json"
         if not capsule_out.exists():

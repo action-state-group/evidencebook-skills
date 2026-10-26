@@ -2,7 +2,7 @@
 """Exercise script for skills/weekly-blind-expert: run one week, end to end.
 
 It performs the skill's steps in order and calls only the verbs the skill lists:
-cll list, get, verify, publish, calibration summarize, close. It pauses for the
+cll list, get, verify, publish, calibration summarize, book close. It pauses for the
 human: without --ratings it seals the sample manifest, writes the blind packets,
 and stops (exit 3). With --ratings it seals one human-rating per rated case, the
 calibration summary (agreement as k of n, nothing else) and the week's Close. It
@@ -214,7 +214,7 @@ def main(argv):
                             for p in summary["pins"]]
 
         # 6. The week's Close; unilateral, no peer bundle is held.
-        close_args = ["close", "--profile", profile, "--period", "week", "--date", str(day),
+        close_args = ["book", "close", "--profile", profile, "--period", "week", "--date", str(day),
                       "--counterparty", spec["counterparty"]]
         capsule_out, bundle_out = out / "close.json", out / "close-bundle.json"
         if not capsule_out.exists():

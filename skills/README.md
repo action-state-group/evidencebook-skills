@@ -70,13 +70,13 @@ when compiled with `--out demo/<name>`, for example
 `everyday-rules` does not run through these skills: it compiles to `packs/everyday-rules/compiled/`
 and is judged with `scripts/judge_bundle.py`.
 
-A run closes the previous day, since `close` refuses a day that has not ended. The reports
+A run closes the previous day, since `book close` refuses a day that has not ended. The reports
 a run seals are committed on the day it runs, so the judgments of day D's cases, made on
 D+1, are covered by the Close for D+1. The weekly run writes the blind packets to a
 directory beside its run directory; give the reviewer that directory and nothing else.
 
 `demo/tau2/compiled.json` is the compiled spec for the tau2 airline demo. Its counterparty
-is a marked sample placeholder: the demo contract has none, and `capsulectl close` requires
+is a marked sample placeholder: the demo contract has none, and `capsulectl book close` requires
 the flag today. The judge is any
 command that reads one case on stdin and prints `{"verdict", "rationale"}`; no model runs in
 this repository. `tests/fresh_env.sh` runs both skills end to end on the tau2 airline book
