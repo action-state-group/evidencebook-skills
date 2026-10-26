@@ -2,7 +2,7 @@
 """Exercise script for skills/weekly-blind-expert: run one week, end to end.
 
 It performs the skill's steps in order and calls only the verbs the skill lists:
-cll list, get, verify, publish, calibration summarize, close. It pauses for the
+cll list, get, verify, publish, calibration summarize, book close. It pauses for the
 human: without --ratings it seals the sample manifest, writes the blind packets,
 and stops (exit 3). With --ratings it seals one human-rating per rated case, the
 calibration summary (agreement as k of n, nothing else) and the week's Close. It

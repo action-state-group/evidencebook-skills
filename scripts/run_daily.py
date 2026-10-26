@@ -2,7 +2,7 @@
 """Exercise script for skills/daily-judge-and-close: run one day, end to end.
 
 It performs the skill's steps in order and calls only the verbs the skill lists:
-judge pin, cll list, get, verify, publish, close. The judge is an external command
+judge pin, cll list, get, verify, publish, book close. The judge is an external command
 (--judge-cmd) that reads one case on stdin and prints {"verdict", "rationale"};
 for every judged-tier clause this script never decides a verdict itself -- the one
 exception, a clause whose effective tier is "recomputed", is its own paragraph

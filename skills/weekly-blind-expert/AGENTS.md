@@ -48,7 +48,7 @@ with a deterministic stand-in rating the packets in place of the person.
   the sampled reports they audit into one `calibration-summary/v1`: **agreement as k of
   n, and nothing else**, with the drawn sample size and any shortfall beside it. See the flag below — this is a deliberate, narrower
   output than this repo's own pre-existing calibration estimators.
-- `close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
+- `book close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
   — seal the week's Close, with the same counterparty and refusal rules as the daily
   skill: unilateral when no peer bundle is held.
 
