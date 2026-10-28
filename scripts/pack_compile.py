@@ -372,9 +372,15 @@ def validate_source(source):
             for key in ("label", "text"):
                 if not isinstance(crit.get(key), str) or not crit[key].strip():
                     issues.append(f"{cwhere}.{key} must be a non-empty string")
-            if "requirement_tier" in crit and crit["requirement_tier"] not in REQUIREMENT_TIERS:
-                issues.append(f"{cwhere}.requirement_tier must be one of {sorted(REQUIREMENT_TIERS)}, "
-                              f"got {crit['requirement_tier']!r}")
+            if "requirement_tier" in crit:
+                rt = crit["requirement_tier"]
+                if not isinstance(rt, str) or rt not in REQUIREMENT_TIERS:
+                    issues.append(f"{cwhere}.requirement_tier must be one of {sorted(REQUIREMENT_TIERS)}, got {rt!r}")
+                elif rt == "informational":
+                    # rollup.all_required_met still makes every criterion decide `resolved`, so a
+                    # contract saying "informational" would contradict the Results built from it.
+                    issues.append(f"{cwhere}.requirement_tier 'informational' is not supported yet: "
+                                  "scripts/rollup.py has no informational criteria")
             tier = crit.get("tier")
             if tier not in TIERS:
                 issues.append(f"{cwhere}.tier must be one of {sorted(TIERS)}, got {tier!r}")

@@ -144,22 +144,22 @@ class FromPack(unittest.TestCase):
             self.assertIn("Judged on one test case, from the test fixture.", req["evidence_rule"])
             self.assertNotIn("out_of_scope", req["evidence_rule"])
 
-    def test_requirement_tier_is_written_on_every_row_and_defaults_to_must_have(self):
+    def test_requirement_tier_is_written_on_every_row_as_must_have(self):
         src = minimal_source()
-        src["checks"][0]["criteria"][1]["requirement_tier"] = "informational"
+        src["checks"][0]["criteria"][1]["requirement_tier"] = "must_have"
         contract = ec.from_pack(src)
-        self.assertEqual([r["tier"] for r in contract["requirements"]],
-                         ["must_have", "informational", "must_have", "must_have"])
+        self.assertEqual([r["tier"] for r in contract["requirements"]], ["must_have"] * 4)
         # the judged/recomputed `tier` of a clause is not the requirement tier
         for req in contract["requirements"]:
-            self.assertIn(req["tier"], ("must_have", "informational"))
             self.assertIn(req["mode"], ("judged", "value"))
 
-    def test_an_unknown_requirement_tier_is_refused(self):
-        src = minimal_source()
-        src["checks"][0]["criteria"][0]["requirement_tier"] = "optional"
-        with self.assertRaisesRegex(ec.ContractError, "requirement_tier must be one of"):
-            ec.from_pack(src)
+    def test_a_bad_or_unsupported_requirement_tier_is_refused(self):
+        # informational waits for rollup support: see pack_compile.validate_source
+        for bad in ("optional", "informational", [], {}, None, 3):
+            src = minimal_source()
+            src["checks"][0]["criteria"][0]["requirement_tier"] = bad
+            with self.assertRaisesRegex(ec.ContractError, "requirement_tier"):
+                ec.from_pack(src)
 
     def test_out_of_scope_answer_follows_the_switch_and_never_out_of_scope(self):
         source = minimal_source()
@@ -381,10 +381,9 @@ class SchemaValid(unittest.TestCase):
         bad = ec.from_pack(minimal_source())
         bad["requirements"][0]["tier"] = "optional"
         self.assertFalse(validator.is_valid(bad))
-        # positive vector: both tiers
-        src = minimal_source()
-        src["checks"][0]["criteria"][1]["requirement_tier"] = "informational"
-        good = ec.from_pack(src)
+        # positive vector: the schema accepts both tiers
+        good = ec.from_pack(minimal_source())
+        good["requirements"][1]["tier"] = "informational"
         self.assertEqual({r["tier"] for r in good["requirements"]}, {"must_have", "informational"})
         self.assertTrue(validator.is_valid(good))
 

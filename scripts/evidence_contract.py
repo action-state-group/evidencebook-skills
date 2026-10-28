@@ -18,6 +18,8 @@ members EC v0 defines: `id`, `version` and one requirement per row.
   - A pack row's `tier` is its criterion's `requirement_tier`, `must_have` or
     `informational` (default `must_have`, as every criterion decides in
     rollup.all_required_met): whether the row decides the overall answer.
+    A pack source may only say `must_have` until the rollup can set a
+    criterion aside.
     A report-spec row carries none. It is not the clause's judged/recomputed
     `tier`, which the contract states as `mode` and `evidence_rule`.
   - A pack check that names an `article` is a native obligation citing it; any
