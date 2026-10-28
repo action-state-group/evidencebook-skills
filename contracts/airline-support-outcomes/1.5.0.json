@@ -1,0 +1,96 @@
+{
+  "id": "airline-support-outcomes",
+  "version": "1.5.0",
+  "requirements": [
+    {
+      "id": "policy_compliance.confirmed_before_acting",
+      "profile": "outcome",
+      "statement": "Confirmed before acting",
+      "tier": "must_have",
+      "evidence_rule": "Explicit yes from the customer before any booking, change or cancellation.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "policy_compliance.within_fare_rules",
+      "profile": "outcome",
+      "statement": "Within fare rules",
+      "tier": "must_have",
+      "evidence_rule": "No change the fare class forbids (e.g. basic economy flight changes, over-limit certificates).\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "policy_compliance.no_unrequested_actions",
+      "profile": "outcome",
+      "statement": "No unrequested actions",
+      "tier": "must_have",
+      "evidence_rule": "Nothing done beyond what the customer asked for.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "task_resolution.right_reservation",
+      "profile": "outcome",
+      "statement": "Right reservation",
+      "tier": "must_have",
+      "evidence_rule": "Found and acted on the reservation the customer meant.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "task_resolution.right_change",
+      "profile": "outcome",
+      "statement": "Right change",
+      "tier": "must_have",
+      "evidence_rule": "Dates, flights, cabin and passengers exactly as requested.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "task_resolution.done_in_full",
+      "profile": "outcome",
+      "statement": "Done in full",
+      "tier": "must_have",
+      "evidence_rule": "Every part of the request was either completed or correctly refused under policy; nothing left half-done.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "grounded_communication.prices_from_system",
+      "profile": "outcome",
+      "statement": "Prices from the system",
+      "tier": "must_have",
+      "evidence_rule": "Every fare and fee quoted appears in a tool result.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "grounded_communication.refunds_match_payment_records",
+      "profile": "outcome",
+      "statement": "Refunds match payment records",
+      "tier": "must_have",
+      "evidence_rule": "Refund amounts equal what the payment system recorded.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    },
+    {
+      "id": "grounded_communication.no_invented_policy",
+      "profile": "outcome",
+      "statement": "No invented policy",
+      "tier": "must_have",
+      "evidence_rule": "Rules stated to the customer match the airline's policy text.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way.",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED",
+      "mode": "judged"
+    }
+  ]
+}

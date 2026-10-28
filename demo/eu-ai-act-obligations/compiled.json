@@ -1,7 +1,7 @@
 {
   "contract": "eu-ai-act-obligations/v1",
   "contract_version": "rubric-v0.2",
-  "contract_ref": "eu-ai-act-obligations@0.2.1",
+  "contract_ref": "eu-ai-act-obligations@0.2.2",
   "outcome_statement": "The AI system meets the in-scope EU AI Act obligations for this session",
   "resolution_rule": "no resolved roll-up is reported and no overall compliance percentage is produced; each test is reported as a count of sessions, met, not met or not evaluable",
   "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
@@ -177,7 +177,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "8f19bb4e57f96acc36ede394462452148ec96e803f42fed7813647151f172662",
+  "pack_source_digest": "6d9db94c802afb489a609a49fa8db85119062ad3271b0c625238db0f10e68963",
   "title": "EU AI Act obligations",
   "switches": {
     "out_of_scope_verdict": true

@@ -33,7 +33,7 @@ decision_note: >
   never a finding against the agent.
 
 pack_id: eu-ai-act-obligations
-pack_version: "0.2.1"
+pack_version: "0.2.2"
 rubric_version: "0.2"
 regulation: "Regulation (EU) 2024/1689 (the EU AI Act), as amended by Regulation (EU) 2026/1744 (OJ L, 24.7.2026)"
 

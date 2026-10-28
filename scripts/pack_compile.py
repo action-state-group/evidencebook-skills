@@ -61,6 +61,9 @@ import sys
 import yaml
 
 TIERS = {"judged", "recomputed"}
+# A criterion's optional `requirement_tier` (Evidence Contract requirement `tier`):
+# whether it decides the overall answer. Distinct from `tier` above (how it is checked).
+REQUIREMENT_TIERS = {"must_have", "informational"}
 
 # scripts/result_v0.py's CASE_SEPARATOR, repeated here rather than imported so
 # this compiler keeps no dependency on the rollup modules: a day document's
@@ -369,6 +372,9 @@ def validate_source(source):
             for key in ("label", "text"):
                 if not isinstance(crit.get(key), str) or not crit[key].strip():
                     issues.append(f"{cwhere}.{key} must be a non-empty string")
+            if "requirement_tier" in crit and crit["requirement_tier"] not in REQUIREMENT_TIERS:
+                issues.append(f"{cwhere}.requirement_tier must be one of {sorted(REQUIREMENT_TIERS)}, "
+                              f"got {crit['requirement_tier']!r}")
             tier = crit.get("tier")
             if tier not in TIERS:
                 issues.append(f"{cwhere}.tier must be one of {sorted(TIERS)}, got {tier!r}")

@@ -144,6 +144,23 @@ class FromPack(unittest.TestCase):
             self.assertIn("Judged on one test case, from the test fixture.", req["evidence_rule"])
             self.assertNotIn("out_of_scope", req["evidence_rule"])
 
+    def test_requirement_tier_is_written_on_every_row_and_defaults_to_must_have(self):
+        src = minimal_source()
+        src["checks"][0]["criteria"][1]["requirement_tier"] = "informational"
+        contract = ec.from_pack(src)
+        self.assertEqual([r["tier"] for r in contract["requirements"]],
+                         ["must_have", "informational", "must_have", "must_have"])
+        # the judged/recomputed `tier` of a clause is not the requirement tier
+        for req in contract["requirements"]:
+            self.assertIn(req["tier"], ("must_have", "informational"))
+            self.assertIn(req["mode"], ("judged", "value"))
+
+    def test_an_unknown_requirement_tier_is_refused(self):
+        src = minimal_source()
+        src["checks"][0]["criteria"][0]["requirement_tier"] = "optional"
+        with self.assertRaisesRegex(ec.ContractError, "requirement_tier must be one of"):
+            ec.from_pack(src)
+
     def test_out_of_scope_answer_follows_the_switch_and_never_out_of_scope(self):
         source = minimal_source()
         source["switches"] = {"out_of_scope_verdict": True}
@@ -360,6 +377,16 @@ class SchemaValid(unittest.TestCase):
         bad = ec.from_pack(minimal_source())
         bad["requirements"][0]["result"] = "met"
         self.assertFalse(validator.is_valid(bad))
+        # negative vector: a tier outside must_have | informational
+        bad = ec.from_pack(minimal_source())
+        bad["requirements"][0]["tier"] = "optional"
+        self.assertFalse(validator.is_valid(bad))
+        # positive vector: both tiers
+        src = minimal_source()
+        src["checks"][0]["criteria"][1]["requirement_tier"] = "informational"
+        good = ec.from_pack(src)
+        self.assertEqual({r["tier"] for r in good["requirements"]}, {"must_have", "informational"})
+        self.assertTrue(validator.is_valid(good))
 
     @unittest.skipUnless(capsulectl(), "capsulectl not available (set CAPSULECTL or put it on PATH)")
     def test_capsulectl_contract_validate_accepts_every_compiled_contract(self):

@@ -15,6 +15,11 @@ members EC v0 defines: `id`, `version` and one requirement per row.
     scripts/report_spec.py and every Result v0 here already carry.
   - A requirement's `id` is the row's `requirement_ref`: `<check>.<criterion>`
     for a pack, the claim id for a report spec.
+  - A pack row's `tier` is its criterion's `requirement_tier`, `must_have` or
+    `informational` (default `must_have`, as every criterion decides in
+    rollup.all_required_met): whether the row decides the overall answer.
+    A report-spec row carries none. It is not the clause's judged/recomputed
+    `tier`, which the contract states as `mode` and `evidence_rule`.
   - A pack check that names an `article` is a native obligation citing it; any
     other row is a native outcome.
   - A judged row's `evidence_rule` is exactly what the judge is asked
@@ -123,15 +128,20 @@ def from_pack(source):
     for check in source["checks"]:
         for crit in check["criteria"]:
             clause = clauses[f"{check['id']}.{crit['id']}"]
-            tier = effective_tier(clause, switches)
+            checkability = effective_tier(clause, switches)
             req = {"id": clause["id"]}
             if "article" in check:
                 req["profile"] = "obligation"
             else:
                 req["profile"] = "outcome"
             req["statement"] = crit["label"]
+            # EC requirement `tier`: whether the row decides the overall answer.
+            # Always written, so a reader never infers it; an unmarked criterion
+            # decides, as in rollup.all_required_met. Not the judged/recomputed
+            # `tier` of a clause, which is `checkability` here.
+            req["tier"] = crit.get("requirement_tier", "must_have")
             oos = out_of_scope and not crit.get("never_out_of_scope")
-            if tier == "judged":
+            if checkability == "judged":
                 parts = [effective_claim(clause, switches), "", scope, _answers(oos)]
                 if crit.get("recompute_precheck"):
                     parts.append(f"A deterministic pre-check, {crit['recompute_precheck']}, runs before "
