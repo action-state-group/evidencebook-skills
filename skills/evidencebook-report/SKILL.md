@@ -35,8 +35,11 @@ only through the verbs, never written by the agent.
    and without one the agent can list deals but not total them.
 3. The person says **"make an EvidenceBook report"**, "make it official", "I need to show
    this to someone", or a grade-1 answer contained a count or a judgment: grade 2, if a
-   Terms Pack (an Evidence Contract) covers the question. If none does, say exactly that,
-   name the packs that exist, and offer grade 1 or the standard History card instead.
+   Terms Pack (an Evidence Contract) covers the question. If none does, run
+   `python3 scripts/packs.py refuse` (or `require NAME` for a pack the person named,
+   which exits 3 when that pack is missing or not compiled) and say its `say` sentence:
+   it names the packs that exist by title and offers grade 1 or the History card (the
+   person's checkpoints and receipts; no totals yet). It states no count.
 4. Anyone **other than the holder** asks: this skill does not answer them. Evidence
    requests from other parties are answered by `book respond` under the share policy, by
    the `capsulectl-book` skill, never by narration.
@@ -49,8 +52,17 @@ checked, and the same page anyone can verify."** Say it once per answer, not per
 
 Verbs: `cll list`, `get --raw --output FILE` then `verify --capsule FILE` (never read a
 record you have not verified), `book reconcile` (read-only), and the book's own served
-derivations where the holder's host exposes them. No record is sealed: reading is not a
+derivations where the holder's host exposes them. A sealed Result is not a capsule, so
+`get` does not return it: read it from its bundle once `verify --bundle` says `VALID`
+(the Result is the root's statement). No record is sealed: reading is not a
 consequential action.
+
+Before the person sees a narration, run
+`python3 scripts/narration_check.py --narration ANSWER.txt --record ID=FILE ...` with
+each record it cites. It checks the rules below against those records: every statement
+cites a record, and every number is held by a record cited in the same sentence. Write
+numbers as digits so the check can read them. A finding means rewrite the answer; it is
+never delivered as it stands.
 
 Rules that make a narration safe:
 
@@ -58,8 +70,8 @@ Rules that make a narration safe:
   `aggregate` or a signed derivation (the History card). If the question needs a number no
   Result holds, say "I can list them; I can't total them until a report is run", and offer
   grade 2.
-- **Cite what you read.** Each statement names the record ids it rests on, so the person
-  can tap through to the receipt or the Result.
+- **Cite what you read.** Each statement names the record ids it rests on, as
+  `[RECORD_ID]`, so the person can tap through to the receipt or the Result.
 - **Say whose words they are.** A judge's reason is "the judge wrote"; a counterparty's
   half is "their record says"; the agent's own reading is "I read".
 - **Label it.** The first or last line says "narrated by your agent, from your records".
@@ -70,16 +82,23 @@ Rules that make a narration safe:
 
 Preconditions, checked before any verb runs:
 
-- A **pack** whose contract covers the question. In this repository:
-  `packs/airline-support-outcomes` (card `outcome`), `packs/eu-ai-act-obligations`
-  (card `obligation`), `packs/everyday-rules` (card `outcome`). A Mesh node's
+- A **pack** whose contract covers the question. `python3 scripts/packs.py list` names
+  the packs in this repository, each with its title, compiled spec and card. A Mesh node's
   inference-deals pack reports on card `settlement`. A Muse personal-deals pack
   (intentions, approvals, both halves) is **not written yet**: a Muse agent asked for an
-  EvidenceBook report today says so and offers grade 1 or the standard History card.
+  EvidenceBook report today says so (`packs.py refuse`) and offers grade 1 or the History
+  card.
 - The pack's **judge pin** resolves (`judge pin FILE`), as `daily-judge-and-close` requires.
 - The book profile is the holder's own (`--profile NAME`).
 
-Steps, in order; each one's output is the next one's input:
+Steps, in order; each one's output is the next one's input. For the airline support and
+EU AI Act packs, one command runs steps 1 to 5:
+`scripts/report.sh --spec SPEC --profile NAME --date FROM --to TO --out report.html --seal --judge-backend live`
+with the spec `packs.py` names. `--judge-backend live` runs the pack's real judge (it
+needs `TYPESAFE_API_KEY` and makes model calls); the default `mock` backend is for demos
+and tests, and its page says no model read the conversations, so it is never handed over
+as a report. The command stops at the first refusal, and it leaves no page at `--out`
+unless `report check` says `match` with the embedded evidence `VALID`.
 
 1. **Judge.** Run the pack's judge over the period's cases exactly as
    [`../daily-judge-and-close/SKILL.md`](../daily-judge-and-close/SKILL.md) does
@@ -150,11 +169,13 @@ match, or judge days a prior run sealed. Share a narration, a receipt or a repor
 anyone but the holder. Edit a Result, a page or a wording pack to get past a refusal.
 Answer another party's evidence request.
 
-## Status, 2026-10-27
+## Status, 2026-10-28
 
 Shipped: `capsulectl book result build`, `report build --seal`, `report check` on
 evidencebook main (not yet in a capsulectl-book release); `evidencebook/report` v0.2.0
-with `View.Wording` and `View.ContractReport`; the three packs above with their judges.
+with `View.Wording` and `View.ContractReport`; the three packs above with their judges;
+`scripts/report.sh --seal`, `scripts/packs.py` and `scripts/narration_check.py`, run
+end to end by `tests/fresh_env_report.sh`.
 Not yet: a Muse personal-deals pack; a command-line wording flag; the standard History card
 derivation; the ad-hoc report path. The skill states each gap to the person instead of
 working around it.
