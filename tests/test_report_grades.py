@@ -73,6 +73,15 @@ class Narration(unittest.TestCase):
         found = self.findings(narration(f"The report exists [{RID}].", "Everything was approved."))
         self.assertEqual(found, ["cites no verified record for this statement: 'Everything was approved.'"])
 
+    def test_the_no_total_sentence_stands_without_a_citation(self):
+        text = narration(f"I read 3 deals [{RID}].", narration_check.NO_TOTAL)
+        self.assertEqual(self.findings(text, {RID: {"deals": [1, 2, 3]}}), [])
+
+    def test_the_skill_quotes_the_checks_fixed_words(self):
+        skill = (ROOT / "skills/evidencebook-report/SKILL.md").read_text()
+        for fixed in (*narration_check.FIXED, narration_check.LABEL):
+            self.assertIn(fixed, " ".join(skill.split()), fixed)
+
     def test_a_number_in_the_label_sentence_is_checked(self):
         text = f"The report [{RID}] covers 99 deals, narrated by your agent, from your records.\n{narration_check.OFFER}"
         found = self.findings(text)

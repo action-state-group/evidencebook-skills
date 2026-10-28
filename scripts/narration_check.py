@@ -8,7 +8,8 @@ the rules that make it safe, against the very records it cites:
     last line;
   - every statement cites the records it rests on, as [RECORD_ID], and every
     id it cites is one of the --record files it was given (records the agent
-    fetched and verified); only the label and the offer stand without one;
+    fetched and verified); only the skill's fixed words (the label, the offer,
+    and the sentence for a total no Result holds) stand without one;
   - every number it states is read, not computed: the number appears in a
     record cited in the same sentence. Numbers are written as digits ("1,000"
     reads as one thousand), so a spelled-out number ("three") is a finding;
@@ -30,6 +31,9 @@ import sys
 LABEL = "narrated by your agent, from your records"
 OFFER = ("Tell me if you'd like an EvidenceBook version of this: sealed, checked, "
          "and the same page anyone can verify.")
+# What the skill says when no Result holds the total asked for.
+NO_TOTAL = "I can list them; I can't total them until a report is run"
+FIXED = (OFFER, NO_TOTAL)
 
 CITATION = re.compile(r"\[([A-Za-z0-9][A-Za-z0-9:._-]*)\]")
 # A grouped number ("1,000") is read whole; anything else is a digit run.
@@ -94,9 +98,12 @@ def check(text, records):
     held = {rid: numbers_in(doc, set()) for rid, doc in records.items()}
     stated = False
     for sentence in SENTENCE_END.split(text):
-        # The label and the offer are the skill's fixed words; whatever else
-        # shares their sentence is checked like any other statement.
-        rest = LABEL_TEXT.sub(" ", sentence.replace(OFFER, " "))
+        # The label, the offer and NO_TOTAL are the skill's fixed words;
+        # whatever else shares their sentence is checked like any other statement.
+        rest = sentence
+        for fixed in FIXED:
+            rest = rest.replace(fixed, " ")
+        rest = LABEL_TEXT.sub(" ", rest)
         if not re.search(r"[A-Za-z0-9]", CITATION.sub(" ", rest)):
             continue
         quoted = repr(sentence.strip())
