@@ -86,7 +86,7 @@ Preconditions, checked before any verb runs:
   the packs in this repository, each with its title, compiled spec and card. Two packs
   are **not written yet**: a Muse personal-deals pack (intentions, approvals, both
   halves) and a Mesh node's inference-deals pack (card `settlement`). An agent asked for
-  an EvidenceBook report that only one of them would cover says so (`packs.py refuse`)
+  an EvidenceBook report that one of them would cover says so (`packs.py refuse`)
   and offers grade 1 or the History card.
 - The pack's **judge pin** resolves (`judge pin FILE`), as `daily-judge-and-close` requires.
 - The book profile is the holder's own (`--profile NAME`).
@@ -123,8 +123,10 @@ unless `report check` says `match` with the embedded evidence `VALID`.
    operator's pack for Mesh) is applied through the SDK's `report.View.Wording`
    (`evidencebook/report` v0.2.0). On the command line it is `--wording FILE
    --wording-digest SHA256`, which is on evidencebook main but not yet in a
-   capsulectl-book release; a page built with a released capsulectl-book carries the
-   viewer's base words, and the skill says so. A worded page gets no permalink, by
+   capsulectl-book release. `scripts/report.sh` takes no wording pack, so its page
+   always carries the viewer's base words, and the skill says so; only this step run by
+   hand with `--wording` and `--wording-digest`, on a capsulectl-book built from
+   evidencebook main, applies one. A worded page gets no permalink, by
    design: the permalink would carry the bundle without the words.
 5. **Check.** `capsulectl book report check --profile NAME --page report.html` must say
    `match`. Anything else (`mismatch`, `no sealed record`, `not covered by a checkpoint`)
