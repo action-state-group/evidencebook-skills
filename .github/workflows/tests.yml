@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# The scripts' tests, and the evidencebook-report skill's grades run end to end
+# against a real capsulectl. Runs the pull request's own code on `pull_request`,
+# which receives no secrets; nothing here needs one (no model runs: the
+# end-to-end report takes the no-judge path).
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -p 'test_*.py'
+
+  report-grades:
+    runs-on: ubuntu-latest
+    env:
+      # `book report build --seal` and `book report check` are on evidencebook
+      # main, not yet in a capsulectl-book release. capsule-cli is the commit
+      # that plugin's go.mod builds against.
+      EVIDENCEBOOK_REF: 608b797ad6b9114acef72db121e4c029211c7800
+      CAPSULE_CLI_REF: 8a856b7513166d80c001529b9f0b3db22950d2f2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/evidencebook
+          ref: ${{ env.EVIDENCEBOOK_REF }}
+          path: .deps/evidencebook
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-cli
+          ref: ${{ env.CAPSULE_CLI_REF }}
+          path: .deps/capsule-cli
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .deps/evidencebook/capsulectl/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml rfc8785
+      - name: build capsulectl and the capsulectl-book plugin
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins"
+          chmod 755 "$RUNNER_TEMP/plugins"
+          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
+          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-book" ./cmd/capsulectl-book)
+      - name: the three grades, end to end
+        run: |
+          CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
+            bash tests/fresh_env_report.sh
