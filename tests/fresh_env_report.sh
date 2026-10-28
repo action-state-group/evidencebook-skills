@@ -111,11 +111,13 @@ printf 'edited page: exit %s, %s\n' "$edited" "$(jq -c . "$work/edited-check.jso
 
 step "a question with no Terms Pack: an honest refusal, no count"
 set +e
-python3 "$REPO/scripts/packs.py" require personal-deals >"$work/refusal.json"
+python3 "$REPO/scripts/packs.py" refuse >"$work/refusal.json"
 refused=$?
 set -e
-[[ "$refused" -eq 3 ]] || fail "packs.py require personal-deals exited $refused, not 3"
-jq -e '.refused == "no_pack" and (.packs | index("everyday-rules")) and (.say | test("[0-9]") | not)' \
+[[ "$refused" -eq 3 ]] || fail "packs.py refuse exited $refused, not 3"
+# No count anywhere outside the pack titles it names.
+jq -e '.refused == "no_pack" and (.packs | index("everyday-rules"))
+       and (reduce .titles[] as $t (.say; split($t) | join("")) | test("[0-9]") | not)' \
   "$work/refusal.json" >/dev/null || fail "the refusal is not the honest one: $(cat "$work/refusal.json")"
 printf 'refused: %s\n' "$(jq -r .say "$work/refusal.json")"
 

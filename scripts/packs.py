@@ -6,14 +6,17 @@ pack whose contract covers the question. This reads the packs from the tree
 instead of a list typed into the skill, so a pack added or removed changes the
 answer without editing the skill.
 
-    packs.py list                 every pack: its directory name, pack_id, the
-                                  compiled spec report.sh takes, and its card
+    packs.py list                 every pack: its directory name, pack_id, title,
+                                  the compiled spec report.sh takes, and its card
     packs.py require NAME         that pack's entry (exit 0), or the refusal
-                                  (exit 3) naming the packs that exist
+                                  (exit 3)
+    packs.py refuse               the refusal (exit 3), for a question the agent
+                                  finds no pack covers
 
 NAME is a pack's directory name under packs/ or its pack_id. The refusal is
-JSON with the sentence the skill says to the person; it carries no count and no
-judgment, because without a pack there is no Result to read one from.
+JSON with the sentence the skill says to the person, naming the packs that
+exist by title; it carries no count and no judgment, because without a pack
+there is no Result to read one from.
 """
 import argparse
 import json
@@ -31,8 +34,10 @@ DEFAULT_CARD = "outcome"
 
 REFUSED = 3
 
-OFFER = ("I can narrate it from your records, without totals, or show your "
-         "standard History card.")
+# history_card/1 is what a book serves today: checkpoints and receipts, no
+# counts. The standard card with counts is not registered yet.
+OFFER = ("I can narrate it from your records, without totals, or show your History card "
+         "(your checkpoints and receipts; it has no totals yet).")
 
 
 def compiled_spec(root, name):
@@ -54,10 +59,12 @@ def pack_entry(root, source):
         presentation = spec.with_name("presentation.json")
         if presentation.is_file():
             _, _, card = prepare_block(json.loads(presentation.read_text()))
+    compiled = json.loads(spec.read_text()) if spec else {}
     return {
         "name": name,
         "pack_id": pack_id,
-        "contract_ref": json.loads(spec.read_text()).get("contract_ref") if spec else None,
+        "title": compiled.get("title") or name,
+        "contract_ref": compiled.get("contract_ref"),
         "spec": str(spec.relative_to(root)) if spec else None,
         "card": card,
     }
@@ -73,21 +80,24 @@ def require(name, root=ROOT):
     for p in packs:
         if name in (p["name"], p["pack_id"]):
             if p["spec"] is None:
-                return REFUSED, refusal(name, packs, f"the {p['name']} pack is not compiled yet")
+                return REFUSED, refusal(packs, name, f"the {p['name']} pack is not compiled yet",
+                                        f"The {p['title']} pack exists but isn't ready to report from yet.")
             return 0, p
-    return REFUSED, refusal(name, packs, f"no Terms Pack named {name!r}")
+    return REFUSED, refusal(packs, name, f"no Terms Pack named {name!r}")
 
 
-def refusal(name, packs, reason):
-    names = [p["name"] for p in packs if p["spec"] is not None]
-    listed = ", ".join(names) if names else "none"
+def refusal(packs, asked=None, reason="no Terms Pack covers the question", lead=None):
+    ready = [p for p in packs if p["spec"] is not None]
+    titles = ", ".join(p["title"] for p in ready) if ready else "none"
+    lead = lead or ("No Terms Pack covers this, so I can't make an EvidenceBook report of it. "
+                    f"The packs that exist: {titles}.")
     return {
         "refused": "no_pack",
-        "asked": name,
+        "asked": asked,
         "reason": reason,
-        "packs": names,
-        "say": (f"No Terms Pack covers this, so I can't make an EvidenceBook report of it. "
-                f"The packs that exist: {listed}. {OFFER}"),
+        "packs": [p["name"] for p in ready],
+        "titles": [p["title"] for p in ready],
+        "say": f"{lead} {OFFER}",
     }
 
 
@@ -97,11 +107,15 @@ def main(argv=None):
     sub.add_parser("list")
     req = sub.add_parser("require")
     req.add_argument("name")
+    sub.add_parser("refuse")
     args = ap.parse_args(argv)
     if args.cmd == "list":
         print(json.dumps(list_packs(), indent=2))
         return 0
-    code, answer = require(args.name)
+    if args.cmd == "refuse":
+        code, answer = REFUSED, refusal(list_packs())
+    else:
+        code, answer = require(args.name)
     print(json.dumps(answer, indent=2))
     return code
 

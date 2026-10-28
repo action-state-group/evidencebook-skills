@@ -27,9 +27,11 @@ from test_report_sh import BASH, STUB_ROLLUP_DAY, STUB_RUN_DAILY, _exe  # noqa: 
 RESULT = {
     "result_version": "evidence-result-v0",
     "generated_at": "2026-10-28T23:59:59Z",
-    "claims": [{"id": "2026-10-28::refund_ok", "verdict": "met"}],
-    "aggregate": {"buckets": {"met": ["2026-10-28::refund_ok"], "not_met": [], "not_evaluable": []},
+    "claims": [{"id": "2026-10-28::refund_within_policy", "verdict": "met",
+                "evidence": [{"digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}]}],
+    "aggregate": {"buckets": {"met": ["2026-10-28::refund_within_policy"], "not_met": [], "not_evaluable": []},
                   "coverage": {"evaluated_population": 12, "excluded_not_applicable": 0, "unknown_count": 0}},
+    "view": {"title": "Refunds, 1,250 conversations"},
     "x-digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
 }
 RID = "4291b3a0"
@@ -65,7 +67,32 @@ class Narration(unittest.TestCase):
 
     def test_no_citation_fails(self):
         found = self.findings(narration("Everything went through."))
-        self.assertTrue(any(f.startswith("cites no record") for f in found), found)
+        self.assertTrue(any(f.startswith("cites no verified record") for f in found), found)
+
+    def test_every_statement_cites_not_just_one(self):
+        found = self.findings(narration(f"The report exists [{RID}].", "Everything was approved."))
+        self.assertEqual(found, ["cites no verified record for this statement: 'Everything was approved.'"])
+
+    def test_a_number_in_the_label_sentence_is_checked(self):
+        text = f"The report [{RID}] covers 99 deals, narrated by your agent, from your records.\n{narration_check.OFFER}"
+        found = self.findings(text)
+        self.assertTrue(any(f.startswith("states 99 ") for f in found), found)
+
+    def test_a_grouped_number_is_read_whole(self):
+        self.assertEqual(self.findings(narration(f"The report [{RID}] covers 1,250 conversations.")), [])
+        found = self.findings(narration(f"The report [{RID}] covers 1,000 conversations."))
+        self.assertTrue(any(f.startswith("states 1,000 ") for f in found), found)
+
+    def test_a_timestamp_and_a_dated_claim_id_are_read(self):
+        text = narration(f"The report [{RID}] was generated on 2026-10-28 at 23:59.")
+        self.assertEqual(self.findings(text), [])
+
+    def test_a_spelled_out_number_fails(self):
+        found = self.findings(narration(f"The report [{RID}] evaluated twelve checks."))
+        self.assertTrue(any(f.startswith("writes the number 'twelve' as a word") for f in found), found)
+        self.assertTrue(any(f.startswith("states a number but") for f in
+                            self.findings(f"The report [{RID}] evaluated twelve checks.\n"
+                                          "Narrated by your agent, from your records.")))
 
     def test_unlabelled_fails(self):
         found = self.findings(f"The report [{RID}] says everything was met.")
@@ -112,16 +139,29 @@ class NoPack(unittest.TestCase):
         self.assertEqual(packs.require("everyday-rules")[1]["name"], "everyday-rules")
         self.assertEqual(packs.require("asg/everyday-rules")[1]["name"], "everyday-rules")
 
+    def assert_honest(self, answer):
+        self.assertEqual(answer["refused"], "no_pack")
+        self.assertEqual(answer["packs"], [p["name"] for p in packs.list_packs()])
+        say = answer["say"]
+        for title in answer["titles"]:
+            self.assertIn(title, say)
+            say = say.replace(title, "")
+        self.assertIn("History card (your checkpoints and receipts; it has no totals yet)", say)
+        # No count, no judgment: there is no Result to read one from.
+        self.assertIsNone(re.search(r"\d", say), say)
+
     def test_a_question_with_no_pack_is_refused_honestly(self):
         code, answer = packs.require("personal-deals")
         self.assertEqual(code, packs.REFUSED)
-        self.assertEqual(answer["refused"], "no_pack")
-        self.assertEqual(answer["packs"], [p["name"] for p in packs.list_packs()])
-        for name in answer["packs"]:
-            self.assertIn(name, answer["say"])
-        self.assertIn("History card", answer["say"])
-        # No count, no judgment: there is no Result to read one from.
-        self.assertIsNone(re.search(r"\d", answer["say"]), answer["say"])
+        self.assert_honest(answer)
+
+    def test_refuse_needs_no_pack_name(self):
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts/packs.py"), "refuse"],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, packs.REFUSED, proc.stderr)
+        answer = json.loads(proc.stdout)
+        self.assertIsNone(answer["asked"])
+        self.assert_honest(answer)
 
     def test_an_uncompiled_pack_is_refused_too(self):
         tmp = pathlib.Path(tempfile.mkdtemp())
@@ -131,6 +171,8 @@ class NoPack(unittest.TestCase):
         code, answer = packs.require("draft", root=tmp)
         self.assertEqual(code, packs.REFUSED)
         self.assertEqual(answer["reason"], "the draft pack is not compiled yet")
+        self.assertTrue(answer["say"].startswith("The draft pack exists but isn't ready to report from yet."),
+                        answer["say"])
 
 
 STUB_CAPSULECTL = r'''#!/usr/bin/env python3
@@ -195,9 +237,18 @@ class SealedAndChecked(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
         build = next(c for c in self.calls() if c[:3] == ["book", "report", "build"])
         self.assertIn("--seal", build)
-        self.assertEqual(self.calls()[-1], ["book", "report", "check", "--profile", "p", "--page", str(self.out)])
+        page = build[build.index("--out") + 1]
+        self.assertNotEqual(page, str(self.out))
+        self.assertEqual(self.calls()[-1], ["book", "report", "check", "--profile", "p", "--page", page])
         self.assertIn("sealed and checked", proc.stdout)
         self.assertTrue(self.out.is_file())
+        self.assertFalse(pathlib.Path(page).exists())
+
+    def test_a_failed_run_leaves_no_earlier_page_at_out(self):
+        self.out.write_text("<html>an earlier, unsealed page</html>")
+        proc = self.run_report("--seal", STUB_CHECK_PAGE="mismatch")
+        self.assertEqual(proc.returncode, 1)
+        self.assertFalse(self.out.exists())
 
     def test_without_seal_nothing_is_sealed_or_checked(self):
         proc = self.run_report()
@@ -212,7 +263,7 @@ class SealedAndChecked(unittest.TestCase):
         self.assertIn('"page": "mismatch"', proc.stdout)
         self.assertIn("report check did not match", proc.stderr)
         self.assertFalse(self.out.exists())
-        self.assertTrue((self.tmp / "work" / "last-run" / "unchecked-report.html").is_file())
+        self.assertTrue((self.tmp / "work" / "last-run" / "report.html").is_file())
 
     def test_a_match_over_evidence_that_is_not_valid_is_not_handed_over(self):
         proc = self.run_report("--seal", STUB_CHECK_VERIFICATION="INCOMPLETE")

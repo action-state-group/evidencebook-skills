@@ -62,9 +62,11 @@
 # --seal is the evidencebook-report skill's grade 2 (sealed and checked):
 # `book report build --seal` writes the page's SHA-256 into the book and
 # checkpoints it, then `book report check` must answer page "match" with the
-# embedded evidence VALID. Anything else is printed verbatim, the page is moved
-# into the run directory as unchecked-report.html, and --out is not left
-# behind: a page that does not check is never handed over.
+# embedded evidence VALID. The page is built in the run directory and moved to
+# --out only then; any earlier copy at --out is removed when the run starts, so
+# a failed run leaves no page there. Anything else is printed verbatim and the
+# page stays in the run directory as report.html: a page that does not check is
+# never handed over.
 set -euo pipefail
 
 usage() {
@@ -101,6 +103,7 @@ done
 [[ -n "$SPEC" && -n "$PROFILE" && -n "$DATE" && -n "$OUT" ]] || usage
 [[ -f "$SPEC" ]] || { echo "report.sh: no such spec file: $SPEC" >&2; exit 2; }
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
+if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
   [[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY set" >&2; exit 2; }
 fi
@@ -298,27 +301,28 @@ import json, sys
 json.dump({'title': json.load(open(sys.argv[1]))['view']['title']}, open(sys.argv[2], 'w'))
 " "$RESULT_V0" "$PRESENTATION_FILE"
 
-REPORT_EXTRA=()
-if [[ "$SEAL" -eq 1 ]]; then REPORT_EXTRA+=(--seal); fi
-step "capsulectl book report build: render $OUT (--card $CARD${REPORT_EXTRA[@]+ ${REPORT_EXTRA[*]}})"
 mkdir -p "$(dirname "$OUT")"
+# A sealed page is built in the run directory and reaches --out only once it checks.
+PAGE=$OUT REPORT_EXTRA=()
+if [[ "$SEAL" -eq 1 ]]; then PAGE="$WORK/report.html"; REPORT_EXTRA+=(--seal); fi
+step "capsulectl book report build: render $PAGE (--card $CARD${REPORT_EXTRA[@]+ ${REPORT_EXTRA[*]}})"
 "$CAPSULECTL" book report build --profile "$PROFILE" --bundle "$BUNDLE" --card "$CARD" \
-  --presentation "$PRESENTATION_FILE" --out "$OUT" ${REPORT_EXTRA[@]+"${REPORT_EXTRA[@]}"} | tee "$WORK/report-build.json"
-[[ -f "$OUT" ]] || fail "report.html was not written"
+  --presentation "$PRESENTATION_FILE" --out "$PAGE" ${REPORT_EXTRA[@]+"${REPORT_EXTRA[@]}"} | tee "$WORK/report-build.json"
+[[ -f "$PAGE" ]] || fail "report.html was not written"
 
 if [[ "$SEAL" -eq 1 ]]; then
   step "capsulectl book report check: the page must be the one the book sealed"
   set +e
-  "$CAPSULECTL" book report check --profile "$PROFILE" --page "$OUT" >"$WORK/report-check.json" 2>"$WORK/report-check.err"
+  "$CAPSULECTL" book report check --profile "$PROFILE" --page "$PAGE" >"$WORK/report-check.json" 2>"$WORK/report-check.err"
   checked=$?
   set -e
   cat "$WORK/report-check.json"
   verdict=$(jq -r '"\(.page) \(.verification)"' "$WORK/report-check.json" 2>/dev/null || true)
   if [[ "$checked" -ne 0 || "$verdict" != "match VALID" ]]; then
     cat "$WORK/report-check.err" >&2
-    mv "$OUT" "$WORK/unchecked-report.html"
-    fail "report check did not match (exit $checked, page and verification: ${verdict:-none}); the page is not handed over, it is in $WORK/unchecked-report.html"
+    fail "report check did not match (exit $checked, page and verification: ${verdict:-none}); the page is not handed over, it stays in $PAGE"
   fi
+  mv "$PAGE" "$OUT"
   printf 'sealed and checked: report check says match, embedded evidence VALID; bundle %s\n' "$BUNDLE"
 fi
 

@@ -35,10 +35,11 @@ only through the verbs, never written by the agent.
    and without one the agent can list deals but not total them.
 3. The person says **"make an EvidenceBook report"**, "make it official", "I need to show
    this to someone", or a grade-1 answer contained a count or a judgment: grade 2, if a
-   Terms Pack (an Evidence Contract) covers the question. If none does, or
-   `scripts/packs.py require NAME` exits 3, say its `say` sentence: it says no pack
-   covers the question, names the packs that exist, and offers grade 1 or the standard
-   History card. It states no count.
+   Terms Pack (an Evidence Contract) covers the question. If none does, run
+   `python3 scripts/packs.py refuse` (or `require NAME` for a pack the person named,
+   which exits 3 when that pack is missing or not compiled) and say its `say` sentence:
+   it names the packs that exist by title and offers grade 1 or the History card (the
+   person's checkpoints and receipts; no totals yet). It states no count.
 4. Anyone **other than the holder** asks: this skill does not answer them. Evidence
    requests from other parties are answered by `book respond` under the share policy, by
    the `capsulectl-book` skill, never by narration.
@@ -57,10 +58,11 @@ derivations where the holder's host exposes them. A sealed Result is not a capsu
 consequential action.
 
 Before the person sees a narration, run
-`scripts/narration_check.py --narration ANSWER.txt --record ID=FILE ...` with each
-record it cites. It checks the rules below against those records, and it fails a number
-that no record cited in the same sentence holds. A finding means rewrite the answer; it
-is never delivered as it stands.
+`python3 scripts/narration_check.py --narration ANSWER.txt --record ID=FILE ...` with
+each record it cites. It checks the rules below against those records: every statement
+cites a record, and every number is held by a record cited in the same sentence. Write
+numbers as digits so the check can read them. A finding means rewrite the answer; it is
+never delivered as it stands.
 
 Rules that make a narration safe:
 
@@ -80,21 +82,23 @@ Rules that make a narration safe:
 
 Preconditions, checked before any verb runs:
 
-- A **pack** whose contract covers the question. `scripts/packs.py list` names the
-  packs in this repository, each with its compiled spec and its card; today
-  `airline-support-outcomes` (card `outcome`), `eu-ai-act-obligations`
-  (card `obligation`) and `everyday-rules` (card `outcome`). A Mesh node's
+- A **pack** whose contract covers the question. `python3 scripts/packs.py list` names
+  the packs in this repository, each with its title, compiled spec and card. A Mesh node's
   inference-deals pack reports on card `settlement`. A Muse personal-deals pack
   (intentions, approvals, both halves) is **not written yet**: a Muse agent asked for an
-  EvidenceBook report today says so and offers grade 1 or the standard History card.
+  EvidenceBook report today says so (`packs.py refuse`) and offers grade 1 or the History
+  card.
 - The pack's **judge pin** resolves (`judge pin FILE`), as `daily-judge-and-close` requires.
 - The book profile is the holder's own (`--profile NAME`).
 
-Steps, in order; each one's output is the next one's input. For
-`airline-support-outcomes` and `eu-ai-act-obligations`, one command runs steps 1 to 5:
-`scripts/report.sh --spec SPEC --profile NAME --date FROM --to TO --out report.html --seal`
-with the spec `packs.py` names. It stops at the first refusal, and it leaves no page at
-`--out` unless `report check` says `match` with the embedded evidence `VALID`.
+Steps, in order; each one's output is the next one's input. For the airline support and
+EU AI Act packs, one command runs steps 1 to 5:
+`scripts/report.sh --spec SPEC --profile NAME --date FROM --to TO --out report.html --seal --judge-backend live`
+with the spec `packs.py` names. `--judge-backend live` runs the pack's real judge (it
+needs `TYPESAFE_API_KEY` and makes model calls); the default `mock` backend is for demos
+and tests, and its page says no model read the conversations, so it is never handed over
+as a report. The command stops at the first refusal, and it leaves no page at `--out`
+unless `report check` says `match` with the embedded evidence `VALID`.
 
 1. **Judge.** Run the pack's judge over the period's cases exactly as
    [`../daily-judge-and-close/SKILL.md`](../daily-judge-and-close/SKILL.md) does
