@@ -83,11 +83,11 @@ Rules that make a narration safe:
 Preconditions, checked before any verb runs:
 
 - A **pack** whose contract covers the question. `python3 scripts/packs.py list` names
-  the packs in this repository, each with its title, compiled spec and card. A Mesh node's
-  inference-deals pack reports on card `settlement`. A Muse personal-deals pack
-  (intentions, approvals, both halves) is **not written yet**: a Muse agent asked for an
-  EvidenceBook report today says so (`packs.py refuse`) and offers grade 1 or the History
-  card.
+  the packs in this repository, each with its title, compiled spec and card. Two packs
+  are **not written yet**: a Muse personal-deals pack (intentions, approvals, both
+  halves) and a Mesh node's inference-deals pack (card `settlement`). An agent asked for
+  an EvidenceBook report that only one of them would cover says so (`packs.py refuse`)
+  and offers grade 1 or the History card.
 - The pack's **judge pin** resolves (`judge pin FILE`), as `daily-judge-and-close` requires.
 - The book profile is the holder's own (`--profile NAME`).
 
@@ -121,10 +121,11 @@ unless `report check` says `match` with the embedded evidence `VALID`.
    page: it is marked draft, mints no permalink and is never sealed.
    The **wording pack** (`aac.wording-pack/v0`: consumer/en for a person, the node
    operator's pack for Mesh) is applied through the SDK's `report.View.Wording`
-   (`evidencebook/report` v0.2.0); the command line has no wording flag yet, so a page
-   built on the command line today carries the viewer's base words, and the skill says
-   so. A worded page gets no permalink, by design: the permalink would carry the bundle
-   without the words.
+   (`evidencebook/report` v0.2.0). On the command line it is `--wording FILE
+   --wording-digest SHA256`, which is on evidencebook main but not yet in a
+   capsulectl-book release; a page built with a released capsulectl-book carries the
+   viewer's base words, and the skill says so. A worded page gets no permalink, by
+   design: the permalink would carry the bundle without the words.
 5. **Check.** `capsulectl book report check --profile NAME --page report.html` must say
    `match`. Anything else (`mismatch`, `no sealed record`, `not covered by a checkpoint`)
    is reported verbatim and the page is not handed over.
@@ -176,6 +177,7 @@ evidencebook main (not yet in a capsulectl-book release); `evidencebook/report` 
 with `View.Wording` and `View.ContractReport`; the three packs above with their judges;
 `scripts/report.sh --seal`, `scripts/packs.py` and `scripts/narration_check.py`, run
 end to end by `tests/fresh_env_report.sh`.
-Not yet: a Muse personal-deals pack; a command-line wording flag; the standard History card
+Not yet: a Muse personal-deals pack; a Mesh inference-deals pack; a released command-line
+wording flag (`--wording` is on evidencebook main); the standard History card
 derivation; the ad-hoc report path. The skill states each gap to the person instead of
 working around it.
