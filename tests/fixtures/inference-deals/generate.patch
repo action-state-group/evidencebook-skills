@@ -1,5 +1,5 @@
 diff --git a/crates/evidence-plugin/src/main.rs b/crates/evidence-plugin/src/main.rs
-index 9464b40..0b0657d 100644
+index 9464b40..cd5b429 100644
 --- a/crates/evidence-plugin/src/main.rs
 +++ b/crates/evidence-plugin/src/main.rs
 @@ -1702,6 +1702,7 @@ mod own_key_tests {
@@ -10,7 +10,7 @@ index 9464b40..0b0657d 100644
  
      /// What the plugin does at start with each answer the host can give:
      /// whether a request it then sends is signed.
-@@ -2244,3 +2245,174 @@ mod exchange_text_wiring_tests {
+@@ -2244,3 +2245,214 @@ mod exchange_text_wiring_tests {
          assert!(!log.contains("SECRET"), "{log}");
      }
  }
@@ -159,6 +159,42 @@ index 9464b40..0b0657d 100644
 +        }
 +    }
 +
++    /// The provider's own served exchange record for `exchange_id`, from its ledger.
++    fn served_record_id(dir: &Path, exchange_id: &str) -> String {
++        std::fs::read_to_string(dir.join("ledger").join("capsules.jsonl"))
++            .unwrap()
++            .lines()
++            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
++            .filter(|c| c.pointer("/model_attestation/compute_attestation/x-mesh-poc-v1/serving_provenance/exchange_id")
++                .and_then(|v| v.as_str()) == Some(exchange_id))
++            .last()
++            .map(|c| c["capsule_id"].as_str().unwrap().to_string())
++            .expect("a served exchange record")
++    }
++
++    /// A referee's verdict on the provider's served half, delivered to the
++    /// provider and sealed through its own `emit_adjudication_received`.
++    fn adjudicated(provider: &Node, dir: &Path, exchange_id: &str, verdict: &str, seed: &str) {
++        let half = served_record_id(dir, exchange_id);
++        let verdict_id = hash(seed, "verdict");
++        let twin = hash(seed, "twin");
++        let referee = "5f".repeat(32);
++        let facts = crate::producer::capsule::VerdictFacts {
++            verdict,
++            verdict_capsule_id: &verdict_id,
++            referee_node_id: &referee,
++            halves: [&half, &twin],
++            half_node_ids: [PROVIDER_ID, "6a".repeat(32).leak()],
++            twin_bracket_id: Some("bracket-1"),
++            model_hash: None,
++        };
++        provider
++            .capsules
++            .emit_adjudication_received(&facts, &half, &referee, "2026-10-29T23:00:00Z")
++            .unwrap()
++            .expect("a new adjudication record");
++    }
++
 +    #[tokio::test]
 +    #[ignore]
 +    async fn inference_deals_fixtures() {
@@ -181,6 +217,10 @@ index 9464b40..0b0657d 100644
 +        // A free exchange: no lifecycle event at all.
 +        provider.exchange(served_envelope("p-free", "qwen3-8b-q4")).await;
 +        payer.exchange(requester_envelope("free")).await;
++        // The referee corroborated the provider's settled deal and found
++        // against its short one (contradicted, naming the provider).
++        adjudicated(&provider, &b, "p-deal-settled", "corroborated", "adj-1");
++        adjudicated(&provider, &b, "p-deal-short", &format!("contradicted:{PROVIDER_ID}"), "adj-2");
 +        println!("payer ledger: {}", a.join("ledger").display());
 +        println!("provider ledger: {}", b.join("ledger").display());
 +    }

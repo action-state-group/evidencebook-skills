@@ -102,6 +102,15 @@ and tests, and its page says no model read the conversations, so it is never han
 as a report. The command stops at the first refusal, and it leaves no page at `--out`
 unless `report check` says `match` with the embedded evidence `VALID`.
 
+For a Mesh node's inference-deals pack the one command is
+`scripts/report.sh --spec packs/inference-deals/compiled/compiled.json --profile NAME --date DAY --out report.html --seal`,
+adding `--period-policy FILE` with the node's own `period_policy` when it is not the
+pack's default. It takes no `--to` and no judge flags: the window is the last 12 months of
+whole closed periods ending at the last period boundary on or before the end of `DAY`,
+and a `DAY` whose window would end after now is refused. In place of step 1 the pack's evaluator
+(`scripts/evaluators/inference_deals.py`) decides every row from the node's own records,
+with no model; steps 2 to 5 are the same.
+
 1. **Judge.** Run the pack's judge over the period's cases exactly as
    [`../daily-judge-and-close/SKILL.md`](../daily-judge-and-close/SKILL.md) does
    (`scripts/run_daily.py` for the cron packs, `scripts/judge_bundle.py` for

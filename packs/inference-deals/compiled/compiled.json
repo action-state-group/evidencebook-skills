@@ -47,7 +47,7 @@
       "check_id": "come_through",
       "check_question": "Did the node come through on the terms it accepted?",
       "label": "Served the model it named",
-      "claim": "When the node provided, the model that answered is the model it named. Recomputed from a record that lets a verifier check it; otherwise the row reads \"provider states\": the node's own record of the model requested and the model that answered.",
+      "claim": "When the node provided, the model that answered is the model it named. A deal a referee already adjudicated is not judged again: the row carries the sealed verdict (corroborated is met, contradicted naming this node is not_met, anything else is not_evaluable). Otherwise the row reads \"provider states\": the node's own records of the model requested and the model that answered, which no verifier can check against the accepted terms, since those carry the model only inside their digest.",
       "tier": "recomputed",
       "recompute_eligible": false,
       "recompute_note": "",
@@ -60,7 +60,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "9253349fd50629ffd0cff876e63e5439e7f56bb00c2f6dcd9ed6ddf4e93d89df",
+  "pack_source_digest": "2a6b5b3fb53cf0d4b8b6c00adf7c5a7a6f97a55023538fb4ddad3f2beea219af",
   "title": "Inference deals",
   "switches": {
     "out_of_scope_verdict": true

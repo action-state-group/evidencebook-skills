@@ -14,7 +14,9 @@
 # from the sealed records in process, with no model, over the pack's window of
 # whole closed periods ending at the last period boundary at or before the end
 # of --date (--to is refused there; --period-policy FILE replaces the pack's
-# default policy with the node's own).
+# default policy with the node's own; an anchor later than now is refused, and
+# --now TIME, for a test replaying recorded fixtures, sets that now). Both flags
+# are refused for any other --spec.
 # All paths converge on the SAME tail: (judged path only) pin the pack's own
 # compiled presentation.json block's digest in the Result v0 -> capsulectl book
 # result build -> a fresh checkpoint -> disclose -> (judged path only) wire that
@@ -30,7 +32,7 @@
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
 #       [--title TITLE] [--attach-input-originals] [--seal] \
 #       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live] \
-#       [--period-policy FILE]
+#       [--period-policy FILE] [--now TIME]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
 # from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
@@ -83,13 +85,13 @@ usage: report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] 
                   [--work DIR] [--capsulectl PATH] [--card CARD]
                   [--title TITLE] [--attach-input-originals] [--seal]
                   [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
-                  [--period-policy FILE]
+                  [--period-policy FILE] [--now TIME]
 EOF
   exit 2
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
-TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY=
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -107,6 +109,7 @@ while [[ $# -gt 0 ]]; do
     --judge-model-id) JUDGE_MODEL_ID=$2; shift 2 ;;
     --judge-backend) JUDGE_BACKEND=$2; shift 2 ;;
     --period-policy) PERIOD_POLICY=$2; shift 2 ;;
+    --now) NOW=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -170,6 +173,8 @@ else:
     sys.exit('report.sh: ' + sys.argv[1] + ' is neither a report-spec/v1 YAML nor a compiled pack contract (no clauses+judge or evaluator)')
 " "$SPEC")
 step "spec kind: $MODE ($SPEC)"
+[[ "$MODE" == "evaluator" || ( -z "$PERIOD_POLICY" && -z "$NOW" ) ]] \
+  || fail "--period-policy and --now apply only to a deterministic pack's window"
 
 mkdir -p "$WORK/rollup"
 if [[ "$MODE" == "no-judge" ]]; then
@@ -185,6 +190,7 @@ elif [[ "$MODE" == "evaluator" ]]; then
   step "evaluators/$EVALUATOR.py: every row from the sealed records, no model"
   POLICY_ARGS=()
   if [[ -n "$PERIOD_POLICY" ]]; then POLICY_ARGS+=(--period-policy "$PERIOD_POLICY"); fi
+  if [[ -n "$NOW" ]]; then POLICY_ARGS+=(--now "$NOW"); fi
   python3 "$REPO/scripts/evaluators/$EVALUATOR.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
     --date "$LAST_DATE" --generated-at "$GENERATED_AT" --out "$WORK/rollup" ${POLICY_ARGS[@]+"${POLICY_ARGS[@]}"} \
     || fail "evaluators/$EVALUATOR.py wrote no Result (its output above says why)"

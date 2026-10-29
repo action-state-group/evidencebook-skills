@@ -17,7 +17,8 @@
 # Mesh capsule the plugin's producer sealed (see that directory's README). Each
 # goes into the book as one record whose payload is the capsule, stamped with the
 # capsule's own time. The report's --date is the end of the fixtures' week, so the
-# window's last closed period holds them. No model runs.
+# window's last closed period holds them; --now says that week has closed, as it
+# has for anyone replaying these recorded fixtures after 2026-11-02. No model runs.
 set -euo pipefail
 
 CTL=${CAPSULECTL:?set CAPSULECTL to a capsulectl that loads the capsulectl-book plugin}
@@ -63,7 +64,8 @@ EOF
 
   step "$node: report.sh --seal over packs/inference-deals, then report check"
   bash "$REPO/scripts/report.sh" --spec "$REPO/packs/inference-deals/compiled/compiled.json" --profile "$node" \
-    --date "$DATE" --out "$work/$node.html" --capsulectl "$CTL" --work "$work/$node-run" --seal \
+    --date "$DATE" --now 2026-11-02T00:00:00Z --out "$work/$node.html" --capsulectl "$CTL" \
+    --work "$work/$node-run" --seal \
     || fail "$node: report.sh --seal did not hand over a checked page"
   "$CTL" book report check --profile "$node" --page "$work/$node.html" >"$work/$node-check.json" \
     || fail "$node: report check refuses the handed-over page: $(cat "$work/$node-check.json")"

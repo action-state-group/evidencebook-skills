@@ -84,9 +84,13 @@ checks:
         label: Served the model it named
         text: >-
           When the node provided, the model that answered is the model it named.
-          Recomputed from a record that lets a verifier check it; otherwise the
-          row reads "provider states": the node's own record of the model
-          requested and the model that answered.
+          A deal a referee already adjudicated is not judged again: the row
+          carries the sealed verdict (corroborated is met, contradicted naming
+          this node is not_met, anything else is not_evaluable). Otherwise the
+          row reads "provider states": the node's own records of the model
+          requested and the model that answered, which no verifier can check
+          against the accepted terms, since those carry the model only inside
+          their digest.
         tier: recomputed
         fold_id: inference_deals.served_named_model
         requirement_tier: must_have

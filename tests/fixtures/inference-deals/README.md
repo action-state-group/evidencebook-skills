@@ -14,12 +14,18 @@ Mesh payer node and a Mesh provider node sealed for one scripted two-node run.
   settlement legs, with the payer's terms legs delivered to the provider as
   `record-push/1` would. The plugin's own event checks refuse an impossible
   event, so a scripted event is one a host could send.
-- `golden-*.json`: the Result `scripts/evaluators/inference_deals.py` writes for
-  each book with `--date 2026-11-01` (tests/test_inference_deals.py).
+- `golden-payer.json`, `golden-provider.json`: the Result
+  `scripts/evaluators/inference_deals.py` writes for each book with `--date
+  2026-11-01` (tests/test_inference_deals.py).
+- `vector-provider-countersigned.json`: a vector, not a golden from a real book
+  (below).
 
 What is real and what is scripted: the producer, the records, the keys, the
-signatures and the legs are the plugin's. The host events are scripted, and no
-Lightning network runs: no committed fixture from a paid two-node run over a
+signatures and the legs are the plugin's (capsules-plugin 0.1.5). The host
+events are scripted: every record carries the run's one minute as its
+timestamp, every lifecycle event carries the placeholder `terms_digest`
+`7d7d…7d`, the referee's verdicts are scripted facts sealed through the
+provider's own `emit_adjudication_received`, and no Lightning network runs: no committed fixture from a paid two-node run over a
 network exists yet (the plugin's two-node e2e is free traffic,
 `two_node_e2e.rs:604-607`). The paid run over a real network is the live
 step 10 finding in evidence-network/loop.
@@ -34,12 +40,17 @@ The run, per node (payer exchange ids `deal-*`, provider `p-deal-*`):
 | `deal-terms` | terms accepted, no invoice | not_evaluable (`terms_only`) | not_evaluable / provider states |
 | `free` | no lifecycle event (`settlement: null`) | not a deal | not a deal |
 
-`golden-provider-countersigned.json` is the provider's book plus the payer's
+On the provider, a referee corroborated `p-deal-settled` and contradicted
+`p-deal-short` (naming the provider), so term 3 of those two deals carries the
+sealed verdict (met, not_met) instead of "provider states".
+
+`vector-provider-countersigned.json` is the provider's book plus the payer's
 terms legs its payee legs name. No Mesh node holds those in its book today:
 the provider keeps the pushed terms leg in `received-capsules.jsonl`, outside
 its ledger, and a payer never receives the payee leg. So a real Mesh book gives
-only `self-attested` and `not_evaluable` claims; this golden covers the
-`countersigned` rule.
+only `self-attested` and `not_evaluable` claims; this vector covers the
+`countersigned` rule. The rule reads each leg's `key_id`; the counterparty
+leg's inner Mesh signature is not verified by the evaluator.
 
 To regenerate (the records' timestamps are the run's wall clock; move
 `DATE` in tests/test_inference_deals.py and tests/fresh_env_deals.sh to the end
