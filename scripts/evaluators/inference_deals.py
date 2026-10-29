@@ -293,7 +293,13 @@ def payment_state(observations, side):
         if any(_amount(m) is None for i, found in paired for m in [i, *found]):
             return "not_evaluable", "amount_missing", len(unmatched), set()
         ok = all(_amount(s) == _amount(i) for i, found in paired for s in found)
-        hashes = {s.get("payment_hash") for _, found in paired for s in found if s.get("payment_hash")}
+        settled = [s for _, found in paired for s in found]
+        hashes = {s.get("payment_hash") for s in settled if s.get("payment_hash")}
+        if len(hashes) < len(settled):
+            # A settlement joined to its invoice by segment, with no hash, has
+            # no counterparty leg to name it: None marks the row as one that
+            # cannot be countersigned (_countersigned).
+            hashes = hashes | {None}
         return ("met" if ok else "not_met"), "settled", len(unmatched), hashes
     if side == "provider" or not any(m.get("phase") == "final_accounted" for _, m in observations):
         return "not_evaluable", "outcome_not_reported", len(unmatched), set()
@@ -307,7 +313,7 @@ def _countersigned(side, hashes, legs, own_keys):
     node, the payer's terms leg its own payee_observed leg names. A leg is
     this node's only under one of its own keys, and the counterparty's only
     under a key that is present and not one of them."""
-    if not hashes:
+    if not hashes or None in hashes:
         return False
     def own(body):
         return body.get("key_id") in own_keys
@@ -333,6 +339,7 @@ def _cited(deal, legs, hashes):
     """The book capsule ids a row cites: the deal's own records and the legs
     of its payments."""
     ids = [cid for cid, _ in deal.records]
+    hashes = hashes - {None}
     leg_ids = {body.get("capsule_id") for _, body, m in legs
                if (m.get("payment_ref") or {}).get("value") in hashes}
     terms = {m.get("terms_ref") for _, body, m in legs if body.get("capsule_id") in leg_ids}

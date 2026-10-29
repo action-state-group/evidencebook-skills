@@ -219,6 +219,16 @@ class Goldens(unittest.TestCase):
         doc, _ = run(provider + held)
         self.assertEqual(claims(doc)[f"d1::{SERVED}"]["grade"], "self-attested")
 
+    def test_a_settlement_without_a_hash_is_not_countersigned(self):
+        payer, provider = load("payer"), load("provider")
+        named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
+        held = [c for c in payer if c["capsule_id"] in named]
+        for c in deal_records(provider, "p-deal-settled"):
+            if observation(c) and observation(c)["phase"] == "output_settlement_observed":
+                observation(c)["payment_hash"] = None  # joined to its invoice by segment
+        row = claims(run(provider + held)[0])[f"d1::{SERVED}"]
+        self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
+
     def test_an_own_leg_without_a_key_is_not_a_countersignature(self):
         payer, provider = load("payer"), load("provider")
         named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
