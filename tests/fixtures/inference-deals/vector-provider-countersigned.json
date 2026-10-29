@@ -1,0 +1,481 @@
+{
+  "result_version": "evidence-result-v0",
+  "generated_at": "2026-11-01T23:59:59Z",
+  "claims": [
+    {
+      "id": "d1::come_through.served_as_agreed",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_as_agreed",
+      "tier": "recomputed",
+      "grade": "countersigned",
+      "sufficiency": "SATISFIED",
+      "verdict": "met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "32551973a3b4c58156b467b30e1e5099fcdaec539f9513631723b2cfd36d7a40"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "33f4f4338ae30fea405e875426ed4a5a721259ca9592313c56b87c853aff588f"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "55e256dddffd37e0903153b06e3c1ab27c58a98e23f43457269b85f6c25663cd"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "f48513749cf60b585191dbdb155db731832f7d102d1a34bf9c19e94fc6a0614e"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "32551973a3b4c58156b467b30e1e5099fcdaec539f9513631723b2cfd36d7a40"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "33f4f4338ae30fea405e875426ed4a5a721259ca9592313c56b87c853aff588f"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "55e256dddffd37e0903153b06e3c1ab27c58a98e23f43457269b85f6c25663cd"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "f48513749cf60b585191dbdb155db731832f7d102d1a34bf9c19e94fc6a0614e"
+          }
+        ]
+      },
+      "x-state": "settled"
+    },
+    {
+      "id": "d1::come_through.served_named_model",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_named_model",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "SATISFIED",
+      "verdict": "met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "8664bb04da6ad427239c205af87cec488afc2606aafafa152180bd153c467641"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "8664bb04da6ad427239c205af87cec488afc2606aafafa152180bd153c467641"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb"
+          }
+        ]
+      },
+      "x-reading": "adjudicated",
+      "x-adjudication": "corroborated"
+    },
+    {
+      "id": "d2::come_through.served_as_agreed",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_as_agreed",
+      "tier": "recomputed",
+      "grade": "countersigned",
+      "sufficiency": "SATISFIED",
+      "verdict": "met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "057638c90712bf25b54bb38bc3c9e33ffeb1cc4cbdee30107a74302aa3e450cf"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "121b19dbbe92b0145effaf053cfd97e2faaba6669c2ec303ea0c3c7055794506"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "17fbf93ef917f610dd19f592f66405a3b3ddee1efbf0c0bcadeedfa7f895eb08"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "554867caa939687f7c7270dc7b8473195571dfb624fd27d716913a0244ed19e3"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "5900d26c3180914e815f15583582dc763f251b53031a243cd75210a050874619"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "8bcc6b40814fd6b3ebd636ef0b9ffc0fffa06a2cb05143f8a925a470eb922b55"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "93c09b8764c917e679b320cf0424c6f5ec93d234489e576c0e8c9fdce5d678c0"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "b2258eb2091241b93d9fcba29d7b92aea12f2455b941f00f8146b2490f0ebd16"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "c64cd334e861c6d03d8f6e09bf561b0710247e462ff8736a7361eb02d0f7ba26"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "c8b26cd8417ef389e7ff75f1aecbbaf0815033dc57682510d00fd32650aa6706"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "efe4cbe6e5f8b7fa21ff5daf2c7364f78cb7d32181cd30894924271dd2ea98c9"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "057638c90712bf25b54bb38bc3c9e33ffeb1cc4cbdee30107a74302aa3e450cf"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "121b19dbbe92b0145effaf053cfd97e2faaba6669c2ec303ea0c3c7055794506"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "17fbf93ef917f610dd19f592f66405a3b3ddee1efbf0c0bcadeedfa7f895eb08"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "554867caa939687f7c7270dc7b8473195571dfb624fd27d716913a0244ed19e3"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "5900d26c3180914e815f15583582dc763f251b53031a243cd75210a050874619"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "8bcc6b40814fd6b3ebd636ef0b9ffc0fffa06a2cb05143f8a925a470eb922b55"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "93c09b8764c917e679b320cf0424c6f5ec93d234489e576c0e8c9fdce5d678c0"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "b2258eb2091241b93d9fcba29d7b92aea12f2455b941f00f8146b2490f0ebd16"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "c64cd334e861c6d03d8f6e09bf561b0710247e462ff8736a7361eb02d0f7ba26"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "c8b26cd8417ef389e7ff75f1aecbbaf0815033dc57682510d00fd32650aa6706"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "efe4cbe6e5f8b7fa21ff5daf2c7364f78cb7d32181cd30894924271dd2ea98c9"
+          }
+        ]
+      },
+      "x-state": "settled"
+    },
+    {
+      "id": "d2::come_through.served_named_model",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_named_model",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "SATISFIED",
+      "verdict": "not_met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "00d1b10f8bd24e12a20105320797eb2fc8a6cb579bab22759ed89491dc7bbd25"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "b2258eb2091241b93d9fcba29d7b92aea12f2455b941f00f8146b2490f0ebd16"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "00d1b10f8bd24e12a20105320797eb2fc8a6cb579bab22759ed89491dc7bbd25"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "b2258eb2091241b93d9fcba29d7b92aea12f2455b941f00f8146b2490f0ebd16"
+          }
+        ]
+      },
+      "x-reading": "adjudicated",
+      "x-adjudication": "contradicted"
+    },
+    {
+      "id": "d3::come_through.served_as_agreed",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_as_agreed",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "GAP",
+      "verdict": "not_evaluable",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "bca183a35c58cff19ea9e60ce19ec946a8bcb7dbed1d29dd563f5f805ecb5650"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "e247fd52e486c4a61f77f44635537e30462dcbdc39c40da242abbf2165b3eb83"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "INSUFFICIENT",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "bca183a35c58cff19ea9e60ce19ec946a8bcb7dbed1d29dd563f5f805ecb5650"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "e247fd52e486c4a61f77f44635537e30462dcbdc39c40da242abbf2165b3eb83"
+          }
+        ]
+      },
+      "x-state": "terms_only"
+    },
+    {
+      "id": "d3::come_through.served_named_model",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_named_model",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "SATISFIED",
+      "verdict": "met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "bca183a35c58cff19ea9e60ce19ec946a8bcb7dbed1d29dd563f5f805ecb5650"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "bca183a35c58cff19ea9e60ce19ec946a8bcb7dbed1d29dd563f5f805ecb5650"
+          }
+        ]
+      },
+      "x-reading": "provider_states"
+    },
+    {
+      "id": "d4::come_through.served_as_agreed",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_as_agreed",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "GAP",
+      "verdict": "not_evaluable",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "0e0349146813c27518c279f4dc062814b97f01fd13e66ee5926f7746f9c3bb1f"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "467416838f24bd49ffbcbb323a904dbf048ae59aa8851e89cb37d634ff6f281e"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "7e1a78e8935bc0ddd7ea672830383d22f5bef5aed1bce559c0f30802da2aa062"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "968f308ede10a3bfc0dc26abeadb00b1f608c5ab32aa478107b8b67613e9b4d3"
+        },
+        {
+          "digest_alg": "SHA-256",
+          "digest": "d8f25cf24f80e955ffbbdc67ce54f8c25b9560ee59fcc8f20c1cbeced3cb38c9"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "INSUFFICIENT",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "0e0349146813c27518c279f4dc062814b97f01fd13e66ee5926f7746f9c3bb1f"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "467416838f24bd49ffbcbb323a904dbf048ae59aa8851e89cb37d634ff6f281e"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "7e1a78e8935bc0ddd7ea672830383d22f5bef5aed1bce559c0f30802da2aa062"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "968f308ede10a3bfc0dc26abeadb00b1f608c5ab32aa478107b8b67613e9b4d3"
+          },
+          {
+            "digest_alg": "SHA-256",
+            "digest": "d8f25cf24f80e955ffbbdc67ce54f8c25b9560ee59fcc8f20c1cbeced3cb38c9"
+          }
+        ]
+      },
+      "x-state": "outcome_not_reported"
+    },
+    {
+      "id": "d4::come_through.served_named_model",
+      "contract_ref": "inference-deals@0.1.0",
+      "requirement_ref": "come_through.served_named_model",
+      "tier": "recomputed",
+      "grade": "self-attested",
+      "sufficiency": "SATISFIED",
+      "verdict": "met",
+      "evidence": [
+        {
+          "digest_alg": "SHA-256",
+          "digest": "467416838f24bd49ffbcbb323a904dbf048ae59aa8851e89cb37d634ff6f281e"
+        }
+      ],
+      "proofs": [],
+      "presentation": {
+        "kind": "disclosure",
+        "status": "SATISFIED",
+        "evidence": [
+          {
+            "digest_alg": "SHA-256",
+            "digest": "467416838f24bd49ffbcbb323a904dbf048ae59aa8851e89cb37d634ff6f281e"
+          }
+        ]
+      },
+      "x-reading": "provider_states"
+    }
+  ],
+  "aggregate": {
+    "coverage": {
+      "evaluated_population": 8,
+      "excluded_not_applicable": 4,
+      "unknown_count": 0
+    },
+    "buckets": {
+      "met": [
+        "d1::come_through.served_as_agreed",
+        "d1::come_through.served_named_model",
+        "d2::come_through.served_as_agreed",
+        "d3::come_through.served_named_model",
+        "d4::come_through.served_named_model"
+      ],
+      "not_met": [
+        "d2::come_through.served_named_model"
+      ],
+      "not_evaluable": [
+        "d3::come_through.served_as_agreed",
+        "d4::come_through.served_as_agreed"
+      ]
+    }
+  },
+  "view": {
+    "spec_version": "presentation/v1",
+    "title": "Inference deals \u2014 2025-11-03 to 2026-11-01"
+  },
+  "x-window": {
+    "from": "2025-11-03T00:00:00Z",
+    "to": "2026-11-02T00:00:00Z",
+    "periods": 52,
+    "months": 12,
+    "period_policy_digest": "0d4b28af7ebfca01a49c1ad59e74b7d9bff0e6712dd3478b4ee35b8ff6af5150",
+    "deals_counted": 4,
+    "not_counted_shop_preauth": 0,
+    "class_missing": 4,
+    "class_conflicting": 0,
+    "unmatched_settlements": 0,
+    "adjudicated_deals": 2,
+    "peer_book": "not_available"
+  }
+}

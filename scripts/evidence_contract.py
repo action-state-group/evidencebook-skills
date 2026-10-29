@@ -123,8 +123,10 @@ def from_pack(source):
         raise ContractError("pack source is invalid: " + "; ".join(issues))
     switches = source.get("switches") or {}
     out_of_scope = bool(switches.get("out_of_scope_verdict"))
-    subject, evidence = _judged_evidence(source)
-    scope = f"Judged on {subject}, from {pack_compile._join_evidence(evidence)}."
+    evaluator = source.get("evaluator")
+    if evaluator is None:
+        subject, evidence = _judged_evidence(source)
+        scope = f"Judged on {subject}, from {pack_compile._join_evidence(evidence)}."
     clauses = {c["id"]: c for c in pack_compile.build_clauses(source)}
     requirements = []
     for check in source["checks"]:
@@ -156,9 +158,14 @@ def from_pack(source):
                 fold = crit.get("fold_id")
                 rule = [effective_claim(clause, switches), ""]
                 rule.append(f"Recomputed by fold {fold}." if fold else "Recomputed from the session's records.")
-                # A checker's answer is held to met/not_met/not_evaluable
-                # (run_daily.recomputed_answer); out_of_scope is a judge answer only.
-                rule.append(_answers(False))
+                if evaluator is not None:
+                    # A deterministic pack's evaluator (scripts/evaluators/) answers
+                    # every row itself, out_of_scope included when its switch is on.
+                    rule.append(_answers(oos))
+                else:
+                    # A checker's answer is held to met/not_met/not_evaluable
+                    # (run_daily.recomputed_answer); out_of_scope is a judge answer only.
+                    rule.append(_answers(False))
                 req["evidence_rule"] = "\n".join(rule)
                 req["forward_verdict"] = FORWARD_RECOMPUTED
                 req["backward_verdict"] = "DETERMINISTIC"

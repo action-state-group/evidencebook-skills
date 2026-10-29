@@ -55,11 +55,14 @@ def pack_entry(root, source):
     pack_id = (yaml.safe_load(source.read_text()) or {}).get("pack_id")
     spec = compiled_spec(root, name)
     card = DEFAULT_CARD
+    compiled = json.loads(spec.read_text()) if spec else {}
     if spec is not None:
         presentation = spec.with_name("presentation.json")
         if presentation.is_file():
             _, _, card = prepare_block(json.loads(presentation.read_text()))
-    compiled = json.loads(spec.read_text()) if spec else {}
+        elif (compiled.get("presentation") or {}).get("card"):
+            # A deterministic pack (scripts/pack_compile.py EVALUATORS) names its card directly.
+            card = compiled["presentation"]["card"]
     return {
         "name": name,
         "pack_id": pack_id,

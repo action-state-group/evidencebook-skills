@@ -1,0 +1,227 @@
+diff --git a/crates/evidence-plugin/src/main.rs b/crates/evidence-plugin/src/main.rs
+index 9464b40..cd5b429 100644
+--- a/crates/evidence-plugin/src/main.rs
++++ b/crates/evidence-plugin/src/main.rs
+@@ -1702,6 +1702,7 @@ mod own_key_tests {
+     use super::*;
+     use peer_keys::own::Announced;
+     use serde_json::json;
++    use std::path::Path;
+ 
+     /// What the plugin does at start with each answer the host can give:
+     /// whether a request it then sends is signed.
+@@ -2244,3 +2245,214 @@ mod exchange_text_wiring_tests {
+         assert!(!log.contains("SECRET"), "{log}");
+     }
+ }
++
++/// Fixture generator for evidencebook-skills#71 (the inference-deals Terms
++/// Pack). Not a test: run it by hand with
++/// `INFERENCE_DEALS_OUT=DIR cargo test -p evidence-plugin --bin evidence-plugin \
++///  inference_deals_fixtures -- --ignored --nocapture`.
++/// Two nodes, a payer and a provider, each with its own ledger, sealed by the
++/// same handler paths the channel uses: `observe_exchange_event` for an
++/// exchange, `emit_settlement_record` plus the settlement legs for a payment
++/// lifecycle event, and the payer's terms legs delivered to the provider as
++/// `record-push/1` would. Host events are scripted; no Lightning network runs.
++#[cfg(test)]
++mod inference_deals_fixtures {
++    use super::*;
++    use serde_json::json;
++    use std::path::Path;
++
++    const PROVIDER_ID: &str = "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478";
++    const PAYER_ID: &str = "9b1f0c3e5a7d2b4f6e8a0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f1a2b3c4d5e6f";
++
++    struct Node {
++        capsules: Arc<CapsuleState>,
++        events: ObservedLifecycleEvents,
++        splits: Splits,
++    }
++
++    impl Node {
++        fn open(dir: &Path, name: &str) -> Self {
++            Node {
++                capsules: Arc::new(CapsuleState::open(dir, name).unwrap()),
++                events: ObservedLifecycleEvents::open(dir).unwrap(),
++                splits: Splits::new(),
++            }
++        }
++
++        /// One payment lifecycle event, through the handler's own two steps.
++        fn lifecycle(&self, body: serde_json::Value) -> Vec<settlement_legs::Push> {
++            let mut body = body;
++            body["event_ref"] = json!("");
++            body["event_ref"] = json!(crate::producer::jcs::json_digest(&body).unwrap());
++            let event = settlement_channel::parse_and_check(&serde_json::to_vec(&body).unwrap())
++                .expect("a host-shaped lifecycle event");
++            self.capsules.emit_settlement_record(&event.observation()).unwrap();
++            self.capsules.settlement_legs().on_lifecycle(&self.capsules, &event)
++        }
++
++        async fn exchange(&self, envelope: serde_json::Value) -> Vec<settlement_legs::Push> {
++            let body = serde_json::to_vec(&envelope).unwrap();
++            let mut pushes = Vec::new();
++            if let Ok(env) = serde_json::from_slice::<OpenAiExchangeEnvelope>(&body) {
++                if env.dispatch_path == lifecycle_channel::DispatchPath::RemoteMesh {
++                    if let Some(id) = env.exchange_id.clone() {
++                        pushes = self.capsules.settlement_legs().on_exchange(
++                            &self.capsules,
++                            &id,
++                            Some(PROVIDER_ID),
++                            env.response_digest.as_deref(),
++                        );
++                    }
++                }
++            }
++            observe_exchange_event(&body, false, &self.capsules, &self.splits, &self.events).await;
++            pushes
++        }
++    }
++
++    fn ev(role: &str, exchange_id: &str, phase: &str, source: &str, segment: Option<u32>,
++          hash: Option<&str>, amount_msat: u64, extra: &[(&str, u64)]) -> serde_json::Value {
++        let terminal = source == "wallet_reported";
++        let mut body = json!({
++            "exchange_id": exchange_id, "event_ref": "", "terms_digest": "7d".repeat(32),
++            "role": role, "phase": phase, "source": source,
++            "settlement": if terminal { json!("terminal") } else { json!(null) },
++            "segment": segment, "payment_hash": hash, "amount_msat": amount_msat,
++        });
++        for (k, v) in extra {
++            body[*k] = json!(v);
++        }
++        body
++    }
++
++    fn requester_envelope(exchange_id: &str) -> serde_json::Value {
++        json!({
++            "exchange_id": exchange_id, "dispatch_path": "remote_mesh", "phase": "terminal",
++            "model": "qwen3-8b-q4", "status": 200,
++            "serving_provenance": {"served_by_node_id": PROVIDER_ID},
++            "usage": {"prompt_tokens": 20, "completion_tokens": 22, "total_tokens": 42},
++            "request_digest": format!("sha256:{}", "a1".repeat(32)),
++            "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
++        })
++    }
++
++    fn served_envelope(exchange_id: &str, model: &str) -> serde_json::Value {
++        json!({
++            "exchange_id": exchange_id, "dispatch_path": "raw_proxy", "phase": "terminal",
++            "model": model, "status": 200,
++            "serving_provenance": {"served_by_node_id": PROVIDER_ID, "requested_by_node_id": PAYER_ID,
++                                    "weights_digest": "sha256:loaded-weights", "quantization": "Q4_K_M"},
++            "usage": {"prompt_tokens": 20, "completion_tokens": 22, "total_tokens": 42},
++            "request_digest": format!("sha256:{}", "a1".repeat(32)),
++            "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
++        })
++    }
++
++    const H_IN: &str = "8437d5a5e0c5aa3304c0e0d17288cd504593ca7e560e3691a30739f1725ee7c5";
++    const H_OUT: &str = "59c0c4d2859c994004ad65ce13831b9cdaf688828d6c9f08cdb06f1bda9f15dd";
++
++    fn hash(seed: &str, which: &str) -> String {
++        crate::producer::jcs::json_digest(&json!({"seed": seed, "which": which})).unwrap()
++    }
++
++    /// One paid exchange on both nodes. `payer_paid`: the payer's wallet
++    /// reports both settlements (and `payer_amount` is what it reports for the
++    /// output invoice); `payer_accounted`: the payer host sends its
++    /// final_accounted; `provider_paid`: the provider's wallet reports both.
++    async fn paid(payer: &Node, provider: &Node, ex: &str, payer_paid: bool, payer_amount: u64,
++                  payer_accounted: bool, provider_paid: bool) {
++        let (pex, hin, hout) = (format!("p-{ex}"), hash(ex, "in"), hash(ex, "out"));
++        let _ = (H_IN, H_OUT);
++        payer.lifecycle(ev("payer", ex, "terms_accepted", "payer_asserted", None, None, 1000, &[]));
++        provider.lifecycle(ev("provider", &pex, "terms_accepted", "provider_asserted", None, None, 1000, &[]));
++        for (phase, seg, h) in [("input_invoice_issued", 0, &hin), ("output_invoice_issued", 1, &hout)] {
++            provider.lifecycle(ev("provider", &pex, phase, "provider_asserted", Some(seg), Some(h), 500, &[]));
++            payer.lifecycle(ev("payer", ex, phase, "provider_asserted", Some(seg), Some(h), 500, &[]));
++        }
++        for (phase, seg, h, amt) in [("input_settlement_observed", 0, &hin, 500),
++                                     ("output_settlement_observed", 1, &hout, payer_amount)] {
++            if provider_paid {
++                provider.lifecycle(ev("provider", &pex, phase, "wallet_reported", Some(seg), Some(h), 500,
++                                      &[("credited_msat", 495), ("fee_msat", 5)]));
++            }
++            if payer_paid {
++                payer.lifecycle(ev("payer", ex, phase, "wallet_reported", Some(seg), Some(h), amt, &[("fee_msat", 0)]));
++            }
++        }
++        if payer_accounted {
++            payer.lifecycle(ev("payer", ex, "final_accounted", "payer_asserted", None, None, 1000, &[]));
++        }
++        provider.lifecycle(ev("provider", &pex, "delivered", "provider_asserted", None, None, 0, &[("tokens", 42)]));
++        provider.exchange(served_envelope(&pex, "qwen3-8b-q4")).await;
++        let pushes = payer.exchange(requester_envelope(ex)).await;
++        for push in &pushes {
++            provider.capsules.settlement_legs().on_received(&provider.capsules, &push.capsule);
++        }
++    }
++
++    /// The provider's own served exchange record for `exchange_id`, from its ledger.
++    fn served_record_id(dir: &Path, exchange_id: &str) -> String {
++        std::fs::read_to_string(dir.join("ledger").join("capsules.jsonl"))
++            .unwrap()
++            .lines()
++            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap())
++            .filter(|c| c.pointer("/model_attestation/compute_attestation/x-mesh-poc-v1/serving_provenance/exchange_id")
++                .and_then(|v| v.as_str()) == Some(exchange_id))
++            .last()
++            .map(|c| c["capsule_id"].as_str().unwrap().to_string())
++            .expect("a served exchange record")
++    }
++
++    /// A referee's verdict on the provider's served half, delivered to the
++    /// provider and sealed through its own `emit_adjudication_received`.
++    fn adjudicated(provider: &Node, dir: &Path, exchange_id: &str, verdict: &str, seed: &str) {
++        let half = served_record_id(dir, exchange_id);
++        let verdict_id = hash(seed, "verdict");
++        let twin = hash(seed, "twin");
++        let referee = "5f".repeat(32);
++        let facts = crate::producer::capsule::VerdictFacts {
++            verdict,
++            verdict_capsule_id: &verdict_id,
++            referee_node_id: &referee,
++            halves: [&half, &twin],
++            half_node_ids: [PROVIDER_ID, "6a".repeat(32).leak()],
++            twin_bracket_id: Some("bracket-1"),
++            model_hash: None,
++        };
++        provider
++            .capsules
++            .emit_adjudication_received(&facts, &half, &referee, "2026-10-29T23:00:00Z")
++            .unwrap()
++            .expect("a new adjudication record");
++    }
++
++    #[tokio::test]
++    #[ignore]
++    async fn inference_deals_fixtures() {
++        let out = std::path::PathBuf::from(std::env::var("INFERENCE_DEALS_OUT").expect("INFERENCE_DEALS_OUT"));
++        let (a, b) = (out.join("payer"), out.join("provider"));
++        std::fs::create_dir_all(&a).unwrap();
++        std::fs::create_dir_all(&b).unwrap();
++        let (payer, provider) = (Node::open(&a, "payer-node"), Node::open(&b, "provider-node"));
++        // Settled on both sides.
++        paid(&payer, &provider, "deal-settled", true, 500, true, true).await;
++        // The payer's wallet reports less than the output invoice.
++        paid(&payer, &provider, "deal-short", true, 400, true, true).await;
++        // Invoices issued, no settlement and no accounted bill on either side.
++        paid(&payer, &provider, "deal-unreported", false, 500, false, false).await;
++        // Terms only: accepted, no invoice yet.
++        payer.lifecycle(ev("payer", "deal-terms", "terms_accepted", "payer_asserted", None, None, 1000, &[]));
++        provider.lifecycle(ev("provider", "p-deal-terms", "terms_accepted", "provider_asserted", None, None, 1000, &[]));
++        provider.exchange(served_envelope("p-deal-terms", "qwen3-8b-q4")).await;
++        payer.exchange(requester_envelope("deal-terms")).await;
++        // A free exchange: no lifecycle event at all.
++        provider.exchange(served_envelope("p-free", "qwen3-8b-q4")).await;
++        payer.exchange(requester_envelope("free")).await;
++        // The referee corroborated the provider's settled deal and found
++        // against its short one (contradicted, naming the provider).
++        adjudicated(&provider, &b, "p-deal-settled", "corroborated", "adj-1");
++        adjudicated(&provider, &b, "p-deal-short", &format!("contradicted:{PROVIDER_ID}"), "adj-2");
++        println!("payer ledger: {}", a.join("ledger").display());
++        println!("provider ledger: {}", b.join("ledger").display());
++    }
++}

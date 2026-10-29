@@ -6,8 +6,10 @@ validates against its vendored schema. Written to match that schema exactly.
 Known, flagged gaps against the schema:
   - `proofs` is always [] here. A real inclusion proof or receipt digest comes from
     the book; this judge/rollup seam produces none.
-  - `grade` is always "self-attested": these are our own book's judge verdicts,
-    never witnessed or countersigned by any other party.
+  - `grade` is "self-attested" for our own book's judge verdicts, never
+    witnessed or countersigned by any other party; only a deterministic
+    evaluator that cites the counterparty's own signed record sets another
+    (claim_for's `grade`).
   - `sufficiency` maps met/not_met -> SATISFIED, not_evaluable -> GAP, per the
     schema's Claim.allOf rule (sufficiency SATISFIED <-> verdict in {met,
     not_met}; otherwise verdict MUST be not_evaluable).
@@ -61,7 +63,8 @@ def resolve_contract_ref(spec):
 
 
 def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, claim_id=None,
-             judge_pin_digest=None, judge_pin=None, rule_id=None, source_capsule_id=None):
+             judge_pin_digest=None, judge_pin=None, rule_id=None, source_capsule_id=None,
+             grade="self-attested", extensions=None):
     """One requirement-type claim (PR #19's ClaimType default: absent == requirement)
     for one criterion. `tier` is that criterion's own tier ("judged" or
     "recomputed") from the compiled contract's clause -- required, never
@@ -119,6 +122,12 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     disambiguate, so its id stays the bare criterion_id, unchanged, for every
     existing caller/test.
 
+    `grade` is the claim's evidence strength (Evidence Result v0 `Grade`):
+    "self-attested" unless a caller that can show more says so, as
+    scripts/evaluators/inference_deals.py does for a payment the counterparty's
+    own signed leg also records ("countersigned"). `extensions` are further
+    `x-` members for the claim (section 8a), each name checked here.
+
     `verdict` is strictly `met`/`not_met`/`not_evaluable` -- Evidence Result v0's
     closed Verdict enum, which this function never widens: an `out_of_scope`
     criterion is never passed here at all (see build_result_v0's own filtering,
@@ -147,7 +156,7 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         "contract_ref": contract_ref,
         "requirement_ref": criterion_id,
         "tier": tier,
-        "grade": "self-attested",
+        "grade": grade,
         "sufficiency": sufficiency,
         "verdict": verdict,
         "evidence": evidence,
@@ -163,6 +172,10 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
             ext["pin"] = dict(judge_pin)
     if ext:
         claim["x-judge-pin"] = ext
+    for name, value in (extensions or {}).items():
+        if not name.startswith("x-") or name in claim:
+            raise RollupError(f"criterion {criterion_id!r}: {name!r} is not a free x- member")
+        claim[name] = value
     return claim
 
 
@@ -260,7 +273,7 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
 
 def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
                              allow_out_of_scope=False, never_out_of_scope=frozenset(),
-                             source_capsule_ids=None):
+                             source_capsule_ids=None, claim_extras=None):
     """One Result v0 document spanning every complete case judged for one day/
     period: an outcome report renders from a single Result root, so a
     conversation's criteria live beside every other conversation's in one document
@@ -283,6 +296,9 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     top-level parameter rather than a 5th case_rollups element so every
     existing caller/test keeps working unchanged.
 
+    `claim_extras`: optional dict[case_id -> dict[criterion_id -> {"grade": ...,
+    "x-...": ...}]], passed to claim_for() as that claim's grade and x- members.
+
     `allow_out_of_scope`: same switch build_result_v0() takes -- threaded through
     only so this function can tell a legitimate out_of_scope input verdict apart
     from a stray one (defense in depth; every real caller already filtered
@@ -296,6 +312,7 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
     claims = []
     excluded_not_applicable = 0
     source_capsule_ids = source_capsule_ids or {}
+    claim_extras = claim_extras or {}
     for case_id, criterion_verdicts, report_digests, tiers in case_rollups:
         missing = [c for c in all_criteria if c not in criterion_verdicts]
         if missing:
@@ -312,14 +329,17 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
             raise RollupError(f"case {case_id!r}: every criterion is out_of_scope; nothing was evaluated")
         report_digests = report_digests or {}
         case_sources = source_capsule_ids.get(case_id) or {}
+        case_extras = claim_extras.get(case_id) or {}
         for cid in all_criteria:
             if criterion_verdicts[cid] == "out_of_scope":
                 excluded_not_applicable += 1
                 continue
+            extras = dict(case_extras.get(cid) or {})
+            grade = extras.pop("grade", "self-attested")
             claims.append(claim_for(
                 cid, criterion_verdicts[cid], contract_ref, tiers[cid], report_digests.get(cid),
                 claim_id=f"{case_id}{CASE_SEPARATOR}{cid}",
-                source_capsule_id=case_sources.get(cid),
+                source_capsule_id=case_sources.get(cid), grade=grade, extensions=extras,
             ))
     buckets = {"met": [], "not_met": [], "not_evaluable": []}
     for c in claims:

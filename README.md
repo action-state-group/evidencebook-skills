@@ -30,7 +30,8 @@ way.
   — the Capsule CLI contract copied verbatim into bundles.
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
   `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
-  `everyday-rules`). `scripts/pack_compile.py` compiles one into four files:
+  `everyday-rules`, `inference-deals`). `scripts/pack_compile.py` compiles a
+  judged pack into four files:
   `compiled.json`, the contract the run scripts read, with the pack's `title`
   for report titles (`PACK_TITLES` in the compiler, outside the pack source so
   naming a pack never moves its judge pin); `judge-prompt.md` and
@@ -43,6 +44,11 @@ way.
   writes a judge sidecar, `<result>.judge.json` (format `judge-sidecar/v1`,
   described in [`docs/jev-judge.md`](docs/jev-judge.md)), recording which rows
   the judge was sent.
+  `inference-deals` (a Mesh node's come-through terms, card `settlement`) is a
+  deterministic pack: it names an `evaluator` instead of a judge, compiles to
+  `compiled.json` alone under `packs/inference-deals/compiled/`, and
+  `scripts/report.sh` runs `scripts/evaluators/inference_deals.py` over the
+  node's book for a window of whole closed periods. No model runs.
 - [`contracts/`](contracts/) — published Evidence Contracts, one file per
   version at `contracts/<id>/<version>.json`. A pack source or a report spec
   stays the authoring form; `scripts/evidence_contract.py` compiles it to an
