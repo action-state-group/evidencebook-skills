@@ -295,7 +295,7 @@ def payment_state(observations, side):
         ok = all(_amount(s) == _amount(i) for i, found in paired for s in found)
         settled = [s for _, found in paired for s in found]
         hashes = {s.get("payment_hash") for s in settled if s.get("payment_hash")}
-        if len(hashes) < len(settled):
+        if any(not s.get("payment_hash") for s in settled):
             # A settlement joined to its invoice by segment, with no hash, has
             # no counterparty leg to name it: None marks the row as one that
             # cannot be countersigned (_countersigned).

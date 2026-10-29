@@ -229,6 +229,16 @@ class Goldens(unittest.TestCase):
         row = claims(run(provider + held)[0])[f"d1::{SERVED}"]
         self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
 
+    def test_a_repeated_settlement_of_one_payment_stays_countersigned(self):
+        payer, provider = load("payer"), load("provider")
+        named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
+        held = [c for c in payer if c["capsule_id"] in named]
+        again = copy.deepcopy(next(c for c in deal_records(provider, "p-deal-settled")
+                                   if observation(c) and observation(c)["phase"] == "output_settlement_observed"))
+        again["capsule_id"] = "b" * 64
+        row = claims(run(provider + held + [again])[0])[f"d1::{SERVED}"]
+        self.assertEqual((row["verdict"], row["grade"]), ("met", "countersigned"))
+
     def test_an_own_leg_without_a_key_is_not_a_countersignature(self):
         payer, provider = load("payer"), load("provider")
         named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
