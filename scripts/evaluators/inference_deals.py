@@ -354,8 +354,8 @@ def ruling_about(verdict, half_node_ids, node_id):
     (capsules-plugin verdict_counts.rs `ruling_about`). A contradiction naming
     the OTHER half means the referee's answer matched this one, so it is
     corroborated for this node."""
-    if not node_id or node_id not in half_node_ids:
-        return None
+    if len(half_node_ids) != 2 or not node_id or node_id not in half_node_ids:
+        return None  # the plugin's halves are exactly two ([&str; 2])
     if isinstance(verdict, str) and verdict.startswith("contradicted:"):
         named = verdict[len("contradicted:"):]
         if named == node_id:

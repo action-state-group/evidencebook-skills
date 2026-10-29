@@ -360,6 +360,16 @@ class Negatives(unittest.TestCase):
         row = claims(run(provider)[0])[f"d2::{MODEL}"]
         self.assertEqual((row["verdict"], row["x-adjudication"]), ("not_evaluable", "no_ruling"))
 
+    def test_a_verdict_without_exactly_two_halves_decides_nothing(self):
+        provider = load("provider")
+        adj = next(c for c in provider if "adjudication_received" in deals._attestation(c)
+                   and deals._attestation(c)["adjudication_received"]["verdict"] == "corroborated")
+        block = deals._attestation(adj)["adjudication_received"]
+        for halves in (block["half_node_ids"][:1], block["half_node_ids"] + ["7e" * 32]):
+            block["half_node_ids"] = halves
+            row = claims(run(provider)[0])[f"d1::{MODEL}"]
+            self.assertEqual((row["verdict"], row["x-adjudication"]), ("not_evaluable", "no_ruling"))
+
     def test_adjudications_that_disagree_decide_nothing(self):
         provider = load("provider")
         adj = next(c for c in provider if "adjudication_received" in deals._attestation(c))
