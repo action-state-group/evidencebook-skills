@@ -73,9 +73,10 @@ did not carry it (the node bought: term 1; it provided: terms 2 and 3):
      served record of the deal names the same requested and resolved model.
      A deal a referee already adjudicated is not judged again (Steven, ops
      c18ddbd8): the row cites the sealed adjudication record and carries its
-     verdict (`x-reading: adjudicated`): corroborated is met, contradicted
-     naming this node is not_met, anything else is not_evaluable. It is
-     counted in `x-window.adjudicated_deals`.
+     verdict (`x-reading: adjudicated`), read for this node as the plugin's
+     own `ruling_about` reads it: corroborated, or contradicted naming the
+     other half, is met; contradicted naming this node is not_met; anything
+     else is not_evaluable. It is counted in `x-window.adjudicated_deals`.
 
 One node is never both sides of one exchange: a deal whose observations or
 exchange records name both sides is `conflicting_roles`, every row
@@ -347,28 +348,38 @@ def _cited(deal, legs, hashes):
     return sorted(set(ids))
 
 
+def ruling_about(verdict, half_node_ids, node_id):
+    """The bucket a sealed verdict puts `node_id` in, when it is one of the two
+    judged halves' nodes, else None: the plugin's own reading
+    (capsules-plugin verdict_counts.rs `ruling_about`). A contradiction naming
+    the OTHER half means the referee's answer matched this one, so it is
+    corroborated for this node."""
+    if not node_id or node_id not in half_node_ids:
+        return None
+    if isinstance(verdict, str) and verdict.startswith("contradicted:"):
+        named = verdict[len("contradicted:"):]
+        if named == node_id:
+            return "contradicted"
+        return "corroborated" if named in half_node_ids else None
+    return verdict if verdict in ("corroborated", "inconclusive", "not_comparable") else None
+
+
 def _adjudication(deal, own_node):
     """(verdict, x-adjudication, cited ids) from the deal's sealed adjudication
-    records, or None when it has none. Records that disagree decide nothing."""
+    records, read for this node as ruling_about reads them, or None when it has
+    none. A record that puts this node in no bucket, or records that disagree,
+    decide nothing."""
     if not deal.adjudications:
         return None
     readings = set()
     for _, m in deal.adjudications:
-        v = m.get("verdict")
-        if v == "corroborated":
-            readings.add("corroborated")
-        elif isinstance(v, str) and v.startswith("contradicted:"):
-            readings.add("contradicted_this_node" if own_node and v == f"contradicted:{own_node}"
-                         else "contradicted_other")
-        elif v in ("inconclusive", "not_comparable"):
-            readings.add(v)
-        else:
-            readings.add("unreadable")
+        halves = [h for h in (m.get("half_node_ids") or []) if isinstance(h, str)]
+        readings.add(ruling_about(m.get("verdict"), halves, own_node) or "no_ruling")
     cited = sorted({cid for cid, _ in deal.adjudications} | {cid for cid, _, _ in deal.exchanges})
     if len(readings) != 1:
         return "not_evaluable", "conflicting", cited
     reading = readings.pop()
-    verdict = {"corroborated": "met", "contradicted_this_node": "not_met"}.get(reading, "not_evaluable")
+    verdict = {"corroborated": "met", "contradicted": "not_met"}.get(reading, "not_evaluable")
     return verdict, reading, cited
 
 

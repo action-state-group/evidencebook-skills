@@ -254,7 +254,7 @@
         ]
       },
       "x-reading": "adjudicated",
-      "x-adjudication": "contradicted_this_node"
+      "x-adjudication": "contradicted"
     },
     {
       "id": "d3::come_through.served_as_agreed",

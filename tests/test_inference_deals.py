@@ -195,7 +195,7 @@ class Goldens(unittest.TestCase):
                  for cid, c in claims(doc).items() if cid.endswith(MODEL)}
         self.assertEqual(model, {
             f"d1::{MODEL}": ("met", "adjudicated", "corroborated"),             # the referee corroborated it
-            f"d2::{MODEL}": ("not_met", "adjudicated", "contradicted_this_node"),
+            f"d2::{MODEL}": ("not_met", "adjudicated", "contradicted"),
             f"d3::{MODEL}": ("met", "provider_states", None),
             f"d4::{MODEL}": ("met", "provider_states", None),
         })
@@ -347,6 +347,18 @@ class Negatives(unittest.TestCase):
         deals._attestation(other)["invocation"]["resolved_model_id"] = "another-model"
         for book in (provider + [other], [other] + provider):  # either order
             self.assertEqual(claims(run(book)[0])[f"d3::{MODEL}"]["verdict"], "not_evaluable")
+
+    def test_a_contradiction_naming_the_other_half_is_corroborated_for_this_node(self):
+        provider = load("provider")
+        adj = next(c for c in provider if "adjudication_received" in deals._attestation(c)
+                   and deals._attestation(c)["adjudication_received"]["verdict"].startswith("contradicted:"))
+        block = deals._attestation(adj)["adjudication_received"]
+        block["verdict"] = "contradicted:" + block["half_node_ids"][1]  # the twin, not this node
+        row = claims(run(provider)[0])[f"d2::{MODEL}"]
+        self.assertEqual((row["verdict"], row["x-adjudication"]), ("met", "corroborated"))
+        block["verdict"] = "contradicted:" + "7e" * 32  # a node outside the two halves
+        row = claims(run(provider)[0])[f"d2::{MODEL}"]
+        self.assertEqual((row["verdict"], row["x-adjudication"]), ("not_evaluable", "no_ruling"))
 
     def test_adjudications_that_disagree_decide_nothing(self):
         provider = load("provider")
