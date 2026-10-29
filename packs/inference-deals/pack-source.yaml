@@ -1,0 +1,96 @@
+# inference-deals -- pack source, rubric v0.1
+#
+# A Mesh node's come-through terms over its own paid exchanges, on card
+# `settlement` (evidencebook-skills#71, THE_LOOP step 10). The hand-editable
+# INPUT scripts/pack_compile.py compiles to packs/inference-deals/compiled/.
+#
+# Steven's rulings, 2026-10-29:
+#   - fully deterministic, no LLM call anywhere (ops c18ddbd8): this pack names an
+#     `evaluator`, never a judge. scripts/evaluators/inference_deals.py answers
+#     every criterion from the node's own sealed records, in process;
+#   - terms 1-3, all must_have, over 12 months in whole closed periods tied to
+#     AAC #315 `period_policy` (ops f4f269eb; Buzz a3c74abf).
+#
+# A deal is one exchange_id in this node's own book that at least one payment
+# lifecycle observation (x-mesh-settlement-v1) names. An exchange no observation
+# names is free or ran with payments off (`settlement: null`): not a deal, never
+# judged, never counted. A row the deal never carried is out_of_scope: the node
+# bought (term 1 applies) or provided (terms 2 and 3 apply).
+#
+# Grades: a claim backed only by this node's records is self-attested; one
+# whose book also holds the counterparty's signed leg of the same payment is
+# countersigned; a row the records cannot decide is not_evaluable, never not_met.
+pack_id: inference-deals
+pack_version: 0.1.0
+rubric_version: "0.1"
+evaluator: inference_deals
+
+outcome_statement: >-
+  On every counted deal in the window, the node came through on the terms it
+  accepted: it paid as agreed when it bought, and it served as agreed, with the
+  model it named, when it provided.
+resolution_rule: >-
+  a deal is resolved only when every term that applies to it is met
+counterparty: mesh-peer
+counterparty_note: >-
+  The peer's book of the same exchange is not held on this node. It is shown as
+  not_available, never as a failure or as agreement.
+source: "evidencebook-skills#71; Steven's rulings 2026-10-29 (ops c18ddbd8, f4f269eb)"
+
+switches:
+  out_of_scope_verdict: true
+
+# 12 months in whole closed periods (Buzz a3c74abf). The anchor is the last
+# period boundary at or before the end of the report's --date; the window is
+# every whole period ending at the anchor that starts no earlier than 12
+# calendar months before it. The default policy is the one the node's Service
+# History serves (evidencebook#46, Steven 2026-10-22; Mesh-LLM/capsules-plugin
+# derivations/service-history-1.json), digest
+# 0d4b28af7ebfca01a49c1ad59e74b7d9bff0e6712dd3478b4ee35b8ff6af5150. A node with
+# another policy passes its own (report.sh --period-policy FILE).
+window:
+  months: 12
+  period_policy:
+    epoch: "2026-01-05T00:00:00Z"
+    length_s: 604800
+    min_length_s: 86400
+    floor: 5
+    suppression: complementary
+
+checks:
+  - id: come_through
+    question: Did the node come through on the terms it accepted?
+    criteria:
+      - id: paid_as_agreed
+        label: Paid as agreed
+        text: >-
+          When the node bought, every invoice it saw has a settlement its own
+          wallet reported, for the invoice's amount.
+        tier: recomputed
+        fold_id: inference_deals.paid_as_agreed
+        requirement_tier: must_have
+        out_of_scope_means: the node did not buy on this deal
+      - id: served_as_agreed
+        label: Served as agreed
+        text: >-
+          When the node provided, it served the exchange it accepted terms for,
+          and every invoice it issued has a settlement its wallet reported, for
+          the invoice's amount.
+        tier: recomputed
+        fold_id: inference_deals.served_as_agreed
+        requirement_tier: must_have
+        out_of_scope_means: the node did not provide on this deal
+      - id: served_named_model
+        label: Served the model it named
+        text: >-
+          When the node provided, the model that answered is the model it named.
+          Recomputed from a record that lets a verifier check it; otherwise the
+          row reads "provider states": the node's own record of the model
+          requested and the model that answered.
+        tier: recomputed
+        fold_id: inference_deals.served_named_model
+        requirement_tier: must_have
+        out_of_scope_means: the node did not provide on this deal
+
+report:
+  card: settlement

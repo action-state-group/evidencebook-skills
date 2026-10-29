@@ -8,7 +8,14 @@
 # compiled.json, e.g. demo/airline-support-outcomes/compiled.json) goes the
 # JUDGED path: scripts/run_daily.py (one Jev call per clause per case, mock
 # backend by default) then scripts/rollup_day.py's all-required rollup.
-# Both paths converge on the SAME tail: (judged path only) pin the pack's own
+# A --spec that is a compiled DETERMINISTIC pack (its compiled.json names an
+# `evaluator` and has no judge, e.g. packs/inference-deals/compiled/compiled.json)
+# goes the EVALUATOR path: scripts/evaluators/<evaluator>.py decides every row
+# from the sealed records in process, with no model, over the pack's window of
+# whole closed periods ending at the last period boundary at or before the end
+# of --date (--to is refused there; --period-policy FILE replaces the pack's
+# default policy with the node's own).
+# All paths converge on the SAME tail: (judged path only) pin the pack's own
 # compiled presentation.json block's digest in the Result v0 -> capsulectl book
 # result build -> a fresh checkpoint -> disclose -> (judged path only) wire that
 # same block (outcome-report/v1 or eu-ai-act-compliance/v1,
@@ -22,7 +29,8 @@
 #   report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] \
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
 #       [--title TITLE] [--attach-input-originals] [--seal] \
-#       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
+#       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live] \
+#       [--period-policy FILE]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
 # from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
@@ -75,12 +83,13 @@ usage: report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] 
                   [--work DIR] [--capsulectl PATH] [--card CARD]
                   [--title TITLE] [--attach-input-originals] [--seal]
                   [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
+                  [--period-policy FILE]
 EOF
   exit 2
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
-TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -97,6 +106,7 @@ while [[ $# -gt 0 ]]; do
     --judge-cmd) JUDGE_CMD=$2; shift 2 ;;
     --judge-model-id) JUDGE_MODEL_ID=$2; shift 2 ;;
     --judge-backend) JUDGE_BACKEND=$2; shift 2 ;;
+    --period-policy) PERIOD_POLICY=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -144,17 +154,20 @@ while IFS= read -r day; do DATES+=("$day"); done <<< "$DATES_RAW"
 LAST_DATE=${DATES[${#DATES[@]}-1]}
 GENERATED_AT="${LAST_DATE}T23:59:59Z"
 
-# --spec's own kind: report-spec/v1 (no judge) or a compiled pack contract (judged).
+# --spec's own kind: report-spec/v1 (no judge), a compiled deterministic pack
+# (evaluator), or a compiled pack contract (judged).
 MODE=$(python3 -c "
 import json, sys
 import yaml
 spec = yaml.safe_load(open(sys.argv[1]))
 if isinstance(spec, dict) and spec.get('spec_version') == 'report-spec/v1':
     print('no-judge')
+elif isinstance(spec, dict) and 'clauses' in spec and 'evaluator' in spec and 'judge' not in spec:
+    print('evaluator')
 elif isinstance(spec, dict) and 'clauses' in spec and 'judge' in spec:
     print('judged')
 else:
-    sys.exit('report.sh: ' + sys.argv[1] + ' is neither a report-spec/v1 YAML nor a compiled pack contract (no clauses+judge)')
+    sys.exit('report.sh: ' + sys.argv[1] + ' is neither a report-spec/v1 YAML nor a compiled pack contract (no clauses+judge or evaluator)')
 " "$SPEC")
 step "spec kind: $MODE ($SPEC)"
 
@@ -164,6 +177,18 @@ if [[ "$MODE" == "no-judge" ]]; then
   python3 "$REPO/scripts/report_spec.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
     --generated-at "$GENERATED_AT" --out "$WORK/rollup" --date-from "${DATES[0]}" --date-to "$LAST_DATE"
   DEFAULT_CARD=$(python3 -c "import yaml,sys; print((yaml.safe_load(open(sys.argv[1])).get('presentation') or {}).get('card', 'outcome'))" "$SPEC")
+elif [[ "$MODE" == "evaluator" ]]; then
+  [[ -z "$TO" ]] || fail "--to does not apply to a deterministic pack: its window is whole closed periods ending at --date"
+  EVALUATOR=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['evaluator'])" "$SPEC")
+  [[ "$EVALUATOR" =~ ^[a-z_]+$ && -f "$REPO/scripts/evaluators/$EVALUATOR.py" ]] \
+    || fail "the pack names evaluator '$EVALUATOR', which scripts/evaluators/ does not have"
+  step "evaluators/$EVALUATOR.py: every row from the sealed records, no model"
+  POLICY_ARGS=()
+  if [[ -n "$PERIOD_POLICY" ]]; then POLICY_ARGS+=(--period-policy "$PERIOD_POLICY"); fi
+  python3 "$REPO/scripts/evaluators/$EVALUATOR.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
+    --date "$LAST_DATE" --generated-at "$GENERATED_AT" --out "$WORK/rollup" ${POLICY_ARGS[@]+"${POLICY_ARGS[@]}"} \
+    || fail "evaluators/$EVALUATOR.py wrote no Result (its output above says why)"
+  DEFAULT_CARD=$(python3 -c "import json,sys; print((json.load(open(sys.argv[1])).get('presentation') or {}).get('card', 'outcome'))" "$SPEC")
 else
   JUDGE_MODEL_ID=${JUDGE_MODEL_ID:-$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['judge']['model_id'])" "$SPEC")}
   JUDGE_CMD=${JUDGE_CMD:-"python3 $REPO/scripts/judges/jev_judge.py"}
@@ -203,7 +228,7 @@ if [[ "$MODE" == "judged" ]]; then
     DAY_RESULTS+=("$f")
   done
 else
-  # report_spec.py already kept only --date-from..--date-to.
+  # report_spec.py already kept only --date-from..--date-to; an evaluator wrote one window.
   shopt -s nullglob
   DAY_RESULTS=("$WORK"/rollup/result-v0-*.json)
   shopt -u nullglob

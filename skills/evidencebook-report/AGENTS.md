@@ -83,12 +83,14 @@ Rules that make a narration safe:
 Preconditions, checked before any verb runs:
 
 - A **pack** whose contract covers the question. `python3 scripts/packs.py list` names
-  the packs in this repository, each with its title, compiled spec and card. Two packs
-  are **not written yet**: a Muse personal-deals pack (intentions, approvals, both
-  halves) and a Mesh node's inference-deals pack (card `settlement`). An agent asked for
-  an EvidenceBook report that one of them would cover says so (`packs.py refuse`)
-  and offers grade 1 or the History card.
-- The pack's **judge pin** resolves (`judge pin FILE`), as `daily-judge-and-close` requires.
+  the packs in this repository, each with its title, compiled spec and card. A Mesh
+  node's inference-deals pack reports on card `settlement`: no model judges it, and its
+  window is the last 12 months of whole closed periods, so a report for any day of a
+  week covers the same deals. A Muse personal-deals pack (intentions, approvals, both
+  halves) is **not written yet**: an agent asked for an EvidenceBook report it would
+  cover says so (`packs.py refuse`) and offers grade 1 or the History card.
+- For a judged pack, the pack's **judge pin** resolves (`judge pin FILE`), as
+  `daily-judge-and-close` requires.
 - The book profile is the holder's own (`--profile NAME`).
 
 Steps, in order; each one's output is the next one's input. For the airline support and
@@ -172,14 +174,15 @@ match, or judge days a prior run sealed. Share a narration, a receipt or a repor
 anyone but the holder. Edit a Result, a page or a wording pack to get past a refusal.
 Answer another party's evidence request.
 
-## Status, 2026-10-28
+## Status, 2026-10-29
 
 Shipped: `capsulectl book result build`, `report build --seal`, `report check` on
 evidencebook main (not yet in a capsulectl-book release); `evidencebook/report` v0.2.0
-with `View.Wording` and `View.ContractReport`; the three packs above with their judges;
-`scripts/report.sh --seal`, `scripts/packs.py` and `scripts/narration_check.py`, run
-end to end by `tests/fresh_env_report.sh`.
-Not yet: a Muse personal-deals pack; a Mesh inference-deals pack; a released command-line
+with `View.Wording` and `View.ContractReport`; the judged packs above with their judges;
+the Mesh inference-deals pack (`scripts/evaluators/inference_deals.py`, no judge, run end
+to end by `tests/fresh_env_deals.sh`); `scripts/report.sh --seal`, `scripts/packs.py` and
+`scripts/narration_check.py`, run end to end by `tests/fresh_env_report.sh`.
+Not yet: a Muse personal-deals pack; a released command-line
 wording flag (`--wording` is on evidencebook main); the standard History card
 derivation; the ad-hoc report path. The skill states each gap to the person instead of
 working around it.

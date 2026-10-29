@@ -65,3 +65,7 @@ jobs:
         run: |
           CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
             bash tests/fresh_env_report.sh
+      - name: the inference-deals pack, sealed and checked on a payer and a provider book
+        run: |
+          CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
+            bash tests/fresh_env_deals.sh

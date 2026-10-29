@@ -1,0 +1,68 @@
+{
+  "contract": "inference-deals/v1",
+  "contract_version": "rubric-v0.1",
+  "contract_ref": "inference-deals@0.1.0",
+  "outcome_statement": "On every counted deal in the window, the node came through on the terms it accepted: it paid as agreed when it bought, and it served as agreed, with the model it named, when it provided.",
+  "resolution_rule": "a deal is resolved only when every term that applies to it is met",
+  "counterparty": "mesh-peer",
+  "counterparty_note": "The peer's book of the same exchange is not held on this node. It is shown as not_available, never as a failure or as agreement.",
+  "source": "evidencebook-skills#71; Steven's rulings 2026-10-29 (ops c18ddbd8, f4f269eb)",
+  "decision_note": "",
+  "evaluator": "inference_deals",
+  "window": {
+    "months": 12,
+    "period_policy": {
+      "epoch": "2026-01-05T00:00:00Z",
+      "length_s": 604800,
+      "min_length_s": 86400,
+      "floor": 5,
+      "suppression": "complementary"
+    }
+  },
+  "clauses": [
+    {
+      "id": "come_through.paid_as_agreed",
+      "check_id": "come_through",
+      "check_question": "Did the node come through on the terms it accepted?",
+      "label": "Paid as agreed",
+      "claim": "When the node bought, every invoice it saw has a settlement its own wallet reported, for the invoice's amount.",
+      "tier": "recomputed",
+      "recompute_eligible": false,
+      "recompute_note": "",
+      "fold_id": "inference_deals.paid_as_agreed"
+    },
+    {
+      "id": "come_through.served_as_agreed",
+      "check_id": "come_through",
+      "check_question": "Did the node come through on the terms it accepted?",
+      "label": "Served as agreed",
+      "claim": "When the node provided, it served the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount.",
+      "tier": "recomputed",
+      "recompute_eligible": false,
+      "recompute_note": "",
+      "fold_id": "inference_deals.served_as_agreed"
+    },
+    {
+      "id": "come_through.served_named_model",
+      "check_id": "come_through",
+      "check_question": "Did the node come through on the terms it accepted?",
+      "label": "Served the model it named",
+      "claim": "When the node provided, the model that answered is the model it named. Recomputed from a record that lets a verifier check it; otherwise the row reads \"provider states\": the node's own record of the model requested and the model that answered.",
+      "tier": "recomputed",
+      "recompute_eligible": false,
+      "recompute_note": "",
+      "fold_id": "inference_deals.served_named_model"
+    }
+  ],
+  "presentation": {
+    "card": "settlement"
+  },
+  "disclosure": {
+    "suppress": []
+  },
+  "pack_source_digest": "9253349fd50629ffd0cff876e63e5439e7f56bb00c2f6dcd9ed6ddf4e93d89df",
+  "title": "Inference deals",
+  "switches": {
+    "out_of_scope_verdict": true
+  }
+}

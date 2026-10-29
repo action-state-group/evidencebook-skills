@@ -205,7 +205,23 @@ PACK_TITLES = {
     "airline-support-outcomes": "Airline support outcomes",
     "eu-ai-act-obligations": "EU AI Act obligations",
     "asg/everyday-rules": "Everyday Rules",
+    "inference-deals": "Inference deals",
 }
+
+# A deterministic pack names one of these instead of a judge: the module under
+# scripts/evaluators/ that answers every one of its criteria from the sealed
+# records, in process, with no model (scripts/report.sh runs it). Unregistered
+# is a typo, as with TIERS.
+EVALUATORS = frozenset({"inference_deals"})
+
+# The cards `capsulectl book report build --card` renders (evidencebook
+# report/report.go `cards`). A deterministic pack names its card directly; a
+# judged pack's card follows from its report.template (wire_presentation.py).
+REPORT_CARDS = frozenset({"attribution", "human_role", "obligation", "outcome", "process", "quality", "settlement"})
+
+# AAC inference-service history profile v0 section 6.1: a period policy has
+# exactly these members.
+PERIOD_POLICY_KEYS = ("epoch", "length_s", "min_length_s", "floor", "suppression")
 
 # The report-template registry: this is the "pluggable" seam. Adding a template
 # means registering a builder here; selecting one no one registered is a
@@ -279,6 +295,44 @@ CONTRACT_REPORT_KEY = "contract-report/v1"
 # to pack-source.yaml would move both packs' judge pins and start a new pin
 # scope for work already judged. Opting in changes presentation.json only.
 CONTRACT_REPORT_PACKS = frozenset({"eu-ai-act-obligations", "airline-support-outcomes"})
+
+
+def _validate_deterministic(source, checks):
+    """The rules a deterministic pack (one naming an `evaluator`) adds: no judge
+    anywhere, every criterion recomputed by a named fold, and a reporting window
+    of whole closed periods under an AAC period policy."""
+    issues = []
+    if source["evaluator"] not in EVALUATORS:
+        issues.append(f"evaluator must be one of {sorted(EVALUATORS)}, got {source['evaluator']!r}")
+    if "judge" in source or "judge_batch" in source:
+        issues.append("a deterministic pack names an evaluator and no judge: drop judge/judge_batch")
+    for i, check in enumerate(checks):
+        for j, crit in enumerate(check.get("criteria") or [] if isinstance(check, dict) else []):
+            if isinstance(crit, dict) and crit.get("tier") != "recomputed":
+                issues.append(f"checks[{i}].criteria[{j}].tier must be 'recomputed' in a deterministic pack")
+            if isinstance(crit, dict) and (crit.get("tier_switch") or crit.get("recompute_precheck")):
+                issues.append(f"checks[{i}].criteria[{j}]: tier_switch and recompute_precheck need a judge")
+    window = source.get("window")
+    if not isinstance(window, dict) or set(window) != {"months", "period_policy"}:
+        return issues + ["window must be exactly {months, period_policy}"]
+    months = window["months"]
+    if isinstance(months, bool) or not isinstance(months, int) or months < 1:
+        issues.append(f"window.months must be a positive integer, got {months!r}")
+    policy = window["period_policy"]
+    if not isinstance(policy, dict) or set(policy) != set(PERIOD_POLICY_KEYS):
+        return issues + [f"window.period_policy must have exactly {list(PERIOD_POLICY_KEYS)}"]
+    for key in ("length_s", "min_length_s", "floor"):
+        v = policy[key]
+        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+            issues.append(f"window.period_policy.{key} must be a positive integer, got {v!r}")
+    if isinstance(policy["length_s"], int) and isinstance(policy["min_length_s"], int) \
+            and policy["length_s"] < policy["min_length_s"]:
+        issues.append("window.period_policy.length_s must be at least min_length_s")
+    if policy["suppression"] != "complementary":
+        issues.append("window.period_policy.suppression must be 'complementary'")
+    if not isinstance(policy["epoch"], str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", policy["epoch"]):
+        issues.append("window.period_policy.epoch must be an RFC 3339 UTC time like 2026-01-05T00:00:00Z")
+    return issues
 
 
 def validate_source(source):
@@ -505,8 +559,11 @@ def validate_source(source):
                     issues.append(f"duplicate criterion id across the pack: {full_id!r}")
                 seen_clause_ids.add(full_id)
 
+    evaluator = source.get("evaluator")
     judge = source.get("judge")
-    if not isinstance(judge, dict) or not isinstance(judge.get("model_id"), str) or not judge.get("model_id", "").strip():
+    if evaluator is not None:
+        issues.extend(_validate_deterministic(source, checks))
+    elif not isinstance(judge, dict) or not isinstance(judge.get("model_id"), str) or not judge.get("model_id", "").strip():
         issues.append("judge.model_id must be a non-empty string")
     else:
         if "sampling_params" in judge and not isinstance(judge["sampling_params"], dict):
@@ -562,6 +619,10 @@ def validate_source(source):
     report = source.get("report")
     if not isinstance(report, dict):
         issues.append("report must be a mapping")
+    elif evaluator is not None:
+        if set(report) != {"card"} or report.get("card") not in REPORT_CARDS:
+            issues.append(f"report must be exactly {{card: <one of {sorted(REPORT_CARDS)}>}} in a deterministic "
+                          "pack: it has no report template")
     else:
         template = report.get("template")
         if template not in REPORT_TEMPLATES:
@@ -656,6 +717,40 @@ def build_clauses(source):
                 clause["claim_switch"] = dict(crit["claim_switch"])
             clauses.append(clause)
     return clauses
+
+
+def build_deterministic_compiled_json(source):
+    """compiled.json for a pack that names an evaluator: its clauses (each with
+    the fold that answers it), the window, the card, and no judge block, so no
+    judge prompt, axes or judge pin exist for it. scripts/report.sh runs
+    scripts/evaluators/<evaluator>.py over it."""
+    clauses = build_clauses(source)
+    folds = {f"{check['id']}.{crit['id']}": crit["fold_id"]
+             for check in source["checks"] for crit in check["criteria"]}
+    for clause in clauses:
+        clause["fold_id"] = folds[clause["id"]]
+    compiled = {
+        "contract": f"{source['pack_id']}/v1",
+        "contract_version": f"rubric-v{source['rubric_version']}",
+        "contract_ref": f"{source['pack_id']}@{source['pack_version']}",
+        "outcome_statement": source["outcome_statement"],
+        "resolution_rule": source["resolution_rule"],
+        "counterparty": source["counterparty"],
+        "counterparty_note": source.get("counterparty_note", ""),
+        "source": source.get("source", ""),
+        "decision_note": source.get("decision_note", ""),
+        "evaluator": source["evaluator"],
+        "window": source["window"],
+        "clauses": clauses,
+        "presentation": {"card": source["report"]["card"]},
+        "disclosure": source.get("disclosure") or {"suppress": []},
+        "pack_source_digest": source_digest(source),
+    }
+    if source["pack_id"] in PACK_TITLES:
+        compiled["title"] = PACK_TITLES[source["pack_id"]]
+    if source.get("switches"):
+        compiled["switches"] = dict(source["switches"])
+    return compiled
 
 
 def build_compiled_json(source, out_rel):
@@ -813,9 +908,12 @@ def build_presentation_json(source):
 
 
 def compile_pack(source, out_rel):
-    """Pure: source + the output path string -> the four generated documents.
-    No filesystem access -- tests call this directly to check determinism and
-    content without touching disk."""
+    """Pure: source + the output path string -> the four generated documents
+    (for a deterministic pack, compiled.json and three Nones: it has no judge
+    prompt, axes or presentation block). No filesystem access -- tests call
+    this directly to check determinism and content without touching disk."""
+    if source.get("evaluator") is not None:
+        return build_deterministic_compiled_json(source), None, None, None
     return (
         build_compiled_json(source, out_rel),
         build_axes_json(source),
@@ -828,6 +926,8 @@ def write_pack(source, out_dir, out_rel):
     compiled, axes, prompt, presentation = compile_pack(source, out_rel)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "compiled.json").write_text(json.dumps(compiled, indent=2) + "\n")
+    if axes is None:
+        return compiled
     (out_dir / "axes.json").write_text(json.dumps(axes, indent=2) + "\n")
     (out_dir / "judge-prompt.md").write_text(prompt)
     (out_dir / "presentation.json").write_text(json.dumps(presentation, indent=2) + "\n")
@@ -911,7 +1011,8 @@ def main(argv):
         "clauses": len(compiled["clauses"]),
         "out": out_rel,
         "files": [f"{out_rel}/{name}" for name in
-                  ("compiled.json", "axes.json", "judge-prompt.md", "presentation.json")],
+                  (("compiled.json",) if source.get("evaluator") is not None else
+                   ("compiled.json", "axes.json", "judge-prompt.md", "presentation.json"))],
     }, indent=2))
     return 0
 
