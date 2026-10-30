@@ -113,7 +113,7 @@ class LiveFixtures(unittest.TestCase):
         self.assertNotEqual(live_pack.project(s)["definition_digest"], ENGINE_DIGESTS["inference-0.1.0"])
 
     def test_a_padded_kind_is_refused_not_stripped_into_live(self):
-        text = (FIXTURES / "inference-0.1.0/pack-source.yaml").read_text().replace("kind: live", 'kind: " live "', 1)
+        text = (FIXTURES / "inference-0.1.0/pack-source.yaml").read_text().replace("\n  kind: live", '\n  kind: " live "', 1)
         s = pack_compile.load_source(text)
         self.assertEqual(pack_compile.validate_source(s), ["scope.kind ' live ' must be one of ['live', 'after_the_fact']"])
 
