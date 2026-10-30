@@ -312,7 +312,7 @@ def load_input(path):
             raise ContractError(str(e)) from e
         return from_report_spec(spec)
     if isinstance(doc, dict) and "pack_id" in doc:
-        return from_pack(pack_compile._strip_strings(doc))
+        return from_pack(pack_compile.load_source(pathlib.Path(path).read_text()))
     raise ContractError(f"{path}: neither a pack source (pack_id) nor a report-spec/v1")
 
 

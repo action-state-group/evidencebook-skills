@@ -65,6 +65,11 @@ UNSUPPORTED_KEYS = ("outcomes", "profiles", "proposers", "scope_census")
 OBLIGATION_KEYS = {"id", "statement", "check", "selector", "default_disposition", "re_derivability_grade",
                    "measurability", "evidence_instrument", "requirement_tier"}
 
+# capsule-engine's packs/schema.py PACK_ID_RE and HOLDS_INTEGRATION_VALUES: a source
+# outside them is a pack the engine refuses to load, so it gets no digest here.
+PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_]*(-[a-z0-9_]+)*/\d+\.\d+\.\d+$")
+HOLDS_INTEGRATION_VALUES = ("none", "stubbed", "built")
+
 _HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
 
 
@@ -118,8 +123,8 @@ def _validate_obligation(i, o, checks, issues):
     grade = o.get("re_derivability_grade")
     if grade is not None and grade not in RE_DERIVABILITY_GRADES:
         issues.append(f"{where}.re_derivability_grade {grade!r} must be one of {list(RE_DERIVABILITY_GRADES)}")
-    tier = o.get("requirement_tier")
-    if tier is not None and tier not in REQUIREMENT_TIERS:
+    tier = o.get("requirement_tier", "must_have")
+    if tier not in REQUIREMENT_TIERS:
         issues.append(f"{where}.requirement_tier {tier!r} must be one of {list(REQUIREMENT_TIERS)}")
     measurability = o.get("measurability", "measured")
     if measurability not in MEASURABILITY:
@@ -159,6 +164,13 @@ def validate_live(source):
         elif "@" in v or re.search(r"\s", v):
             issues.append(f"{k} must not contain '@' or whitespace (used verbatim in contract_ref: <pack_id>@<pack_version>)")
 
+    pack_id, pack_version = source.get("pack_id"), source.get("pack_version")
+    if _nonempty(pack_id) and not PACK_ID_RE.match(pack_id):
+        issues.append(f"pack_id {pack_id!r} must be <owner>/<name>/<major.minor.patch>, as capsule-engine's PACK_ID_RE requires")
+    elif _nonempty(pack_id) and _nonempty(pack_version) and pack_version != pack_id.rsplit("/", 1)[1]:
+        issues.append(f"pack_version {pack_version!r} must equal the version in pack_id {pack_id!r}: "
+                      "the digest is the engine's for that pack_id, and the contract cites pack_version")
+
     constraints = source.get("constraints")
     checks = set()
     if not isinstance(constraints, list) or not constraints:
@@ -197,8 +209,8 @@ def validate_live(source):
             seen.add(oid)
 
     semantics = source.get("action_semantics")
-    if not isinstance(semantics, list):
-        issues.append("action_semantics must be a list")
+    if not isinstance(semantics, list) or not semantics:
+        issues.append("action_semantics must be a non-empty list")
         semantics = []
     for i, a in enumerate(semantics):
         where = f"action_semantics[{i}]" + (f" ({a['action_type']!r})" if isinstance(a, dict) and _nonempty(a.get("action_type")) else "")
@@ -219,8 +231,8 @@ def validate_live(source):
             issues.append(f"{where}.field_aliases must be a mapping of string to string")
 
     folds = source.get("folds")
-    if not isinstance(folds, list):
-        issues.append("folds must be a list")
+    if not isinstance(folds, list) or not folds:
+        issues.append("folds must be a non-empty list")
         folds = []
     for i, f in enumerate(folds):
         where = f"folds[{i}]" + (f" ({f['fold_ref']!r})" if isinstance(f, dict) and _nonempty(f.get("fold_ref")) else "")
@@ -234,8 +246,8 @@ def validate_live(source):
         if not (isinstance(f.get("digest"), str) and _HEX64.match(f["digest"])):
             issues.append(f"{where}.digest must be 64 lowercase hex characters")
 
-    if "holds_integration" in source and not _nonempty(source["holds_integration"]):
-        issues.append("holds_integration must be a non-empty string")
+    if source.get("holds_integration", "none") not in HOLDS_INTEGRATION_VALUES:
+        issues.append(f"holds_integration {source['holds_integration']!r} must be one of {list(HOLDS_INTEGRATION_VALUES)}")
     tax = source.get("taxonomy")
     if tax is not None:
         if not (isinstance(tax, dict) and set(tax) == {"taxonomy_version", "digest"}

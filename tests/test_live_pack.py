@@ -40,7 +40,7 @@ ENGINE_DIGESTS = {
 
 
 def load(name):
-    return pack_compile._strip_strings(yaml.safe_load((FIXTURES / name / "pack-source.yaml").read_text()))
+    return pack_compile.load_source((FIXTURES / name / "pack-source.yaml").read_text())
 
 
 def capsulectl():
@@ -94,15 +94,23 @@ class LiveFixtures(unittest.TestCase):
         for edit in (lambda s: s["obligations"][0].update(statement="changed"),
                      lambda s: s["obligations"][0].update(default_disposition="ASK"),
                      lambda s: s["constraints"][0].update(digest="0" * 64),
-                     lambda s: s.update(holds_integration="holds")):
+                     lambda s: s.update(holds_integration="stubbed")):
             s = copy.deepcopy(base)
             edit(s)
             self.assertNotEqual(live_pack.project(s)["definition_digest"], digest)
-        # not digested: the contract's own version and requirement tier
+        # not digested: the requirement tier
         s = copy.deepcopy(base)
-        s["pack_version"] = "9.9.9"
         s["obligations"][0]["requirement_tier"] = "informational"
         self.assertEqual(live_pack.project(s)["definition_digest"], digest)
+
+    def test_strings_are_digested_as_written(self):
+        # capsule-engine keeps a folded `>` scalar's trailing newline in the digest
+        text = (FIXTURES / "inference-0.1.0/pack-source.yaml").read_text()
+        folded = text.replace("statement: >-\n      Checks the input", "statement: >\n      Checks the input", 1)
+        self.assertNotEqual(folded, text)
+        s = pack_compile.load_source(folded)
+        self.assertTrue(s["obligations"][0]["statement"].endswith("\n"))
+        self.assertNotEqual(live_pack.project(s)["definition_digest"], ENGINE_DIGESTS["inference-0.1.0"])
 
     def test_compile_is_byte_stable(self):
         a, b = load("seller-0.1.6"), load("seller-0.1.6")
@@ -162,6 +170,19 @@ class LiveErrorsNameTheRow(unittest.TestCase):
                          ["obligations[2] ('r03-same-purchase-twice').check 'nope' has no matching constraint"])
         self.assertEqual(self.issues(lambda s: s["obligations"][0].update(statement="")),
                          ["obligations[0] ('r01-rate-caps').statement must be a non-empty string"])
+
+    def test_pack_id_version_and_closed_sets_follow_the_engine_loader(self):
+        self.assertEqual(self.issues(lambda s: s.update(pack_id="Inference")),
+                         ["pack_id 'Inference' must be <owner>/<name>/<major.minor.patch>, as capsule-engine's PACK_ID_RE requires"])
+        self.assertEqual(len(self.issues(lambda s: s.update(pack_version="9.9.9"))), 1)
+        self.assertEqual(self.issues(lambda s: s.update(holds_integration="bogus")),
+                         ["holds_integration 'bogus' must be one of ['none', 'stubbed', 'built']"])
+        self.assertEqual(self.issues(lambda s: s.update(folds=[])), ["folds must be a non-empty list"])
+        self.assertEqual(self.issues(lambda s: s.update(action_semantics=[])), ["action_semantics must be a non-empty list"])
+
+    def test_null_or_unknown_requirement_tier_is_refused(self):
+        for tier in (None, "optional"):
+            self.assertEqual(len(self.issues(lambda s: s["obligations"][0].update(requirement_tier=tier))), 1, tier)
 
     def test_duplicate_obligation_and_measured_with_instrument(self):
         self.assertEqual(self.issues(lambda s: s["obligations"][1].update(id="r01-rate-caps")),

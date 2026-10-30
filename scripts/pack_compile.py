@@ -136,6 +136,15 @@ def _strip_strings(obj):
     return obj
 
 
+def load_source(text):
+    """A pack source's YAML text -> the mapping every other function takes. An
+    after-the-fact source has its strings stripped (_strip_strings); a live one
+    keeps them as written, because capsule-engine digests a pack's strings
+    as they are (`statement: >` keeps its trailing newline, `>-` does not)."""
+    source = yaml.safe_load(text)
+    return source if live_pack.is_live(source) else _strip_strings(source)
+
+
 def _build_outcome_report_presentation(source):
     checks = [{"id": c["id"], "question": c["question"]} for c in source["checks"]]
     criteria = []
@@ -1009,7 +1018,7 @@ def main(argv):
     p_project.add_argument("source", type=pathlib.Path)
 
     args = ap.parse_args(argv)
-    source = _strip_strings(yaml.safe_load(args.source.read_text()))
+    source = load_source(args.source.read_text())
     issues = validate_source(source)
 
     if args.cmd == "validate":
