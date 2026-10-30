@@ -142,7 +142,10 @@ def load_source(text):
     keeps them as written, because capsule-engine digests a pack's strings
     as they are (`statement: >` keeps its trailing newline, `>-` does not)."""
     source = yaml.safe_load(text)
-    return source if live_pack.is_live(source) else _strip_strings(source)
+    # Only a source that is after_the_fact as written is stripped: a kind that is
+    # neither (" live ") is left as is and refused by validate_scope, never
+    # stripped into a live source.
+    return _strip_strings(source) if live_pack.scope_kind(source) == "after_the_fact" else source
 
 
 def _build_outcome_report_presentation(source):

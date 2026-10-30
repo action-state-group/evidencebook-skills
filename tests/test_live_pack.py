@@ -112,6 +112,11 @@ class LiveFixtures(unittest.TestCase):
         self.assertTrue(s["obligations"][0]["statement"].endswith("\n"))
         self.assertNotEqual(live_pack.project(s)["definition_digest"], ENGINE_DIGESTS["inference-0.1.0"])
 
+    def test_a_padded_kind_is_refused_not_stripped_into_live(self):
+        text = (FIXTURES / "inference-0.1.0/pack-source.yaml").read_text().replace("kind: live", 'kind: " live "', 1)
+        s = pack_compile.load_source(text)
+        self.assertEqual(pack_compile.validate_source(s), ["scope.kind ' live ' must be one of ['live', 'after_the_fact']"])
+
     def test_compile_is_byte_stable(self):
         a, b = load("seller-0.1.6"), load("seller-0.1.6")
         self.assertEqual(ec.to_bytes(ec.from_pack(a)), ec.to_bytes(ec.from_pack(b)))
