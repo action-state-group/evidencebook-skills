@@ -52,6 +52,7 @@ import sys
 import rfc8785
 import yaml
 
+import live_pack
 import pack_compile
 import report_spec
 from run_daily import effective_claim, effective_tier
@@ -110,6 +111,8 @@ def _judged_evidence(source):
 def from_pack(source):
     """A validated pack source (pack_compile.validate_source) -> the contract."""
     issues = pack_compile.validate_source(source)
+    if not issues and live_pack.is_live(source):
+        return _contract(source["pack_id"], source["pack_version"], live_pack.from_live(source)["requirements"])
     if isinstance(source, dict) and any(isinstance(c, dict) and "article" in c for c in source.get("checks") or []):
         # A check citing an article compiles to an obligation whose clause names
         # the instrument and the article (EC clauseSpec: both non-empty text).
