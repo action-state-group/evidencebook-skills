@@ -1,0 +1,531 @@
+# Live fixture for evidencebook-skills#62: capsule-engine's go/packs/seller-0.1.6/pack.yaml
+# (capsule-engine main) as a `scope.kind: live` pack-source.yaml, with `scope`,
+# `pack_version` and a `check` on each constraint added. Its definition_digest is
+# the engine's, 5e112a7f5136e2193adb177605dfad10b7b0753a2de93ed72e446695b7acc56a.
+#
+# The original header follows.
+# seller pack: the rules for an assistant that sells one item for its user
+# to one of several buyers, one buyer per thread. Every check here is a
+# deterministic predicate over normalized action fields; none calls a model.
+#
+# The buyer-side rules live in the everyday pack. A seller's counterparty is
+# the buyer, so the checks that read a recipient's role, a payment rail or
+# a commitment use their seller configurations (seller.recipient_role,
+# seller.destination_rail, seller.single_commitment); everything else is the
+# same definition everyday cites.
+#
+# Every constraint and fold cite a built-in definition by id and digest
+# (wicket_ref / fold_ref + digest) -- nothing is copied into this directory.
+# The loader refuses the pack if a cited definition has changed.
+#
+# Statements name what is detected and recorded -- the observable, never an
+# intent. The guard engine reads default_disposition: a failing check (or
+# gate selector) whose rules all declare ASK asks an approver when the
+# action's class names one; any other failure refuses, and an integrity
+# check (dedupe in one deal, a cited mandate, one commitment per sale, a
+# statement never made, an address before acceptance) refuses whatever its
+# rule declares.
+#
+# 0.1.1 releases personal data only on acceptance
+# (seller.release_on_acceptance), where 0.1.0 asked on every personal-data
+# disclosure through action_class_gate's personal_disclosure selector.
+# Every class a disclosure may declare is held back until the receiving
+# buyer's acceptance, and an undeclared or unknown class is refused, so no
+# disclosure 0.1.0 asked on is allowed without an acceptance. No class is
+# released before acceptance. The gate is no longer cited: it reads only
+# the action class, so it would ask after acceptance too. The gate also
+# refused an action whose class has no taxonomy row; release_on_acceptance
+# now refuses that itself.
+#
+# 0.1.2 cites no spending limit. 0.1.1 cited caps/1.0.0 (and its fold,
+# spend.weekly/1.0.0) only because the guard engine needed one to run; it
+# limits money.transfer alone, which no action here declares. The engine
+# now runs a pack that cites none and records caps as out of scope on every
+# action, as 0.1.1's decisions already did. No rule changes.
+#
+# 0.1.3 counts a statement the user's agent made in the deal as one made to
+# the counterparty (required_disclosure/1.1.0, with the fold
+# disclosure.statement_seen/1.0.0). A capsulectl claim record sealing
+# source_kind agent and a class states no act, so under 0.1.2 no decision
+# carried its class, and every offer and commit asked for the condition
+# statement it had just been given. Now a claim of a required class made in
+# the deal before the offer or commit satisfies s05; with none it still asks.
+# An offer or commit that names a deal and no target, which 0.1.2 held not
+# applicable, is now decided on the deal's claims, so with none it fails and
+# asks. A sealed delivery_promise reads as delivery_date. No other rule
+# changes.
+#
+# 0.1.4 adds a platform recipient: the marketplace, booking site
+# or mail relay a sale is listed on, acting between the user and the buyer.
+# s01 (seller.recipient_role/1.1.0) passes a disclosure to a platform only
+# when every class of data it gives is email, as a listing's confirmation or
+# a relay needs, and refuses a phone, an address or any other class to one,
+# or one that names no class. s13 (seller.release_on_acceptance/1.1.0) does
+# not apply to a disclosure to a platform: it reaches no buyer, so there is
+# no acceptance to cite. Every disclosure to anyone else is held until the
+# buyer's acceptance as in 0.1.3. The first time an email goes to a platform
+# is a pause in the producer, which knows the recipient (capsulectl's first
+# telling). No other rule changes.
+#
+# 0.1.5 lets the platform a sale is listed on also be given the listing's
+# public pickup area (pickup_area: the ZIP or region the listing shows, never
+# the exact spot, which is pickup_location), as a listing needs it
+# (seller.recipient_role/1.2.0, capsule-engine#181). pickup_area is not an
+# address class. A phone, an address, pickup_location or any other class to a
+# platform still refuses.
+#
+# 0.1.5 also fixes s13 (seller.release_on_acceptance/1.2.0, capsule-engine
+# #179, #186). 1.1.0 read a statement class no share carries and needed a
+# cited acceptance no producer sends, so no share to a buyer ever passed.
+# s13 now reads the classes of data a share gives (disclosed_classes) and
+# finds the sale's acceptance in the history: the same record as before, in
+# the share's own deal and by the same buyer, by the counterparty
+# fingerprint each check seals. The public pickup area goes to a buyer before
+# acceptance; a credential, a verification code, a payment card or an ID
+# document goes to no one but the platform (s01 decides that), the accepted
+# buyer included. personal_data.share now requires disclosed_classes and
+# takes deal_id, and no longer requires representation_class.
+#
+# 0.1.5 also checks the payment rail at the seller's commit
+# (seller.destination_rail/1.1.0, capsule-engine#192), where 0.1.4 checked it
+# only on marketplace.sale, a class no deal record carries, so s07 never ran.
+# A commit (agreement.accept) or a sale passes on card or p2p, with venmo,
+# zelle, cash_app and paypal counted as p2p, and on cash only when the item is
+# handed over in person (the commit's terms.handover, sealed as handover). A
+# commit that states no rail fails ("payment method not stated"); a sale with
+# none is not applicable as before. s07 still asks. offer.accept takes the
+# rail and the handover.
+# s06 (offer_expiry/1.1.0) holds an offer that answers no proposal not
+# applicable: the producer seals no_proposal on an offer when no buyer message
+# was on record before it (capsule-engine#193), and an offer that answers a
+# buyer's message is held to that message's time. A missing proposal time
+# still asks, and so does no_proposal beside a proposal time.
+#
+# 0.1.5 also counts the sale's listing as a statement for s05
+# (required_disclosure/1.2.0, capsule-engine#190): an offer or commit whose
+# check carries listing_classes naming the condition (every live listing of
+# the sale states it) passes s05 with no chat claim. A listing that drops it,
+# no listing, or listings on two platforms that do not both state it count
+# for nothing, and s05 asks as in 0.1.4 unless chat stated it. offer.make and
+# offer.accept take listing_classes.
+#
+# 0.1.5 also lets s04 and s10 decide (capsule-engine#180, #189). The checker
+# bridge now carries a represent check's class (representing.class), which
+# it dropped, so both read a missing class as not applicable and every
+# statement passed them. s04 (promise_requires_approval/1.1.0) reads the
+# classes the user ordered where capsulectl's task authority seals them,
+# body.ordered_representations; 1.0.0 read a member no producer seals. A
+# promise with no task authority to cover it (an x-deal-v0 deal has none)
+# asks, saying "no order or approval of yours covers this promise". s10 (promise_never/1.1.0) still refuses the agent's own
+# authenticity claim, and passes the user's own, said as theirs and marked
+# unverified: a statement attributed to the user (representing.attributed_to,
+# statement_attributed_to here) whose words, given beside the check, open
+# the commitment it seals and read as one sentence "The seller says ...
+# (unverified)". A live check given no words fails. A replay reads the words
+# from the bundle's deal report, whose openings capsulectl seals, and
+# decides as live. When the bundle does not carry them (a counterparty copy,
+# a claim never made), a replay cannot confirm the attributed claim: s10 is
+# not evaluable there ("the words for this attributed claim are not in the
+# bundle"), refused but never recorded as a failure. The sentence marks
+# are every Unicode 17.0 sentence terminator and every line break.
+# capsulectl asks the user before every such claim. No other rule changes.
+#
+# 0.1.6 changes wording only (capsule-engine#182); no rule decides differently.
+# s01's statement defines a platform as in the everyday pack: the marketplace,
+# booking site or mail relay between you and the other party. Every id, check and
+# definition is 0.1.5's; only the statement and so the pack's definition
+# digest move, and 0.1.5 stays frozen at its own.
+pack_id: asg/seller/0.1.6
+pack_version: 0.1.6
+scope:
+  kind: live
+
+obligations:
+  # -- DO ------------------------------------------------------------------
+  - id: s01-personal-data-to-the-buyer-or-the-user
+    statement: >-
+      Checks who receives a personal-data disclosure (disclosure.personal):
+      buyer, platform, third_party or self (the user). It passes for a buyer
+      or self; other rules decide which data a buyer may get. For a platform
+      (the marketplace, booking site or mail relay between you and the other
+      party), it
+      passes only when every class the disclosure names is email or
+      pickup_area, the listing's public area and never the exact spot.
+      Otherwise it refuses. It records the role and the class names, never
+      who the recipient is or what the disclosure says.
+    check: recipient_role
+    default_disposition: DO
+  # -- ASK -----------------------------------------------------------------
+  - id: s03-price-below-the-floor
+    statement: >-
+      Checks the amount of an offer, an acceptance or a sale against the
+      lowest total the user will take, opened on the user's own device from
+      the salted commitment the cited task-authority record seals, and
+      flags an amount below it. It records the amount and whether it is
+      below the floor, never the floor itself.
+    check: price_floor
+    default_disposition: ASK
+  - id: s04-statement-that-needs-the-users-word
+    statement: >-
+      Flags a statement in a class the user must approve (today warranty
+      and delivery date), and records the class, unless the cited task
+      authority orders that class (it seals them in
+      ordered_representations) or a sealed approval for that class, cited
+      by digest, covers it. A statement that cites no task authority needs
+      that approval.
+    check: promise_requires_approval
+    default_disposition: ASK
+  - id: s05-required-statement-made-first
+    statement: >-
+      Flags an offer, an acceptance or a sale to a counterparty that has
+      not first received a statement in each required class (today
+      condition): an accepted earlier statement to that counterparty, a
+      claim the agent made in the same deal before it, or, on a sale, the
+      listings in force when the action was checked, if every live listing
+      states the class. It records which class is missing. It checks that a statement of the class was
+      recorded, never what it said. An approval does not clear it: the
+      action cannot proceed as constructed until the statement is made or
+      the task authority changes.
+    check: required_disclosure
+    default_disposition: ASK
+  - id: s06-proposal-still-current
+    statement: >-
+      Flags an offer, an acceptance or a sale acting on a proposal older
+      than the configured limit (24 hours), and one whose age cannot be
+      established, and records both timestamps or the field it could not
+      read. s06 does not apply to an offer made before any buyer message
+      was noted in the deal. A buyer message's time is the sent time the platform showed,
+      when the agent noted one, and otherwise when the agent noted the
+      message. So a message noted late without a sent time reads as newer
+      than it is.
+    check: offer_expiry
+    default_disposition: ASK
+  - id: s07-payment-rail-the-user-allows
+    statement: >-
+      Flags a seller's commit or a sale when its payment rail is not one the
+      user allows (today card, and person-to-person apps, p2p: Venmo, Zelle,
+      Cash App and PayPal); when it pays in cash and the item is not handed
+      over in person; or, for a commit, when it states no payment method. It
+      records the rail it read, what it counted it as, and the handover.
+    check: destination_rail
+    default_disposition: ASK
+  - id: s08-stay-within-task-bounds
+    statement: >-
+      Checks that a consequential action is inside the allowed actions of
+      the task-authority record it cites by digest, reading that record only
+      when its digest matches, and records the plan digest and the
+      containment result. An action citing no record, or whose record is not
+      supplied, is recorded as not checked.
+    check: task_authority
+    default_disposition: ASK
+  - id: s09-no-repeated-act
+    statement: >-
+      Detects an act that repeats one already recorded by the same agent
+      within the dedupe window, and records which earlier act it matches.
+    check: dedupe
+    default_disposition: ASK
+  # -- NEVER ---------------------------------------------------------------
+  - id: s10-statement-never-made
+    statement: >-
+      Detects a statement in a class the user never allows the agent to
+      make (today authenticity), and records the class. No approval and no
+      task authority clears it; only a change to this rule set does. A
+      statement attributed to the user passes only when its words are one
+      sentence reading "The seller says … (unverified)", so the buyer sees
+      whose claim it is and that it is unverified.
+    check: promise_never
+    default_disposition: NEVER
+  - id: s11-one-commitment-per-sale
+    statement: >-
+      Detects a commitment for an item whose sale already has a sealed
+      acceptance, unless the commitment cites that acceptance and is
+      addressed to the counterparty that accepted, and records only whether
+      the sale has an acceptance -- never the item, the task authority or
+      another counterparty.
+    check: single_commitment
+    default_disposition: NEVER
+  - id: s12-cited-mandate-verifies
+    statement: >-
+      Detects an action that cites a mandate record which is not in the
+      ledger or does not re-verify, and records the result.
+    check: verify_before_dispatch
+    default_disposition: NEVER
+  - id: s13-personal-data-only-to-the-buyer-who-accepted
+    statement: >-
+      Checks the user's personal data the agent shares
+      (disclosure.personal) with anyone but the platform. The listing's
+      public pickup area (not the exact spot) may go to any buyer at any
+      time. Contact details
+      (a name, a phone, an email, an address, the pickup spot or other
+      contact) go only to the buyer who
+      accepted the sale, in that buyer's own thread. The acceptance is the
+      sale's one acceptance: the first accepted commitment for the item in
+      the history. It refuses a
+      share before that acceptance, to another buyer, or in another thread.
+      It refuses when the history cannot show the acceptance. It refuses a
+      credential, a verification code, a payment card or an ID document to
+      anyone but the platform, the accepted buyer included. It refuses a share that names no
+      class of data. A share to the platform is left to s01. It records the
+      class names and whether the share was bound to an acceptance, never
+      the data, the item or who the buyer is. The user's approval does not
+      override it.
+    check: release_on_acceptance
+    default_disposition: NEVER
+
+action_semantics:
+  - action_type: offer.make
+    action_class: marketplace.offer
+    required_fields: [amount_minor, currency, target, task_authority_ref, item_ref]
+    optional_fields: [proposal_at, no_proposal, representation_class, authorized_by, equivalence_key, cited_mandate_capsule_id, listing_classes]
+  - action_type: offer.accept
+    action_class: agreement.accept
+    required_fields: [amount_minor, currency, target, rail, task_authority_ref, item_ref, proposal_at]
+    optional_fields: [handover, representation_class, authorized_by, equivalence_key, cited_mandate_capsule_id, listing_classes]
+  - action_type: sale.complete
+    action_class: marketplace.sale
+    required_fields: [amount_minor, currency, target, rail, task_authority_ref, item_ref, proposal_at]
+    optional_fields: [handover, representation_class, authorized_by, equivalence_key, cited_mandate_capsule_id]
+  - action_type: statement.send
+    action_class: communication.send
+    required_fields: [target, representation_class]
+    optional_fields: [task_authority_ref, statement_attributed_to, authorized_by, equivalence_key]
+  - action_type: personal_data.share
+    action_class: disclosure.personal
+    required_fields: [target, recipient_role, disclosed_classes]
+    optional_fields: [task_authority_ref, item_ref, deal_id, authorized_by, cited_mandate_capsule_id, equivalence_key]
+
+constraints:
+  - wicket_ref: dedupe/1.0.0
+    check: dedupe
+    digest: 18ab5d489f1e5774d576b8f99897edd4f4b20f609b85683456a3e3b6b4912abb
+  - wicket_ref: verify_before_dispatch/1.0.0
+    check: verify_before_dispatch
+    digest: a721624813f785de49f3dcef2090662e7045bc393e59db72defcdbf47269453c
+  # The counterparty is the buyer: roles buyer | platform | third_party |
+  # self, where a platform may be given the user's email and the listing's
+  # public pickup area only.
+  - wicket_ref: seller.recipient_role/1.2.0
+    check: recipient_role
+    digest: 6216addfa4e53b746dd72ec6dd4986758e064d2885e007b0fa546e2d42d189d1
+  - wicket_ref: price_floor/2.0.1
+    check: price_floor
+    digest: c39f858b52a9697a70450680d90d0bbd0cb4e4eb79925d18e67623d587404977
+  # The classes the user ordered, where capsulectl's task authority seals them.
+  - wicket_ref: promise_requires_approval/1.1.0
+    check: promise_requires_approval
+    digest: 52514fb625b208f2f04d900d115468b526c01ec34c5630fe3ae68ed86eefe386
+  # The user's own authenticity claim, attributed and marked unverified, passes.
+  - wicket_ref: promise_never/1.1.0
+    check: promise_never
+    digest: ed9e02ed17cbd08a0f846023e7091e7636d504ba1f18c6b9173e0a2443d92b8b
+  # A class stated to the buyer, in the deal, or by the sale's listings in force.
+  - wicket_ref: required_disclosure/1.2.0
+    check: required_disclosure
+    digest: cae962303066286b3c391a6c1a2f5f5db6742865fb84e1932ad68515a423224f
+  # An offer that answers no proposal (no_proposal) is not applicable.
+  - wicket_ref: offer_expiry/1.1.0
+    check: offer_expiry
+    digest: e55083b32ffe5e9415d3ef6455398b42187d9de76aba9f6cc735f3ea71f590f1
+  # One sale, several buyer threads: one accepted commitment.
+  - wicket_ref: seller.single_commitment/1.0.0
+    check: single_commitment
+    digest: 91960c9a9d62b8f15778b6b626a0f0305fa795ab88dd11bd93101294fc56882e
+  # The rails a buyer may pay on, as an allow-list, at the commit and on a
+  # sale: cash only in person, the payment apps counted as p2p.
+  - wicket_ref: seller.destination_rail/1.1.0
+    check: destination_rail
+    digest: a86844bd3b5132ae5fb04e9009c5c6907ea43c1609df713c45055dd04bcdbe0e
+  - wicket_ref: task_authority/1.1.0
+    check: task_authority
+    digest: 5d4e54d3a243be2cde9e64c99c1ce351b0dc04e46ed80aaadc2ba147fa9960ab
+  # Contact details reach only the buyer who accepted, in the accepting
+  # deal; the public pickup area reaches any buyer; a disclosure to a
+  # platform reaches no buyer and is left to s01.
+  - wicket_ref: seller.release_on_acceptance/1.2.0
+    check: release_on_acceptance
+    digest: 854718b637f2f4a06c37d3ba49bccc8b44ca8832878b339a0ac988963256a832
+
+folds:
+  # Read by required_disclosure, which pins these same digests in its config.
+  - fold_ref: disclosure.class_seen/1.0.0
+    digest: 5b4d0280892db43c5209629137be8634be01c32d481ae79e005c4a1c6358c564
+  - fold_ref: disclosure.statement_seen/1.0.0
+    digest: 925e7ccd2e29b3f1984f966e968bdef47d0d22d2b85b8e0205a39d6a5a7ff0be
+
+holds_integration: none
+
+fixtures:
+  ledger: fixtures/mini_ledger.jsonl
+  scenarios:
+    - id: condition-told-to-a
+      outcome: allow
+    - id: condition-told-to-b
+      outcome: allow
+    - id: counter-above-floor-in-a
+      outcome: allow
+    - id: offer-below-floor-in-b
+      outcome: escalate
+    - id: offer-before-required-statement
+      outcome: escalate
+    - id: offer-on-a-stale-proposal
+      outcome: escalate
+    - id: offer-outside-the-task
+      outcome: escalate
+    - id: statement-warranty-unapproved
+      outcome: escalate
+    - id: statement-warranty-approved
+      outcome: allow
+    - id: statement-authenticity
+      outcome: deny
+    - id: pickup-told-to-a
+      outcome: allow
+    - id: pickup-told-to-a-again
+      outcome: deny
+    - id: address-to-a-before-acceptance
+      outcome: deny
+    - id: address-to-a-before-acceptance-approved
+      outcome: deny
+    - id: pickup-detail-to-a-before-acceptance
+      outcome: deny
+    - id: other-detail-to-a-before-acceptance
+      outcome: deny
+    - id: address-citing-an-unknown-mandate
+      outcome: deny
+    - id: listing-views-read
+      outcome: allow
+    - id: share-pickup-area-to-a-before-acceptance
+      outcome: allow
+    - id: share-pickup-location-to-a-before-acceptance
+      outcome: deny
+    - id: share-phone-to-a-before-acceptance
+      outcome: deny
+    - id: share-email-to-a-before-acceptance
+      outcome: deny
+    - id: share-name-to-a-before-acceptance
+      outcome: deny
+    - id: share-home-address-to-a-before-acceptance
+      outcome: deny
+    - id: share-address-to-a-before-acceptance
+      outcome: deny
+    - id: share-pickup-area-and-phone-to-a-before-acceptance
+      outcome: deny
+    - id: acceptance-in-a
+      outcome: allow
+    - id: second-commitment-in-b
+      outcome: deny
+    - id: acceptance-in-b-of-item-2
+      outcome: allow
+    - id: address-to-a-after-acceptance
+      outcome: allow
+    - id: pickup-detail-to-a-after-acceptance
+      outcome: allow
+    - id: other-detail-to-a-after-acceptance
+      outcome: allow
+    - id: address-to-c-after-acceptance
+      outcome: deny
+    - id: address-to-a-citing-b-acceptance
+      outcome: allow
+    - id: address-with-no-action-class
+      outcome: deny
+    - id: address-to-a-third-party
+      outcome: deny
+    - id: sale-to-a-on-an-allowed-rail
+      outcome: allow
+    - id: sale-to-a-on-a-rail-not-allowed
+      outcome: escalate
+    - id: email-to-the-platform
+      outcome: allow
+    - id: phone-to-the-platform
+      outcome: deny
+    - id: address-to-the-platform
+      outcome: deny
+    - id: platform-disclosure-naming-no-class
+      outcome: deny
+    - id: email-and-phone-to-the-platform
+      outcome: deny
+    - id: pickup-area-to-the-platform
+      outcome: allow
+    - id: pickup-location-to-the-platform
+      outcome: deny
+    - id: email-and-pickup-area-to-the-platform
+      outcome: allow
+    - id: share-pickup-location-to-a-after-acceptance
+      outcome: allow
+    - id: share-phone-to-a-after-acceptance
+      outcome: allow
+    - id: share-email-to-a-after-acceptance
+      outcome: allow
+    - id: share-name-to-a-after-acceptance
+      outcome: allow
+    - id: share-home-address-to-a-after-acceptance
+      outcome: allow
+    - id: share-address-to-a-after-acceptance
+      outcome: allow
+    - id: share-pickup-area-to-a-after-acceptance
+      outcome: allow
+    - id: share-phone-to-b-after-acceptance
+      outcome: deny
+    - id: share-pickup-area-to-b-after-acceptance
+      outcome: allow
+    - id: share-phone-in-a-to-another-buyer
+      outcome: deny
+    - id: share-phone-to-a-under-another-name
+      outcome: allow
+    - id: share-phone-to-a-naming-no-deal
+      outcome: deny
+    - id: share-phone-to-a-naming-two-deals
+      outcome: deny
+    - id: share-phone-to-a-with-no-fingerprint
+      outcome: deny
+    - id: share-credential-to-a-after-acceptance
+      outcome: deny
+    - id: commit-cash-in-person
+      outcome: allow
+    - id: commit-cash-shipped
+      outcome: escalate
+    - id: commit-cash-with-no-handover
+      outcome: escalate
+    - id: commit-on-a-rail-not-allowed
+      outcome: escalate
+    - id: commit-by-venmo
+      outcome: allow
+    - id: commit-by-zelle
+      outcome: allow
+    - id: commit-stating-no-rail
+      outcome: escalate
+    - id: sale-to-a-by-venmo
+      outcome: allow
+    - id: sale-to-a-by-zelle
+      outcome: allow
+    - id: first-offer-answering-no-proposal
+      outcome: allow
+    - id: offer-answering-an-unnamed-message
+      outcome: escalate
+    - id: no-proposal-beside-a-proposal-time
+      outcome: escalate
+    - id: offer-after-a-listing-stating-the-condition
+      outcome: allow
+    - id: offer-after-a-listing-without-the-condition
+      outcome: escalate
+    - id: offer-after-listings-sharing-no-class
+      outcome: escalate
+    - id: statement-warranty-ordered
+      outcome: allow
+    - id: statement-warranty-ordered-record-missing
+      outcome: escalate
+    - id: statement-authenticity-attributed
+      outcome: allow
+    - id: statement-authenticity-attributed-off-template
+      outcome: deny
+    - id: statement-authenticity-attributed-words-not-checked
+      outcome: deny
+    - id: statement-authenticity-ordered-not-attributed
+      outcome: deny
+
+# The action taxonomy this pack was authored against. The taxonomy decides
+# whether a gated class asks or refuses on a failure (its approver_role), so
+# the pin puts it under this pack's digest, and the pack does not load under
+# any other taxonomy.
+taxonomy:
+  taxonomy_version: "6"
+  digest: "fc12eb90bc2b3c85bb49c4d3d7be8f384c6e0b8e189bc3b68a753a4f1af5cd94"

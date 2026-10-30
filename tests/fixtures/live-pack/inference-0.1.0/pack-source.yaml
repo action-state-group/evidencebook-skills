@@ -1,0 +1,100 @@
+# Live fixture for evidencebook-skills#62: capsule-engine's go/packs/inference-0.1.0/pack.yaml
+# (capsule-engine main c85f758391aedfacf4f5e8f94133c12389ba292b) written as a
+# `scope.kind: live` pack-source.yaml. Differences from that file: `scope`,
+# `pack_version`, and a `check` on each constraint (the check the cited wicket
+# implements, which the engine reads from the wicket definition). Its
+# definition_digest is the engine's, b8410fcf...98ed (PROVENANCE.json beside the pack).
+#
+# The original header follows.
+# inference pack: the basic policy a node applies before it buys one
+# inference from another node. Every check here is a deterministic predicate
+# over normalized action fields; none calls a model.
+#
+# One action type, inference.purchase, in the taxonomy's money.purchase
+# class. The node reads the selected peer's advertised rates and passes them
+# as input_msat_per_million and output_msat_per_million: millisatoshis per
+# million input and output tokens, mesh-llm's Pricing units. Both are
+# optional fields, so a peer whose price cannot be read reaches rate_cap and
+# is refused there rather than read as malformed. An action names this type
+# in its verb (inference.purchase), and the engine refuses one that lacks a
+# required field (guards/checks/required_fields.py). equivalence_key is
+# required: the exchange's own id. dedupe runs on every decision, and without
+# a key it keys an act on its target and amount, so a second inference from
+# the same peer (no amount) would be refused as a repeat.
+#
+# The pack ships no price bound: both rate caps default to the largest
+# integer every JSON reader holds exactly. The operator's policy profile
+# (policy/profile.py) sets them (rate_cap.max_input_msat_per_million,
+# rate_cap.max_output_msat_per_million) and the counterparty list
+# (counterparty_list.mode, entries, disposition). A daily budget, a
+# per-inference total or a deposit is the host's to enforce, not this pack's.
+#
+# Every constraint cites a built-in definition by id and digest (wicket_ref
+# + digest) -- nothing is copied into this directory. The loader refuses the
+# pack if a cited definition has changed.
+#
+# Statements name what is detected and recorded -- the observable, never an
+# intent. Every rule declares NEVER: a failure refuses.
+pack_id: asg/inference/0.1.0
+pack_version: 0.1.0
+scope:
+  kind: live
+
+obligations:
+  - id: r01-rate-caps
+    statement: >-
+      Checks the input and output rates the selected peer advertises, in
+      millisatoshis per million tokens, against the operator's two caps, and
+      refuses a peer over either, recording the rates and the cap exceeded.
+      A peer whose rates cannot be read is refused, naming the rate missing.
+    check: rate_cap
+    default_disposition: NEVER
+  - id: r02-counterparty-list
+    statement: >-
+      Checks the node an inference is bought from against the operator's
+      counterparty list: a deny list refuses a listed node and an allow list
+      refuses an unlisted one, or asks about it when the profile says so. It
+      records the entry matched, never the list. With no list set, nothing is
+      refused.
+    check: counterparty_list
+    default_disposition: NEVER
+  - id: r03-same-purchase-twice
+    statement: >-
+      Checks whether an inference purchase repeats one already accepted under
+      the same equivalence key, the exchange's id, and refuses the repeat.
+      Two exchanges with the same peer are two purchases.
+    check: dedupe
+    default_disposition: NEVER
+
+action_semantics:
+  - action_type: inference.purchase
+    action_class: money.purchase
+    required_fields: [target, equivalence_key]
+    optional_fields: [input_msat_per_million, output_msat_per_million]
+
+constraints:
+  - wicket_ref: rate_cap/1.0.0
+    check: rate_cap
+    digest: a2628f677ddbeb6cdd6a62ac44403b51ac03f878b40e1c8d1627c95039c13d93
+  # An empty deny list until the profile sets one.
+  - wicket_ref: counterparty_list/1.0.0
+    check: counterparty_list
+    digest: d95162931a6c1f88c763f2fd221d63b238888c1bdd7c6d594123ee5671e18f65
+  - wicket_ref: dedupe/1.0.0
+    check: dedupe
+    digest: 18ab5d489f1e5774d576b8f99897edd4f4b20f609b85683456a3e3b6b4912abb
+
+# The loader requires a fold. No check of this pack reads one: rate_cap reads
+# the action alone, and dedupe its own index. spend.weekly/3.1.0 is cited so
+# the pack's spend is computable as everyday's is; the coverage gate exempts
+# it for this pack only (conformance-vectors/guard/v0/COVERAGE-EXEMPT.json).
+folds:
+  - fold_ref: spend.weekly/3.1.0
+    digest: f379cd4b2b12284fa5d682845f23bcd7ab1ae8b8d1dd827cd9b5dd7069735997
+
+holds_integration: none
+
+# The action taxonomy this pack was authored against.
+taxonomy:
+  taxonomy_version: "6"
+  digest: "fc12eb90bc2b3c85bb49c4d3d7be8f384c6e0b8e189bc3b68a753a4f1af5cd94"

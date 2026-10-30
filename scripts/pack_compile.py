@@ -47,6 +47,12 @@ invalid pack source before writing anything, reporting every issue found, in the
 `{"valid": bool, "issues": [...]}` shape `capsulectl contract validate --json`
 uses.
 
+A pack source with `scope: {kind: live}` (absent means `after_the_fact`) is a
+capsule-engine live pack; scripts/live_pack.py validates it, and `compile` writes
+contract.json (the Evidence Contract) and pack-definition.json (the engine's pack
+definition and its definition_digest, also printed by `project`) instead of the
+four documents above.
+
     python3 scripts/pack_compile.py validate packs/airline-support-outcomes/pack-source.yaml
     python3 scripts/pack_compile.py compile packs/airline-support-outcomes/pack-source.yaml \\
         --out demo/airline-support-outcomes
@@ -59,6 +65,8 @@ import re
 import sys
 
 import yaml
+
+import live_pack
 
 TIERS = {"judged", "recomputed"}
 # A criterion's optional `requirement_tier` (Evidence Contract requirement `tier`):
@@ -126,6 +134,18 @@ def _strip_strings(obj):
     if isinstance(obj, dict):
         return {k: _strip_strings(v) for k, v in obj.items()}
     return obj
+
+
+def load_source(text):
+    """A pack source's YAML text -> the mapping every other function takes. An
+    after-the-fact source has its strings stripped (_strip_strings); a live one
+    keeps them as written, because capsule-engine digests a pack's strings
+    as they are (`statement: >` keeps its trailing newline, `>-` does not)."""
+    source = yaml.safe_load(text)
+    # Only a source that is after_the_fact as written is stripped: a kind that is
+    # neither (" live ") is left as is and refused by validate_scope, never
+    # stripped into a live source.
+    return _strip_strings(source) if live_pack.scope_kind(source) == "after_the_fact" else source
 
 
 def _build_outcome_report_presentation(source):
@@ -342,6 +362,13 @@ def validate_source(source):
     issues = []
     if not isinstance(source, dict):
         return ["pack source must be a mapping"]
+
+    # `scope.kind` (absent means after_the_fact, which is everything below).
+    scope_issues = live_pack.validate_scope(source)
+    if scope_issues:
+        return scope_issues
+    if live_pack.is_live(source):
+        return live_pack.validate_live(source)
 
     def require_str(key):
         v = source.get(key)
@@ -934,6 +961,15 @@ def write_pack(source, out_dir, out_rel):
     return compiled
 
 
+def write_live_pack(source, out_dir):
+    """A live pack compiles to its Evidence Contract and the projection to the
+    engine's pack definition, not to the four after-the-fact documents."""
+    import evidence_contract  # imports this module, so not at the top
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "contract.json").write_bytes(evidence_contract.to_bytes(live_pack.from_live(source)))
+    (out_dir / "pack-definition.json").write_bytes(live_pack.projection_bytes(source))
+
+
 def resolve_out_dir(out_arg):
     """--out must resolve inside this repo's root. A path under `demo/` must be
     exactly `demo/<name>` (two segments): scripts/run_daily.py derives its own repo
@@ -981,8 +1017,11 @@ def main(argv):
     p_compile.add_argument("source", type=pathlib.Path)
     p_compile.add_argument("--out", type=pathlib.Path, required=True)
 
+    p_project = sub.add_parser("project", help="a live pack: print the capsule-engine pack definition and its definition_digest")
+    p_project.add_argument("source", type=pathlib.Path)
+
     args = ap.parse_args(argv)
-    source = _strip_strings(yaml.safe_load(args.source.read_text()))
+    source = load_source(args.source.read_text())
     issues = validate_source(source)
 
     if args.cmd == "validate":
@@ -993,11 +1032,30 @@ def main(argv):
         print(json.dumps({"valid": False, "issues": issues}, indent=2))
         return 1
 
+    if args.cmd == "project":
+        if not live_pack.is_live(source):
+            print(json.dumps({"valid": False, "issues": ["project needs a pack source with scope.kind: live"]}, indent=2))
+            return 1
+        sys.stdout.buffer.write(live_pack.projection_bytes(source))
+        return 0
+
     try:
         out_abs, out_rel = resolve_out_dir(args.out)
     except ValueError as e:
         print(json.dumps({"valid": False, "issues": [str(e)]}, indent=2))
         return 1
+
+    if live_pack.is_live(source):
+        write_live_pack(source, out_abs)
+        print(json.dumps({
+            "valid": True,
+            "pack_id": source["pack_id"],
+            "pack_version": source["pack_version"],
+            "scope": "live",
+            "out": out_rel,
+            "files": [f"{out_rel}/contract.json", f"{out_rel}/pack-definition.json"],
+        }, indent=2))
+        return 0
 
     compiled = write_pack(source, out_abs, out_rel)
     print(json.dumps({
