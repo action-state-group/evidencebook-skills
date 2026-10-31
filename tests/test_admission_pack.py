@@ -218,6 +218,17 @@ class Refusals(unittest.TestCase):
         self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
         self.assertIn("source must be provenance text (a string)", issues)
 
+    def test_a_unit_no_tier_names(self):
+        self.assertRefused("  USD: {band: USD, scale: 0}\n", "  USD: {band: USD, scale: 0}\n  EUR: {band: EUR, scale: 0}\n",
+                           "band unit EUR is named by no tier")
+
+    def test_a_negative_threshold(self):
+        self.assertRefused("params: {min: 10}", "params: {min: -1}", "params.min -1 must be from 0")
+
+    def test_a_threshold_whose_duration_wraps(self):
+        self.assertRefused("params: {max_age_s: 604800}", "params: {max_age_s: 99999999999}",
+                           "params.max_age_s 99999999999 must be from 0")
+
     def test_an_unknown_scope_kind_still_names_admission(self):
         issues = pack_compile.validate_source(load(baseline_text().replace("kind: admission", "kind: admit")))
         self.assertIn("scope.kind 'admit' must be one of ['live', 'after_the_fact', 'admission']", issues)
@@ -251,6 +262,45 @@ rows:
         self.assertTrue(pack_compile.validate_source(load(self.SOURCE.replace('on_fail: "record"', 'on_fail: "LIMIT"'))))
         self.assertTrue(pack_compile.validate_source(load(self.SOURCE.replace(
             'on_fail: "record"}', 'on_fail: "record", ask: {derivation: history_card/1}}'))))
+
+
+class TextIssues(unittest.TestCase):
+    """What the evaluator's loader refuses in the text, before any mapping."""
+
+    def issues(self, old, new):
+        text = baseline_text()
+        self.assertTrue(old in text, old)
+        return admission_pack.text_issues(text.replace(old, new, 1))
+
+    def test_the_baseline_has_none(self):
+        self.assertEqual(admission_pack.text_issues(baseline_text()), [])
+
+    def test_refused(self):
+        for old, new, want in [
+            ('on_fail: "NO"', "on_fail: NO", "reads as a bool"),
+            ('on_fail: "NO"', "on_fail: y", "reads as a bool"),
+            ("scale: -3}", "scale: -3.5}", "reads as a float"),
+            ("max_asks: 3", "max_asks: 0x3", "plain decimal"),
+            ("max_asks: 3", "max_asks: 03", "plain decimal"),
+            ("max_asks: 3", "max_asks: 1_0", "plain decimal"),
+            ("  - id: attestation\n", "  - id: true\n", "reads as a bool"),
+            ("  - id: T0 ", "  - &t0 id: T0 ", "anchors and aliases"),
+            ("  - id: attestation\n", "  - id: !!str attestation\n", "tags are not read"),
+            ("source: \"evidencebook", "source: 2026-10-30\nx: \"evidencebook", "reads as a timestamp"),
+        ]:
+            got = self.issues(old, new)
+            self.assertTrue(any(want in i for i in got), (new, got))
+
+    def test_the_cli_reports_them(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", dir=REPO_ROOT / "packs", delete=False) as f:
+            f.write(baseline_text().replace("max_asks: 3", "max_asks: 0x3", 1))
+        try:
+            run = subprocess.run([sys.executable, "scripts/pack_compile.py", "validate", f.name],
+                                 cwd=REPO_ROOT, capture_output=True, text=True)
+        finally:
+            pathlib.Path(f.name).unlink()
+        self.assertEqual(run.returncode, 1)
+        self.assertTrue(any("plain decimal" in i for i in json.loads(run.stdout)["issues"]), run.stdout)
 
 
 if __name__ == "__main__":

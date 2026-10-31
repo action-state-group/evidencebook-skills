@@ -1034,8 +1034,11 @@ def main(argv):
     p_project.add_argument("source", type=pathlib.Path)
 
     args = ap.parse_args(argv)
-    source = load_source(args.source.read_text())
+    text = args.source.read_text()
+    source = load_source(text)
     issues = validate_source(source)
+    if admission_pack.is_admission(source):
+        issues = admission_pack.text_issues(text) + issues
 
     if args.cmd == "validate":
         print(json.dumps({"valid": not issues, "issues": issues}, indent=2))

@@ -43,9 +43,15 @@ No other field is read, and an unknown field is refused. A pack has no weight,
 score or other place a ranking could hide.
 
 Write outcome names quoted (`"NO"`). YAML 1.1 readers, PyYAML among them, read
-a plain `NO` as the boolean false. The lint here refuses an outcome that reads
-as a boolean, and the evaluator refuses any plain scalar that YAML 1.1 and YAML
-1.2 read differently.
+a plain `NO` as the boolean false. YAML readers disagree on more than that, so
+the lint and the evaluator both refuse:
+
+- a plain scalar that reads as a boolean, float or timestamp in any of them,
+  since no pack value is one;
+- an integer in any form but plain decimal (`0x10`, `010`, `1_000`);
+- anchors, aliases and tags.
+
+A pack then reads one way everywhere, or not at all.
 
 **A pack picks which outcomes it uses.** A Mesh pack under Steven's 10-29
 rulings (u126, u137) yields `["GO", "NO"]` only. It also keeps `own_history`
@@ -84,8 +90,11 @@ it is not the Mesh default while u137 stands.
 - An `on_fail` or `ask` whose outcome the pack does not yield.
 - An unknown predicate, a predicate under the wrong source, or a missing or
   unknown param.
+- A param below 0 or above its bound: `max_age_s` up to a century of seconds,
+  `min_days` and `window_days` up to 36,500, and `min` up to 2^53 − 1.
 - A `from` or `cap` that names no tier.
-- A ceiling in a unit `accept` does not name, or a ceiling that does not rise.
+- A ceiling in a unit `accept` does not name, a ceiling that does not rise,
+  or a unit in `accept` that no tier names.
 - A field of the wrong type. It is reported, never raised.
 
 ## 2. Predicates

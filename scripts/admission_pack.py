@@ -21,6 +21,8 @@ boolean and is refused with that reason.
 """
 import re
 
+import yaml
+
 SCOPE_KIND = "admission"
 
 OUTCOMES = ("GO", "ASK", "LIMIT", "NO")
@@ -62,6 +64,16 @@ ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
 ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
+# Each threshold's bound, as the evaluator's loader holds it (capsule-engine
+# go/admission paramMax): a century of seconds or days, and a count no JSON
+# reader loses.
+PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
+             "min": 2 ** 53 - 1}
+
+_DECIMAL_INT = re.compile(r"^-?(0|[1-9][0-9]*)$")
+# Plain scalars YAML 1.1 reads as booleans that PyYAML's resolver does not.
+_YAML11_BOOLEAN_EXTRA = {"y", "Y", "n", "N"}
+
 
 def is_admission(source):
     scope = source.get("scope") if isinstance(source, dict) else None
@@ -86,6 +98,32 @@ def _outcome(where, v, allowed, issues):
         issues.append(f"{where} {v!r} must be one of {list(allowed)}")
         return None
     return v
+
+
+def text_issues(text):
+    """What the evaluator's loader refuses in the YAML text itself, which the
+    parsed mapping no longer shows: a plain scalar that reads as a boolean,
+    float or timestamp (no pack value is one, and readers disagree on which
+    plain scalars are), an integer in any form but plain decimal (0x10, 010,
+    1_000), and anchors, aliases and tags. A pack then reads one way in every
+    reader or not at all."""
+    issues = []
+    resolver = yaml.resolver.Resolver()
+    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
+        line = ev.start_mark.line + 1
+        if isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None):
+            issues.append(f"line {line}: anchors and aliases are not read")
+        elif isinstance(ev, (yaml.ScalarEvent, yaml.MappingStartEvent, yaml.SequenceStartEvent)) \
+                and ev.tag is not None and not (isinstance(ev, yaml.ScalarEvent) and ev.style):
+            issues.append(f"line {line}: tags are not read")
+        elif isinstance(ev, yaml.ScalarEvent) and not ev.style:
+            tag = resolver.resolve(yaml.ScalarNode, ev.value, (True, False)).rsplit(":", 1)[-1]
+            if tag in ("bool", "float", "timestamp") or ev.value in _YAML11_BOOLEAN_EXTRA:
+                issues.append(f"line {line}: {ev.value!r} reads as a {tag if tag != 'str' else 'bool'} in "
+                              "some YAML readers; no pack value is one (quote a string, such as \"NO\")")
+            elif tag == "int" and not _DECIMAL_INT.match(ev.value):
+                issues.append(f"line {line}: write the integer {ev.value!r} in plain decimal")
+    return issues
 
 
 def validate_admission(source):
@@ -153,6 +191,10 @@ def validate_admission(source):
                 issues.append(f"tier {t['id']}: max_decade.{band} {d} does not rise above the tier below ({below[band]})")
             below[band] = d
 
+    # A unit no tier names would leave a deal in it with no tier at all.
+    for band in sorted(bands - set(below)):
+        issues.append(f"accept: band unit {band} is named by no tier's max_decade")
+
     budget = source.get("budget")
     if not isinstance(budget, dict) or set(budget) != {"max_asks", "deadline_s"} \
             or not _is_int(budget["max_asks"]) or budget["max_asks"] < 0 \
@@ -202,6 +244,9 @@ def validate_admission(source):
                     issues.append(f"{where}: check {check} needs params.{k}")
             for k in sorted(set(params) - set(PREDICATES[check][1])):
                 issues.append(f"{where}: check {check} takes no params.{k}")
+            for k in sorted(set(params) & set(PREDICATES[check][1])):
+                if not 0 <= params[k] <= PARAM_MAX[k]:
+                    issues.append(f"{where}: params.{k} {params[k]} must be from 0 to {PARAM_MAX[k]}")
         if frm is None or frm not in tier_ids:
             issues.append(f"{where}.from {frm!r} is not a tier")
         on_fail = r.get("on_fail")
