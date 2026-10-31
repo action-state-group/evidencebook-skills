@@ -137,7 +137,8 @@ list, in the order of the agent's tool calls), a USD band (`e+N`), the halves pr
 customer handle and `follow_up_of`. The salt (`--subject-salt-file`) is never written. The `operator`
 tier salts the handle per pack; the `shared` tier salts it per share (evidencebook-skills#93) under
 `--subject-share-id`, an id picked fresh for each share, so two shares give one customer unrelated
-handles (`handle_scope.salting: "per-share"`).
+handles (`handle_scope.salting: "per-share"`) and one customer cannot be linked across reports.
+Case ids stay the same in every share of one report.
 `--subject-facts` supplies `follow_up_of` (a `references[]` cite) and halves (from the bilateral
 records); they are validated, never inferred. Synthetic fixtures: `tests/fixtures/subject-history/`.
 `--attach-input-originals`

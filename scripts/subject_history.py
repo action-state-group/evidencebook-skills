@@ -20,7 +20,9 @@ customer gets unrelated handles in two shares and a reader of one share cannot c
 A handle and `follow_up_of` each join conversations into one customer, which is why the shared
 tier needs the per-share key. The handle is HMAC-SHA256 under the tier's key over (scope,
 customer id); the customer id, the salt and the share id are never written, and `salt_id` is a
-fingerprint of the tier's key, so two shares' scopes differ too. A field the inputs do not show is
+fingerprint of the tier's key, so two shares' scopes differ too. What this protects is linking one
+customer across different reports: case ids (the conversation keys and `follow_up_of` targets)
+stay the same in every share of one report, so two shares of one report line up by case id. A field the inputs do not show is
 omitted, never guessed: no single customer id in the conversation means no handle.
 
 `request_labels` are drawn from LABEL_VALUES, in the order of the tool calls the agent made, never

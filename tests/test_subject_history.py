@@ -135,7 +135,7 @@ class Member(unittest.TestCase):
             self.assertNotIn(secret, raw)
         self.assertEqual(sub, self.build("shared"))
 
-    def test_two_shares_of_one_report_cannot_be_joined_by_handle_or_scope(self):
+    def test_two_shares_get_unrelated_handles_and_scopes(self):
         a, b = self.build("shared"), self.build("shared", share_id="synthetic-share-0002")
         handles = lambda sub: {c["customer_handle"] for c in sub["conversations"].values()}  # noqa: E731
         self.assertEqual(handles(a) & handles(b), set())
