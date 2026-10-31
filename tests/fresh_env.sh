@@ -141,7 +141,7 @@ step "the human's ratings (stand-in), then resume"
 python3 tests/stub_rater.py "$packets" >"$work/ratings.json"
 python3 scripts/run_weekly.py --profile tau2 --spec demo/tau2/compiled.json --capsulectl "$ctl" \
   --date "$day" --out "$work/runs" --ratings "$work/ratings.json" | tee "$work/weekly.json"
-jq -e '.shortfall == 0 and (.agreement | length) == 1' "$work/weekly.json" >/dev/null || fail "calibration summary is not one pin's k of n"
+jq -e '.shortfall == 0 and (.agreement | length) == 1 and (.calibration_summaries | length) == 1' "$work/weekly.json" >/dev/null || fail "calibration summary is not one pin's k of n"
 
 step "every capsule in the book verifies offline"
 verified=0
@@ -157,7 +157,7 @@ done
 printf '%s records verified with capsulectl verify (cases, reports, skill actions, manifest, ratings, summary, two Closes)\n' "$verified"
 
 step "bundles verify with the neutral AAC bundle verifier"
-"$ctl" bundle --profile tau2 --root "$(jq -r .calibration_summary "$work/weekly.json")" --out "$work/calibration-bundle.json"
+"$ctl" bundle --profile tau2 --root "$(jq -r ".calibration_summaries[0]" "$work/weekly.json")" --out "$work/calibration-bundle.json"
 for bundle in "$(jq -r .close.bundle "$work/daily.json")" "$(jq -r .close.bundle "$work/weekly.json")" "$work/calibration-bundle.json"; do
   printf '%s: ' "$(basename "$(dirname "$bundle")")/$(basename "$bundle")"
   "$work/bin/bookfixture" aac-verify "$bundle" || fail "$bundle does not verify"
