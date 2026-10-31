@@ -21,7 +21,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from calibration_summary import calibration_summaries  # noqa: E402
-from human_rating import counted, human_rating_record  # noqa: E402
+from human_rating import counted_cases, human_rating_record  # noqa: E402
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
 from rollup_day import safe_filename  # noqa: E402
@@ -227,11 +227,14 @@ def main(argv):
         log["shortfall"] = len(selected) - len(rated)
 
         # 5. Agreement as k of n over the drawn sample; nothing else.
+        # A case counts only when the rating and the judge's verdict are both met
+        # or not_met (human_rating.counted_cases); the verb reads the same pairs,
+        # so its totals and ours are one reading.
+        counts = counted_cases(selected, rated)
         (work / "sampled-reports.json").write_text(json.dumps(
-            [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]} for _, b in selected]))
-        # Only met and not_met count toward agreement (human_rating.counted); the
-        # verb reads the same ratings, so its totals and ours are one reading.
-        (work / "ratings.json").write_text(json.dumps(counted(rated)))
+            [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]}
+             for _, b in selected if b["case_id"] in counts]))
+        (work / "ratings.json").write_text(json.dumps([r for r in rated if r["case_id"] in counts]))
         summary = run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
         records = calibration_summaries(selected, rated, spec["contract"], week_key, stamp)
         # The per-clause tallies must add up to the verb's per-pin totals: one

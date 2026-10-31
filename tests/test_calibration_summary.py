@@ -90,6 +90,12 @@ class CalibrationSummaryMatchesSchema(unittest.TestCase):
         self.assertEqual([(c["clause_ref"], c["agreement"]) for c in a["clauses"]],
                          [("a.one", {"k": 1, "n": 1}), ("a.two", {"k": 0, "n": 0})])
 
+    def test_a_judge_verdict_that_is_not_met_or_not_met_is_in_neither_k_nor_n(self):
+        selected = [report("c1", "a.one", "met"), report("c5", "a.one", "not_evaluable")]
+        a, = calibration_summaries(selected, [{"case_id": "c1", "rating": "met"}, {"case_id": "c5", "rating": "met"}],
+                                   "contract@1.0.0", "2026-W43", NOW)
+        self.assertEqual([(c["clause_ref"], c["agreement"]) for c in a["clauses"]], [("a.one", {"k": 1, "n": 1})])
+
     def test_an_empty_sample_seals_no_summary(self):
         self.assertEqual(calibration_summaries([], [], "contract@1.0.0", "2026-W43", NOW), [])
 

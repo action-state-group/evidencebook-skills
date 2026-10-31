@@ -22,14 +22,18 @@ def human_rating_record(case_id, week_key, report_capsule_id, label, rater_ref, 
         "rated_at": rated_at,
         "blind": True,
         "rater_ref": rater_ref,
-        "case": {"type": "evaluation-report", "digest_alg": "SHA-256", "digest": report_capsule_id,
+        "case": {"type": "evaluation-report/v1", "digest_alg": "SHA-256", "digest": report_capsule_id,
                  "citation_purpose": "rated_case"},
         "label": label,
     }
 
 
-def counted(rated):
-    """The ratings that count toward a judge's agreement: `met` and `not_met`.
-    `not_evaluable` and `out_of_scope` are ratings but not agreement or
-    disagreement, so they are in neither k nor n."""
-    return [r for r in rated if r["rating"] in COUNTED]
+def counted_cases(selected, rated):
+    """The case ids that count toward a judge's agreement: the human's rating
+    and the judge's verdict are both `met` or `not_met`. `not_evaluable` and
+    `out_of_scope`, on either side, are neither agreement nor disagreement, so
+    they are in neither k nor n (AAC#488's reader counts the same pairs).
+    `selected` is the drawn (report capsule id, evaluation-report body) list;
+    `rated` the {"case_id", "rating"} list."""
+    verdict_of = {body["case_id"]: body["verdict"] for _, body in selected}
+    return {r["case_id"] for r in rated if r["rating"] in COUNTED and verdict_of.get(r["case_id"]) in COUNTED}

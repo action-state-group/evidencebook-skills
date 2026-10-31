@@ -49,8 +49,8 @@ with a deterministic stand-in rating the packets in place of the person.
   `evaluation-report/v1` Capsule it audits (`citation_purpose: rated_case`, the report's
   digest), via `publish`. Each rating carries the rater as an opaque principal reference
   (`rater_ref` in the ratings file, or `--rater-ref`), never a name; the run refuses a rating
-  with neither. Only `met` and `not_met` count toward agreement: `not_evaluable` and
-  `out_of_scope` are in neither k nor n.
+  with neither. A case counts toward agreement only when the rating and the judge's verdict are both `met` or
+  `not_met`: `not_evaluable` and `out_of_scope`, on either side, are in neither k nor n.
 - `calibration summarize REPORTS_FILE RATINGS_FILE` — reduce the week's ratings against
   the sampled reports they audit into **agreement as k of n per judge pin**, nothing more.
   The verb returns those per-pin totals only. The sealed `calibration-summary/v1` records
