@@ -166,6 +166,7 @@ records its count, and its denominator where one exists.
 | `vouch.distinct_controllers` | vouch | `min` | distinct vouching controllers, the counterparty's own excluded, ≥ `min` | never | distinct / vouches |
 | `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, a stake on a rail `trust_roots.rails` does not pin, or a different unit | |
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
+| `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
 | `judged` | judged | | the judge met the row | not judged, or judged by a judge outside `trust_roots.judges` (reported, not counted) | |
 
 **A missing input versus nothing to read.** `not_read` has two causes. The
@@ -224,9 +225,8 @@ that rule.
   `k` subjects, of which at most `max_adverse_permille` per thousand were
   resolved against the counterparty. A lower band never adds up to a higher
   one: a hundred subjects at decade 0 earn decade 0. Disputes still open are
-  not in this share, so leaving a dispute unresolved does not make it look
-  clean: a pack shows them as their own count beside the ladder, with
-  `bound.no_unanswered_dispute`.
+  not in this share: a pack shows them as their own count beside the ladder,
+  with `card.open_disputes` (§3.3).
 - **Pass** when the deal's decade is at most the earned band plus
   `step_decades`, where 1 is the 10× step-up. It also passes when a stake on a
   pinned rail covers the deal, whatever the card shows.
@@ -242,10 +242,33 @@ that rule.
   plus the step. It never lowers below the tier below its `from`. History
   earns a tier, not just a pass.
 
-No served card carries per-band counts yet (§6), so the baseline has no ladder
-row. The rule ships with its own conformance pack,
+No served card carries per-band counts of corroborated, net-settled subjects
+yet (§6), so the baseline has no ladder row. The rule ships with its own
+conformance pack,
 `conformance-vectors/admission/v0/packs/history-or-stake.yaml` in
 capsule-engine.
+
+**From a `standard_history/1` card.** The one served card with per-band
+counts is `standard_history/1` (AAC `spec/standard-history-v0.md` §4, §5.3).
+capsule-engine's `StandardHistoryCounts` reads a verified card's `bands` into
+the card input. The artifact must be the JCS of the card, as that spec's §3
+says; bytes that are not exactly the JCS of their own parse are refused, so
+every evaluator reads one card one way:
+
+- each band tally gives `subjects = held + did_not_hold` (its decided deals)
+  and `adverse = did_not_hold`; its `undecided` deals are left out, and a band
+  whose `decade` is `null` (zero-amount deals) is skipped;
+- the currency is the card's SR `assetCode` as written and the decade is in
+  that asset's own unit, so 250 sat is `BTC` decade −6. A pack that reads these
+  cards maps the asset in `accept`, for example `BTC: {band: sat, scale: 8}`.
+
+A ladder filled this way counts decided deals by outcome claim, not
+corroborated, net-settled subjects: a `/1` band carries no corroboration split
+(`happened` is card-level), no netting, and both roles. It is therefore not
+the ladder §3A.14 describes, and the baseline still gets no ladder row from it.
+Counting `did_not_hold` as adverse is the conservative direction: the card
+does not say which side failed, and counting it against the counterparty can
+only lower an earned band, never raise one.
 
 ### 3.2 Rails
 
@@ -254,6 +277,18 @@ A rail is trusted by its adapter declaration, named by id plus digest
 in `stake.covers_deal` and in the ladder's stake road, only when
 `trust_roots.rails` holds that exact pin. A stake on any other rail is
 `not_read`, never a pass. A pack with no rails therefore counts no stake.
+
+### 3.3 Open disputes beside the ladder
+
+The ladder's adverse share counts deals that were decided against the
+counterparty. A dispute still open is not in it. So that leaving a dispute
+unresolved cannot make a history look clean, a pack shows open disputes beside
+the ladder, and `card.open_disputes` is that count: the open disputes others
+raised about the counterparty, out of all disputes they raised, as the card
+shows them. From a `standard_history/1` card these are
+`disputes.received.by_outcome.open` and `disputes.received.of`. The count is
+card-level, across all bands, since `/1` carries no disputes per band. It is a
+`card` row, so it records or limits and never decides NO.
 
 ## 4. Resolution
 
@@ -297,8 +332,9 @@ The evaluator's input is the deal and what was received:
 - **What was received about the counterparty:**
   - the platform facts;
   - the card, with its state, first and latest checkpoint times, witness,
-    declared controller, claims held and made, and per-band counts
-    `{currency, decade, subjects, adverse}`;
+    declared controller, claims held and made, per-band counts
+    `{currency, decade, subjects, adverse}`, and its received disputes
+    `{open, of}`;
   - a bound selection, with its state and its unanswered disputes;
   - the party's own book with the counterparty, as counts and adjudications;
   - the operator's list result;
@@ -341,7 +377,7 @@ v0. The baseline's numbers are placeholders, calibrated first from the live
 stage-1 health report. The fixtures are checked against the evaluator in
 capsule-engine's CI. `pack lint` and `pack test` are #56.
 
-Added after the first v0 compile (#79):
+Added after the first v0 compile (#79, #87):
 
 - **The per-band ladder** with k and a step-up (§3.1; Reference v3 §3A.14,
   item 26). The evaluator reads it. No served card carries per-band counts of
@@ -349,10 +385,12 @@ Added after the first v0 compile (#79):
   its k, step-up and adverse share have no calibrated value.
 - **Rails in `trust_roots`** (§3.2), pinned by adapter declaration id plus
   digest (AAC#406).
+- **The ladder from a `standard_history/1` card** (§3.1) and
+  `card.open_disputes` (§3.3), from #87.
 
-Both are additive within `admission-pack/v0`. An evaluator from before them
+All are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails
-closed. A pack that uses neither compiles to the same bytes as before, but
+closed. A pack that uses none of them compiles to the same bytes as before, but
 one meaning changes, in the fail-closed direction: a pack written before
 rails that has a `stake.covers_deal` row pins no rail, so every stake it reads
 is now `not_read` where a covering one used to pass.
