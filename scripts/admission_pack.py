@@ -70,9 +70,41 @@ ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
              "min": 2 ** 53 - 1}
 
-_DECIMAL_INT = re.compile(r"^-?(0|[1-9][0-9]*)$")
-# Plain scalars YAML 1.1 reads as booleans that PyYAML's resolver does not.
-_YAML11_BOOLEAN_EXTRA = {"y", "Y", "n", "N"}
+# The plain scalar rule (capsule-engine go/admission plainScalars). YAML
+# readers disagree on which plain scalars are strings: PyYAML (YAML 1.1) reads
+# NO, 1:30 and 010 as a boolean and integers, yaml.v3 (YAML 1.2) reads 1e3 and
+# 0o10 as numbers. So a pack may write a plain (unquoted) scalar only in a
+# form every reader reads alike: a plain decimal integer, a dotted version
+# (1.0.0), or text that starts with none of the characters numbers,
+# timestamps, nulls and merges start with and is not a boolean or null word.
+# Anything else is quoted.
+_DECIMAL_INT = re.compile(r"^(0|-?[1-9][0-9]*)$")
+_DOTTED_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_SPECIAL_LEADERS = "0123456789+-.~<"
+_PLAIN_WORDS = {"y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF",
+                "true", "True", "TRUE", "false", "False", "FALSE", "null", "Null", "NULL"}
+
+
+def _plain_ok(v):
+    return (v == "" or bool(_DECIMAL_INT.match(v)) or bool(_DOTTED_VERSION.match(v))
+            or (v[0] not in _SPECIAL_LEADERS and v not in _PLAIN_WORDS))
+
+
+def text_issues(text):
+    """What the evaluator's loader refuses in the YAML text itself, which the
+    parsed mapping no longer shows: a plain scalar outside the plain scalar
+    rule above, anchors and aliases, and explicit tags (the non-specific `!`
+    aside, which yaml.v3 ignores)."""
+    issues = []
+    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
+        line = ev.start_mark.line + 1
+        if isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None):
+            issues.append(f"line {line}: anchors and aliases are not read")
+        elif getattr(ev, "tag", None) not in (None, "!"):
+            issues.append(f"line {line}: tags are not read")
+        elif isinstance(ev, yaml.ScalarEvent) and not ev.style and not _plain_ok(ev.value):
+            issues.append(f"line {line}: quote {ev.value!r}: YAML readers do not all read it as the same string")
+    return issues
 
 
 def is_admission(source):
@@ -98,32 +130,6 @@ def _outcome(where, v, allowed, issues):
         issues.append(f"{where} {v!r} must be one of {list(allowed)}")
         return None
     return v
-
-
-def text_issues(text):
-    """What the evaluator's loader refuses in the YAML text itself, which the
-    parsed mapping no longer shows: a plain scalar that reads as a boolean,
-    float or timestamp (no pack value is one, and readers disagree on which
-    plain scalars are), an integer in any form but plain decimal (0x10, 010,
-    1_000), and anchors, aliases and tags. A pack then reads one way in every
-    reader or not at all."""
-    issues = []
-    resolver = yaml.resolver.Resolver()
-    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
-        line = ev.start_mark.line + 1
-        if isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None):
-            issues.append(f"line {line}: anchors and aliases are not read")
-        elif isinstance(ev, (yaml.ScalarEvent, yaml.MappingStartEvent, yaml.SequenceStartEvent)) \
-                and ev.tag is not None and not (isinstance(ev, yaml.ScalarEvent) and ev.style):
-            issues.append(f"line {line}: tags are not read")
-        elif isinstance(ev, yaml.ScalarEvent) and not ev.style:
-            tag = resolver.resolve(yaml.ScalarNode, ev.value, (True, False)).rsplit(":", 1)[-1]
-            if tag in ("bool", "float", "timestamp") or ev.value in _YAML11_BOOLEAN_EXTRA:
-                issues.append(f"line {line}: {ev.value!r} reads as a {tag if tag != 'str' else 'bool'} in "
-                              "some YAML readers; no pack value is one (quote a string, such as \"NO\")")
-            elif tag == "int" and not _DECIMAL_INT.match(ev.value):
-                issues.append(f"line {line}: write the integer {ev.value!r} in plain decimal")
-    return issues
 
 
 def validate_admission(source):

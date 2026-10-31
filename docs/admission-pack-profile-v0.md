@@ -42,14 +42,19 @@ The baseline pack is [`packs/admission-baseline/`](../packs/admission-baseline/p
 No other field is read, and an unknown field is refused. A pack has no weight,
 score or other place a ranking could hide.
 
-Write outcome names quoted (`"NO"`). YAML 1.1 readers, PyYAML among them, read
-a plain `NO` as the boolean false. YAML readers disagree on more than that, so
-the lint and the evaluator both refuse:
+Write outcome names quoted (`"NO"`). YAML readers disagree on which unquoted
+scalars are strings. PyYAML (YAML 1.1) reads `NO`, `1:30` and `010` as a
+boolean and integers, and yaml.v3 (YAML 1.2) reads `1e3` and `0o10` as numbers.
+So a plain (unquoted) scalar may only be:
 
-- a plain scalar that reads as a boolean, float or timestamp in any of them,
-  since no pack value is one;
-- an integer in any form but plain decimal (`0x10`, `010`, `1_000`);
-- anchors, aliases and tags.
+- a plain decimal integer (`3`, `-1`);
+- a dotted version (`1.0.0`);
+- text that starts with none of `0-9 + - . ~ <` and is not a boolean or null
+  word (`y`, `n`, `yes`, `no`, `on`, `off`, `true`, `false` or `null`, in any of
+  their cases).
+
+Anything else is quoted. The lint and the evaluator both refuse a plain scalar
+outside this rule, and also anchors, aliases and explicit tags.
 
 A pack then reads one way everywhere, or not at all.
 

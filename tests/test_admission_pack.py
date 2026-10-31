@@ -13,6 +13,8 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
+import yaml  # noqa: E402
+
 import admission_pack  # noqa: E402
 import evidence_contract as ec  # noqa: E402
 import pack_compile  # noqa: E402
@@ -275,21 +277,51 @@ class TextIssues(unittest.TestCase):
     def test_the_baseline_has_none(self):
         self.assertEqual(admission_pack.text_issues(baseline_text()), [])
 
+    def test_accepted_plain_forms(self):
+        # A version, a decimal, words and text read alike everywhere; the
+        # non-specific tag ! is ignored, as yaml.v3 ignores it.
+        for doc in ("v: 1.0.0", "v: -3", "v: 0", "v: asg/admission_baseline/1.0.0", "v: history_card/1",
+                    "v: The card is 7 days old.", "v: ! text", 'v: "NO"', "v:"):
+            self.assertEqual(admission_pack.text_issues(doc), [], doc)
+
     def test_refused(self):
         for old, new, want in [
-            ('on_fail: "NO"', "on_fail: NO", "reads as a bool"),
-            ('on_fail: "NO"', "on_fail: y", "reads as a bool"),
-            ("scale: -3}", "scale: -3.5}", "reads as a float"),
-            ("max_asks: 3", "max_asks: 0x3", "plain decimal"),
-            ("max_asks: 3", "max_asks: 03", "plain decimal"),
-            ("max_asks: 3", "max_asks: 1_0", "plain decimal"),
-            ("  - id: attestation\n", "  - id: true\n", "reads as a bool"),
+            ('on_fail: "NO"', "on_fail: NO", "quote 'NO'"),
+            ('on_fail: "NO"', "on_fail: y", "quote 'y'"),
+            ('on_fail: "NO"', "on_fail: null", "quote 'null'"),
+            ("scale: -3}", "scale: -3.5}", "quote '-3.5'"),
+            ("max_asks: 3", "max_asks: 0x3", "quote '0x3'"),
+            ("max_asks: 3", "max_asks: 03", "quote '03'"),
+            ("max_asks: 3", "max_asks: 1_0", "quote '1_0'"),
+            ("max_asks: 3", "max_asks: -0", "quote '-0'"),
+            ("max_asks: 3", "max_asks: +3", "quote '+3'"),
+            ("  - id: attestation\n", "  - id: true\n", "quote 'true'"),
+            ("  - id: attestation\n", "  - id: 1e3\n", "quote '1e3'"),
+            ("  - id: attestation\n", "  - id: 1E-2\n", "quote '1E-2'"),
+            ("  - id: attestation\n", "  - id: 0o10\n", "quote '0o10'"),
+            ("  - id: attestation\n", "  - id: 2026-1-2\n", "quote '2026-1-2'"),
+            ("  - id: attestation\n", "  - id: 1:30\n", "quote '1:30'"),
+            ("  - id: attestation\n", "  - id: .inf\n", "quote '.inf'"),
             ("  - id: T0 ", "  - &t0 id: T0 ", "anchors and aliases"),
             ("  - id: attestation\n", "  - id: !!str attestation\n", "tags are not read"),
-            ("source: \"evidencebook", "source: 2026-10-30\nx: \"evidencebook", "reads as a timestamp"),
+            ("max_asks: 3", 'max_asks: !!int "3"', "tags are not read"),
+            ("source: \"evidencebook", "source: 2026-10-30\nx: \"evidencebook", "quote '2026-10-30'"),
         ]:
             got = self.issues(old, new)
             self.assertTrue(any(want in i for i in got), (new, got))
+
+    def test_the_shared_probes(self):
+        # A copy of capsule-engine's conformance-vectors/admission/v0/
+        # plain-scalars.json, which its Go and Rust loaders decide too.
+        probes = json.loads((REPO_ROOT / "tests/fixtures/capsule-engine/admission-plain-scalars.json").read_text())
+        for doc in probes["accepted"]:
+            self.assertEqual(admission_pack.text_issues(doc), [], doc)
+        for doc in probes["refused"]:
+            try:
+                got = admission_pack.text_issues(doc)
+            except yaml.YAMLError:
+                continue
+            self.assertTrue(got, doc)
 
     def test_the_cli_reports_them(self):
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", dir=REPO_ROOT / "packs", delete=False) as f:
@@ -300,7 +332,7 @@ class TextIssues(unittest.TestCase):
         finally:
             pathlib.Path(f.name).unlink()
         self.assertEqual(run.returncode, 1)
-        self.assertTrue(any("plain decimal" in i for i in json.loads(run.stdout)["issues"]), run.stdout)
+        self.assertTrue(any("quote '0x3'" in i for i in json.loads(run.stdout)["issues"]), run.stdout)
 
 
 if __name__ == "__main__":
