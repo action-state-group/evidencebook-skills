@@ -36,7 +36,7 @@ The baseline pack is [`packs/admission-baseline/`](../packs/admission-baseline/p
 | `missing` | what a missing input gives: `LIMIT` (at the lowest tier) or `NO`, and never GO. It must be in `outcomes` |
 | `accept` | the mapping table. Each accepted currency maps to its band unit and scale, `{band, scale}`: an amount in that currency times `10^scale` is the amount in the band unit, so `msat: {band: sat, scale: -3}`. Nothing converts across units |
 | `tiers` | the ladder, lowest first, each `{id, max_decade: {<band unit>: <decade>}}`. Every key must be a band unit in `accept`. A unit's ceiling rises above that of the last lower tier naming it |
-| `budget` | `{max_asks, deadline_s}`: how many asks a counterparty may get in the caller's budget window, and how long an ask waits before an unanswered one is recorded as absence (design §8) |
+| `budget` | `{max_asks, deadline_s}` (0 to 1,000 asks; 1 second to a century): how many asks a counterparty may get in the caller's budget window, and how long an ask waits before an unanswered one is recorded as absence (design §8) |
 | `trust_roots` | optional `{controllers, witnesses, judges}`, each a list of names, saying whose word this pack counts. An empty or absent list trusts none |
 | `rows` | the rows, below |
 
@@ -120,6 +120,9 @@ source compiles to.
 - An `on_fail` or `ask` whose outcome the pack does not yield.
 - An unknown predicate, a predicate under the wrong source, or a missing or
   unknown param.
+- A budget out of range: `max_asks` from 0 to 1,000, and `deadline_s` from 1
+  second to a century.
+- A currency, band unit or other key that is not a string (`840:` is quoted).
 - A param below 0 or above its bound: `max_age_s` up to a century of seconds,
   `min_days` and `window_days` up to 36,500, and `min` up to 2^53 − 1.
 - A `from` or `cap` that names no tier.

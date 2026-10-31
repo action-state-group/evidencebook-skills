@@ -374,7 +374,7 @@ def validate_source(source):
     if live_pack.is_live(source):
         return live_pack.validate_live(source)
     if admission_pack.is_admission(source):
-        return admission_pack.validate_admission(source)
+        return admission_pack.validate_admission(source) or admission_pack.compile_issues(source)
 
     def require_str(key):
         v = source.get(key)
@@ -982,8 +982,11 @@ def write_admission_pack(source, out_dir):
     pack_id and their SHA-256)."""
     import evidence_contract  # imports this module, so not at the top
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "contract.json").write_bytes(evidence_contract.to_bytes(admission_pack.from_admission(source)))
-    (out_dir / "pack-definition.json").write_bytes(admission_pack.compiled_bytes(source))
+    # Both are built before either is written, so a failure leaves no half.
+    contract = evidence_contract.to_bytes(admission_pack.from_admission(source))
+    pinned = admission_pack.compiled_bytes(source)
+    (out_dir / "contract.json").write_bytes(contract)
+    (out_dir / "pack-definition.json").write_bytes(pinned)
 
 
 def resolve_out_dir(out_arg):

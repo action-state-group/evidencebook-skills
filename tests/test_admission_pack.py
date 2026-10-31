@@ -245,6 +245,13 @@ class Refusals(unittest.TestCase):
     def test_a_ceiling_out_of_range(self):
         self.assertRefused("max_decade: {USD: 2}", "max_decade: {USD: 99}", "max_decade.USD 99 must be from -60 to 60")
 
+    def test_a_budget_out_of_range(self):
+        self.assertRefused("  deadline_s: 86400", "  deadline_s: 9007199254740993", "deadline_s: 1 to")
+        self.assertRefused("  max_asks: 3", "  max_asks: 9007199254740993", "max_asks: 0 to 1000")
+
+    def test_a_numeric_currency(self):
+        self.assertRefused("  USDT: {band: USD, scale: 0}", "  840: {band: USD, scale: 0}", "must be written as a string")
+
     def test_a_unit_no_tier_names(self):
         self.assertRefused("  USD: {band: USD, scale: 0}\n", "  USD: {band: USD, scale: 0}\n  EUR: {band: EUR, scale: 0}\n",
                            "band unit EUR is named by no tier")

@@ -73,6 +73,9 @@ ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 # An accept scale and a tier ceiling, bounded so a band's decade stays far
 # inside an int (the loader's scaleMax and decadeMax).
 SCALE_MAX = 30
+# The budget's bounds (the loader's maxAsksMax and deadlineSMax).
+MAX_ASKS_MAX = 1000
+DEADLINE_S_MAX = 100 * 365 * 24 * 3600
 DECADE_MAX = 60
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
              "min": 2 ** 53 - 1}
@@ -172,6 +175,8 @@ def validate_admission(source):
         issues.append("accept must map at least one currency to its band unit")
     else:
         for cur, unit in accept.items():
+            if not _nonempty(cur):
+                issues.append(f"accept: the currency {cur!r} must be written as a string (quote it)")
             if not isinstance(unit, dict) or set(unit) != {"band", "scale"} \
                     or not _nonempty(unit.get("band")) or not _is_int(unit.get("scale")):
                 issues.append(f"accept.{cur} must be exactly {{band: <unit>, scale: <integer>}}")
@@ -200,6 +205,9 @@ def validate_admission(source):
         if not isinstance(decades, dict) or not all(_is_int(d) for d in decades.values()):
             issues.append(f"tiers[{i}].max_decade must map band units to integer decades")
             continue
+        for band in decades:
+            if not _nonempty(band):
+                issues.append(f"tier {t['id']}: the band unit {band!r} must be written as a string (quote it)")
         for band, d in sorted(decades.items(), key=lambda kv: str(kv[0])):
             if not -DECADE_MAX <= d <= DECADE_MAX:
                 issues.append(f"tier {t['id']}: max_decade.{band} {d} must be from {-DECADE_MAX} to {DECADE_MAX}")
@@ -215,9 +223,9 @@ def validate_admission(source):
 
     budget = source.get("budget")
     if not isinstance(budget, dict) or set(budget) != {"max_asks", "deadline_s"} \
-            or not _is_int(budget["max_asks"]) or budget["max_asks"] < 0 \
-            or not _is_int(budget["deadline_s"]) or budget["deadline_s"] <= 0:
-        issues.append("budget must be exactly {max_asks: <non-negative integer>, deadline_s: <positive integer>}")
+            or not _is_int(budget["max_asks"]) or not 0 <= budget["max_asks"] <= MAX_ASKS_MAX \
+            or not _is_int(budget["deadline_s"]) or not 0 < budget["deadline_s"] <= DEADLINE_S_MAX:
+        issues.append(f"budget must be exactly {{max_asks: 0 to {MAX_ASKS_MAX}, deadline_s: 1 to {DEADLINE_S_MAX}}}")
 
     roots = source.get("trust_roots", {})
     if not isinstance(roots, dict) or set(roots) - set(TRUST_ROOT_KEYS) \
@@ -341,6 +349,17 @@ def compile_pack(source):
 def compiled_bytes(source):
     """pack-definition.json's bytes: RFC 8785 JCS, no trailing newline."""
     return rfc8785.dumps(compile_pack(source))
+
+
+def compile_issues(source):
+    """A last check that a validated source compiles to JCS bytes at all, so
+    `validate` and `compile` never disagree: the rules above should leave
+    nothing for it to find."""
+    try:
+        compiled_bytes(source)
+    except Exception as e:  # rfc8785 raises its own error types
+        return [f"the pack does not compile to JCS: {e}"]
+    return []
 
 
 def _evidence_rule(r):
