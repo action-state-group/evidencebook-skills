@@ -21,7 +21,9 @@ with a deterministic stand-in rating the packets in place of the person.
 ## Verbs this skill may call, and nothing else
 
 - `cll list` / `get` / `verify --capsule FILE` — resolve and authenticate the week's
-  `evaluation-report/v1` records (those whose `period` is a day of the week) before
+  judged `evaluation-report/v1` records (those whose `period` is a day of the week and that
+  name a `judge_pin_digest`; a recomputed report has no judge to calibrate, so it is skipped
+  unverified and only counted in the run's log as `frame_unjudged_skipped`) before
   sampling from them.
 - Draw the sample per the contract's `sample_policy` (`weekly: N`, `stratify_by`),
   reusing the deterministic rule this repo already specifies in
