@@ -82,6 +82,24 @@ class Ladder(unittest.TestCase):
         empty = baseline_text().replace("  judges: [placeholder-judge]\n", "  judges: [placeholder-judge]\n  rails: []\n")
         self.assertEqual(admission_pack.compiled_bytes(load(empty)), admission_pack.compiled_bytes(load(baseline_text())))
 
+    def test_open_disputes_beside_the_ladder(self):
+        row = """  - id: open-disputes
+    statement: The card shows at most one open dispute raised about the counterparty.
+    source: card
+    check: card.open_disputes
+    params: {max: 1}
+    from: T1
+    on_fail: "LIMIT"
+"""
+        text = ladder_text().replace("rows:\n", "rows:\n" + row, 1)
+        self.assertEqual(pack_compile.validate_source(load(text)), [])
+        issues = pack_compile.validate_source(load(text.replace("params: {max: 1}", "params: {}")))
+        self.assertTrue(any("needs params.max" in i for i in issues), issues)
+        issues = pack_compile.validate_source(load(text.replace(
+            "check: card.open_disputes\n    params: {max: 1}\n    from: T1\n    on_fail: \"LIMIT\"",
+            "check: card.open_disputes\n    params: {max: 1}\n    from: T1\n    on_fail: \"NO\"")))
+        self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
+
     def test_the_baseline_has_no_ladder_yet(self):
         # No served card carries per-band counts yet (profile §6).
         checks = {r["check"] for r in load(baseline_text())["rows"]}

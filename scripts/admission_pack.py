@@ -57,6 +57,7 @@ PREDICATES = {
     "vouch.distinct_controllers": ("vouch", ("min",)),
     "stake.covers_deal": ("stake", ()),
     "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
+    "card.open_disputes": ("card", ("max",)),
     "judged": ("judged", ()),
 }
 
@@ -83,7 +84,7 @@ MAX_ASKS_MAX = 1000
 DEADLINE_S_MAX = 100 * 365 * 24 * 3600
 DECADE_MAX = 60
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
-             "min": 2 ** 53 - 1, "k": 2 ** 53 - 1, "step_decades": DECADE_MAX, "max_adverse_permille": 1000}
+             "min": 2 ** 53 - 1, "k": 2 ** 53 - 1, "max": 2 ** 53 - 1, "step_decades": DECADE_MAX, "max_adverse_permille": 1000}
 # A ladder needs at least one subject in a band to earn it (paramMin).
 PARAM_MIN = {"k": 1}
 
