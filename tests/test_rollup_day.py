@@ -743,6 +743,43 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         self.assertEqual(summary["cases_judged"], 0)
         self.assertEqual(summary["reports_excluded"]["judge_pin_mismatch"], len(self.spec["clauses"]))
 
+    def _with_case_record(self, messages):
+        book = json.loads((self.tmp / "book.json").read_text())
+        record = "c" * 64
+        for e in book:
+            if e["payload"].get("case_id") == "case-a":
+                e["payload"]["source_capsule_id"] = record
+        book.append({"capsule_id": record, "appended_at": "2026-09-23T00:00:00Z",
+                     "payload": {"case": {}, "agent_interaction": {"messages": messages}}})
+        (self.tmp / "book.json").write_text(json.dumps(book))
+
+    def test_subject_tier_writes_the_pack_member_named_by_the_pack_id_not_the_contract(self):
+        calls = [{"role": "assistant", "tool_calls": [{"id": "1", "name": "get_user_details",
+                                                       "arguments": {"user_id": "synthetic_9"}},
+                                                      {"id": "2", "name": "cancel_reservation", "arguments": {}}]},
+                 {"role": "tool", "tool_call_id": "2", "content": json.dumps({"payment_history": [{"amount": 120}]})}]
+        self._with_case_record(calls)
+        salt = self.tmp / "salt"
+        salt.write_bytes(b"s" * 32)
+        code, _ = self._main("--judge-model-id", self.SEALED_UNDER, "--subject-tier", "operator",
+                             "--subject-salt-file", str(salt))
+        self.assertEqual(code, 0)
+        doc = json.loads(next((self.tmp / "out").glob("result-v0-*.json")).read_text())
+        member = doc["x-airline-support-outcomes"]["subject_history"]
+        self.assertEqual(member["handle_scope"]["pack"], "airline-support-outcomes")
+        entry = member["conversations"]["case-a"]
+        self.assertEqual((entry["request_labels"], entry["usd_band"]), (["cancellation"], "e+2"))
+        self.assertIn("customer_handle", entry)
+        self.assertNotIn("synthetic_9", json.dumps(doc))
+
+    def test_subject_tier_refuses_a_case_with_no_readable_record_and_needs_a_salt(self):
+        code, out = self._main("--judge-model-id", self.SEALED_UNDER, "--subject-tier", "shared")
+        self.assertEqual(code, 2)
+        self.assertIn("cite no case record", out["evidence_unavailable"])
+        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
+            self._main("--subject-tier", "operator")
+        self.assertEqual(cm.exception.code, 2)
+
     def test_an_empty_judge_model_id_is_refused_not_read_as_no_pin(self):
         # argparse accepts --judge-model-id ''; it used to roll up every judged
         # report unscoped (exit 0, cases_judged 1, judge_pin_mismatch 0).
