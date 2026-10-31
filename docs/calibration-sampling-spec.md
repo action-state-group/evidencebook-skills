@@ -74,7 +74,7 @@ isolation.
 
 ## Estimators
 
-Count only **usable** ratings (drop `unsure` and verification-dropped); let `m_p`, `m_f`
+Count only **usable** ratings (drop `not_evaluable`, `out_of_scope` and verification-dropped); let `m_p`, `m_f`
 be usable counts per stratum and use them — never the drawn `n_p`/`n_f` — in every
 estimate:
 
@@ -155,7 +155,7 @@ not caller-set):
     "spec_version": "human-rating/v1",
     "subject": { "case_id": "...", "simulation_id": "..." },
     "rated_quantity": "full_resolution",
-    "verdict": "pass",            // pass | fail | unsure
+    "verdict": "met",             // met | not_met | not_evaluable | out_of_scope (out_of_scope only when the contract allows it)
     "blind": true,
     "rater": { "role": "...", "id": "..." },
     "sampling": {
@@ -174,7 +174,7 @@ Notes:
 - The chain `parent_capsule_id` is the audited report; the calibration join is the
   chain link itself, so the confusion cell is unambiguous even if the judge is re-run.
   `subject` still records the case/trial for cohort checks and must match the report.
-- `unsure` (and verification-dropped) ratings are excluded from **both** numerator and
+- `not_evaluable` and `out_of_scope` (and verification-dropped) ratings are excluded from **both** numerator and
   denominator — they are not in the usable counts `m_p`/`m_f` — and reported as nonresponse.
 
 ## Sampling-and-rating bundle
@@ -229,7 +229,7 @@ Steps:
 - sampling design: `N_p`, `N_f`, drawn `n_p`/`n_f`, usable `m_p`/`m_f`, method
   (`stratified_by_verdict`), seed / `sample_manifest_capsule_id` (digested), blinding attested.
 - confusion matrix: counts of (judge, human) ∈ {pass, fail} per stratum;
-  `unsure`/excluded counts reported as nonresponse.
+  `not_evaluable`/`out_of_scope`/excluded counts reported as nonresponse.
 - estimates: `false_pass_rate` `b̂`±CI, `false_fail_rate` `â`±CI, `judge_accuracy` `Â`±CI,
   `corrected_pass_rate` `p̂`±CI, and raw sample `agreement` labelled descriptive-only
   (decimal strings — AAC digests reject floats).

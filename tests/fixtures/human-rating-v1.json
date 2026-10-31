@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentactioncapsule.org/schemas/judge/human-rating-v1.json",
+  "title": "Human Rating v1",
+  "description": "Companion schema for spec/judge-record-family-v1.md section 5. The root schema validates a Human Rating record: a human's rating of one cited case, blind by construction. blind is fixed true -- a non-blind human rating is not a legal record in this schema; a producer that needs to record a non-blind rating uses a different record shape, it does not set this field to false. rater_ref is an opaque principal reference (Evidence Layer's principal_ref convention) -- never a name; a rater's identity binding is host-defined and out of scope here, exactly as the owning document states for principal_ref generally. epistemic_type is fixed to human_report -- asserted by a human, not machine-observed.",
+  "$ref": "#/$defs/HumanRating",
+  "$defs": {
+    "HexDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "DigestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest_alg", "digest"],
+      "properties": {
+        "digest_alg": { "const": "SHA-256" },
+        "digest": { "$ref": "#/$defs/HexDigest" }
+      }
+    },
+    "Citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "digest_alg", "digest", "citation_purpose"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "digest_alg": { "const": "SHA-256" },
+        "digest": { "$ref": "#/$defs/HexDigest" },
+        "citation_purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "RatedCaseCitation": {
+      "allOf": [
+        { "$ref": "#/$defs/Citation" },
+        { "properties": { "citation_purpose": { "const": "rated_case" } } }
+      ]
+    },
+    "PrincipalRef": {
+      "description": "Opaque identifier; the scheme that gives it meaning is host-defined (Evidence Layer, principal_ref). Never a display name, email, or other directly identifying string -- a rater is a reference a host can resolve, not a label this record carries in the clear.",
+      "type": "string",
+      "minLength": 1
+    },
+    "HumanRating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_version", "record_id", "epistemic_type", "rated_at",
+        "blind", "rater_ref", "case", "label"
+      ],
+      "properties": {
+        "record_version": { "const": "human-rating/v1" },
+        "record_id": { "type": "string", "minLength": 1 },
+        "epistemic_type": { "const": "human_report" },
+        "rated_at": { "type": "string", "format": "date-time" },
+        "blind": { "const": true },
+        "rater_ref": { "$ref": "#/$defs/PrincipalRef" },
+        "case": { "$ref": "#/$defs/RatedCaseCitation" },
+        "label": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

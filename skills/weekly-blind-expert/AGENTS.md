@@ -43,9 +43,14 @@ with a deterministic stand-in rating the packets in place of the person.
   **excludes** the report's verdict,
   rationale, axis judgments and stratum label, and withholds any field the contract's
   `disclosure.suppress` list names (with digest, never silently dropped).
-- Present the packet to a human expert; record their pass/fail as `human-rating/v1`
-  (epistemic type `human_report`, `blind: true`), chained to the `evaluation-report/v1`
-  Capsule it audits, via `publish`.
+- Present the packet to a human expert; record their rating (`met`, `not_met`,
+  `not_evaluable`, or `out_of_scope` when the contract allows it) as `human-rating/v1`
+  (epistemic type `human_report`, `blind: true`), whose `case` cites the
+  `evaluation-report/v1` Capsule it audits (`citation_purpose: rated_case`, the report's
+  digest), via `publish`. Each rating carries the rater as an opaque principal reference
+  (`rater_ref` in the ratings file, or `--rater-ref`), never a name; the run refuses a rating
+  with neither. Only `met` and `not_met` count toward agreement: `not_evaluable` and
+  `out_of_scope` are in neither k nor n.
 - `calibration summarize REPORTS_FILE RATINGS_FILE` — reduce the week's ratings against
   the sampled reports they audit into **agreement as k of n per judge pin**, nothing more.
   The verb returns those per-pin totals only. The sealed `calibration-summary/v1` records

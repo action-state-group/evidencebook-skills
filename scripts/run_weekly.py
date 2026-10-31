@@ -21,6 +21,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from calibration_summary import calibration_summaries  # noqa: E402
+from human_rating import counted, human_rating_record  # noqa: E402
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
 from rollup_day import safe_filename  # noqa: E402
@@ -115,7 +116,9 @@ def main(argv):
     ap.add_argument("--spec", required=True, type=pathlib.Path)
     ap.add_argument("--date", required=True, help="any day in the week, YYYY-MM-DD (UTC; weeks start Monday)")
     ap.add_argument("--out", required=True, type=pathlib.Path)
-    ap.add_argument("--ratings", type=pathlib.Path, help="the human's blind ratings: [{case_id, rating}]")
+    ap.add_argument("--ratings", type=pathlib.Path, help="the human's blind ratings: [{case_id, rating, rater_ref?}]")
+    ap.add_argument("--rater-ref", help="an opaque principal reference for the rater (never a name), for each rating "
+                    "that carries no rater_ref of its own; the run refuses a rating with neither")
     ap.add_argument("--capsulectl", default="capsulectl")
     args = ap.parse_args(argv)
 
@@ -211,11 +214,12 @@ def main(argv):
         rated = []
         for r in ratings:
             rid, body = by_case[r["case_id"]]
-            record = {"record_type": "human-rating/v1", "epistemic_type": "human_report", "blind": True,
-                      "case_id": r["case_id"], "rating": r["rating"], "audits": rid,
-                      "sample_manifest": manifest_id, "period": week_key}
+            rater_ref = r.get("rater_ref") or args.rater_ref
+            if not isinstance(rater_ref, str) or not rater_ref.strip():
+                raise EvidenceUnavailable(f"rating for {r['case_id']!r} has no rater_ref: give each rating one, or pass --rater-ref")
+            record = human_rating_record(r["case_id"], week_key, rid, r["rating"], rater_ref, stamp)
             publish(ctl, profile, seal_request(
-                f"urn:evidencebook-skills:human-rating:{r['case_id']}:{week_key}", operator,
+                record["record_id"], operator,
                 "evidencebook-skills/weekly-blind-expert", stamp, record), work, f"rating-{rid[:16]}")
             rated.append({"case_id": r["case_id"], "rating": r["rating"]})
         log["rated"] = len(rated)
@@ -224,7 +228,9 @@ def main(argv):
         # 5. Agreement as k of n over the drawn sample; nothing else.
         (work / "sampled-reports.json").write_text(json.dumps(
             [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]} for _, b in selected]))
-        (work / "ratings.json").write_text(json.dumps(rated))
+        # Only met and not_met count toward agreement (human_rating.counted); the
+        # verb reads the same ratings, so its totals and ours are one reading.
+        (work / "ratings.json").write_text(json.dumps(counted(rated)))
         summary = run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
         records = calibration_summaries(selected, rated, spec["contract"], week_key, stamp)
         # The per-clause tallies must add up to the verb's per-pin totals: one

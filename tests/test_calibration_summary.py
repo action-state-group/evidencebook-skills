@@ -83,6 +83,13 @@ class CalibrationSummaryMatchesSchema(unittest.TestCase):
             self.assertFalse([k for c in record["clauses"] for m in ("agreement", "drift") for k in c[m]
                               if k not in ("k", "n")], "k and n only, never a rate")
 
+    def test_not_evaluable_and_out_of_scope_ratings_are_in_neither_k_nor_n(self):
+        rated = [{"case_id": "c1", "rating": "met"}, {"case_id": "c2", "rating": "not_evaluable"},
+                 {"case_id": "c3", "rating": "out_of_scope"}]
+        a, _ = summaries(rated)
+        self.assertEqual([(c["clause_ref"], c["agreement"]) for c in a["clauses"]],
+                         [("a.one", {"k": 1, "n": 1}), ("a.two", {"k": 0, "n": 0})])
+
     def test_an_empty_sample_seals_no_summary(self):
         self.assertEqual(calibration_summaries([], [], "contract@1.0.0", "2026-W43", NOW), [])
 

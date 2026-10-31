@@ -140,7 +140,7 @@ printf 'refused: %s\n' "$(jq -r .evidence_unavailable "$work/weekly-duplicated.j
 step "the human's ratings (stand-in), then resume"
 python3 tests/stub_rater.py "$packets" >"$work/ratings.json"
 python3 scripts/run_weekly.py --profile tau2 --spec demo/tau2/compiled.json --capsulectl "$ctl" \
-  --date "$day" --out "$work/runs" --ratings "$work/ratings.json" | tee "$work/weekly.json"
+  --date "$day" --out "$work/runs" --ratings "$work/ratings.json" --rater-ref "rater:stub-expert" | tee "$work/weekly.json"
 jq -e '.shortfall == 0 and (.agreement | length) == 1 and (.calibration_summaries | length) == 1' "$work/weekly.json" >/dev/null || fail "calibration summary is not one pin's k of n"
 
 step "every capsule in the book verifies offline"
