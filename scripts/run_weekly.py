@@ -79,7 +79,7 @@ def week_frame(entries, load, check, week_days):
     return reports, unjudged
 
 
-def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset()):
+def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset(), rater_ref=None):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
     make rated exceed drawn and the shortfall go negative. `out_of_scope` is a
@@ -101,8 +101,12 @@ def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_o
                           else set())
         if r.get("rating") not in allowed:
             raise ValueError(f"rating for {case_id!r} is not one of {', '.join(sorted(allowed))}")
+        own = r.get("rater_ref", rater_ref)
+        if not isinstance(own, str) or not own or own != own.strip():
+            raise ValueError(f"rating for {case_id!r} has no usable rater_ref (a non-empty opaque string, no surrounding "
+                             f"spaces): give each rating one, or pass --rater-ref")
         seen.add(case_id)
-    return ratings
+    return [{**r, "rater_ref": r.get("rater_ref", rater_ref)} for r in ratings]
 
 
 def sample_key(seed, capsule_id):
@@ -202,22 +206,19 @@ def main(argv):
             print(json.dumps(log, indent=2))
             return 3
 
-        # 4. The human's ratings, one record each, chained to the report audited.
+        # 4. The human's ratings, one record each, citing the report audited.
         try:
             never_oos_clauses = {c["id"] for c in spec.get("clauses", []) if c.get("never_out_of_scope")}
             never_oos_cases = {cid for cid, (_, b) in by_case.items() if b.get("clause_id") in never_oos_clauses}
             ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case),
                                       bool((spec.get("switches") or {}).get("out_of_scope_verdict")),
-                                      never_oos_cases)
+                                      never_oos_cases, args.rater_ref)
         except ValueError as e:
             raise EvidenceUnavailable(f"ratings refused: {e}") from e
         rated = []
         for r in ratings:
             rid, body = by_case[r["case_id"]]
-            rater_ref = r.get("rater_ref") or args.rater_ref
-            if not isinstance(rater_ref, str) or not rater_ref.strip():
-                raise EvidenceUnavailable(f"rating for {r['case_id']!r} has no rater_ref: give each rating one, or pass --rater-ref")
-            record = human_rating_record(r["case_id"], week_key, rid, r["rating"], rater_ref, stamp)
+            record = human_rating_record(r["case_id"], week_key, rid, r["rating"], r["rater_ref"], stamp)
             publish(ctl, profile, seal_request(
                 record["record_id"], operator,
                 "evidencebook-skills/weekly-blind-expert", stamp, record), work, f"rating-{rid[:16]}")

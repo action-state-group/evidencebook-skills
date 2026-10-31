@@ -5,7 +5,7 @@
 > feed are superseded: `calibration-summary/v1` reports agreement as k of n per judge pin,
 > with the drawn sample and any shortfall, and never a score (see
 > `skills/weekly-blind-expert/SKILL.md`). The sampling design, the blinding rules and the
-> `sample-manifest/v1` / `human-rating/v1` shapes still stand; the weekly skill uses the
+> `sample-manifest/v1` shape still stands, and a human rating is `human-rating/v1` as AAC's schema defines it (`schemas/judge/human-rating-v1.json`; the example record below is the older capsule-chain form, superseded: the weekly run seals `record_version`, `rater_ref`, a `case` citation of the audited report with `citation_purpose: rated_case`, and `label`); the weekly skill uses the
 > deterministic sampling rule defined here.
 
 ## Problem
@@ -171,7 +171,7 @@ not caller-set):
 ```
 
 Notes:
-- The chain `parent_capsule_id` is the audited report; the calibration join is the
+- (Superseded form.) The chain `parent_capsule_id` is the audited report; the calibration join is the
   chain link itself, so the confusion cell is unambiguous even if the judge is re-run.
   `subject` still records the case/trial for cohort checks and must match the report.
 - `not_evaluable` and `out_of_scope` (and verification-dropped) ratings are excluded from **both** numerator and
