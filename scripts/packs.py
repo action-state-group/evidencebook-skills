@@ -73,8 +73,15 @@ def pack_entry(root, source):
     }
 
 
+def is_report_pack(source):
+    """An admission pack (scope.kind admission, #51) decides before an act and
+    has no Result to report from, so it is not a pack this lists."""
+    scope = (yaml.safe_load(source.read_text()) or {}).get("scope")
+    return not (isinstance(scope, dict) and scope.get("kind") == "admission")
+
+
 def list_packs(root=ROOT):
-    return [pack_entry(root, s) for s in sorted((root / "packs").glob("*/pack-source.yaml"))]
+    return [pack_entry(root, s) for s in sorted((root / "packs").glob("*/pack-source.yaml")) if is_report_pack(s)]
 
 
 def require(name, root=ROOT):

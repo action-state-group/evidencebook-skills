@@ -74,7 +74,7 @@ class ScopeKind(unittest.TestCase):
             self.assertTrue(all(i.startswith("scope") for i in issues), issues)
         source = minimal_source()
         source["scope"] = {"kind": "hybrid"}
-        self.assertIn("scope.kind 'hybrid' must be one of ['live', 'after_the_fact']", pack_compile.validate_source(source))
+        self.assertIn("scope.kind 'hybrid' must be one of ['live', 'after_the_fact', 'admission']", pack_compile.validate_source(source))
         with self.assertRaises(ec.ContractError):
             ec.from_pack(source)
 
@@ -115,7 +115,7 @@ class LiveFixtures(unittest.TestCase):
     def test_a_padded_kind_is_refused_not_stripped_into_live(self):
         text = (FIXTURES / "inference-0.1.0/pack-source.yaml").read_text().replace("\n  kind: live", '\n  kind: " live "', 1)
         s = pack_compile.load_source(text)
-        self.assertEqual(pack_compile.validate_source(s), ["scope.kind ' live ' must be one of ['live', 'after_the_fact']"])
+        self.assertEqual(pack_compile.validate_source(s), ["scope.kind ' live ' must be one of ['live', 'after_the_fact', 'admission']"])
 
     def test_compile_is_byte_stable(self):
         a, b = load("seller-0.1.6"), load("seller-0.1.6")

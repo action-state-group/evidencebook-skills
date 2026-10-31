@@ -51,7 +51,8 @@ import re
 
 import rfc8785
 
-SCOPE_KINDS = ("live", "after_the_fact")
+# `admission` (an admission pack, #51) is validated by scripts/admission_pack.py.
+SCOPE_KINDS = ("live", "after_the_fact", "admission")
 DEFAULT_SCOPE_KIND = "after_the_fact"
 
 DISPOSITIONS = ("DO", "ASK", "NEVER")

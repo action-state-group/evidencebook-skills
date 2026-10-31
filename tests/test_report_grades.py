@@ -139,7 +139,9 @@ class Narration(unittest.TestCase):
 class NoPack(unittest.TestCase):
     def test_every_pack_in_the_tree_is_listed_with_its_spec_and_card(self):
         listed = {p["name"]: p for p in packs.list_packs()}
-        self.assertEqual(set(listed), {d.parent.name for d in (ROOT / "packs").glob("*/pack-source.yaml")})
+        self.assertEqual(set(listed), {d.parent.name for d in (ROOT / "packs").glob("*/pack-source.yaml")
+                                       if packs.is_report_pack(d)})
+        self.assertNotIn("admission-baseline", listed)
         for p in listed.values():
             self.assertTrue((ROOT / p["spec"]).is_file(), p)
         self.assertEqual(listed["eu-ai-act-obligations"]["card"], "obligation")
