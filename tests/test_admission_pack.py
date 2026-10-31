@@ -224,7 +224,7 @@ class Refusals(unittest.TestCase):
         self.assertIn("tier T2: max_decade.sat 2 does not rise above the tier below (3)", issues)
 
     def test_no_ask_deadline(self):
-        self.assertRefused("  deadline_s: 86400", "  max_wait: 86400", "deadline_s: <positive integer>")
+        self.assertRefused("  deadline_s: 86400", "  max_wait: 86400", "deadline_s: 1 to")
 
     def test_an_unknown_trust_root(self):
         self.assertRefused("  judges: [placeholder-judge]", "  rails: [x402]", "trust_roots must map some of")
@@ -355,6 +355,10 @@ class TextIssues(unittest.TestCase):
             except yaml.YAMLError:
                 continue
             self.assertTrue(got, doc)
+
+    def test_malformed_yaml_is_reported(self):
+        got = admission_pack.text_issues("rows: [a, {b: ]\n")
+        self.assertTrue(got and "not YAML" in got[0], got)
 
     def test_the_cli_reports_them(self):
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", dir=REPO_ROOT / "packs", delete=False) as f:

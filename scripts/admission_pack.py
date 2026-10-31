@@ -107,7 +107,11 @@ def text_issues(text):
     rule above, anchors and aliases, and explicit tags (the non-specific `!`
     aside, which yaml.v3 ignores)."""
     issues = []
-    for ev in yaml.parse(text, Loader=yaml.SafeLoader):
+    try:
+        events = list(yaml.parse(text, Loader=yaml.SafeLoader))
+    except yaml.YAMLError as e:
+        return [f"the source is not YAML this compiler reads: {e}"]
+    for ev in events:
         line = ev.start_mark.line + 1
         if isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None):
             issues.append(f"line {line}: anchors and aliases are not read")
