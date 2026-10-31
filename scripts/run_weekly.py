@@ -57,6 +57,26 @@ def is_judged(report):
     return bool(report.get("judge_pin_digest"))
 
 
+def week_frame(entries, load, check, week_days):
+    """The calibration frame: the week's judged evaluation-reports, each
+    authenticated with `check` before it counts, and how many of the week's
+    reports were skipped because no judge wrote them (is_judged). Skipped
+    reports are not verified."""
+    reports, unjudged = [], 0
+    for entry in entries:
+        body = load(entry["capsule_id"])
+        if not (isinstance(body, dict) and body.get("record_type") == "evaluation-report/v1"):
+            continue
+        if body.get("period", "").removeprefix("day:") not in week_days:
+            continue
+        if not is_judged(body):
+            unjudged += 1
+            continue
+        check(entry["capsule_id"])
+        reports.append((entry["capsule_id"], body))
+    return reports, unjudged
+
+
 def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset()):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
@@ -131,18 +151,9 @@ def main(argv):
 
     try:
         # 1. The week's evaluation reports, authenticated before sampling.
-        reports, unjudged = [], 0
-        for entry in list_capsules(ctl, profile):
-            body = payload(ctl, profile, entry["capsule_id"])
-            if not (isinstance(body, dict) and body.get("record_type") == "evaluation-report/v1"):
-                continue
-            if body.get("period", "").removeprefix("day:") not in week_days:
-                continue
-            if not is_judged(body):
-                unjudged += 1
-                continue
-            verify(ctl, profile, entry["capsule_id"], work)
-            reports.append((entry["capsule_id"], body))
+        reports, unjudged = week_frame(
+            list_capsules(ctl, profile), lambda cid: payload(ctl, profile, cid),
+            lambda cid: verify(ctl, profile, cid, work), week_days)
         log["frame"] = len(reports)
         log["frame_unjudged_skipped"] = unjudged
         action("read-frame", output_digest=json_digest(sorted(rid for rid, _ in reports)))

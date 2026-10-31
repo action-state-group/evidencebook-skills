@@ -12,7 +12,7 @@ import datetime  # noqa: E402
 
 from capsulectl_calls import EvidenceUnavailable, committed_on, parse_rfc3339  # noqa: E402
 from run_daily import checked_answer  # noqa: E402
-from run_weekly import PACKET_FIELDS, blind_packet, checked_ratings, is_judged  # noqa: E402
+from run_weekly import PACKET_FIELDS, blind_packet, checked_ratings, is_judged, week_frame  # noqa: E402
 
 REPORT = {"record_type": "evaluation-report/v1", "case_id": "tau2:airline:task-1:trial-0",
           "clause_id": "policy-followed", "verdict": "met", "rationale": "the agent refunded correctly",
@@ -47,6 +47,31 @@ class JudgedFrame(unittest.TestCase):
     def test_a_recomputed_report_has_no_judge_pin_and_is_not(self):
         self.assertFalse(is_judged({"record_type": "evaluation-report/v1"}))
         self.assertFalse(is_judged({"record_type": "evaluation-report/v1", "judge_pin_digest": ""}))
+
+
+class WeekFrame(unittest.TestCase):
+    DAYS = {"2026-10-19", "2026-10-20"}
+    BODIES = {
+        "judged": {"record_type": "evaluation-report/v1", "period": "day:2026-10-19", "judge_pin_digest": "ab" * 32},
+        "recomputed": {"record_type": "evaluation-report/v1", "period": "day:2026-10-19"},
+        "other-week": {"record_type": "evaluation-report/v1", "period": "day:2026-09-01", "judge_pin_digest": "ab" * 32},
+        "not-a-report": {"record_type": "sample-manifest/v1", "period": "day:2026-10-19"},
+        "judged-2": {"record_type": "evaluation-report/v1", "period": "day:2026-10-20", "judge_pin_digest": "cd" * 32},
+    }
+
+    def run_frame(self):
+        checked = []
+        reports, unjudged = week_frame([{"capsule_id": k} for k in self.BODIES], self.BODIES.__getitem__, checked.append, self.DAYS)
+        return reports, unjudged, checked
+
+    def test_only_the_weeks_judged_reports_are_in_the_frame_and_verified(self):
+        reports, _, checked = self.run_frame()
+        self.assertEqual([rid for rid, _ in reports], ["judged", "judged-2"])
+        self.assertEqual(checked, ["judged", "judged-2"], "an unjudged report is never verified")
+
+    def test_unjudged_reports_of_the_week_are_counted_not_dropped_silently(self):
+        _, unjudged, _ = self.run_frame()
+        self.assertEqual(unjudged, 1, "only the week's unjudged report counts, not another week's or another record type")
 
 
 class CheckedRatings(unittest.TestCase):

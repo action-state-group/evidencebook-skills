@@ -21,8 +21,9 @@ gap is never filled from another stratum. A report that states k of n also state
 
 ## Draw
 
-1. Fix the frame: every `evaluation-report/v1` the report covers, each verified before
-   it counts.
+1. Fix the frame: every judged `evaluation-report/v1` the report covers (one that names a
+   `judge_pin_digest`; a recomputed report has no judge to calibrate and is skipped, counted in
+   the run's log), each verified before it counts.
 2. Draw per stratum by the rule in `calibration-sampling-spec.md`: order by the hex of
    `SHA-256(u32be(len(seed)) || seed || report_capsule_id)`, ties by capsule id, take
    the first `per_stratum`. The seed is the pack's `sample_policy.seed`.
