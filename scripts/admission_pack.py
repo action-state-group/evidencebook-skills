@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""A `scope.kind: admission` pack source: validation and the Evidence Contract
-it compiles to (admission pack profile v0, docs/admission-pack-profile-v0.md).
+"""A `scope.kind: admission` pack source: validation, and what it compiles to,
+the Evidence Contract and pack-definition.json, the pinned artifact (admission
+pack profile v0, docs/admission-pack-profile-v0.md).
 
 An admission pack is the relying party's policy over what it has received about
 a counterparty, run before the act (#51; Steven's 2026-10-30 ruling: admission
 uses the Terms Pack build approach and the SDK does the math). It states
 thresholds only. The band, the tier, freshness, counts and denominators are the
 evaluator's, capsule-engine#265 (Go `go/admission`, Rust `rust/capsule-engine`),
-which is the only reader of a pack's rows. This module refuses what that loader
-refuses, so a pack that passes here loads there. Nothing here evaluates a pack.
+which reads only the compiled pack-definition.json. This module refuses what
+that loader refuses, so a pack that compiles here loads there. Nothing here
+evaluates a pack.
 
 The admission design rules are held here, not trusted to the author: only
 platform, own_history and operator rows decide NO; a judged row only caps a
@@ -20,6 +22,9 @@ outcome is written quoted ("NO"); an unquoted one reaches this module as a
 boolean and is refused with that reason.
 """
 import re
+
+import rfc8785
+import yaml
 
 SCOPE_KIND = "admission"
 
@@ -61,6 +66,60 @@ ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "
 
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
 ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+# Each threshold's bound, as the evaluator's loader holds it (capsule-engine
+# go/admission paramMax): a century of seconds or days, and a count no JSON
+# reader loses.
+# An accept scale and a tier ceiling, bounded so a band's decade stays far
+# inside an int (the loader's scaleMax and decadeMax).
+SCALE_MAX = 30
+# The budget's bounds (the loader's maxAsksMax and deadlineSMax).
+MAX_ASKS_MAX = 1000
+DEADLINE_S_MAX = 100 * 365 * 24 * 3600
+DECADE_MAX = 60
+PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
+             "min": 2 ** 53 - 1}
+
+# The plain scalar rule. The compiler's PyYAML is the one YAML reader an
+# admission pack has (the evaluator reads the compiled pack-definition.json),
+# and YAML readers disagree on which plain scalars are strings: PyYAML (YAML
+# 1.1) reads NO, 1:30 and 010 as a boolean and integers where an author, or a
+# YAML 1.2 reader, sees strings. So a value it would misread is refused before
+# it is frozen into the pinned bytes: a plain (unquoted) scalar may only be a
+# plain decimal integer, a dotted version (1.0.0), or text that starts with
+# none of the characters numbers, timestamps, nulls and merges start with and
+# is not a boolean or null word. Anything else is quoted.
+_DECIMAL_INT = re.compile(r"^(0|-?[1-9][0-9]*)$")
+_DOTTED_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_SPECIAL_LEADERS = "0123456789+-.~<"
+_PLAIN_WORDS = {"y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO", "on", "On", "ON", "off", "Off", "OFF",
+                "true", "True", "TRUE", "false", "False", "FALSE", "null", "Null", "NULL"}
+
+
+def _plain_ok(v):
+    return (v == "" or bool(_DECIMAL_INT.match(v)) or bool(_DOTTED_VERSION.match(v))
+            or (v[0] not in _SPECIAL_LEADERS and v not in _PLAIN_WORDS))
+
+
+def text_issues(text):
+    """What the lint refuses in the YAML text itself, which the parsed mapping
+    no longer shows: a plain scalar outside the plain scalar
+    rule above, anchors and aliases, and explicit tags (the non-specific `!`
+    aside, which yaml.v3 ignores)."""
+    issues = []
+    try:
+        events = list(yaml.parse(text, Loader=yaml.SafeLoader))
+    except yaml.YAMLError as e:
+        return [f"the source is not YAML this compiler reads: {e}"]
+    for ev in events:
+        line = ev.start_mark.line + 1
+        if isinstance(ev, yaml.AliasEvent) or getattr(ev, "anchor", None):
+            issues.append(f"line {line}: anchors and aliases are not read")
+        elif getattr(ev, "tag", None) not in (None, "!"):
+            issues.append(f"line {line}: tags are not read")
+        elif isinstance(ev, yaml.ScalarEvent) and not ev.style and not _plain_ok(ev.value):
+            issues.append(f"line {line}: quote {ev.value!r}: YAML readers do not all read it as the same string")
+    return issues
 
 
 def is_admission(source):
@@ -120,11 +179,15 @@ def validate_admission(source):
         issues.append("accept must map at least one currency to its band unit")
     else:
         for cur, unit in accept.items():
+            if not _nonempty(cur):
+                issues.append(f"accept: the currency {cur!r} must be written as a string (quote it)")
             if not isinstance(unit, dict) or set(unit) != {"band", "scale"} \
                     or not _nonempty(unit.get("band")) or not _is_int(unit.get("scale")):
                 issues.append(f"accept.{cur} must be exactly {{band: <unit>, scale: <integer>}}")
             else:
                 bands.add(unit["band"])
+                if not -SCALE_MAX <= unit["scale"] <= SCALE_MAX:
+                    issues.append(f"accept.{cur}: scale {unit['scale']} must be from {-SCALE_MAX} to {SCALE_MAX}")
 
     tiers = source.get("tiers")
     tier_ids = []
@@ -146,18 +209,27 @@ def validate_admission(source):
         if not isinstance(decades, dict) or not all(_is_int(d) for d in decades.values()):
             issues.append(f"tiers[{i}].max_decade must map band units to integer decades")
             continue
+        for band in decades:
+            if not _nonempty(band):
+                issues.append(f"tier {t['id']}: the band unit {band!r} must be written as a string (quote it)")
         for band, d in sorted(decades.items(), key=lambda kv: str(kv[0])):
+            if not -DECADE_MAX <= d <= DECADE_MAX:
+                issues.append(f"tier {t['id']}: max_decade.{band} {d} must be from {-DECADE_MAX} to {DECADE_MAX}")
             if band not in bands:
                 issues.append(f"tier {t['id']}: max_decade.{band} is not a band unit in accept")
             if band in below and d <= below[band]:
                 issues.append(f"tier {t['id']}: max_decade.{band} {d} does not rise above the tier below ({below[band]})")
             below[band] = d
 
+    # A unit no tier names would leave a deal in it with no tier at all.
+    for band in sorted(bands - set(below)):
+        issues.append(f"accept: band unit {band} is named by no tier's max_decade")
+
     budget = source.get("budget")
     if not isinstance(budget, dict) or set(budget) != {"max_asks", "deadline_s"} \
-            or not _is_int(budget["max_asks"]) or budget["max_asks"] < 0 \
-            or not _is_int(budget["deadline_s"]) or budget["deadline_s"] <= 0:
-        issues.append("budget must be exactly {max_asks: <non-negative integer>, deadline_s: <positive integer>}")
+            or not _is_int(budget["max_asks"]) or not 0 <= budget["max_asks"] <= MAX_ASKS_MAX \
+            or not _is_int(budget["deadline_s"]) or not 0 < budget["deadline_s"] <= DEADLINE_S_MAX:
+        issues.append(f"budget must be exactly {{max_asks: 0 to {MAX_ASKS_MAX}, deadline_s: 1 to {DEADLINE_S_MAX}}}")
 
     roots = source.get("trust_roots", {})
     if not isinstance(roots, dict) or set(roots) - set(TRUST_ROOT_KEYS) \
@@ -202,6 +274,9 @@ def validate_admission(source):
                     issues.append(f"{where}: check {check} needs params.{k}")
             for k in sorted(set(params) - set(PREDICATES[check][1])):
                 issues.append(f"{where}: check {check} takes no params.{k}")
+            for k in sorted(set(params) & set(PREDICATES[check][1])):
+                if not 0 <= params[k] <= PARAM_MAX[k]:
+                    issues.append(f"{where}: params.{k} {params[k]} must be from 0 to {PARAM_MAX[k]}")
         if frm is None or frm not in tier_ids:
             issues.append(f"{where}.from {frm!r} is not a tier")
         on_fail = r.get("on_fail")
@@ -238,6 +313,57 @@ def validate_admission(source):
             if "ASK" not in outcomes:
                 issues.append(f"{where} carries an ask, but ASK is not in outcomes")
     return issues
+
+
+COMPILED_FORMAT = "admission-pack/v0"
+
+
+def compile_pack(source):
+    """A validated admission pack source -> pack-definition.json, the pinned
+    artifact: its pack_id and the SHA-256 of these bytes are what a decision
+    cites. The evaluator (capsule-engine#265, Go and Rust) reads only these
+    bytes, never the YAML, so PyYAML here is the one YAML reader there is.
+    Optional fields are written out (params {}, every trust_roots list), so
+    the evaluator has no default to apply."""
+    roots = source.get("trust_roots") or {}
+    doc = {
+        "format": COMPILED_FORMAT,
+        "pack_id": source["pack_id"],
+        "pack_version": source["pack_version"],
+        "outcomes": list(source["outcomes"]),
+        "missing": source["missing"],
+        "accept": {cur: {"band": u["band"], "scale": u["scale"]} for cur, u in source["accept"].items()},
+        "tiers": [{"id": t["id"], "max_decade": dict(t["max_decade"])} for t in source["tiers"]],
+        "budget": {"max_asks": source["budget"]["max_asks"], "deadline_s": source["budget"]["deadline_s"]},
+        "trust_roots": {k: list(roots.get(k, [])) for k in TRUST_ROOT_KEYS},
+        "rows": [],
+    }
+    if "source" in source:
+        doc["source"] = source["source"]
+    for r in source["rows"]:
+        row = {"id": r["id"], "statement": r["statement"], "source": r["source"], "check": r["check"],
+               "params": dict(r.get("params") or {}), "from": r["from"],
+               "on_fail": dict(r["on_fail"]) if isinstance(r["on_fail"], dict) else r["on_fail"]}
+        if r.get("ask") is not None:
+            row["ask"] = {"derivation": r["ask"]["derivation"]}
+        doc["rows"].append(row)
+    return doc
+
+
+def compiled_bytes(source):
+    """pack-definition.json's bytes: RFC 8785 JCS, no trailing newline."""
+    return rfc8785.dumps(compile_pack(source))
+
+
+def compile_issues(source):
+    """A last check that a validated source compiles to JCS bytes at all, so
+    `validate` and `compile` never disagree: the rules above should leave
+    nothing for it to find."""
+    try:
+        compiled_bytes(source)
+    except Exception as e:  # rfc8785 raises its own error types
+        return [f"the pack does not compile to JCS: {e}"]
+    return []
 
 
 def _evidence_rule(r):

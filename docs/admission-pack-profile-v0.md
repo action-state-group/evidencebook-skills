@@ -11,8 +11,9 @@ the tier, the card's freshness, distinct-controller counts and denominators.
 The evaluator is capsule-engine#265, one implementation in Go (`go/admission`)
 and Rust (`rust/capsule-engine`), so every caller decides the same way. This
 repository validates a pack (`scripts/admission_pack.py`, through
-`scripts/pack_compile.py validate`) and compiles it to an Evidence Contract. It
-does not evaluate one.
+`scripts/pack_compile.py validate`) and compiles it to an Evidence Contract and
+to `pack-definition.json`, the artifact the evaluator reads (§1.1). It does not
+evaluate one.
 
 Sources:
 
@@ -35,17 +36,28 @@ The baseline pack is [`packs/admission-baseline/`](../packs/admission-baseline/p
 | `missing` | what a missing input gives: `LIMIT` (at the lowest tier) or `NO`, and never GO. It must be in `outcomes` |
 | `accept` | the mapping table. Each accepted currency maps to its band unit and scale, `{band, scale}`: an amount in that currency times `10^scale` is the amount in the band unit, so `msat: {band: sat, scale: -3}`. Nothing converts across units |
 | `tiers` | the ladder, lowest first, each `{id, max_decade: {<band unit>: <decade>}}`. Every key must be a band unit in `accept`. A unit's ceiling rises above that of the last lower tier naming it |
-| `budget` | `{max_asks, deadline_s}`: how many asks a counterparty may get in the caller's budget window, and how long an ask waits before an unanswered one is recorded as absence (design §8) |
+| `budget` | `{max_asks, deadline_s}` (0 to 1,000 asks; 1 second to a century): how many asks a counterparty may get in the caller's budget window, and how long an ask waits before an unanswered one is recorded as absence (design §8) |
 | `trust_roots` | optional `{controllers, witnesses, judges}`, each a list of names, saying whose word this pack counts. An empty or absent list trusts none |
 | `rows` | the rows, below |
 
 No other field is read, and an unknown field is refused. A pack has no weight,
 score or other place a ranking could hide.
 
-Write outcome names quoted (`"NO"`). YAML 1.1 readers, PyYAML among them, read
-a plain `NO` as the boolean false. The lint here refuses an outcome that reads
-as a boolean, and the evaluator refuses any plain scalar that YAML 1.1 and YAML
-1.2 read differently.
+Write outcome names quoted (`"NO"`). YAML readers disagree on which unquoted
+scalars are strings. PyYAML (YAML 1.1) reads `NO`, `1:30` and `010` as a
+boolean and integers, and yaml.v3 (YAML 1.2) reads `1e3` and `0o10` as numbers.
+So a plain (unquoted) scalar may only be:
+
+- a plain decimal integer (`3`, `-1`);
+- a dotted version (`1.0.0`);
+- text that starts with none of `0-9 + - . ~ <` and is not a boolean or null
+  word (`y`, `n`, `yes`, `no`, `on`, `off`, `true`, `false` or `null`, in any of
+  their cases).
+
+Anything else is quoted. The lint refuses a plain scalar outside this rule, and
+also anchors, aliases and explicit tags.
+
+A pack then reads one way everywhere, or not at all.
 
 **A pack picks which outcomes it uses.** A Mesh pack under Steven's 10-29
 rulings (u126, u137) yields `["GO", "NO"]` only. It also keeps `own_history`
@@ -53,6 +65,30 @@ from deciding NO: an adverse adjudication is sealed as a row result
 (`record`), and the operator turns it into NO through its own config. The
 baseline lets our own adjudicated history decide NO, as design §4 draws it, so
 it is not the Mesh default while u137 stands.
+
+### 1.1 The pinned artifact
+
+Authors and operators write and edit `pack-source.yaml`. The evaluator never
+reads YAML: `pack_compile.py compile` writes `pack-definition.json`, and that
+file is what a deployment pins and what a decision cites.
+
+- It is the source in JSON with `"format": "admission-pack/v0"` added, encoded
+  as RFC 8785 (JCS) bytes. Optional fields are written out: `params` as `{}`,
+  and all three `trust_roots` lists. The evaluator therefore applies no default.
+- A pin is named and cited as a live pack's is: `pack_id` plus
+  `definition_digest`, the SHA-256 of those bytes. The decision's `reads`
+  policy entry carries both. Admission adds no digest name of its own.
+- The evaluator loads the bytes only if they are exactly the JCS encoding of
+  their own parse. That rules out duplicate keys, other whitespace or key order,
+  and non-integer numbers. It then decodes them strictly: unknown fields, nulls
+  and wrong types are refused. Its loader holds every rule the lint holds
+  (below), so a pack refused here is refused there too.
+- PyYAML, in the compiler, is the only YAML reader. A pack therefore reads one
+  way, as this compiler reads it.
+
+The baseline's compiled files are committed beside it in
+`packs/admission-baseline/compiled/`, and a test keeps them equal to what the
+source compiles to.
 
 ### Rows
 
@@ -84,8 +120,14 @@ it is not the Mesh default while u137 stands.
 - An `on_fail` or `ask` whose outcome the pack does not yield.
 - An unknown predicate, a predicate under the wrong source, or a missing or
   unknown param.
+- A budget out of range: `max_asks` from 0 to 1,000, and `deadline_s` from 1
+  second to a century.
+- A currency, band unit or other key that is not a string (`840:` is quoted).
+- A param below 0 or above its bound: `max_age_s` up to a century of seconds,
+  `min_days` and `window_days` up to 36,500, and `min` up to 2^53 − 1.
 - A `from` or `cap` that names no tier.
-- A ceiling in a unit `accept` does not name, or a ceiling that does not rise.
+- A ceiling in a unit `accept` does not name, a ceiling that does not rise,
+  or a unit in `accept` that no tier names.
 - A field of the wrong type. It is reported, never raised.
 
 ## 2. Predicates
@@ -209,7 +251,8 @@ does today:
 - `verdict`: GO, ASK, LIMIT or NO;
 - `source`: the id of the row that decided, `rows` when the rows decided
   together, `above_tier`, or `missing`;
-- `reads`: the policy entry, `pack_id` and its digest;
+- `reads`: the policy entry, `pack_id` and the SHA-256 of its
+  `pack-definition.json`;
 - `rows`: each `{row, result}`.
 
 The new members are additive:
