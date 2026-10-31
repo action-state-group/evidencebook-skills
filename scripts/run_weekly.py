@@ -218,6 +218,9 @@ def main(argv):
             log["calibration_summaries"].append(publish(ctl, profile, seal_request(
                 record["record_id"], operator, "evidencebook-skills/weekly-blind-expert", stamp, record),
                 work, f"calibration-summary-{record['judge_pin']['digest'][:16]}"))
+        # The summaries cite only their pin; this action ties them to the
+        # sample they summarize (the manifest), as the blind-packets action does.
+        action("calibration-summary", inputs=[("sample_manifest", manifest_id)], output_digest=json_digest(log["calibration_summaries"]))
         log["agreement"] = [{"judge_pin_digest": p["judge_pin_digest"], "k": p["agreement_count"], "n": p["rated_count"]}
                             for p in summary["pins"]]
 
