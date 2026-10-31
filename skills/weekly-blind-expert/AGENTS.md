@@ -98,8 +98,7 @@ rating was given, or that the week closed, from the absence of its record. If fe
 ratings come back than were drawn (a rater unavailable, a case dropped on
 verification), the run reports the shortfall against the drawn sample, not a silently
 smaller stated sample; a clause's `n` in the summary counts rated cases only. A week with no
-sampled reports seals no summary (the schema needs a judge pin and a clause): the log
-reads `drawn: 0` and `calibration_summaries: []`.
+sampled reports seals no summary (the schema needs a judge pin and a clause).
 
 ## What this skill never does
 
