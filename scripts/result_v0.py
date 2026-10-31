@@ -449,9 +449,12 @@ def merge_result_v0_documents(docs, title, generated_at):
             "title": title,
         },
     }
-    # A pack's subject-history member (scripts/subject_history.py) is combined across the days;
-    # any other document-level x- member is the producer's per-document wording and is not carried.
-    names = {n for d in docs for n in d if n.startswith("x-") and n != "x-presentation-digest"}
+    # A pack's subject-history member (scripts/subject_history.py) is combined across the days and
+    # must be on every day or none; any other document-level x- member is per-document and not carried.
+    names = {n for d in docs for n, v in d.items() if n.startswith("x-") and isinstance(v, dict) and "subject_history" in v}
     for name in sorted(names):
-        merged[name] = merge_subject_history([d[name] for d in docs if name in d])
+        absent = [d["view"]["title"] for d in docs if "subject_history" not in (d.get(name) or {})]
+        if absent:
+            raise RollupError(f"{name} is missing from some documents: {absent!r}")
+        merged[name] = merge_subject_history([d[name] for d in docs])
     return merged

@@ -4,7 +4,6 @@ Synthetic customers only (Sherlock2, Buzz 3958de61): the fixture's four conversa
 built here, never read from a recorded tau2 run.
 """
 import copy
-import hashlib
 import json
 import pathlib
 import sys
@@ -55,6 +54,7 @@ FACTS["t-3"]["follow_up_of"] = "t-1"
 
 class Fields(unittest.TestCase):
     def test_label_comes_from_the_closed_list(self):
+        self.assertEqual(sh.request_label(convo("u", "update_reservation_cabin", 80)), "cabin change")
         for case, label in (("t-1", "cancellation"), ("t-2", "compensation"), ("t-3", "flight change"),
                             ("t-4", "information request")):
             self.assertEqual(sh.request_label(CONVERSATIONS[case]), label)
@@ -65,6 +65,10 @@ class Fields(unittest.TestCase):
                          ["e+2", "e+1", "e+2", None])
         self.assertEqual(sh.usd_band(convo("u", "cancel_reservation", -1000)), "e+3")
         self.assertIsNone(sh.usd_band(convo("u", "cancel_reservation", 0.5)))
+        self.assertEqual(sh.usd_band(convo("u", "update_reservation_cabin", 80)), "e+1")
+        failed = convo("u", "send_certificate", 5000)
+        failed[-1] = result(2, "Error: user not found")
+        self.assertIsNone(sh.usd_band(failed))
 
     def test_customer_id_needs_exactly_one_lookup(self):
         self.assertEqual(sh.customer_id(CONVERSATIONS["t-1"]), CUSTOMER)
@@ -74,6 +78,7 @@ class Fields(unittest.TestCase):
 
     def test_handle_is_stable_in_scope_and_differs_by_scope_salt_and_customer(self):
         scope = {"pack": PACK, "tier": "operator", "salting": "per-pack"}
+        self.assertNotEqual(sh.salt_id(SALT), sh.salt_id(b"t" * 32))
         h = sh.customer_handle(SALT, scope, CUSTOMER)
         self.assertEqual(h, sh.customer_handle(SALT, scope, CUSTOMER))
         self.assertNotEqual(h, sh.customer_handle(SALT, scope, "other"))
@@ -90,7 +95,9 @@ class Member(unittest.TestCase):
 
     def test_operator_carries_all_five_for_one_customer_across_four_conversations(self):
         sub = self.build()
-        self.assertEqual(sub["handle_scope"], {"pack": PACK, "tier": "operator", "salting": "per-pack"})
+        self.assertEqual(sub["handle_scope"], {"pack": PACK, "tier": "operator", "salting": "per-pack",
+                                               "salt_id": sh.salt_id(SALT)})
+        self.assertNotIn(SALT.decode(), json.dumps(sub))
         convs = sub["conversations"]
         self.assertEqual(len(convs), 4)
         self.assertEqual(len({c["customer_handle"] for c in convs.values()}), 1)
@@ -124,6 +131,14 @@ class Member(unittest.TestCase):
                 sh.build_subject_history(PACK, "shared", CONVERSATIONS, {"t-1": {"halves": halves}})
         with self.assertRaises(RollupError):
             sh.build_subject_history(PACK, "shared", CONVERSATIONS, {"nope": {}})
+        for facts in ({"t-3": {"follow_up_of": ["t-1"]}}, ["t-1"], {"t-1": "x"}):
+            with self.assertRaises(RollupError):
+                sh.build_subject_history(PACK, "operator", CONVERSATIONS, facts, SALT)
+        with self.assertRaises(RollupError):
+            sh.build_subject_history(PACK, "operator", {"t-1": [call(1, "get_user_details", user_id=7)]}, None, b"x")
+        odd = {"t-1": [call(1, "get_user_details", user_id=7)]}
+        self.assertNotIn("customer_handle", sh.build_subject_history(PACK, "operator", odd, None, SALT)
+                         ["subject_history"]["conversations"]["t-1"])
 
     def test_ambiguous_customer_gets_no_handle(self):
         two = {"t-1": CONVERSATIONS["t-1"] + [call(9, "get_user_details", user_id="other")]}
@@ -155,6 +170,23 @@ class OnTheResult(unittest.TestCase):
         convs = merged[sh.extension_name(PACK)]["subject_history"]["conversations"]
         self.assertEqual(sorted(convs), ["t-1", "t-2", "t-3", "t-4"])
         self.assertEqual(convs["t-3"]["follow_up_of"], "t-1")
+
+    def test_merge_needs_the_member_on_every_day_and_ignores_other_x_members(self):
+        d1 = self.day(["t-1"], sh.build_subject_history(PACK, "shared", {"t-1": CONVERSATIONS["t-1"]}))
+        d2 = self.day(["t-2"], sh.build_subject_history(PACK, "shared", {"t-2": CONVERSATIONS["t-2"]}))
+        del d2[sh.extension_name(PACK)]
+        d2["x-other"] = {"anything": 1}
+        with self.assertRaises(RollupError):
+            merge_result_v0_documents([d1, d2], "t", "2026-10-31T00:00:00Z")
+        d2[sh.extension_name(PACK)] = sh.build_subject_history(PACK, "shared", {"t-2": CONVERSATIONS["t-2"]})
+        merged = merge_result_v0_documents([d1, d2], "t", "2026-10-31T00:00:00Z")
+        self.assertNotIn("x-other", merged)
+
+    def test_merge_refuses_days_sealed_under_different_salts(self):
+        a = sh.build_subject_history(PACK, "operator", {"t-1": CONVERSATIONS["t-1"]}, None, SALT)
+        b = sh.build_subject_history(PACK, "operator", {"t-2": CONVERSATIONS["t-2"]}, None, b"t" * 32)
+        with self.assertRaises(RollupError):
+            sh.merge_subject_history([a, b])
 
     def test_merge_refuses_mixed_scopes_and_dangling_follow_ups(self):
         a = sh.build_subject_history(PACK, "operator", {"t-1": CONVERSATIONS["t-1"]}, None, SALT)
@@ -189,7 +221,7 @@ class Fixtures(unittest.TestCase):
             self.assertEqual(json.loads(raw), fixture_document(tier))
             self.assertEqual([e.message for e in validator.iter_errors(json.loads(raw))], [])
             self.assertNotIn(CUSTOMER, raw)
-            self.assertNotIn(hashlib.sha256(SALT).hexdigest(), raw)
+            self.assertNotIn(SALT.decode(), raw)
 
 
 if __name__ == "__main__":

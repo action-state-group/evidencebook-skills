@@ -138,7 +138,7 @@
             "present": 4,
             "of": 4
           },
-          "customer_handle": "6f90c176e7df599d03dce5e8aaca297c4a7a4b877917ec6f003b30f41f8bd6b1"
+          "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899"
         },
         "t-2": {
           "request_label": "compensation",
@@ -147,7 +147,7 @@
             "present": 4,
             "of": 4
           },
-          "customer_handle": "6f90c176e7df599d03dce5e8aaca297c4a7a4b877917ec6f003b30f41f8bd6b1"
+          "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899"
         },
         "t-3": {
           "request_label": "flight change",
@@ -156,7 +156,7 @@
             "present": 4,
             "of": 4
           },
-          "customer_handle": "6f90c176e7df599d03dce5e8aaca297c4a7a4b877917ec6f003b30f41f8bd6b1",
+          "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899",
           "follow_up_of": "t-1"
         },
         "t-4": {
@@ -165,13 +165,14 @@
             "present": 4,
             "of": 4
           },
-          "customer_handle": "6f90c176e7df599d03dce5e8aaca297c4a7a4b877917ec6f003b30f41f8bd6b1"
+          "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899"
         }
       },
       "handle_scope": {
         "pack": "airline-support-outcomes",
         "tier": "operator",
-        "salting": "per-pack"
+        "salting": "per-pack",
+        "salt_id": "5c830ead1ef08e31"
       }
     }
   }

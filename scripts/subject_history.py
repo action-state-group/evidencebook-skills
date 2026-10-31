@@ -20,8 +20,8 @@ both wait for per-share salting. The handle is HMAC-SHA256 under a producer-held
 show is omitted, never guessed: no single customer id in the conversation means no handle.
 
 `request_label` is one of REQUEST_LABELS, chosen from the tool calls the agent made, never
-transcript text. `usd_band` is "e+N", the order of magnitude of the largest USD amount the
-agent's own write actions moved. `follow_up_of` (a `references[]` cite of the case record) and
+transcript text. `usd_band` is "e+N", the order of magnitude of the largest USD amount in the agent's own
+successful write actions (a certificate's amount, or a payment in a write result's payment_history). `follow_up_of` (a `references[]` cite of the case record) and
 `halves` (from the bilateral records) are supplied by the caller and validated here.
 """
 import hmac
@@ -37,6 +37,7 @@ MIN_SALT_BYTES = 16
 REQUEST_LABELS = (
     ("cancel_reservation", "cancellation"),
     ("update_reservation_flights", "flight change"),
+    ("update_reservation_cabin", "cabin change"),
     ("book_reservation", "new booking"),
     ("update_reservation_baggages", "baggage change"),
     ("update_reservation_passengers", "passenger change"),
@@ -45,7 +46,7 @@ REQUEST_LABELS = (
 )
 FALLBACK_LABEL = "information request"
 LABEL_VALUES = tuple(label for _, label in REQUEST_LABELS) + (FALLBACK_LABEL,)
-_WRITE_TOOLS = ("cancel_reservation", "update_reservation_flights", "book_reservation",
+_WRITE_TOOLS = ("cancel_reservation", "update_reservation_flights", "update_reservation_cabin", "book_reservation",
                 "update_reservation_baggages", "update_reservation_passengers")
 
 
@@ -77,7 +78,8 @@ def customer_id(messages):
     ids = {(c.get("arguments") or {}).get("user_id") for c in _calls(messages)
            if c.get("name") == "get_user_details"}
     ids.discard(None)
-    return ids.pop() if len(ids) == 1 and next(iter(ids)) else None
+    only = next(iter(ids)) if len(ids) == 1 else None
+    return only if isinstance(only, str) and only else None
 
 
 def usd_band(messages):
@@ -91,7 +93,8 @@ def usd_band(messages):
         if not call:
             continue
         if call.get("name") == "send_certificate":
-            amounts.append((call.get("arguments") or {}).get("amount"))
+            if not str(m.get("content") or "").lower().startswith("error"):
+                amounts.append((call.get("arguments") or {}).get("amount"))
         elif call.get("name") in _WRITE_TOOLS:
             body = _payload(m) or {}
             amounts.extend(p.get("amount") for p in body.get("payment_history") or [] if isinstance(p, dict))
@@ -99,9 +102,20 @@ def usd_band(messages):
     return f"e+{int(math.floor(math.log10(max(usable))))}" if usable else None
 
 
-def customer_handle(salt, scope, cust_id):
+def _check_salt(salt):
     if not isinstance(salt, (bytes, bytearray)) or len(salt) < MIN_SALT_BYTES:
         raise RollupError(f"the handle salt must be at least {MIN_SALT_BYTES} bytes")
+
+
+def salt_id(salt):
+    """A non-reversible fingerprint of the salt, in handle_scope: days sealed under different
+    salts give one customer different handles, and the merge refuses to join them."""
+    _check_salt(salt)
+    return hmac.new(bytes(salt), b"subject-history salt id", "sha256").hexdigest()[:16]
+
+
+def customer_handle(salt, scope, cust_id):
+    _check_salt(salt)
     msg = json.dumps(scope, sort_keys=True, separators=(",", ":")).encode() + b"\0" + cust_id.encode()
     return hmac.new(bytes(salt), msg, "sha256").hexdigest()
 
@@ -122,13 +136,17 @@ def build_subject_history(pack_id, tier, conversations, facts=None, salt=None, k
     if tier not in TIERS:
         raise RollupError(f"subject tier must be one of {TIERS}, got {tier!r}")
     facts = facts or {}
+    if not isinstance(facts, dict) or not all(isinstance(v, dict) for v in facts.values()):
+        raise RollupError("subject facts must map case ids to {follow_up_of, halves} objects")
     known_cases = set(known_cases if known_cases is not None else conversations)
     unknown = sorted(set(facts) - known_cases)
     if unknown:
         raise RollupError(f"subject facts name cases the report does not carry: {unknown!r}")
     scope = {"pack": pack_id, "tier": tier, "salting": "per-pack"}
-    if tier == "operator" and salt is None:
-        raise RollupError("operator tier needs a handle salt")
+    if tier == "operator":
+        if salt is None:
+            raise RollupError("operator tier needs a handle salt")
+        scope["salt_id"] = salt_id(salt)
     out = {}
     for case_id, messages in sorted(conversations.items()):
         entry = {"request_label": request_label(messages)}
@@ -144,7 +162,7 @@ def build_subject_history(pack_id, tier, conversations, facts=None, salt=None, k
                 entry["customer_handle"] = customer_handle(salt, scope, cid)
             earlier = fact.get("follow_up_of")
             if earlier is not None:
-                if earlier == case_id or earlier not in known_cases:
+                if not isinstance(earlier, str) or earlier == case_id or earlier not in known_cases:
                     raise RollupError(f"case {case_id!r}: follow_up_of {earlier!r} is not another case in this report")
                 entry["follow_up_of"] = earlier
         out[case_id] = entry
@@ -162,7 +180,6 @@ def merge_subject_history(members):
     """Combine several days' extension values (one pack) into one; refuses mixed scopes
     and a case carried twice."""
     merged, scope = {}, None
-    members = list(members)
     for member in members:
         sub = member["subject_history"]
         if scope is not None and sub.get("handle_scope") != scope.get("handle_scope"):

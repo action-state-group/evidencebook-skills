@@ -349,6 +349,8 @@ def case_messages(capsulectl, profile, clause_verdicts):
     sources = sorted({src for _, _, src in clause_verdicts.values() if src})
     if not sources:
         raise RollupError("a case's reports cite no case record; its subject-history entry cannot be read")
+    if len(sources) > 1:
+        raise RollupError(f"a case's reports cite {len(sources)} different case records; which conversation it is is ambiguous")
     body = payload(capsulectl, profile, sources[0])
     messages = ((body or {}).get("agent_interaction") or {}).get("messages")
     if not isinstance(messages, list):
@@ -507,8 +509,13 @@ def main(argv):
 
     # One Result v0 per day/period, over every case that day that rolls up, beside
     # the per-case documents above. Built from the same sealed reports and tiers.
-    subject_facts = json.loads(args.subject_facts.read_text()) if args.subject_facts else None
-    subject_salt = args.subject_salt_file.read_bytes() if args.subject_salt_file else None
+    try:
+        subject_facts = json.loads(args.subject_facts.read_text()) if args.subject_facts else None
+        subject_salt = args.subject_salt_file.read_bytes() if args.subject_salt_file else None
+        if args.subject_tier == "operator":
+            subject_history.salt_id(subject_salt)
+    except (OSError, ValueError, RollupError) as e:
+        ap.error(f"--subject-*: {e}")
     day_entries = []
     for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}
@@ -519,8 +526,8 @@ def main(argv):
                 day_cases = sorted({c["id"].rpartition(CASE_SEPARATOR)[0] for c in day_doc["claims"]})
                 try:
                     conversations = {cid: case_messages(args.capsulectl, args.profile, by_case[cid]) for cid in day_cases}
-                    day_doc[subject_history.extension_name(contract)] = subject_history.build_subject_history(
-                        contract, args.subject_tier, conversations,
+                    day_doc[subject_history.extension_name(contract_ref.rpartition("@")[0])] = subject_history.build_subject_history(
+                        contract_ref.rpartition("@")[0], args.subject_tier, conversations,
                         subject_facts, subject_salt, known_cases=set(by_case))
                 except RollupError as e:
                     print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
