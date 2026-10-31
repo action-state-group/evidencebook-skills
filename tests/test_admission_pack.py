@@ -26,8 +26,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASELINE = REPO_ROOT / "packs/admission-baseline"
 SCHEMA = REPO_ROOT / "tests/fixtures/capsule-engine/evidence-contract-v0.json"
 
-INPUT_KEYS = {"now", "amount", "currency", "platform", "card", "own", "operator", "vouches", "subject",
-              "judged", "asks", "asks_made", "stake"}
+INPUT_KEYS = {"now", "amount", "currency", "platform", "card", "selection", "own", "operator", "vouches",
+              "subject", "judged", "asks", "asks_made", "stake"}
 
 
 def baseline_text():
@@ -45,7 +45,7 @@ class Baseline(unittest.TestCase):
     def test_every_number_is_a_placeholder(self):
         # #51's added acceptance: every amount is marked as a placeholder.
         for line in baseline_text().splitlines():
-            if any(k in line for k in ("max_decade:", "max_asks:", "params:")):
+            if any(k in line for k in ("max_decade:", "max_asks:", "deadline_s:", "params:")):
                 self.assertIn("placeholder", line, line)
 
     def test_stake_is_a_recorded_source_only(self):
@@ -54,6 +54,22 @@ class Baseline(unittest.TestCase):
         for r in rows:
             self.assertEqual(r["on_fail"], "record")
             self.assertEqual(set(r), {"id", "statement", "source", "check", "from", "on_fail"})
+        roots = load(baseline_text())["trust_roots"]
+        self.assertNotIn("stake", roots)
+
+    def test_not_the_mesh_default(self):
+        # u137: a Mesh pack keeps own_history from deciding NO. The baseline
+        # does let it, so it says it is not the Mesh default.
+        self.assertIn("Not the Mesh default", baseline_text())
+
+    def test_the_climb_rests_on_the_counterpartys_evidence(self):
+        # Design §4: our own book gates no tier above T0; the card gates T1
+        # and the bound selection T2.
+        rows = load(baseline_text())["rows"]
+        gating = {r["source"] for r in rows if r["from"] != "T0" and r.get("on_fail") == "LIMIT"}
+        self.assertLessEqual(gating, {"card", "bound", "own_history"})
+        own_gates = [r["id"] for r in rows if r["source"] == "own_history" and r.get("on_fail") == "LIMIT"]
+        self.assertEqual(own_gates, ["no-conflicting-deal"])
 
     def test_compiles_to_a_contract(self):
         contract = ec.from_pack(load(baseline_text()))
@@ -114,7 +130,7 @@ class Refusals(unittest.TestCase):
 
     def assertRefused(self, old, new, want):
         text = baseline_text()
-        self.assertIn(old, text)
+        self.assertTrue(old in text, f"the baseline has no {old!r}")
         issues = pack_compile.validate_source(load(text.replace(old, new, 1)))
         self.assertTrue(any(want in i for i in issues), issues)
 
@@ -124,12 +140,13 @@ class Refusals(unittest.TestCase):
 
     def test_a_vouch_row_deciding_no(self):
         self.assertRefused("    check: vouch.distinct_controllers\n    params: {min: 3}            # placeholder\n"
-                           "    from: T2\n    on_fail: \"LIMIT\"",
+                           "    from: T2\n    on_fail: \"record\"",
                            "    check: vouch.distinct_controllers\n    params: {min: 3}\n    from: T2\n    on_fail: \"NO\"",
                            "a vouch row may not decide NO")
 
     def test_a_stake_row_deciding_no(self):
-        self.assertRefused("    on_fail: \"record\"", "    on_fail: \"NO\"", "a stake row may not decide NO")
+        self.assertRefused("    check: stake.covers_deal\n    from: T2\n    on_fail: \"record\"",
+                           "    check: stake.covers_deal\n    from: T2\n    on_fail: \"NO\"", "a stake row may not decide NO")
 
     def test_a_judged_row_deciding_no(self):
         self.assertRefused("    on_fail: {cap: T1}", "    on_fail: \"NO\"", "a judged row's on_fail must be {cap: <tier>}")
@@ -154,7 +171,7 @@ class Refusals(unittest.TestCase):
         self.assertRefused("check: own.settled", "check: own.reputation", "is not an admission predicate")
 
     def test_a_wrong_param(self):
-        self.assertRefused("    params: {min_days: 60}", "    params: {min: 60}", "needs params.min_days")
+        self.assertRefused("    params: {max_age_s: 604800}", "    params: {max_age: 604800}", "needs params.max_age_s")
 
     def test_decades_that_do_not_rise(self):
         self.assertRefused("max_decade: {sat: 4, USD: 0}", "max_decade: {sat: 3, USD: 0}", "does not rise")
@@ -163,9 +180,77 @@ class Refusals(unittest.TestCase):
         self.assertRefused('outcomes: ["GO", "ASK", "LIMIT", "NO"]', 'outcomes: ["GO", "LIMIT", "NO"]',
                            "ASK is not in outcomes")
 
+    def test_a_judged_row_in_a_pack_without_limit(self):
+        text = baseline_text().replace('outcomes: ["GO", "ASK", "LIMIT", "NO"]', 'outcomes: ["GO", "ASK", "NO"]')
+        issues = pack_compile.validate_source(load(text))
+        self.assertIn("rows[17] ('adjacent-domain'): a judged row caps a tier, so LIMIT must be in outcomes", issues)
+
+    def test_a_cap_that_lowers_nothing(self):
+        self.assertRefused("    on_fail: {cap: T1}", "    on_fail: {cap: T2}", "cap T2 must be a tier below from T2")
+
+    def test_an_ask_on_a_no_row(self):
+        self.assertRefused("    check: platform.attestation_not_invalid\n    from: T0\n    on_fail: \"NO\"",
+                           "    check: platform.attestation_not_invalid\n    from: T0\n    on_fail: \"NO\"\n"
+                           "    ask: {derivation: history_card/1}", "only a LIMIT row may carry an ask")
+
+    def test_a_ceiling_in_a_unit_accept_does_not_name(self):
+        self.assertRefused("max_decade: {USD: 2}", "max_decade: {USD: 2, Sat: 9}", "max_decade.Sat is not a band unit in accept")
+
+    def test_a_ceiling_that_falls_across_a_skipped_tier(self):
+        text = baseline_text().replace("max_decade: {sat: 4, USD: 0}", "max_decade: {USD: 0}") \
+            .replace("max_decade: {USD: 2}", "max_decade: {USD: 2, sat: 2}")
+        issues = pack_compile.validate_source(load(text))
+        self.assertIn("tier T2: max_decade.sat 2 does not rise above the tier below (3)", issues)
+
+    def test_no_ask_deadline(self):
+        self.assertRefused("  deadline_s: 86400", "  max_wait: 86400", "deadline_s: <positive integer>")
+
+    def test_an_unknown_trust_root(self):
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [x402]", "trust_roots must map some of")
+
+    def test_wrong_types_are_reported_not_raised(self):
+        text = baseline_text().replace("  - id: attestation\n", "  - id: [attestation]\n") \
+            .replace("check: platform.owner_signed", "check: [platform.owner_signed]") \
+            .replace('source: "evidencebook-skills#51', 'source_was: "x"\nsource: {by: "evidencebook-skills#51')
+        text = text.replace('§4"\n', '§4"}\n', 1)
+        issues = pack_compile.validate_source(load(text))
+        self.assertTrue(any("id must be lowercase" in i for i in issues), issues)
+        self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
+        self.assertIn("source must be provenance text (a string)", issues)
+
     def test_an_unknown_scope_kind_still_names_admission(self):
         issues = pack_compile.validate_source(load(baseline_text().replace("kind: admission", "kind: admit")))
         self.assertIn("scope.kind 'admit' must be one of ['live', 'after_the_fact', 'admission']", issues)
+
+
+class GoNoPack(unittest.TestCase):
+    """A pack shaped like the Mesh default under u137: GO and NO only, NO from
+    the operator alone, the other rows recorded. Its evaluator vectors, above
+    the top tier among them, are capsule-engine#265's (mesh-go-no.yaml)."""
+
+    SOURCE = """
+pack_id: asg/mesh_admission_example/0.1.0
+pack_version: 0.1.0
+scope: {kind: admission}
+outcomes: ["GO", "NO"]
+missing: "NO"
+accept:
+  msat: {band: sat, scale: -3}
+tiers:
+  - {id: T0, max_decade: {sat: 6}}
+budget: {max_asks: 0, deadline_s: 86400}
+rows:
+  - {id: deny-list, statement: Not on the deny list., source: operator, check: operator.not_deny_listed, from: T0, on_fail: "NO"}
+  - {id: disputes, statement: No adverse adjudication in 30 days., source: own_history, check: own.no_adverse_adjudication, params: {window_days: 30}, from: T0, on_fail: "record"}
+"""
+
+    def test_validates(self):
+        self.assertEqual(pack_compile.validate_source(load(self.SOURCE)), [])
+
+    def test_refuses_a_limit_or_an_ask(self):
+        self.assertTrue(pack_compile.validate_source(load(self.SOURCE.replace('on_fail: "record"', 'on_fail: "LIMIT"'))))
+        self.assertTrue(pack_compile.validate_source(load(self.SOURCE.replace(
+            'on_fail: "record"}', 'on_fail: "record", ask: {derivation: history_card/1}}'))))
 
 
 if __name__ == "__main__":

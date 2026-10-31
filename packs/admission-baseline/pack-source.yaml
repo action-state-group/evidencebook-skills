@@ -18,6 +18,21 @@
 # labelled placeholder, to be calibrated first from the live stage-1 health
 # report. None is a recommendation.
 #
+# Not the Mesh default. While Steven's 10-29 ruling u137 stands, a Mesh pack
+# yields GO and NO only and keeps own_history from deciding NO (an adverse
+# adjudication is sealed as a row result and the operator makes it a NO in
+# config). This baseline lets our own adjudicated history decide NO, as
+# design §4 draws it.
+#
+# The climb rests on the counterparty's own evidence (design §4): its card at
+# T1, a selection bound to our ask at T2. Our own book with it is recorded,
+# never a gate a stranger cannot pass on a first deal.
+#
+# Not in v0: the per-band ladder with k and a step-up (Reference v3 §3A.14,
+# item 26) needs per-band counts of corroborated, net-settled subjects, which
+# no card served today carries; and a rail is trusted by its adapter
+# declaration (AAC#406, a spike), so trust_roots names no rails yet.
+#
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
 pack_id: asg/admission_baseline/1.0.0
 pack_version: 1.0.0
@@ -39,8 +54,10 @@ accept:
   USDT: {band: USD, scale: 0}
 
 # A deal sits in the first tier whose ceiling for its band unit holds the
-# band's decade. Above T2 nothing is offered: the decision is LIMIT at T2 with
-# the row above_tier, unless an operator row decides.
+# band's decade. Above the highest tier that names its unit nothing is
+# offered: a USD deal above T2, or a sat deal above T1, is LIMIT at that tier
+# with source above_tier, unless a NO row or a missing input decides first or
+# a row lowers the tier.
 tiers:
   - id: T0                      # micro
     max_decade: {sat: 3, USD: -1}  # placeholder
@@ -51,16 +68,29 @@ tiers:
 
 budget:
   max_asks: 3                   # placeholder
+  deadline_s: 86400             # placeholder: an unanswered ask is absence after a day
+
+# Whose word counts: placeholders until the operator names its own.
+trust_roots:
+  controllers: [placeholder-controller]
+  witnesses: [placeholder-witness]
+  judges: [placeholder-judge]
 
 rows:
-  # T0: platform facts, our own adjudicated history and the operator's lists.
-  # These are the only rows that decide NO.
+  # T0: platform facts, the operator's lists and our own adjudicated history.
+  # These are the only rows that decide NO. A micro deal needs no card.
   - id: attestation
     statement: The platform does not report the counterparty's release attestation as invalid.
     source: platform
     check: platform.attestation_not_invalid
     from: T0
     on_fail: "NO"
+  - id: owner-signed
+    statement: The platform reports the counterparty's release as owner-signed.
+    source: platform
+    check: platform.owner_signed
+    from: T0
+    on_fail: "record"
   - id: deny-list
     statement: The counterparty is not on the operator's deny list.
     source: operator
@@ -80,16 +110,33 @@ rows:
     params: {window_days: 180}  # placeholder
     from: T0
     on_fail: "NO"
+  # Our own book, recorded at every tier and gating none.
+  - id: own-settled
+    statement: This party's own book holds a settled deal with the counterparty.
+    source: own_history
+    check: own.settled
+    params: {min: 1}            # placeholder
+    from: T0
+    on_fail: "record"
+  - id: own-corroboration
+    statement: This party holds the counterparty's half of an exchange.
+    source: own_history
+    check: own.held_halves
+    params: {min: 1}            # placeholder
+    from: T0
+    on_fail: "record"
 
-  # T1: the card is required and fresh. A missing or stale card is asked for
-  # (one ask answers both rows); a refused or unanswered ask limits to T0.
+  # T1: the card is required, fresh and witnessed, with claims held shown
+  # with their denominator and a controller declared. A missing or stale card
+  # is asked for (one ask answers every row that needs it); a refused or
+  # unanswered ask limits to T0.
   - id: card-verified
-    statement: The counterparty's history card verifies under the key that presents it.
+    statement: The counterparty's card verifies under the key that presents it.
     source: card
     check: card.verified
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: history_card/1}
+    ask: {derivation: served_summary/1}
   - id: card-fresh
     statement: The card's latest checkpoint is at most 7 days old.
     source: card
@@ -97,12 +144,25 @@ rows:
     params: {max_age_s: 604800}  # placeholder
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: history_card/1}
-  - id: key-age
-    statement: The card's first checkpoint is at least 60 days old.
+    ask: {derivation: served_summary/1}
+  - id: card-witnessed
+    statement: A witness in this pack's trust roots receipted the card's latest checkpoint.
     source: card
-    check: card.key_age
-    params: {min_days: 60}      # placeholder
+    check: card.witnessed
+    from: T1
+    on_fail: "LIMIT"
+  - id: claims-held
+    statement: The card shows at least 10 claims held, with the claims made as the denominator.
+    source: card
+    check: card.claims_held
+    params: {min: 10}           # placeholder
+    from: T1
+    on_fail: "LIMIT"
+    ask: {derivation: served_summary/1}
+  - id: controller-declared
+    statement: The card's key declares the controller it is bound to.
+    source: card
+    check: card.controller_declared
     from: T1
     on_fail: "LIMIT"
   - id: no-conflicting-deal
@@ -111,30 +171,36 @@ rows:
     check: own.no_conflicting
     from: T1
     on_fail: "LIMIT"
-  - id: corroboration
-    statement: This party holds the counterparty's half of at least one exchange.
-    source: own_history
-    check: own.held_halves
-    params: {min: 1}            # placeholder
-    from: T1
-    on_fail: "LIMIT"
 
-  # T2: our own settled deals with the counterparty, and vouches from distinct
-  # controllers. A judged adjacent-domain row caps a T2 deal at T1.
-  - id: performed-and-settled
-    statement: This party's own book holds at least 3 settled deals with the counterparty.
-    source: own_history
-    check: own.settled
-    params: {min: 3}            # placeholder
+  # T2: a selection bound to our ask, with inclusion proofs; the controller in
+  # our trust roots; no dispute left unanswered with anyone in 90 days.
+  - id: selection
+    statement: A selection the counterparty returned to this party's own ask verifies, inclusion proofs included.
+    source: bound
+    check: bound.selection_verified
+    from: T2
+    on_fail: "LIMIT"
+    ask: {derivation: selection}
+  - id: controller-trusted
+    statement: The controller the card declares is in this pack's trust roots.
+    source: card
+    check: card.controller_trusted
+    from: T2
+    on_fail: "LIMIT"
+  - id: no-unanswered-dispute
+    statement: The selection shows no dispute with anyone left unanswered in the last 90 days.
+    source: bound
+    check: bound.no_unanswered_dispute
+    params: {window_days: 90}   # placeholder
     from: T2
     on_fail: "LIMIT"
   - id: independence
-    statement: At least 3 distinct controllers, not the counterparty's own, vouch for it.
+    statement: Vouches from distinct controllers, not the counterparty's own, are counted.
     source: vouch
     check: vouch.distinct_controllers
     params: {min: 3}            # placeholder
     from: T2
-    on_fail: "LIMIT"
+    on_fail: "record"
   - id: adjacent-domain
     statement: The disclosed history is from the same kind of work as the proposed deal.
     source: judged

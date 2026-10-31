@@ -26,7 +26,7 @@ SCOPE_KIND = "admission"
 OUTCOMES = ("GO", "ASK", "LIMIT", "NO")
 MISSING_DEFAULTS = ("LIMIT", "NO")
 ON_FAIL = ("NO", "LIMIT", "record")
-SOURCES = ("platform", "card", "own_history", "operator", "vouch", "stake", "judged")
+SOURCES = ("platform", "card", "bound", "own_history", "operator", "vouch", "stake", "judged")
 MAY_DECIDE_NO = ("platform", "own_history", "operator")
 
 # The evaluator's predicates: the source each reads and the params it takes.
@@ -37,6 +37,12 @@ PREDICATES = {
     "card.verified": ("card", ()),
     "card.fresh": ("card", ("max_age_s",)),
     "card.key_age": ("card", ("min_days",)),
+    "card.witnessed": ("card", ()),
+    "card.claims_held": ("card", ("min",)),
+    "card.controller_declared": ("card", ()),
+    "card.controller_trusted": ("card", ()),
+    "bound.selection_verified": ("bound", ()),
+    "bound.no_unanswered_dispute": ("bound", ("window_days",)),
     "own.settled": ("own_history", ("min",)),
     "own.held_halves": ("own_history", ("min",)),
     "own.no_conflicting": ("own_history", ()),
@@ -49,7 +55,8 @@ PREDICATES = {
 }
 
 ADMISSION_KEYS = {"pack_id", "pack_version", "scope", "source", "outcomes", "missing", "accept", "tiers",
-                  "budget", "rows"}
+                  "budget", "trust_roots", "rows"}
+TRUST_ROOT_KEYS = ("controllers", "witnesses", "judges")
 ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask"}
 
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
@@ -91,6 +98,9 @@ def validate_admission(source):
     elif not isinstance(version, str) or not pack_id.endswith("/" + version):
         issues.append(f"pack_id {pack_id!r} must end in pack_version {version!r}")
 
+    if "source" in source and not isinstance(source["source"], str):
+        issues.append("source must be provenance text (a string)")
+
     outcomes = source.get("outcomes")
     if not isinstance(outcomes, list) or not outcomes:
         issues.append("outcomes must list the outcomes this pack yields")
@@ -105,6 +115,7 @@ def validate_admission(source):
         issues.append(f"missing {missing} is not in outcomes")
 
     accept = source.get("accept")
+    bands = set()
     if not isinstance(accept, dict) or not accept:
         issues.append("accept must map at least one currency to its band unit")
     else:
@@ -112,12 +123,17 @@ def validate_admission(source):
             if not isinstance(unit, dict) or set(unit) != {"band", "scale"} \
                     or not _nonempty(unit.get("band")) or not _is_int(unit.get("scale")):
                 issues.append(f"accept.{cur} must be exactly {{band: <unit>, scale: <integer>}}")
+            else:
+                bands.add(unit["band"])
 
     tiers = source.get("tiers")
     tier_ids = []
     if not isinstance(tiers, list) or not tiers:
         issues.append("tiers must not be empty")
         tiers = []
+    # The ceiling of the highest tier so far that names each band unit, so a
+    # unit a tier skips is still compared across the gap.
+    below = {}
     for i, t in enumerate(tiers):
         if not isinstance(t, dict) or set(t) - {"id", "max_decade"} or not _nonempty(t.get("id")):
             issues.append(f"tiers[{i}] must be {{id, max_decade}}")
@@ -130,15 +146,23 @@ def validate_admission(source):
         if not isinstance(decades, dict) or not all(_is_int(d) for d in decades.values()):
             issues.append(f"tiers[{i}].max_decade must map band units to integer decades")
             continue
-        prev = tiers[i - 1].get("max_decade") if i > 0 and isinstance(tiers[i - 1], dict) else None
-        for band, d in decades.items():
-            if isinstance(prev, dict) and _is_int(prev.get(band)) and d <= prev[band]:
-                issues.append(f"tier {t['id']}: max_decade.{band} {d} does not rise above the tier below ({prev[band]})")
+        for band, d in sorted(decades.items(), key=lambda kv: str(kv[0])):
+            if band not in bands:
+                issues.append(f"tier {t['id']}: max_decade.{band} is not a band unit in accept")
+            if band in below and d <= below[band]:
+                issues.append(f"tier {t['id']}: max_decade.{band} {d} does not rise above the tier below ({below[band]})")
+            below[band] = d
 
     budget = source.get("budget")
-    if not isinstance(budget, dict) or set(budget) != {"max_asks"} or not _is_int(budget["max_asks"]) \
-            or budget["max_asks"] < 0:
-        issues.append("budget must be exactly {max_asks: <non-negative integer>}")
+    if not isinstance(budget, dict) or set(budget) != {"max_asks", "deadline_s"} \
+            or not _is_int(budget["max_asks"]) or budget["max_asks"] < 0 \
+            or not _is_int(budget["deadline_s"]) or budget["deadline_s"] <= 0:
+        issues.append("budget must be exactly {max_asks: <non-negative integer>, deadline_s: <positive integer>}")
+
+    roots = source.get("trust_roots", {})
+    if not isinstance(roots, dict) or set(roots) - set(TRUST_ROOT_KEYS) \
+            or not all(isinstance(v, list) and all(_nonempty(x) for x in v) for v in roots.values()):
+        issues.append(f"trust_roots must map some of {list(TRUST_ROOT_KEYS)} to lists of names")
 
     rows = source.get("rows")
     if not isinstance(rows, list) or not rows:
@@ -157,10 +181,12 @@ def validate_admission(source):
             issues.append(f"{where}.id must be lowercase letters, digits, - or _")
         elif rid in seen:
             issues.append(f"{where}.id is listed twice")
-        seen.add(rid)
+        else:
+            seen.add(rid)
         if not _nonempty(r.get("statement")):
             issues.append(f"{where}.statement must be a non-empty string")
-        src, check = r.get("source"), r.get("check")
+        # A field of the wrong type is reported, never hashed.
+        src, check, frm = (v if isinstance(v, str) else None for v in (r.get("source"), r.get("check"), r.get("from")))
         if src not in SOURCES:
             issues.append(f"{where}.source {src!r} must be one of {list(SOURCES)}")
         params = r.get("params", {})
@@ -176,16 +202,22 @@ def validate_admission(source):
                     issues.append(f"{where}: check {check} needs params.{k}")
             for k in sorted(set(params) - set(PREDICATES[check][1])):
                 issues.append(f"{where}: check {check} takes no params.{k}")
-        frm = r.get("from")
-        if frm not in tier_ids:
+        if frm is None or frm not in tier_ids:
             issues.append(f"{where}.from {frm!r} is not a tier")
         on_fail = r.get("on_fail")
         if src == "judged":
             # A judged row caps a tier and never decides NO (D-23).
             if not isinstance(on_fail, dict) or set(on_fail) != {"cap"}:
                 issues.append(f"{where}: a judged row's on_fail must be {{cap: <tier>}}")
-            elif on_fail["cap"] not in tier_ids:
+            elif not isinstance(on_fail["cap"], str) or on_fail["cap"] not in tier_ids:
                 issues.append(f"{where}: cap {on_fail['cap']!r} is not a tier")
+            elif frm in tier_ids and tier_ids.index(on_fail["cap"]) >= tier_ids.index(frm):
+                # A cap at or above the row's own tier could never lower one.
+                issues.append(f"{where}: cap {on_fail['cap']} must be a tier below from {frm}")
+            # A cap is a LIMIT: a pack that yields none would turn it into the
+            # missing default, a judged row deciding NO (D-23).
+            if "LIMIT" not in outcomes:
+                issues.append(f"{where}: a judged row caps a tier, so LIMIT must be in outcomes")
         else:
             on_fail = _outcome(f"{where}.on_fail", on_fail, ON_FAIL, issues)
             if on_fail == "NO" and src not in MAY_DECIDE_NO:
@@ -197,6 +229,10 @@ def validate_admission(source):
                 issues.append(f"{where}.on_fail {on_fail} is not in outcomes")
         ask = r.get("ask")
         if ask is not None:
+            # Only a LIMIT row asks (resolution step 6); an ask anywhere else
+            # would never be made.
+            if on_fail != "LIMIT":
+                issues.append(f"{where}: only a LIMIT row may carry an ask")
             if not isinstance(ask, dict) or set(ask) != {"derivation"} or not _nonempty(ask.get("derivation")):
                 issues.append(f"{where}.ask must be exactly {{derivation: <name>}}")
             if "ASK" not in outcomes:
