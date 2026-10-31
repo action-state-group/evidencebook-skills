@@ -37,7 +37,7 @@ The baseline pack is [`packs/admission-baseline/`](../packs/admission-baseline/p
 | `accept` | the mapping table. Each accepted currency maps to its band unit and scale, `{band, scale}`: an amount in that currency times `10^scale` is the amount in the band unit, so `msat: {band: sat, scale: -3}`. Nothing converts across units |
 | `tiers` | the ladder, lowest first, each `{id, max_decade: {<band unit>: <decade>}}`. Every key must be a band unit in `accept`. A unit's ceiling rises above that of the last lower tier naming it |
 | `budget` | `{max_asks, deadline_s}` (0 to 1,000 asks; 1 second to a century): how many asks a counterparty may get in the caller's budget window, and how long an ask waits before an unanswered one is recorded as absence (design §8) |
-| `trust_roots` | optional `{controllers, witnesses, judges}`, each a list of names, saying whose word this pack counts. An empty or absent list trusts none |
+| `trust_roots` | optional `{controllers, witnesses, judges, rails}`. The first three are lists of names, saying whose word this pack counts. `rails` is a list of `{id, digest}` pins, each naming a rail by its adapter declaration: the declaration's id and the SHA-256 of its bytes (AAC#406). An empty or absent list trusts none |
 | `rows` | the rows, below |
 
 No other field is read, and an unknown field is refused. A pack has no weight,
@@ -74,7 +74,11 @@ file is what a deployment pins and what a decision cites.
 
 - It is the source in JSON with `"format": "admission-pack/v0"` added, encoded
   as RFC 8785 (JCS) bytes. Optional fields are written out: `params` as `{}`,
-  and all three `trust_roots` lists. The evaluator therefore applies no default.
+  and the three `trust_roots` lists of names. The evaluator therefore applies
+  no default. `trust_roots.rails` is the one exception: it is written only when
+  the pack pins a rail, and the evaluator reads its absence as an empty list.
+  A pack that pins no rail therefore keeps the bytes, and the digest, it had
+  before rails were added.
 - A pin is named and cited as a live pack's is: `pack_id` plus
   `definition_digest`, the SHA-256 of those bytes. The decision's `reads`
   policy entry carries both. Admission adds no digest name of its own.
@@ -124,8 +128,13 @@ source compiles to.
   second to a century.
 - A currency, band unit or other key that is not a string (`840:` is quoted).
 - A param below 0 or above its bound: `max_age_s` up to a century of seconds,
-  `min_days` and `window_days` up to 36,500, and `min` up to 2^53 − 1.
+  `min_days` and `window_days` up to 36,500, `min` and `k` up to 2^53 − 1,
+  `step_decades` up to 60, and `max_adverse_permille` up to 1,000.
 - A `from` or `cap` that names no tier.
+- A rail pin that is not exactly `{id, digest}`, has an empty id, has a digest
+  other than 64 lowercase hex digits, or is listed twice. A rail named without
+  a pin (`rails: [x402]`) is refused too.
+- A ladder whose `k` is 0: a band is earned by at least one subject.
 - A ceiling in a unit `accept` does not name, a ceiling that does not rise,
   or a unit in `accept` that no tier names.
 - A field of the wrong type. It is reported, never raised.
@@ -155,7 +164,8 @@ records its count, and its denominator where one exists.
 | `operator.not_deny_listed` | operator | | not on the deny list | never | |
 | `operator.allow_listed` | operator | | on the allow list, or no allow list kept | never | |
 | `vouch.distinct_controllers` | vouch | `min` | distinct vouching controllers, the counterparty's own excluded, ≥ `min` | never | distinct / vouches |
-| `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, or a different unit | |
+| `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, a stake on a rail `trust_roots.rails` does not pin, or a different unit | |
+| `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `judged` | judged | | the judge met the row | not judged, or judged by a judge outside `trust_roots.judges` (reported, not counted) | |
 
 **A missing input versus nothing to read.** `not_read` has two causes. The
@@ -190,6 +200,61 @@ never through a float. 5 sat is decade 0, 1,000,000 msat is 1,000 sat or decade
 - A currency outside `accept`, or an amount that does not read, is a missing
   input.
 
+### 3.1 The per-band ladder: history or stake
+
+Reference v3 §3A.14 gives a new relationship's limit as
+`max(earned band × step-up, collateral on this deal)`. There are two roads
+to a band: earned history or posted stake. `card.band_history_or_stake` is
+that rule.
+
+- **Card input.** The card's per-band counts. Each count gives a currency
+  and a decade, the subjects in that band, and how many of those subjects were
+  resolved against the counterparty. A subject is corroborated and
+  net-settled (settled − refunded − charged back), and it is banded once,
+  after netting. Each band maps through `accept` as an amount does: a decade
+  in a currency is that decade plus the currency's `scale` in its band unit.
+  Bands that map to one decade of one unit are added together. The added
+  subjects stop at 2^53 − 1, and the added adverse subjects never exceed the
+  added subjects. A currency outside `accept`, a band in another unit, and a
+  count that does not read are not counted. A count does not read when its
+  subjects or adverse subjects are negative, its subjects are above 2^53 − 1,
+  it has more adverse subjects than subjects, or its decade is outside −1,000
+  to 1,000.
+- **Earned band.** The highest decade, in the deal's band unit, with at least
+  `k` subjects, of which at most `max_adverse_permille` per thousand were
+  resolved against the counterparty. A lower band never adds up to a higher
+  one: a hundred subjects at decade 0 earn decade 0. Disputes still open are
+  not in this share, so leaving a dispute unresolved does not make it look
+  clean: a pack shows them as their own count beside the ladder, with
+  `bound.no_unanswered_dispute`.
+- **Pass** when the deal's decade is at most the earned band plus
+  `step_decades`, where 1 is the 10× step-up. It also passes when a stake on a
+  pinned rail covers the deal, whatever the card shows.
+- **Fail** when the card's bands were read and neither road holds. An empty
+  list of bands was read, so it fails. **not_read** when no stake covers and
+  the card is not verified, carries no per-band counts at all (absent, not
+  empty), or the deal's band does not read. Both ask, if the row carries an
+  `ask`.
+- **Effect.** A plain LIMIT row that does not pass lowers the tier admitted to
+  the tier below its `from`. A ladder row lowers it only to the highest tier
+  its earned limit holds whole: the earned limit holds a tier when every tier
+  up to it that names the deal's unit has a ceiling at or below the earned band
+  plus the step. It never lowers below the tier below its `from`. History
+  earns a tier, not just a pass.
+
+No served card carries per-band counts yet (§6), so the baseline has no ladder
+row. The rule ships with its own conformance pack,
+`conformance-vectors/admission/v0/packs/history-or-stake.yaml` in
+capsule-engine.
+
+### 3.2 Rails
+
+A rail is trusted by its adapter declaration, named by id plus digest
+(AAC#406). A stake carries the pin of the rail it is posted on. A stake counts,
+in `stake.covers_deal` and in the ladder's stake road, only when
+`trust_roots.rails` holds that exact pin. A stake on any other rail is
+`not_read`, never a pass. A pack with no rails therefore counts no stake.
+
 ## 4. Resolution
 
 In order:
@@ -201,7 +266,8 @@ In order:
    does a NO row that reads `not_read` because its input is missing (§2). The
    source is `missing` or that row's id.
 4. **Tier admitted.** It starts at the deal's tier. A `LIMIT` row that does not
-   pass lowers it to the tier below that row's `from`. A failing judged row
+   pass lowers it to the tier below that row's `from`, and a ladder row lowers
+   it only to the tier its earned history holds (§3.1). A failing judged row
    lowers it to its `cap`.
 5. **Above the top tier.** If the deal is `above_tier` and no row lowered the
    tier admitted, the decision is LIMIT at that top tier with source
@@ -231,12 +297,13 @@ The evaluator's input is the deal and what was received:
 - **What was received about the counterparty:**
   - the platform facts;
   - the card, with its state, first and latest checkpoint times, witness,
-    declared controller and claims held and made;
+    declared controller, claims held and made, and per-band counts
+    `{currency, decade, subjects, adverse}`;
   - a bound selection, with its state and its unanswered disputes;
   - the party's own book with the counterparty, as counts and adjudications;
   - the operator's list result;
   - verified vouches (by controller) and the counterparty's own controller;
-  - any stake posted on the deal;
+  - any stake posted on the deal, with its rail's pin `{id, digest}`;
   - judged rows' results, each with its judge.
 - **Asks:** the asks already made (by derivation, with their state) and the
   number made in the budget window.
@@ -274,10 +341,18 @@ v0. The baseline's numbers are placeholders, calibrated first from the live
 stage-1 health report. The fixtures are checked against the evaluator in
 capsule-engine's CI. `pack lint` and `pack test` are #56.
 
-Not in v0:
+Added after the first v0 compile (#79):
 
-- **The per-band ladder** with k and a step-up (Reference v3 §3A.14, item 26).
-  It needs per-band counts of corroborated, net-settled subjects, which no card
-  served today carries.
-- **Rails in `trust_roots`.** A rail is trusted by its adapter declaration,
-  which is still a spike (AAC#406).
+- **The per-band ladder** with k and a step-up (§3.1; Reference v3 §3A.14,
+  item 26). The evaluator reads it. No served card carries per-band counts of
+  corroborated, net-settled subjects yet, so the baseline does not use it, and
+  its k, step-up and adverse share have no calibrated value.
+- **Rails in `trust_roots`** (§3.2), pinned by adapter declaration id plus
+  digest (AAC#406).
+
+Both are additive within `admission-pack/v0`. An evaluator from before them
+refuses a pack that uses them, as an unknown predicate or field, so it fails
+closed. A pack that uses neither compiles to the same bytes as before, but
+one meaning changes, in the fail-closed direction: a pack written before
+rails that has a `stake.covers_deal` row pins no rail, so every stake it reads
+is now `not_read` where a covering one used to pass.
