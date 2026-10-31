@@ -15,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
 import jsonschema  # noqa: E402
 
-from calibration_summary import calibration_summaries  # noqa: E402
+from calibration_summary import calibration_summaries, disagreement_with_verb  # noqa: E402
 
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "fixtures" / "calibration-summary-v1.json"
 SCHEMA_SHA256 = "2801e9e3865b756c8d73a5b7bb75c840db2d07c41626f11863ef9c16d48c752f"
@@ -95,6 +95,21 @@ class CalibrationSummaryMatchesSchema(unittest.TestCase):
         a, = calibration_summaries(selected, [{"case_id": "c1", "rating": "met"}, {"case_id": "c5", "rating": "met"}],
                                    "contract@1.0.0", "2026-W43", NOW)
         self.assertEqual([(c["clause_ref"], c["agreement"]) for c in a["clauses"]], [("a.one", {"k": 1, "n": 1})])
+
+    def test_the_cross_check_agrees_with_the_verb_and_reads_a_missing_pin_as_zero(self):
+        rated = [{"case_id": "c1", "rating": "met"}, {"case_id": "c2", "rating": "met"}, {"case_id": "c3", "rating": "not_met"}]
+        a, b = summaries(rated)
+        verb = [{"judge_pin_digest": PIN_A, "agreement_count": 1, "rated_count": 3}]
+        self.assertEqual(disagreement_with_verb([a], verb), None)
+        self.assertEqual(disagreement_with_verb([a], []), "calibration summary for pin %s disagrees with `calibration summarize`: (1, 3) against (0, 0)" % PIN_A[:16],
+                         "a pin the verb omits reads (0, 0)")
+        self.assertIn("disagrees", disagreement_with_verb([a], [{"judge_pin_digest": PIN_A, "agreement_count": 0, "rated_count": 3}]))
+
+    def test_a_pin_with_no_countable_case_reads_zero_of_zero_and_agrees_with_a_verb_that_omits_it(self):
+        selected = [report("c1", "a.one", "not_evaluable")]
+        record, = calibration_summaries(selected, [{"case_id": "c1", "rating": "met"}], "contract@1.0.0", "2026-W43", NOW)
+        self.assertEqual(record["clauses"][0]["agreement"], {"k": 0, "n": 0})
+        self.assertIsNone(disagreement_with_verb([record], []))
 
     def test_an_empty_sample_seals_no_summary(self):
         self.assertEqual(calibration_summaries([], [], "contract@1.0.0", "2026-W43", NOW), [])

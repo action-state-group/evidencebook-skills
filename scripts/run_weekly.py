@@ -20,7 +20,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from calibration_summary import calibration_summaries  # noqa: E402
+from calibration_summary import calibration_summaries, disagreement_with_verb  # noqa: E402
 from human_rating import counted_cases, human_rating_record  # noqa: E402
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
@@ -235,16 +235,15 @@ def main(argv):
             [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]}
              for _, b in selected if b["case_id"] in counts]))
         (work / "ratings.json").write_text(json.dumps([r for r in rated if r["case_id"] in counts]))
-        summary = run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
+        # With no countable case there is nothing to summarize: the records read 0 of 0.
+        summary = (run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
+                   if counts else {"pins": []})
         records = calibration_summaries(selected, rated, spec["contract"], week_key, stamp)
         # The per-clause tallies must add up to the verb's per-pin totals: one
         # reading of agreement, not two.
-        totals = {p["judge_pin_digest"]: (p["agreement_count"], p["rated_count"]) for p in summary["pins"]}
-        for record in records:
-            ours = tuple(sum(c["agreement"][m] for c in record["clauses"]) for m in ("k", "n"))
-            if totals.get(record["judge_pin"]["digest"]) != ours:
-                raise EvidenceUnavailable(f"calibration summary for pin {record['judge_pin']['digest'][:16]} disagrees with "
-                                          f"`calibration summarize`: {ours} against {totals.get(record['judge_pin']['digest'])}")
+        disagreement = disagreement_with_verb(records, summary["pins"])
+        if disagreement:
+            raise EvidenceUnavailable(disagreement)
         log["calibration_summaries"] = []
         for record in records:
             log["calibration_summaries"].append(publish(ctl, profile, seal_request(

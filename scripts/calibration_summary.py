@@ -43,3 +43,16 @@ def calibration_summaries(selected, rated, contract, week_key, computed_at):
         "clauses": [{"clause_ref": clause, "agreement": {"k": k, "n": n}, "drift": {"k": 0, "n": 0}}
                     for clause, (k, n) in sorted(clauses.items())],
     } for pin, clauses in sorted(pins.items())]
+
+
+def disagreement_with_verb(records, verb_pins):
+    """The first way the records' per-clause k and n fail to add up to the
+    verb's per-pin totals, as text, or None. A pin the verb does not list had
+    no countable case and reads (0, 0) in the records: both say the same."""
+    totals = {p["judge_pin_digest"]: (p["agreement_count"], p["rated_count"]) for p in verb_pins}
+    for record in records:
+        pin = record["judge_pin"]["digest"]
+        ours = tuple(sum(c["agreement"][m] for c in record["clauses"]) for m in ("k", "n"))
+        if totals.get(pin, (0, 0)) != ours:
+            return f"calibration summary for pin {pin[:16]} disagrees with `calibration summarize`: {ours} against {totals.get(pin, (0, 0))}"
+    return None
