@@ -42,6 +42,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from rollup import RollupError, all_required_met, refuse_unknown_verdicts  # noqa: E402
+from subject_history import merge_subject_history  # noqa: E402
 
 CASE_SEPARATOR = "::"
 
@@ -431,7 +432,7 @@ def merge_result_v0_documents(docs, title, generated_at):
     for c in claims:
         buckets[c["verdict"]].append(c["id"])
     excluded_not_applicable = sum(d["aggregate"]["coverage"]["excluded_not_applicable"] for d in docs)
-    return {
+    merged = {
         "result_version": "evidence-result-v0",
         "generated_at": generated_at,
         "claims": claims,
@@ -448,3 +449,9 @@ def merge_result_v0_documents(docs, title, generated_at):
             "title": title,
         },
     }
+    # A pack's subject-history member (scripts/subject_history.py) is combined across the days;
+    # any other document-level x- member is the producer's per-document wording and is not carried.
+    names = {n for d in docs for n in d if n.startswith("x-") and n != "x-presentation-digest"}
+    for name in sorted(names):
+        merged[name] = merge_subject_history([d[name] for d in docs if name in d])
+    return merged

@@ -130,7 +130,15 @@ obligation titles, test names, not-evaluable notes or the quality protocol as
 the producer's wording, so those show with no label; that text is the
 renderer's, and it is listed in #29's viewer follow-up. The renderers don't yet compare the block against the sealed digest
 (issue #29's viewer follow-up), so until they do the page keeps its
-"not evidence" labels. `--attach-input-originals`
+"not evidence" labels. `rollup_day.py --subject-tier operator|shared` adds a pack-namespaced `x-<pack_id>` member to each
+day Result with what a viewer's "Same customer in this report" page draws
+(`scripts/subject_history.py`, evidencebook-skills#89): per conversation a request label (a closed
+list, chosen from the agent's tool calls), a USD band (`e+N`) and the halves present, and at the
+`operator` tier a salted customer handle (HMAC under `--subject-salt-file`, never written) and
+`follow_up_of`. The `shared` tier omits the handle and `follow_up_of` until per-share salting exists.
+`--subject-facts` supplies `follow_up_of` (a `references[]` cite) and halves (from the bilateral
+records); they are validated, never inferred. Synthetic fixtures: `tests/fixtures/subject-history/`.
+`--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it
 discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one
 day's `result-v0-*.json` is merged into one Result v0

@@ -54,10 +54,11 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from capsulectl_calls import EvidenceUnavailable, list_capsules, payload, run  # noqa: E402
 from judge_pin import DEFAULT_JUDGE_TIMEOUT, describe_judge, pin_input  # noqa: E402
-from result_v0 import (build_result_v0, build_result_v0_for_day, headline_from_result, report_title,  # noqa: E402
+from result_v0 import (CASE_SEPARATOR, build_result_v0, build_result_v0_for_day, headline_from_result, report_title,  # noqa: E402
                        resolve_contract_ref)
 from rollup import (RollupError, all_criteria_from_clauses, all_required_met,  # noqa: E402
                     checks_from_clauses, check_verdicts, never_out_of_scope_from_clauses)
+import subject_history  # noqa: E402
 from run_daily import effective_tier  # noqa: E402
 
 
@@ -342,6 +343,19 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
                                    source_capsule_ids=source_capsule_ids), skipped
 
 
+def case_messages(capsulectl, profile, clause_verdicts):
+    """The conversation (agent_interaction.messages) of a case, read from the case record
+    its reports cite. RollupError when the reports cite none or the record carries no messages."""
+    sources = sorted({src for _, _, src in clause_verdicts.values() if src})
+    if not sources:
+        raise RollupError("a case's reports cite no case record; its subject-history entry cannot be read")
+    body = payload(capsulectl, profile, sources[0])
+    messages = ((body or {}).get("agent_interaction") or {}).get("messages")
+    if not isinstance(messages, list):
+        raise RollupError(f"case record {sources[0]} carries no agent_interaction.messages")
+    return messages
+
+
 def resolve_judge_model_id(cli_judge_model_id, spec):
     """--judge-model-id, or spec["judge"]["model_id"] when present, else None.
     Never raises on a missing or non-mapping "judge" key ("judge": "jev",
@@ -422,7 +436,19 @@ def main(argv):
                           "(evidence_unavailable, exit 2); a contract with no judged clause runs "
                           "scoped by pack_source_digest alone. Judged reports "
                           "under any other pin are excluded and counted in the summary's reports_excluded.")
+    ap.add_argument("--subject-tier", choices=subject_history.TIERS, default=None,
+                    help="add the pack's subject-history member (scripts/subject_history.py) to every day Result: "
+                         "request label, USD band and halves per conversation; at 'operator' also a salted customer "
+                         "handle and follow_up_of. Off by default.")
+    ap.add_argument("--subject-salt-file", type=pathlib.Path, default=None,
+                    help="the producer-held handle salt (at least 16 bytes; read raw, never written out); "
+                         "required with --subject-tier operator")
+    ap.add_argument("--subject-facts", type=pathlib.Path, default=None,
+                    help="JSON {case_id: {follow_up_of: case_id, halves: {present, of}}}: the references[] cite and "
+                         "bilateral-record counts the caller read; validated, never inferred")
     args = ap.parse_args(argv)
+    if args.subject_tier == "operator" and not args.subject_salt_file:
+        ap.error("--subject-tier operator needs --subject-salt-file")
     # An explicit blank id (an unset shell variable, say) is a caller error,
     # never a silent fall back to the spec's model id or to no pin at all.
     if args.judge_model_id is not None and not args.judge_model_id.strip():
@@ -481,12 +507,24 @@ def main(argv):
 
     # One Result v0 per day/period, over every case that day that rolls up, beside
     # the per-case documents above. Built from the same sealed reports and tiers.
+    subject_facts = json.loads(args.subject_facts.read_text()) if args.subject_facts else None
+    subject_salt = args.subject_salt_file.read_bytes() if args.subject_salt_file else None
     day_entries = []
     for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
             day_doc["view"]["title"] = report_title(spec, day_label)
+            if args.subject_tier:
+                day_cases = sorted({c["id"].rpartition(CASE_SEPARATOR)[0] for c in day_doc["claims"]})
+                try:
+                    conversations = {cid: case_messages(args.capsulectl, args.profile, by_case[cid]) for cid in day_cases}
+                    day_doc[subject_history.extension_name(contract)] = subject_history.build_subject_history(
+                        contract, args.subject_tier, conversations,
+                        subject_facts, subject_salt, known_cases=set(by_case))
+                except RollupError as e:
+                    print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
+                    return 2
             out_path = args.out / f"result-v0-{safe_filename(day_label)}.json"
             out_path.write_text(json.dumps(day_doc, indent=2))
             entry.update(cases=headline_from_result(day_doc)["cases"], claims=len(day_doc["claims"]),
