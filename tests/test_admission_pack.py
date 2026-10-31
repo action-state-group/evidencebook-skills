@@ -42,6 +42,52 @@ def load(text):
     return pack_compile.load_source(text)
 
 
+RAIL_DIGEST = "5" * 64
+LADDER_PARAMS = "    params: {k: 3, step_decades: 1, max_adverse_permille: 50}"
+LADDER_ROW = f"""  - id: ladder
+    statement: The card earns this deal's band, or collateral on a pinned rail covers it.
+    source: card
+    check: card.band_history_or_stake
+{LADDER_PARAMS}
+    from: T1
+    on_fail: "LIMIT"
+    ask: {{derivation: served_summary/1}}
+"""
+
+
+def ladder_text():
+    """The baseline with a rail pinned and a ladder row: profile §2's
+    card.band_history_or_stake, which the baseline itself does not use yet."""
+    text = baseline_text().replace("  judges: [placeholder-judge]\n",
+                                   f"  judges: [placeholder-judge]\n  rails: [{{id: x402-v0, digest: \"{RAIL_DIGEST}\"}}]\n")
+    return text.replace("rows:\n", "rows:\n" + LADDER_ROW, 1)
+
+
+class Ladder(unittest.TestCase):
+    """The per-band ladder and rails in trust_roots (#79)."""
+
+    def test_validates(self):
+        self.assertEqual(pack_compile.validate_source(load(ladder_text())), [])
+
+    def test_rails_are_compiled(self):
+        doc = admission_pack.compile_pack(load(ladder_text()))
+        self.assertEqual(doc["trust_roots"]["rails"], [{"id": "x402-v0", "digest": RAIL_DIGEST}])
+        row = next(r for r in doc["rows"] if r["id"] == "ladder")
+        self.assertEqual(row["params"], {"k": 3, "step_decades": 1, "max_adverse_permille": 50})
+
+    def test_a_pack_that_pins_no_rail_keeps_its_bytes(self):
+        # rails is written only when a rail is pinned, so the baseline compiles
+        # to the bytes it did before rails existed, and its pin still holds.
+        self.assertNotIn("rails", admission_pack.compile_pack(load(baseline_text()))["trust_roots"])
+        empty = baseline_text().replace("  judges: [placeholder-judge]\n", "  judges: [placeholder-judge]\n  rails: []\n")
+        self.assertEqual(admission_pack.compiled_bytes(load(empty)), admission_pack.compiled_bytes(load(baseline_text())))
+
+    def test_the_baseline_has_no_ladder_yet(self):
+        # No served card carries per-band counts yet (profile §6).
+        checks = {r["check"] for r in load(baseline_text())["rows"]}
+        self.assertNotIn("card.band_history_or_stake", checks)
+
+
 class Baseline(unittest.TestCase):
     def test_validates(self):
         self.assertEqual(pack_compile.validate_source(load(baseline_text())), [])
@@ -150,7 +196,7 @@ class Refusals(unittest.TestCase):
     """Each edit of the baseline must be refused, naming the rule it breaks."""
 
     def assertRefused(self, old, new, want):
-        text = baseline_text()
+        text = baseline_text() if old in baseline_text() else ladder_text()
         self.assertTrue(old in text, f"the baseline has no {old!r}")
         issues = pack_compile.validate_source(load(text.replace(old, new, 1)))
         self.assertTrue(any(want in i for i in issues), issues)
@@ -227,7 +273,33 @@ class Refusals(unittest.TestCase):
         self.assertRefused("  deadline_s: 86400", "  max_wait: 86400", "deadline_s: 1 to")
 
     def test_an_unknown_trust_root(self):
-        self.assertRefused("  judges: [placeholder-judge]", "  rails: [x402]", "trust_roots must map some of")
+        self.assertRefused("  judges: [placeholder-judge]", "  rivers: [x402]", "trust_roots must map some of")
+
+    def test_a_rail_named_not_pinned(self):
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [x402]", "trust_roots.rails[0] must be exactly")
+
+    def test_a_rail_pin_with_a_short_digest(self):
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: x402, digest: abc}]",
+                           "trust_roots.rails[0] must be exactly")
+
+    def test_a_rail_pinned_twice(self):
+        pin = "{id: x402, digest: \"" + "a" * 64 + "\"}"
+        self.assertRefused("  judges: [placeholder-judge]", f"  rails: [{pin}, {pin}]", "x402 is listed twice")
+
+    def test_a_ladder_that_earns_from_no_subject(self):
+        self.assertRefused(LADDER_PARAMS, LADDER_PARAMS.replace("k: 3", "k: 0"), "params.k 0 must be from 1")
+
+    def test_a_ladder_step_out_of_range(self):
+        self.assertRefused(LADDER_PARAMS, LADDER_PARAMS.replace("step_decades: 1", "step_decades: 61"),
+                           "params.step_decades 61 must be from 0 to 60")
+
+    def test_a_ladder_dispute_rate_out_of_range(self):
+        self.assertRefused(LADDER_PARAMS, LADDER_PARAMS.replace("max_adverse_permille: 50", "max_adverse_permille: 1001"),
+                           "params.max_adverse_permille 1001 must be from 0 to 1000")
+
+    def test_a_ladder_row_deciding_no(self):
+        self.assertRefused(LADDER_PARAMS + "\n    from: T1\n    on_fail: \"LIMIT\"",
+                           LADDER_PARAMS + "\n    from: T1\n    on_fail: \"NO\"", "a card row may not decide NO")
 
     def test_wrong_types_are_reported_not_raised(self):
         text = baseline_text().replace("  - id: attestation\n", "  - id: [attestation]\n") \

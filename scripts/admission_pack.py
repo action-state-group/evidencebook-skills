@@ -56,12 +56,17 @@ PREDICATES = {
     "operator.allow_listed": ("operator", ()),
     "vouch.distinct_controllers": ("vouch", ("min",)),
     "stake.covers_deal": ("stake", ()),
+    "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
     "judged": ("judged", ()),
 }
 
 ADMISSION_KEYS = {"pack_id", "pack_version", "scope", "source", "outcomes", "missing", "accept", "tiers",
                   "budget", "trust_roots", "rows"}
 TRUST_ROOT_KEYS = ("controllers", "witnesses", "judges")
+# trust_roots.rails pins each rail by its adapter declaration, {id, digest}
+# (AAC#406), rather than naming it.
+RAIL_KEYS = {"id", "digest"}
+DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask"}
 
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
@@ -78,7 +83,9 @@ MAX_ASKS_MAX = 1000
 DEADLINE_S_MAX = 100 * 365 * 24 * 3600
 DECADE_MAX = 60
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
-             "min": 2 ** 53 - 1}
+             "min": 2 ** 53 - 1, "k": 2 ** 53 - 1, "step_decades": DECADE_MAX, "max_adverse_permille": 1000}
+# A ladder needs at least one subject in a band to earn it (paramMin).
+PARAM_MIN = {"k": 1}
 
 # The plain scalar rule. The compiler's PyYAML is the one YAML reader an
 # admission pack has (the evaluator reads the compiled pack-definition.json),
@@ -232,9 +239,23 @@ def validate_admission(source):
         issues.append(f"budget must be exactly {{max_asks: 0 to {MAX_ASKS_MAX}, deadline_s: 1 to {DEADLINE_S_MAX}}}")
 
     roots = source.get("trust_roots", {})
-    if not isinstance(roots, dict) or set(roots) - set(TRUST_ROOT_KEYS) \
-            or not all(isinstance(v, list) and all(_nonempty(x) for x in v) for v in roots.values()):
-        issues.append(f"trust_roots must map some of {list(TRUST_ROOT_KEYS)} to lists of names")
+    names = {k: v for k, v in roots.items() if k != "rails"} if isinstance(roots, dict) else None
+    if names is None or set(names) - set(TRUST_ROOT_KEYS) \
+            or not all(isinstance(v, list) and all(_nonempty(x) for x in v) for v in names.values()):
+        issues.append(f"trust_roots must map some of {list(TRUST_ROOT_KEYS)} to lists of names, and may pin rails")
+    rails = roots.get("rails", []) if isinstance(roots, dict) else []
+    if not isinstance(rails, list):
+        issues.append("trust_roots.rails must be a list of {id, digest}")
+        rails = []
+    pins = set()
+    for i, pin in enumerate(rails):
+        if not isinstance(pin, dict) or set(pin) != RAIL_KEYS or not _nonempty(pin.get("id")) \
+                or not isinstance(pin.get("digest"), str) or not DIGEST_RE.match(pin["digest"]):
+            issues.append(f"trust_roots.rails[{i}] must be exactly {{id: <declaration id>, digest: <64 lowercase hex>}}")
+        elif (pin["id"], pin["digest"]) in pins:
+            issues.append(f"trust_roots.rails[{i}]: {pin['id']} is listed twice")
+        else:
+            pins.add((pin["id"], pin["digest"]))
 
     rows = source.get("rows")
     if not isinstance(rows, list) or not rows:
@@ -275,8 +296,9 @@ def validate_admission(source):
             for k in sorted(set(params) - set(PREDICATES[check][1])):
                 issues.append(f"{where}: check {check} takes no params.{k}")
             for k in sorted(set(params) & set(PREDICATES[check][1])):
-                if not 0 <= params[k] <= PARAM_MAX[k]:
-                    issues.append(f"{where}: params.{k} {params[k]} must be from 0 to {PARAM_MAX[k]}")
+                lo = PARAM_MIN.get(k, 0)
+                if not lo <= params[k] <= PARAM_MAX[k]:
+                    issues.append(f"{where}: params.{k} {params[k]} must be from {lo} to {PARAM_MAX[k]}")
         if frm is None or frm not in tier_ids:
             issues.append(f"{where}.from {frm!r} is not a tier")
         on_fail = r.get("on_fail")
@@ -323,8 +345,11 @@ def compile_pack(source):
     artifact: its pack_id and the SHA-256 of these bytes are what a decision
     cites. The evaluator (capsule-engine#265, Go and Rust) reads only these
     bytes, never the YAML, so PyYAML here is the one YAML reader there is.
-    Optional fields are written out (params {}, every trust_roots list), so
-    the evaluator has no default to apply."""
+    Optional fields are written out (params {}, every trust_roots list of
+    names), so the evaluator has no default to apply. trust_roots.rails is
+    the one exception: it is written only when the pack pins a rail, so a
+    pack that pins none compiles to the bytes, and the digest, it had before
+    rails existed; the evaluator reads it absent as an empty list."""
     roots = source.get("trust_roots") or {}
     doc = {
         "format": COMPILED_FORMAT,
@@ -338,6 +363,8 @@ def compile_pack(source):
         "trust_roots": {k: list(roots.get(k, [])) for k in TRUST_ROOT_KEYS},
         "rows": [],
     }
+    if roots.get("rails"):
+        doc["trust_roots"]["rails"] = [{"id": p["id"], "digest": p["digest"]} for p in roots["rails"]]
     if "source" in source:
         doc["source"] = source["source"]
     for r in source["rows"]:

@@ -28,10 +28,11 @@
 # T1, a selection bound to our ask at T2. Our own book with it is recorded,
 # never a gate a stranger cannot pass on a first deal.
 #
-# Not in v0: the per-band ladder with k and a step-up (Reference v3 §3A.14,
-# item 26) needs per-band counts of corroborated, net-settled subjects, which
-# no card served today carries; and a rail is trusted by its adapter
-# declaration (AAC#406, a spike), so trust_roots names no rails yet.
+# Not used here yet (profile §3.1, §3.2; #79): the per-band ladder with k and
+# a step-up (card.band_history_or_stake, Reference v3 §3A.14, item 26) reads
+# per-band counts of corroborated, net-settled subjects, which no card served
+# today carries; and trust_roots pins no rail, so the stake row counts no
+# stake. Pinning none keeps this pack's compiled bytes and digest.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
 pack_id: asg/admission_baseline/1.0.0
