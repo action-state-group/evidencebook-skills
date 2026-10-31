@@ -223,7 +223,10 @@ that rule.
 - **Earned band.** The highest decade, in the deal's band unit, with at least
   `k` subjects, of which at most `max_adverse_permille` per thousand were
   resolved against the counterparty. A lower band never adds up to a higher
-  one: a hundred subjects at decade 0 earn decade 0.
+  one: a hundred subjects at decade 0 earn decade 0. Disputes still open are
+  not in this share, so leaving a dispute unresolved does not make it look
+  clean: a pack shows them as their own count beside the ladder, with
+  `bound.no_unanswered_dispute`.
 - **Pass** when the deal's decade is at most the earned band plus
   `step_decades`, where 1 is the 10× step-up. It also passes when a stake on a
   pinned rail covers the deal, whatever the card shows.
@@ -349,4 +352,7 @@ Added after the first v0 compile (#79):
 
 Both are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails
-closed. A pack that uses neither compiles to the same bytes as before.
+closed. A pack that uses neither compiles to the same bytes as before, but
+one meaning changes, in the fail-closed direction: a pack written before
+rails that has a `stake.covers_deal` row pins no rail, so every stake it reads
+is now `not_read` where a covering one used to pass.
