@@ -50,6 +50,13 @@ def blind_packet(report, case, reference_files=None):
     return packet
 
 
+def is_judged(report):
+    """Whether an evaluation-report was judged, so it names the judge pin it can
+    be calibrated against. A recomputed report has no judge_pin_digest and is
+    not a judge's output: it is never in the calibration frame."""
+    return bool(report.get("judge_pin_digest"))
+
+
 def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset()):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
@@ -124,16 +131,20 @@ def main(argv):
 
     try:
         # 1. The week's evaluation reports, authenticated before sampling.
-        reports = []
+        reports, unjudged = [], 0
         for entry in list_capsules(ctl, profile):
             body = payload(ctl, profile, entry["capsule_id"])
             if not (isinstance(body, dict) and body.get("record_type") == "evaluation-report/v1"):
                 continue
             if body.get("period", "").removeprefix("day:") not in week_days:
                 continue
+            if not is_judged(body):
+                unjudged += 1
+                continue
             verify(ctl, profile, entry["capsule_id"], work)
             reports.append((entry["capsule_id"], body))
         log["frame"] = len(reports)
+        log["frame_unjudged_skipped"] = unjudged
         action("read-frame", output_digest=json_digest(sorted(rid for rid, _ in reports)))
 
         # 2. Draw the sample and seal the manifest before anyone sees a case.

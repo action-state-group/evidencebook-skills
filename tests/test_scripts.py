@@ -12,7 +12,7 @@ import datetime  # noqa: E402
 
 from capsulectl_calls import EvidenceUnavailable, committed_on, parse_rfc3339  # noqa: E402
 from run_daily import checked_answer  # noqa: E402
-from run_weekly import PACKET_FIELDS, blind_packet, checked_ratings  # noqa: E402
+from run_weekly import PACKET_FIELDS, blind_packet, checked_ratings, is_judged  # noqa: E402
 
 REPORT = {"record_type": "evaluation-report/v1", "case_id": "tau2:airline:task-1:trial-0",
           "clause_id": "policy-followed", "verdict": "met", "rationale": "the agent refunded correctly",
@@ -38,6 +38,15 @@ class BlindPacket(unittest.TestCase):
         packet = blind_packet(REPORT, CASE)
         leaked = {REPORT["verdict"], REPORT["rationale"], REPORT["judge_pin_digest"], REPORT["source_capsule_id"]}
         self.assertFalse(leaked & {v for v in packet.values() if isinstance(v, str)})
+
+
+class JudgedFrame(unittest.TestCase):
+    def test_a_judged_report_is_in_the_frame(self):
+        self.assertTrue(is_judged({"record_type": "evaluation-report/v1", "judge_pin_digest": "ab" * 32}))
+
+    def test_a_recomputed_report_has_no_judge_pin_and_is_not(self):
+        self.assertFalse(is_judged({"record_type": "evaluation-report/v1"}))
+        self.assertFalse(is_judged({"record_type": "evaluation-report/v1", "judge_pin_digest": ""}))
 
 
 class CheckedRatings(unittest.TestCase):
