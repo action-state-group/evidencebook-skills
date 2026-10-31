@@ -11,8 +11,9 @@ the tier, the card's freshness, distinct-controller counts and denominators.
 The evaluator is capsule-engine#265, one implementation in Go (`go/admission`)
 and Rust (`rust/capsule-engine`), so every caller decides the same way. This
 repository validates a pack (`scripts/admission_pack.py`, through
-`scripts/pack_compile.py validate`) and compiles it to an Evidence Contract. It
-does not evaluate one.
+`scripts/pack_compile.py validate`) and compiles it to an Evidence Contract and
+to `pack-definition.json`, the artifact the evaluator reads (§1.1). It does not
+evaluate one.
 
 Sources:
 
@@ -53,8 +54,8 @@ So a plain (unquoted) scalar may only be:
   word (`y`, `n`, `yes`, `no`, `on`, `off`, `true`, `false` or `null`, in any of
   their cases).
 
-Anything else is quoted. The lint and the evaluator both refuse a plain scalar
-outside this rule, and also anchors, aliases and explicit tags.
+Anything else is quoted. The lint refuses a plain scalar outside this rule, and
+also anchors, aliases and explicit tags.
 
 A pack then reads one way everywhere, or not at all.
 
@@ -64,6 +65,30 @@ from deciding NO: an adverse adjudication is sealed as a row result
 (`record`), and the operator turns it into NO through its own config. The
 baseline lets our own adjudicated history decide NO, as design §4 draws it, so
 it is not the Mesh default while u137 stands.
+
+### 1.1 The pinned artifact
+
+Authors and operators write and edit `pack-source.yaml`. The evaluator never
+reads YAML: `pack_compile.py compile` writes `pack-definition.json`, and that
+file is what a deployment pins and what a decision cites.
+
+- It is the source in JSON with `"format": "admission-pack/v0"` added, encoded
+  as RFC 8785 (JCS) bytes. Optional fields are written out: `params` as `{}`,
+  and all three `trust_roots` lists. The evaluator therefore applies no default.
+- A pin is named and cited as a live pack's is: `pack_id` plus
+  `definition_digest`, the SHA-256 of those bytes. The decision's `reads`
+  policy entry carries both. Admission adds no digest name of its own.
+- The evaluator loads the bytes only if they are exactly the JCS encoding of
+  their own parse. That rules out duplicate keys, other whitespace or key order,
+  and non-integer numbers. It then decodes them strictly: unknown fields, nulls
+  and wrong types are refused. Its loader holds every rule the lint holds
+  (below), so a pack refused here is refused there too.
+- PyYAML, in the compiler, is the only YAML reader. A pack therefore reads one
+  way, as this compiler reads it.
+
+The baseline's compiled files are committed beside it in
+`packs/admission-baseline/compiled/`, and a test keeps them equal to what the
+source compiles to.
 
 ### Rows
 
@@ -223,7 +248,8 @@ does today:
 - `verdict`: GO, ASK, LIMIT or NO;
 - `source`: the id of the row that decided, `rows` when the rows decided
   together, `above_tier`, or `missing`;
-- `reads`: the policy entry, `pack_id` and its digest;
+- `reads`: the policy entry, `pack_id` and the SHA-256 of its
+  `pack-definition.json`;
 - `rows`: each `{row, result}`.
 
 The new members are additive:

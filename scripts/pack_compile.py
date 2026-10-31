@@ -53,7 +53,8 @@ contract.json (the Evidence Contract) and pack-definition.json (the engine's pac
 definition and its definition_digest, also printed by `project`) instead of the
 four documents above. A pack source with `scope: {kind: admission}` is an
 admission pack (docs/admission-pack-profile-v0.md); scripts/admission_pack.py
-validates it, and `compile` writes contract.json alone.
+validates it, and `compile` writes contract.json and pack-definition.json, the
+pinned artifact the evaluator reads.
 
     python3 scripts/pack_compile.py validate packs/airline-support-outcomes/pack-source.yaml
     python3 scripts/pack_compile.py compile packs/airline-support-outcomes/pack-source.yaml \\
@@ -976,11 +977,13 @@ def write_live_pack(source, out_dir):
 
 
 def write_admission_pack(source, out_dir):
-    """An admission pack compiles to its Evidence Contract alone: the evaluator
-    (capsule-engine#265) reads the pack source itself, pinned by its digest."""
+    """An admission pack compiles to its Evidence Contract and pack-definition.json,
+    the pinned artifact capsule-engine#265's evaluator reads (JCS bytes, cited by
+    pack_id and their SHA-256)."""
     import evidence_contract  # imports this module, so not at the top
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "contract.json").write_bytes(evidence_contract.to_bytes(admission_pack.from_admission(source)))
+    (out_dir / "pack-definition.json").write_bytes(admission_pack.compiled_bytes(source))
 
 
 def resolve_out_dir(out_arg):
@@ -1081,7 +1084,8 @@ def main(argv):
             "pack_version": source["pack_version"],
             "scope": "admission",
             "out": out_rel,
-            "files": [f"{out_rel}/contract.json"],
+            "files": [f"{out_rel}/contract.json", f"{out_rel}/pack-definition.json"],
+            "definition_digest": hashlib.sha256(admission_pack.compiled_bytes(source)).hexdigest(),
         }, indent=2))
         return 0
 

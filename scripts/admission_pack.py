@@ -21,6 +21,7 @@ boolean and is refused with that reason.
 """
 import re
 
+import rfc8785
 import yaml
 
 SCOPE_KIND = "admission"
@@ -67,6 +68,10 @@ ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 # Each threshold's bound, as the evaluator's loader holds it (capsule-engine
 # go/admission paramMax): a century of seconds or days, and a count no JSON
 # reader loses.
+# An accept scale and a tier ceiling, bounded so a band's decade stays far
+# inside an int (the loader's scaleMax and decadeMax).
+SCALE_MAX = 30
+DECADE_MAX = 60
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
              "min": 2 ** 53 - 1}
 
@@ -169,6 +174,8 @@ def validate_admission(source):
                 issues.append(f"accept.{cur} must be exactly {{band: <unit>, scale: <integer>}}")
             else:
                 bands.add(unit["band"])
+                if not -SCALE_MAX <= unit["scale"] <= SCALE_MAX:
+                    issues.append(f"accept.{cur}: scale {unit['scale']} must be from {-SCALE_MAX} to {SCALE_MAX}")
 
     tiers = source.get("tiers")
     tier_ids = []
@@ -191,6 +198,8 @@ def validate_admission(source):
             issues.append(f"tiers[{i}].max_decade must map band units to integer decades")
             continue
         for band, d in sorted(decades.items(), key=lambda kv: str(kv[0])):
+            if not -DECADE_MAX <= d <= DECADE_MAX:
+                issues.append(f"tier {t['id']}: max_decade.{band} {d} must be from {-DECADE_MAX} to {DECADE_MAX}")
             if band not in bands:
                 issues.append(f"tier {t['id']}: max_decade.{band} is not a band unit in accept")
             if band in below and d <= below[band]:
@@ -289,6 +298,46 @@ def validate_admission(source):
             if "ASK" not in outcomes:
                 issues.append(f"{where} carries an ask, but ASK is not in outcomes")
     return issues
+
+
+COMPILED_FORMAT = "admission-pack/v0"
+
+
+def compile_pack(source):
+    """A validated admission pack source -> pack-definition.json, the pinned
+    artifact: its pack_id and the SHA-256 of these bytes are what a decision
+    cites. The evaluator (capsule-engine#265, Go and Rust) reads only these
+    bytes, never the YAML, so PyYAML here is the one YAML reader there is.
+    Optional fields are written out (params {}, every trust_roots list), so
+    the evaluator has no default to apply."""
+    roots = source.get("trust_roots") or {}
+    doc = {
+        "format": COMPILED_FORMAT,
+        "pack_id": source["pack_id"],
+        "pack_version": source["pack_version"],
+        "outcomes": list(source["outcomes"]),
+        "missing": source["missing"],
+        "accept": {cur: {"band": u["band"], "scale": u["scale"]} for cur, u in source["accept"].items()},
+        "tiers": [{"id": t["id"], "max_decade": dict(t["max_decade"])} for t in source["tiers"]],
+        "budget": {"max_asks": source["budget"]["max_asks"], "deadline_s": source["budget"]["deadline_s"]},
+        "trust_roots": {k: list(roots.get(k, [])) for k in TRUST_ROOT_KEYS},
+        "rows": [],
+    }
+    if "source" in source:
+        doc["source"] = source["source"]
+    for r in source["rows"]:
+        row = {"id": r["id"], "statement": r["statement"], "source": r["source"], "check": r["check"],
+               "params": dict(r.get("params") or {}), "from": r["from"],
+               "on_fail": dict(r["on_fail"]) if isinstance(r["on_fail"], dict) else r["on_fail"]}
+        if r.get("ask") is not None:
+            row["ask"] = {"derivation": r["ask"]["derivation"]}
+        doc["rows"].append(row)
+    return doc
+
+
+def compiled_bytes(source):
+    """pack-definition.json's bytes: RFC 8785 JCS, no trailing newline."""
+    return rfc8785.dumps(compile_pack(source))
 
 
 def _evidence_rule(r):

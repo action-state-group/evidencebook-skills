@@ -4,6 +4,7 @@ holds, and the Evidence Contract an admission pack compiles to. The fixtures'
 expected decisions are checked against the evaluator in capsule-engine#265's
 CI; here they are checked for shape and against the pack.
 """
+import hashlib
 import json
 import pathlib
 import subprocess
@@ -13,6 +14,7 @@ import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
+import rfc8785  # noqa: E402
 import yaml  # noqa: E402
 
 import admission_pack  # noqa: E402
@@ -83,16 +85,33 @@ class Baseline(unittest.TestCase):
         if jsonschema is not None:
             jsonschema.validate(contract, json.loads(SCHEMA.read_text()))
 
-    def test_compile_writes_the_contract_alone(self):
+    def test_compile_writes_the_contract_and_the_pinned_artifact(self):
         with tempfile.TemporaryDirectory(dir=REPO_ROOT / "packs") as tmp:
             out = pathlib.Path(tmp).relative_to(REPO_ROOT)
             run = subprocess.run([sys.executable, "scripts/pack_compile.py", "compile",
                                   str(BASELINE / "pack-source.yaml"), "--out", str(out)],
                                  cwd=REPO_ROOT, capture_output=True, text=True)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
-            self.assertEqual(json.loads(run.stdout)["scope"], "admission")
-            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp).iterdir()), ["contract.json"])
+            answer = json.loads(run.stdout)
+            self.assertEqual(answer["scope"], "admission")
+            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp).iterdir()), ["contract.json", "pack-definition.json"])
+            pinned = (pathlib.Path(tmp) / "pack-definition.json").read_bytes()
+            self.assertEqual(hashlib.sha256(pinned).hexdigest(), answer["definition_digest"])
 
+    def test_the_committed_artifact_is_the_compiled_source(self):
+        # packs/admission-baseline/compiled/ is what a consumer pins and copies;
+        # it must be exactly what the source compiles to.
+        source = load(baseline_text())
+        self.assertEqual((BASELINE / "compiled/pack-definition.json").read_bytes(), admission_pack.compiled_bytes(source))
+        self.assertEqual((BASELINE / "compiled/contract.json").read_bytes(), ec.to_bytes(admission_pack.from_admission(source)))
+
+    def test_the_artifact_is_jcs_and_complete(self):
+        pinned = admission_pack.compiled_bytes(load(baseline_text()))
+        doc = json.loads(pinned)
+        self.assertEqual(rfc8785.dumps(doc), pinned)
+        self.assertEqual(doc["format"], "admission-pack/v0")
+        self.assertEqual(set(doc["trust_roots"]), {"controllers", "witnesses", "judges"})
+        self.assertTrue(all("params" in r for r in doc["rows"]))
 
 class Fixtures(unittest.TestCase):
     def setUp(self):
@@ -219,6 +238,12 @@ class Refusals(unittest.TestCase):
         self.assertTrue(any("id must be lowercase" in i for i in issues), issues)
         self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
         self.assertIn("source must be provenance text (a string)", issues)
+
+    def test_a_scale_out_of_range(self):
+        self.assertRefused("scale: -3}", "scale: -300}", "scale -300 must be from -30 to 30")
+
+    def test_a_ceiling_out_of_range(self):
+        self.assertRefused("max_decade: {USD: 2}", "max_decade: {USD: 99}", "max_decade.USD 99 must be from -60 to 60")
 
     def test_a_unit_no_tier_names(self):
         self.assertRefused("  USD: {band: USD, scale: 0}\n", "  USD: {band: USD, scale: 0}\n  EUR: {band: EUR, scale: 0}\n",

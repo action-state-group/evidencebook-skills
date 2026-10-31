@@ -1,0 +1,177 @@
+{
+  "id": "asg/admission_baseline/1.0.0",
+  "version": "1.0.0",
+  "requirements": [
+    {
+      "id": "attestation",
+      "profile": "outcome",
+      "statement": "The platform does not report the counterparty's release attestation as invalid.",
+      "tier": "must_have",
+      "evidence_rule": "admission check platform.attestation_not_invalid, from tier T0; a failure gives NO",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "owner-signed",
+      "profile": "outcome",
+      "statement": "The platform reports the counterparty's release as owner-signed.",
+      "tier": "must_have",
+      "evidence_rule": "admission check platform.owner_signed, from tier T0; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "deny-list",
+      "profile": "outcome",
+      "statement": "The counterparty is not on the operator's deny list.",
+      "tier": "must_have",
+      "evidence_rule": "admission check operator.not_deny_listed, from tier T0; a failure gives NO",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "allow-list",
+      "profile": "outcome",
+      "statement": "When the operator keeps an allow list, the counterparty is on it.",
+      "tier": "must_have",
+      "evidence_rule": "admission check operator.allow_listed, from tier T0; a failure gives NO",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "adverse-adjudication",
+      "profile": "outcome",
+      "statement": "No adjudication this party holds went against the counterparty in the last 180 days.",
+      "tier": "must_have",
+      "evidence_rule": "admission check own.no_adverse_adjudication (window_days 180), from tier T0; a failure gives NO",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "own-settled",
+      "profile": "outcome",
+      "statement": "This party's own book holds a settled deal with the counterparty.",
+      "tier": "must_have",
+      "evidence_rule": "admission check own.settled (min 1), from tier T0; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "own-corroboration",
+      "profile": "outcome",
+      "statement": "This party holds the counterparty's half of an exchange.",
+      "tier": "must_have",
+      "evidence_rule": "admission check own.held_halves (min 1), from tier T0; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "card-verified",
+      "profile": "outcome",
+      "statement": "The counterparty's card verifies under the key that presents it.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.verified, from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "card-fresh",
+      "profile": "outcome",
+      "statement": "The card's latest checkpoint is at most 7 days old.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.fresh (max_age_s 604800), from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "card-witnessed",
+      "profile": "outcome",
+      "statement": "A witness in this pack's trust roots receipted the card's latest checkpoint.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.witnessed, from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "claims-held",
+      "profile": "outcome",
+      "statement": "The card shows at least 10 claims held, with the claims made as the denominator.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.claims_held (min 10), from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "controller-declared",
+      "profile": "outcome",
+      "statement": "The card's key declares the controller it is bound to.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.controller_declared, from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "no-conflicting-deal",
+      "profile": "outcome",
+      "statement": "No deal with the counterparty is CONFLICTING in this party's own book.",
+      "tier": "must_have",
+      "evidence_rule": "admission check own.no_conflicting, from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "selection",
+      "profile": "outcome",
+      "statement": "A selection the counterparty returned to this party's own ask verifies, inclusion proofs included.",
+      "tier": "must_have",
+      "evidence_rule": "admission check bound.selection_verified, from tier T2; a failure gives LIMIT; asks for selection",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "controller-trusted",
+      "profile": "outcome",
+      "statement": "The controller the card declares is in this pack's trust roots.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.controller_trusted, from tier T2; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "no-unanswered-dispute",
+      "profile": "outcome",
+      "statement": "The selection shows no dispute with anyone left unanswered in the last 90 days.",
+      "tier": "must_have",
+      "evidence_rule": "admission check bound.no_unanswered_dispute (window_days 90), from tier T2; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "independence",
+      "profile": "outcome",
+      "statement": "Vouches from distinct controllers, not the counterparty's own, are counted.",
+      "tier": "must_have",
+      "evidence_rule": "admission check vouch.distinct_controllers (min 3), from tier T2; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "adjacent-domain",
+      "profile": "outcome",
+      "statement": "The disclosed history is from the same kind of work as the proposed deal.",
+      "tier": "must_have",
+      "evidence_rule": "admission check judged, from tier T2; a failure caps the tier at T1",
+      "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
+      "backward_verdict": "MODEL-ASSISTED"
+    },
+    {
+      "id": "stake",
+      "profile": "outcome",
+      "statement": "Collateral posted on this deal covers its amount in the deal's band unit.",
+      "tier": "must_have",
+      "evidence_rule": "admission check stake.covers_deal, from tier T2; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    }
+  ]
+}
