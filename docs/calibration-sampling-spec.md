@@ -5,7 +5,7 @@
 > feed are superseded: `calibration-summary/v1` reports agreement as k of n per judge pin,
 > with the drawn sample and any shortfall, and never a score (see
 > `skills/weekly-blind-expert/SKILL.md`). The sampling design, the blinding rules and the
-> `sample-manifest/v1` / `human-rating/v1` shapes still stand; the weekly skill uses the
+> `sample-manifest/v1` shape still stands, and a human rating is `human-rating/v1` as AAC's schema defines it (`schemas/judge/human-rating-v1.json`; the example record below is the older capsule-chain form, superseded: the weekly run seals `record_version`, `rater_ref`, a `case` citation of the audited report with `citation_purpose: rated_case`, and `label`); the weekly skill uses the
 > deterministic sampling rule defined here.
 
 ## Problem
@@ -74,7 +74,7 @@ isolation.
 
 ## Estimators
 
-Count only **usable** ratings (drop `unsure` and verification-dropped); let `m_p`, `m_f`
+Count only **usable** ratings (drop `not_evaluable`, `out_of_scope` and verification-dropped); let `m_p`, `m_f`
 be usable counts per stratum and use them — never the drawn `n_p`/`n_f` — in every
 estimate:
 
@@ -155,7 +155,7 @@ not caller-set):
     "spec_version": "human-rating/v1",
     "subject": { "case_id": "...", "simulation_id": "..." },
     "rated_quantity": "full_resolution",
-    "verdict": "pass",            // pass | fail | unsure
+    "verdict": "met",             // met | not_met | not_evaluable | out_of_scope (out_of_scope only when the contract allows it)
     "blind": true,
     "rater": { "role": "...", "id": "..." },
     "sampling": {
@@ -171,10 +171,10 @@ not caller-set):
 ```
 
 Notes:
-- The chain `parent_capsule_id` is the audited report; the calibration join is the
+- (Superseded form.) The chain `parent_capsule_id` is the audited report; the calibration join is the
   chain link itself, so the confusion cell is unambiguous even if the judge is re-run.
   `subject` still records the case/trial for cohort checks and must match the report.
-- `unsure` (and verification-dropped) ratings are excluded from **both** numerator and
+- `not_evaluable` and `out_of_scope` (and verification-dropped) ratings are excluded from **both** numerator and
   denominator — they are not in the usable counts `m_p`/`m_f` — and reported as nonresponse.
 
 ## Sampling-and-rating bundle
@@ -185,8 +185,9 @@ judge verdict on `rated_quantity`, draws the reproducible per-stratum sample (ca
 hash ordering + digested manifest above), and for each sampled report resolves and
 verifies the source interaction and assembles the rater packet (interaction + the
 independently-sourced desired-outcome materials, minus every judge-derived field). It
-captures each expert pass/fail and publishes a `human-rating/v1` Capsule chained to the
-audited report. It never judges and never fabricates a rating for an unrated slot. This
+captures each expert rating (`met`, `not_met`, `not_evaluable`, or `out_of_scope` when the
+contract allows it) and publishes a `human-rating/v1` Capsule whose `case` cites the audited
+report (`citation_purpose: rated_case`). It never judges and never fabricates a rating for an unrated slot. This
 is the one calibration-flow skill that resolves source interactions; the calibration
 bundle below stays reports-and-ratings-only.
 
@@ -229,7 +230,7 @@ Steps:
 - sampling design: `N_p`, `N_f`, drawn `n_p`/`n_f`, usable `m_p`/`m_f`, method
   (`stratified_by_verdict`), seed / `sample_manifest_capsule_id` (digested), blinding attested.
 - confusion matrix: counts of (judge, human) ∈ {pass, fail} per stratum;
-  `unsure`/excluded counts reported as nonresponse.
+  `not_evaluable`/`out_of_scope`/excluded counts reported as nonresponse.
 - estimates: `false_pass_rate` `b̂`±CI, `false_fail_rate` `â`±CI, `judge_accuracy` `Â`±CI,
   `corrected_pass_rate` `p̂`±CI, and raw sample `agreement` labelled descriptive-only
   (decimal strings — AAC digests reject floats).

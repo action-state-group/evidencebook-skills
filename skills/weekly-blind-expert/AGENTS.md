@@ -43,9 +43,14 @@ with a deterministic stand-in rating the packets in place of the person.
   **excludes** the report's verdict,
   rationale, axis judgments and stratum label, and withholds any field the contract's
   `disclosure.suppress` list names (with digest, never silently dropped).
-- Present the packet to a human expert; record their pass/fail as `human-rating/v1`
-  (epistemic type `human_report`, `blind: true`), chained to the `evaluation-report/v1`
-  Capsule it audits, via `publish`.
+- Present the packet to a human expert; record their rating (`met`, `not_met`,
+  `not_evaluable`, or `out_of_scope` when the contract allows it) as `human-rating/v1`
+  (epistemic type `human_report`, `blind: true`), whose `case` cites the
+  `evaluation-report/v1` Capsule it audits (`citation_purpose: rated_case`, the report's
+  digest), via `publish`. Each rating carries the rater as an opaque principal reference
+  (`rater_ref` in the ratings file, or `--rater-ref`), never a name; the run refuses a rating
+  with neither. A case counts toward agreement only when the rating and the judge's verdict are both `met` or
+  `not_met`: `not_evaluable` and `out_of_scope`, on either side, are in neither k nor n.
 - `calibration summarize REPORTS_FILE RATINGS_FILE` — reduce the week's ratings against
   the sampled reports they audit into **agreement as k of n per judge pin**, nothing more.
   The verb returns those per-pin totals only. The sealed `calibration-summary/v1` records
@@ -53,7 +58,7 @@ with a deterministic stand-in rating the packets in place of the person.
   built by `scripts/calibration_summary.py`, as `run_weekly.py` step 5 does, and checked
   against the verb's totals before anything is sealed. The drawn sample size and any
   shortfall are in the run's log, the sample manifest and the human-rating records (which cite
-  the manifest), not in the record; the step's skill action ties the summaries to the manifest.
+  the report they rate), not in the record; the step's skill action ties the summaries to the manifest.
   See the flag below — this is a deliberate, narrower output than this repo's own
   pre-existing calibration estimators.
 - `book close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
@@ -65,7 +70,7 @@ with a deterministic stand-in rating the packets in place of the person.
 `calibration-summary/v1` is a `derived_metric` reporting agreement as k of n per clause for
 one judge pin (the record cites the pin by digest). The drawn sample size and any shortfall are
 reported by the run's log, the sample manifest and the human-rating records (which cite the
-manifest), not by this record (the step's skill action ties it to the manifest), and nobody computes an accuracy
+report they rate), not by this record (the step's skill action ties it to the manifest), and nobody computes an accuracy
 score from it. The estimators in `docs/calibration-sampling-spec.md` (`Â`, `p̂`, the
 error rates) are marked superseded there; that document's sampling rule and blinding
 rules still apply.

@@ -77,16 +77,31 @@ class WeekFrame(unittest.TestCase):
 class CheckedRatings(unittest.TestCase):
     SAMPLE = {"a", "b"}
 
+    def test_a_rating_with_no_rater_ref_anywhere_is_refused_before_any_is_sealed(self):
+        ratings = [{"case_id": "a", "rating": "met", "rater_ref": "r:1"}, {"case_id": "b", "rating": "met"}]
+        with self.assertRaisesRegex(ValueError, "no usable rater_ref"):
+            checked_ratings(ratings, self.SAMPLE)
+
+    def test_the_flag_fills_in_for_a_rating_with_none_and_a_rating_own_ref_wins(self):
+        got = checked_ratings([{"case_id": "a", "rating": "met", "rater_ref": "r:own"}, {"case_id": "b", "rating": "met"}],
+                              self.SAMPLE, rater_ref="r:flag")
+        self.assertEqual([r["rater_ref"] for r in got], ["r:own", "r:flag"])
+
+    def test_a_blank_padded_or_non_string_rater_ref_is_refused_not_replaced_by_the_flag(self):
+        for bad in ("", "  ", " r:1 ", 0, None, ["r:1"]):
+            with self.assertRaisesRegex(ValueError, "no usable rater_ref"):
+                checked_ratings([{"case_id": "a", "rating": "met", "rater_ref": bad}], self.SAMPLE, rater_ref="r:flag")
+
     def test_one_rating_per_sampled_case_passes(self):
         ratings = [{"case_id": "a", "rating": "met"}, {"case_id": "b", "rating": "not_met"}]
-        self.assertEqual(checked_ratings(ratings, self.SAMPLE), ratings)
+        self.assertEqual(checked_ratings(ratings, self.SAMPLE, rater_ref="r:1"), [{**r, "rater_ref": "r:1"} for r in ratings])
 
     def test_fewer_ratings_than_drawn_pass_and_leave_a_shortfall(self):
-        self.assertEqual(len(checked_ratings([{"case_id": "a", "rating": "met"}], self.SAMPLE)), 1)
+        self.assertEqual(len(checked_ratings([{"case_id": "a", "rating": "met"}], self.SAMPLE, rater_ref="r:1")), 1)
 
     def test_a_second_rating_for_one_case_is_refused(self):
         with self.assertRaisesRegex(ValueError, "more than one rating"):
-            checked_ratings([{"case_id": "a", "rating": "met"}, {"case_id": "a", "rating": "not_met"}], self.SAMPLE)
+            checked_ratings([{"case_id": "a", "rating": "met"}, {"case_id": "a", "rating": "not_met"}], self.SAMPLE, rater_ref="r:1")
 
     def test_a_rating_outside_the_sample_is_refused(self):
         with self.assertRaisesRegex(ValueError, "outside the sample"):
@@ -106,14 +121,15 @@ class CheckedRatings(unittest.TestCase):
         # against the judge as a disagreement.
         with self.assertRaisesRegex(ValueError, "'b' is not one of met, not_evaluable, not_met$"):
             checked_ratings([{"case_id": "b", "rating": "out_of_scope"}], self.SAMPLE,
-                            allow_out_of_scope=True, never_out_of_scope_cases={"b"})
+                            allow_out_of_scope=True, never_out_of_scope_cases={"b"}, rater_ref="r:1")
         ratings = [{"case_id": "a", "rating": "out_of_scope"}, {"case_id": "b", "rating": "met"}]
         self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True,
-                                         never_out_of_scope_cases={"b"}), ratings)
+                                         never_out_of_scope_cases={"b"}, rater_ref="r:1"),
+                         [{**r, "rater_ref": "r:1"} for r in ratings])
 
     def test_out_of_scope_is_a_rating_when_the_contract_allows_it(self):
         ratings = [{"case_id": "a", "rating": "out_of_scope"}, {"case_id": "b", "rating": "met"}]
-        self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True), ratings)
+        self.assertEqual(checked_ratings(ratings, self.SAMPLE, allow_out_of_scope=True, rater_ref="r:1"), [{**r, "rater_ref": "r:1"} for r in ratings])
         with self.assertRaisesRegex(ValueError, "not one of met, not_evaluable, not_met, out_of_scope"):
             checked_ratings([{"case_id": "a", "rating": "yes"}], self.SAMPLE, allow_out_of_scope=True)
 

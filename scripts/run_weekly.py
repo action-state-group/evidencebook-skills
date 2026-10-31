@@ -20,7 +20,8 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from calibration_summary import calibration_summaries  # noqa: E402
+from calibration_summary import calibration_summaries, disagreement_with_verb  # noqa: E402
+from human_rating import counted_cases, human_rating_record  # noqa: E402
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
 from rollup_day import safe_filename  # noqa: E402
@@ -78,7 +79,7 @@ def week_frame(entries, load, check, week_days):
     return reports, unjudged
 
 
-def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset()):
+def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_out_of_scope_cases=frozenset(), rater_ref=None):
     """The human's ratings, refused unless each names a sampled case exactly
     once: a rating outside the sample, or a second rating for one case, would
     make rated exceed drawn and the shortfall go negative. `out_of_scope` is a
@@ -100,8 +101,12 @@ def checked_ratings(ratings, sampled_case_ids, allow_out_of_scope=False, never_o
                           else set())
         if r.get("rating") not in allowed:
             raise ValueError(f"rating for {case_id!r} is not one of {', '.join(sorted(allowed))}")
+        own = r.get("rater_ref", rater_ref)
+        if not isinstance(own, str) or not own or own != own.strip():
+            raise ValueError(f"rating for {case_id!r} has no usable rater_ref (a non-empty opaque string, no surrounding "
+                             f"spaces): give each rating one, or pass --rater-ref")
         seen.add(case_id)
-    return ratings
+    return [{**r, "rater_ref": r.get("rater_ref", rater_ref)} for r in ratings]
 
 
 def sample_key(seed, capsule_id):
@@ -115,7 +120,9 @@ def main(argv):
     ap.add_argument("--spec", required=True, type=pathlib.Path)
     ap.add_argument("--date", required=True, help="any day in the week, YYYY-MM-DD (UTC; weeks start Monday)")
     ap.add_argument("--out", required=True, type=pathlib.Path)
-    ap.add_argument("--ratings", type=pathlib.Path, help="the human's blind ratings: [{case_id, rating}]")
+    ap.add_argument("--ratings", type=pathlib.Path, help="the human's blind ratings: [{case_id, rating, rater_ref?}]")
+    ap.add_argument("--rater-ref", help="an opaque principal reference for the rater (never a name), for each rating "
+                    "that carries no rater_ref of its own; the run refuses a rating with neither")
     ap.add_argument("--capsulectl", default="capsulectl")
     args = ap.parse_args(argv)
 
@@ -199,42 +206,44 @@ def main(argv):
             print(json.dumps(log, indent=2))
             return 3
 
-        # 4. The human's ratings, one record each, chained to the report audited.
+        # 4. The human's ratings, one record each, citing the report audited.
         try:
             never_oos_clauses = {c["id"] for c in spec.get("clauses", []) if c.get("never_out_of_scope")}
             never_oos_cases = {cid for cid, (_, b) in by_case.items() if b.get("clause_id") in never_oos_clauses}
             ratings = checked_ratings(json.loads(args.ratings.read_text()), set(by_case),
                                       bool((spec.get("switches") or {}).get("out_of_scope_verdict")),
-                                      never_oos_cases)
+                                      never_oos_cases, args.rater_ref)
         except ValueError as e:
             raise EvidenceUnavailable(f"ratings refused: {e}") from e
         rated = []
         for r in ratings:
             rid, body = by_case[r["case_id"]]
-            record = {"record_type": "human-rating/v1", "epistemic_type": "human_report", "blind": True,
-                      "case_id": r["case_id"], "rating": r["rating"], "audits": rid,
-                      "sample_manifest": manifest_id, "period": week_key}
+            record = human_rating_record(r["case_id"], week_key, rid, r["rating"], r["rater_ref"], stamp)
             publish(ctl, profile, seal_request(
-                f"urn:evidencebook-skills:human-rating:{r['case_id']}:{week_key}", operator,
+                record["record_id"], operator,
                 "evidencebook-skills/weekly-blind-expert", stamp, record), work, f"rating-{rid[:16]}")
             rated.append({"case_id": r["case_id"], "rating": r["rating"]})
         log["rated"] = len(rated)
         log["shortfall"] = len(selected) - len(rated)
 
         # 5. Agreement as k of n over the drawn sample; nothing else.
+        # A case counts only when the rating and the judge's verdict are both met
+        # or not_met (human_rating.counted_cases); the verb reads the same pairs,
+        # so its totals and ours are one reading.
+        counts = counted_cases(selected, rated)
         (work / "sampled-reports.json").write_text(json.dumps(
-            [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]} for _, b in selected]))
-        (work / "ratings.json").write_text(json.dumps(rated))
-        summary = run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
+            [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]}
+             for _, b in selected if b["case_id"] in counts]))
+        (work / "ratings.json").write_text(json.dumps([r for r in rated if r["case_id"] in counts]))
+        # With no countable case there is nothing to summarize: the records read 0 of 0.
+        summary = (run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
+                   if counts else {"pins": []})
         records = calibration_summaries(selected, rated, spec["contract"], week_key, stamp)
         # The per-clause tallies must add up to the verb's per-pin totals: one
         # reading of agreement, not two.
-        totals = {p["judge_pin_digest"]: (p["agreement_count"], p["rated_count"]) for p in summary["pins"]}
-        for record in records:
-            ours = tuple(sum(c["agreement"][m] for c in record["clauses"]) for m in ("k", "n"))
-            if totals.get(record["judge_pin"]["digest"]) != ours:
-                raise EvidenceUnavailable(f"calibration summary for pin {record['judge_pin']['digest'][:16]} disagrees with "
-                                          f"`calibration summarize`: {ours} against {totals.get(record['judge_pin']['digest'])}")
+        disagreement = disagreement_with_verb(records, summary["pins"])
+        if disagreement:
+            raise EvidenceUnavailable(disagreement)
         log["calibration_summaries"] = []
         for record in records:
             log["calibration_summaries"].append(publish(ctl, profile, seal_request(
