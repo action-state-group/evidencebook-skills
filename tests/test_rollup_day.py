@@ -798,7 +798,7 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
                                "--subject-salt-file", str(salt), "--subject-share-id", "synthetic-share-a")
         self.assertEqual(code, 2)
         self.assertIn("cite no case record", out["evidence_unavailable"])
-        for argv in (["--subject-tier", "operator"],
+        for argv in (["--subject-tier", "operator"], ["--subject-share-id", "synthetic-share-a"],
                      ["--subject-tier", "shared", "--subject-share-id", "synthetic-share-a"],
                      ["--subject-tier", "shared", "--subject-salt-file", str(salt)],
                      ["--subject-tier", "shared", "--subject-salt-file", str(salt), "--subject-share-id", " "],
