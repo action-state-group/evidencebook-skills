@@ -21,6 +21,7 @@ SCHEMA = pathlib.Path(__file__).resolve().parent / "fixtures" / "evidence-result
 PACK = "airline-support-outcomes"
 SALT = b"s" * 32
 CUSTOMER = "synthetic_customer_0001"
+SHARE = "synthetic-share-0001"
 
 
 def call(i, name, **arguments):
@@ -93,8 +94,14 @@ class Fields(unittest.TestCase):
             sh.customer_handle(b"short", scope, CUSTOMER)
 
 
+def shared(conversations, facts=None, share_id=SHARE, **kw):
+    return sh.build_subject_history(PACK, "shared", conversations, facts, SALT, share_id=share_id, **kw)
+
+
 class Member(unittest.TestCase):
     def build(self, tier="operator", **kw):
+        if tier == "shared":
+            kw.setdefault("share_id", SHARE)
         return sh.build_subject_history(PACK, tier, CONVERSATIONS, FACTS, SALT, **kw)["subject_history"]
 
     def test_operator_carries_all_five_for_one_customer_across_four_conversations(self):
@@ -112,17 +119,41 @@ class Member(unittest.TestCase):
         self.assertNotIn("usd_band", convs["t-4"])
         self.assertNotIn(CUSTOMER, json.dumps(sub))
 
-    def test_shared_tier_has_no_handle_scope_handle_or_follow_up(self):
+    def test_shared_tier_carries_all_five_with_the_handle_salted_per_share(self):
         sub = self.build("shared")
-        self.assertNotIn("handle_scope", sub)
-        for entry in sub["conversations"].values():
-            self.assertEqual(set(entry) - {"request_labels", "usd_band", "halves"}, set())
+        self.assertEqual(sub["handle_scope"], {"pack": PACK, "tier": "shared", "salting": "per-share",
+                                               "salt_id": sh.salt_id(sh.share_key(SALT, SHARE))})
+        convs = sub["conversations"]
+        self.assertEqual(len({c["customer_handle"] for c in convs.values()}), 1)
+        self.assertEqual(convs["t-3"]["follow_up_of"], "t-1")
+        operator = self.build()["conversations"]
+        for case, entry in convs.items():
+            self.assertEqual(entry, dict(operator[case], customer_handle=entry["customer_handle"]))
+            self.assertNotEqual(entry["customer_handle"], operator[case]["customer_handle"])
+        raw = json.dumps(sub)
+        for secret in (CUSTOMER, SHARE, SALT.decode(), sh.salt_id(SALT)):
+            self.assertNotIn(secret, raw)
+        self.assertEqual(sub, self.build("shared"))
+
+    def test_two_shares_get_unrelated_handles_and_scopes(self):
+        a, b = self.build("shared"), self.build("shared", share_id="synthetic-share-0002")
+        handles = lambda sub: {c["customer_handle"] for c in sub["conversations"].values()}  # noqa: E731
+        self.assertEqual(handles(a) & handles(b), set())
+        self.assertNotEqual(a["handle_scope"]["salt_id"], b["handle_scope"]["salt_id"])
+        self.assertNotEqual(sh.share_key(SALT, SHARE), sh.share_key(b"t" * 32, SHARE))
+        with self.assertRaises(RollupError):
+            sh.merge_subject_history([{"subject_history": a}, {"subject_history": b}])
 
     def test_refusals(self):
         with self.assertRaises(RollupError):
             sh.build_subject_history(PACK, "operator", CONVERSATIONS, FACTS, None)
         with self.assertRaises(RollupError):
             sh.build_subject_history(PACK, "buyer", CONVERSATIONS, FACTS, SALT)
+        for salt, share_id in ((None, SHARE), (SALT, None), (SALT, ""), (SALT, "  "), (SALT, 7), (b"short", SHARE)):
+            with self.assertRaises(RollupError):
+                sh.build_subject_history(PACK, "shared", CONVERSATIONS, FACTS, salt, share_id=share_id)
+        with self.assertRaises(RollupError):
+            sh.build_subject_history(PACK, "operator", CONVERSATIONS, FACTS, SALT, share_id=SHARE)
         bad = copy.deepcopy(FACTS)
         bad["t-3"]["follow_up_of"] = "t-9"
         with self.assertRaises(RollupError):
@@ -132,9 +163,9 @@ class Member(unittest.TestCase):
             sh.build_subject_history(PACK, "operator", CONVERSATIONS, bad, SALT)
         for halves in ({"present": 5, "of": 4}, {"present": 0, "of": 0}, {"present": 1}, {"present": True, "of": 4}):
             with self.assertRaises(RollupError):
-                sh.build_subject_history(PACK, "shared", CONVERSATIONS, {"t-1": {"halves": halves}})
+                shared(CONVERSATIONS, {"t-1": {"halves": halves}})
         with self.assertRaises(RollupError):
-            sh.build_subject_history(PACK, "shared", CONVERSATIONS, {"nope": {}})
+            shared(CONVERSATIONS, {"nope": {}})
         for facts in ({"t-3": {"follow_up_of": ["t-1"]}}, ["t-1"], {"t-1": "x"}):
             with self.assertRaises(RollupError):
                 sh.build_subject_history(PACK, "operator", CONVERSATIONS, facts, SALT)
@@ -176,15 +207,18 @@ class OnTheResult(unittest.TestCase):
         self.assertEqual(convs["t-3"]["follow_up_of"], "t-1")
 
     def test_merge_needs_the_member_on_every_day_and_ignores_other_x_members(self):
-        d1 = self.day(["t-1"], sh.build_subject_history(PACK, "shared", {"t-1": CONVERSATIONS["t-1"]}))
-        d2 = self.day(["t-2"], sh.build_subject_history(PACK, "shared", {"t-2": CONVERSATIONS["t-2"]}))
+        d1 = self.day(["t-1"], shared({"t-1": CONVERSATIONS["t-1"]}))
+        d2 = self.day(["t-2"], shared({"t-2": CONVERSATIONS["t-2"]}))
         del d2[sh.extension_name(PACK)]
         d2["x-other"] = {"anything": 1}
         with self.assertRaises(RollupError):
             merge_result_v0_documents([d1, d2], "t", "2026-10-31T00:00:00Z")
-        d2[sh.extension_name(PACK)] = sh.build_subject_history(PACK, "shared", {"t-2": CONVERSATIONS["t-2"]})
+        d2[sh.extension_name(PACK)] = shared({"t-2": CONVERSATIONS["t-2"]})
         merged = merge_result_v0_documents([d1, d2], "t", "2026-10-31T00:00:00Z")
         self.assertNotIn("x-other", merged)
+        sub = merged[sh.extension_name(PACK)]["subject_history"]
+        self.assertEqual(sub["handle_scope"]["salting"], "per-share")
+        self.assertEqual(len({c["customer_handle"] for c in sub["conversations"].values()}), 1)
 
     def test_merge_refuses_days_sealed_under_different_salts(self):
         a = sh.build_subject_history(PACK, "operator", {"t-1": CONVERSATIONS["t-1"]}, None, SALT)
@@ -194,7 +228,7 @@ class OnTheResult(unittest.TestCase):
 
     def test_merge_refuses_mixed_scopes_and_dangling_follow_ups(self):
         a = sh.build_subject_history(PACK, "operator", {"t-1": CONVERSATIONS["t-1"]}, None, SALT)
-        b = sh.build_subject_history(PACK, "shared", {"t-2": CONVERSATIONS["t-2"]})
+        b = shared({"t-2": CONVERSATIONS["t-2"]})
         with self.assertRaises(RollupError):
             sh.merge_subject_history([a, b])
         dangling = sh.build_subject_history(PACK, "operator", {"t-3": CONVERSATIONS["t-3"]}, {"t-3": {"follow_up_of": "t-1"}},
@@ -213,7 +247,8 @@ def fixture_document(tier):
     rollups = [(c, {k: "met" for k in crit}, {k: f"{i:02x}" * 32 for k in crit}, {k: "judged" for k in crit})
                for i, c in enumerate(sorted(CONVERSATIONS), 1)]
     doc = build_result_v0_for_day("2026-10-31", rollups, "2026-10-31T00:00:00Z", crit, f"{PACK}@1.5.0")
-    doc[sh.extension_name(PACK)] = sh.build_subject_history(PACK, tier, CONVERSATIONS, FACTS, SALT)
+    doc[sh.extension_name(PACK)] = sh.build_subject_history(PACK, tier, CONVERSATIONS, FACTS, SALT,
+                                                            share_id=SHARE if tier == "shared" else None)
     return doc
 
 
@@ -224,8 +259,8 @@ class Fixtures(unittest.TestCase):
             raw = (FIXTURE_DIR / f"result-v0-{tier}.json").read_text()
             self.assertEqual(json.loads(raw), fixture_document(tier))
             self.assertEqual([e.message for e in validator.iter_errors(json.loads(raw))], [])
-            self.assertNotIn(CUSTOMER, raw)
-            self.assertNotIn(SALT.decode(), raw)
+            for secret in (CUSTOMER, SALT.decode(), SHARE):
+                self.assertNotIn(secret, raw)
 
 
 if __name__ == "__main__":

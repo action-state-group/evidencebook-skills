@@ -440,17 +440,23 @@ def main(argv):
                           "under any other pin are excluded and counted in the summary's reports_excluded.")
     ap.add_argument("--subject-tier", choices=subject_history.TIERS, default=None,
                     help="add the pack's subject-history member (scripts/subject_history.py) to every day Result: "
-                         "request label, USD band and halves per conversation; at 'operator' also a salted customer "
-                         "handle and follow_up_of. Off by default.")
+                         "request labels, USD band, halves, a salted customer handle and follow_up_of per conversation; "
+                         "'operator' salts the handle per pack, 'shared' per share (--subject-share-id). Off by default.")
     ap.add_argument("--subject-salt-file", type=pathlib.Path, default=None,
                     help="the producer-held handle salt (at least 16 bytes; read raw, never written out); "
-                         "required with --subject-tier operator")
+                         "required with --subject-tier")
+    ap.add_argument("--subject-share-id", default=None,
+                    help="with --subject-tier shared, required: an id picked fresh for each share (one receiver, one "
+                         "report) that the handles are salted under; never written out. Reusing it across shares "
+                         "makes their handles match.")
     ap.add_argument("--subject-facts", type=pathlib.Path, default=None,
                     help="JSON {case_id: {follow_up_of: case_id, halves: {present, of}}}: the references[] cite and "
                          "bilateral-record counts the caller read; validated, never inferred")
     args = ap.parse_args(argv)
-    if args.subject_tier == "operator" and not args.subject_salt_file:
-        ap.error("--subject-tier operator needs --subject-salt-file")
+    if args.subject_tier and not args.subject_salt_file:
+        ap.error(f"--subject-tier {args.subject_tier} needs --subject-salt-file")
+    if (args.subject_tier == "shared") != (args.subject_share_id is not None):
+        ap.error("--subject-share-id goes with --subject-tier shared, and only with it")
     # An explicit blank id (an unset shell variable, say) is a caller error,
     # never a silent fall back to the spec's model id or to no pin at all.
     if args.judge_model_id is not None and not args.judge_model_id.strip():
@@ -512,8 +518,10 @@ def main(argv):
     try:
         subject_facts = json.loads(args.subject_facts.read_text()) if args.subject_facts else None
         subject_salt = args.subject_salt_file.read_bytes() if args.subject_salt_file else None
-        if args.subject_tier == "operator":
+        if args.subject_tier:
             subject_history.salt_id(subject_salt)
+        if args.subject_tier == "shared":
+            subject_history.share_key(subject_salt, args.subject_share_id)
     except (OSError, ValueError, RollupError) as e:
         ap.error(f"--subject-*: {e}")
     day_entries = []
@@ -528,7 +536,7 @@ def main(argv):
                     conversations = {cid: case_messages(args.capsulectl, args.profile, by_case[cid]) for cid in day_cases}
                     day_doc[subject_history.extension_name(contract_ref.rpartition("@")[0])] = subject_history.build_subject_history(
                         contract_ref.rpartition("@")[0], args.subject_tier, conversations,
-                        subject_facts, subject_salt, known_cases=set(by_case))
+                        subject_facts, subject_salt, known_cases=set(by_case), share_id=args.subject_share_id)
                 except RollupError as e:
                     print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
                     return 2

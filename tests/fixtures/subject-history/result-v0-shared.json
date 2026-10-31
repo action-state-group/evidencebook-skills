@@ -140,7 +140,8 @@
           "halves": {
             "present": 4,
             "of": 4
-          }
+          },
+          "customer_handle": "cffedf88cf62522eb0ea3dfd4db22375af1cf387737c92ca0714ecc83efe283d"
         },
         "t-2": {
           "request_labels": [
@@ -150,7 +151,8 @@
           "halves": {
             "present": 4,
             "of": 4
-          }
+          },
+          "customer_handle": "cffedf88cf62522eb0ea3dfd4db22375af1cf387737c92ca0714ecc83efe283d"
         },
         "t-3": {
           "request_labels": [
@@ -161,7 +163,9 @@
           "halves": {
             "present": 4,
             "of": 4
-          }
+          },
+          "customer_handle": "cffedf88cf62522eb0ea3dfd4db22375af1cf387737c92ca0714ecc83efe283d",
+          "follow_up_of": "t-1"
         },
         "t-4": {
           "request_labels": [
@@ -170,8 +174,15 @@
           "halves": {
             "present": 4,
             "of": 4
-          }
+          },
+          "customer_handle": "cffedf88cf62522eb0ea3dfd4db22375af1cf387737c92ca0714ecc83efe283d"
         }
+      },
+      "handle_scope": {
+        "pack": "airline-support-outcomes",
+        "tier": "shared",
+        "salting": "per-share",
+        "salt_id": "8602ee556cf7e75c"
       }
     }
   }

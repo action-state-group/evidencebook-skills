@@ -772,13 +772,41 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         self.assertIn("customer_handle", entry)
         self.assertNotIn("synthetic_9", json.dumps(doc))
 
+    def test_shared_subject_tier_salts_the_handle_per_share(self):
+        calls = [{"role": "assistant", "tool_calls": [{"id": "1", "name": "get_user_details",
+                                                       "arguments": {"user_id": "synthetic_9"}}]}]
+        self._with_case_record(calls)
+        salt = self.tmp / "salt"
+        salt.write_bytes(b"s" * 32)
+        members = []
+        for share in ("synthetic-share-a", "synthetic-share-b"):
+            code, _ = self._main("--judge-model-id", self.SEALED_UNDER, "--subject-tier", "shared",
+                                 "--subject-salt-file", str(salt), "--subject-share-id", share)
+            self.assertEqual(code, 0)
+            raw = next((self.tmp / "out").glob("result-v0-*.json")).read_text()
+            for secret in ("synthetic_9", share, "s" * 32):
+                self.assertNotIn(secret, raw)
+            members.append(json.loads(raw)["x-airline-support-outcomes"]["subject_history"])
+        self.assertEqual([m["handle_scope"]["salting"] for m in members], ["per-share"] * 2)
+        a, b = (m["conversations"]["case-a"]["customer_handle"] for m in members)
+        self.assertNotEqual(a, b)
+
     def test_subject_tier_refuses_a_case_with_no_readable_record_and_needs_a_salt(self):
-        code, out = self._main("--judge-model-id", self.SEALED_UNDER, "--subject-tier", "shared")
+        salt = self.tmp / "salt"
+        salt.write_bytes(b"s" * 32)
+        code, out = self._main("--judge-model-id", self.SEALED_UNDER, "--subject-tier", "shared",
+                               "--subject-salt-file", str(salt), "--subject-share-id", "synthetic-share-a")
         self.assertEqual(code, 2)
         self.assertIn("cite no case record", out["evidence_unavailable"])
-        with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(io.StringIO()):
-            self._main("--subject-tier", "operator")
-        self.assertEqual(cm.exception.code, 2)
+        for argv in (["--subject-tier", "operator"], ["--subject-share-id", "synthetic-share-a"],
+                     ["--subject-tier", "shared", "--subject-share-id", "synthetic-share-a"],
+                     ["--subject-tier", "shared", "--subject-salt-file", str(salt)],
+                     ["--subject-tier", "shared", "--subject-salt-file", str(salt), "--subject-share-id", " "],
+                     ["--subject-tier", "operator", "--subject-salt-file", str(salt), "--subject-share-id", "x"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit) as cm, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self._main(*argv)
+            self.assertEqual(cm.exception.code, 2)
 
     def test_an_empty_judge_model_id_is_refused_not_read_as_no_pin(self):
         # argparse accepts --judge-model-id ''; it used to roll up every judged
