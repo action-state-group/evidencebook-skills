@@ -185,8 +185,9 @@ judge verdict on `rated_quantity`, draws the reproducible per-stratum sample (ca
 hash ordering + digested manifest above), and for each sampled report resolves and
 verifies the source interaction and assembles the rater packet (interaction + the
 independently-sourced desired-outcome materials, minus every judge-derived field). It
-captures each expert pass/fail and publishes a `human-rating/v1` Capsule chained to the
-audited report. It never judges and never fabricates a rating for an unrated slot. This
+captures each expert rating (`met`, `not_met`, `not_evaluable`, or `out_of_scope` when the
+contract allows it) and publishes a `human-rating/v1` Capsule whose `case` cites the audited
+report (`citation_purpose: rated_case`). It never judges and never fabricates a rating for an unrated slot. This
 is the one calibration-flow skill that resolves source interactions; the calibration
 bundle below stays reports-and-ratings-only.
 
