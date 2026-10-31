@@ -45,17 +45,25 @@ with a deterministic stand-in rating the packets in place of the person.
   (epistemic type `human_report`, `blind: true`), chained to the `evaluation-report/v1`
   Capsule it audits, via `publish`.
 - `calibration summarize REPORTS_FILE RATINGS_FILE` — reduce the week's ratings against
-  the sampled reports they audit into one `calibration-summary/v1`: **agreement as k of
-  n, and nothing else**, with the drawn sample size and any shortfall beside it. See the flag below — this is a deliberate, narrower
-  output than this repo's own pre-existing calibration estimators.
+  the sampled reports they audit into **agreement as k of n per judge pin**, nothing more.
+  The verb returns those per-pin totals only. The sealed `calibration-summary/v1` records
+  (one per judge pin, k of n **per clause**, drift 0 of 0 until a drift check is run) are
+  built by `scripts/calibration_summary.py`, as `run_weekly.py` step 5 does, and checked
+  against the verb's totals before anything is sealed. The drawn sample size and any
+  shortfall are in the run's log, the sample manifest and the human-rating records (which cite
+  the manifest), not in the record; the step's skill action ties the summaries to the manifest.
+  See the flag below — this is a deliberate, narrower output than this repo's own
+  pre-existing calibration estimators.
 - `book close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
   — seal the week's Close, with the same counterparty and refusal rules as the daily
   skill: unilateral when no peer bundle is held.
 
 ## `calibration-summary/v1` is k-of-n only
 
-`calibration-summary/v1` is a `derived_metric` reporting agreement as k of n per judge
-pin, beside the drawn sample size and any shortfall, and nobody computes an accuracy
+`calibration-summary/v1` is a `derived_metric` reporting agreement as k of n per clause for
+one judge pin (the record cites the pin by digest). The drawn sample size and any shortfall are
+reported by the run's log, the sample manifest and the human-rating records (which cite the
+manifest), not by this record (the step's skill action ties it to the manifest), and nobody computes an accuracy
 score from it. The estimators in `docs/calibration-sampling-spec.md` (`Â`, `p̂`, the
 error rates) are marked superseded there; that document's sampling rule and blinding
 rules still apply.
@@ -63,8 +71,9 @@ rules still apply.
 ## Every action seals a record
 
 `scripts/run_weekly.py` seals one `skill-action/v1` capsule each for the week's frame
-read and the blind packets handed to the reviewer (their digest, never their content).
-The manifest, each rating, the calibration summary and the Close are their own
+read, the blind packets handed to the reviewer (their digest, never their content) and the
+calibration summaries (tied to the sample manifest they summarize).
+The manifest, each rating, one calibration summary per judge pin and the Close are their own
 capsules. Any action run by hand seals one capsule too.
 Seal it with `scripts/skill_action.py`. That is one `skill-action/v1` capsule with
 digests only (inputs, stdout, argv), never contents, paths, profile or environment.
@@ -87,8 +96,9 @@ summary, the week's Close) must produce a record. A seal failure stops the run b
 the next consequential step and reports `evidence unavailable`; it never infers that a
 rating was given, or that the week closed, from the absence of its record. If fewer
 ratings come back than were drawn (a rater unavailable, a case dropped on
-verification), the summary reports the shortfall against the drawn `n`, not a silently
-smaller stated sample.
+verification), the run reports the shortfall against the drawn sample, not a silently
+smaller stated sample; a clause's `n` in the summary counts rated cases only. A week with no
+sampled reports seals no summary (the schema needs a judge pin and a clause).
 
 ## What this skill never does
 

@@ -20,6 +20,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from calibration_summary import calibration_summaries  # noqa: E402
 from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
                               run, seal_request, verify)
 from rollup_day import safe_filename  # noqa: E402
@@ -203,13 +204,23 @@ def main(argv):
             [{"case_id": b["case_id"], "judge_pin_digest": b["judge_pin_digest"], "verdict": b["verdict"]} for _, b in selected]))
         (work / "ratings.json").write_text(json.dumps(rated))
         summary = run(ctl, "calibration", "summarize", str(work / "sampled-reports.json"), str(work / "ratings.json"))
-        calibration = {"record_type": "calibration-summary/v1", "epistemic_type": "derived_metric",
-                       "contract": spec["contract"], "period": week_key, "sample_manifest": manifest_id,
-                       "drawn": len(selected), "rated": len(rated), "shortfall": len(selected) - len(rated),
-                       "pins": summary["pins"]}
-        log["calibration_summary"] = publish(ctl, profile, seal_request(
-            f"urn:evidencebook-skills:calibration-summary:{spec['contract']}:{week_key}", operator,
-            "evidencebook-skills/weekly-blind-expert", stamp, calibration), work, "calibration-summary")
+        records = calibration_summaries(selected, rated, spec["contract"], week_key, stamp)
+        # The per-clause tallies must add up to the verb's per-pin totals: one
+        # reading of agreement, not two.
+        totals = {p["judge_pin_digest"]: (p["agreement_count"], p["rated_count"]) for p in summary["pins"]}
+        for record in records:
+            ours = tuple(sum(c["agreement"][m] for c in record["clauses"]) for m in ("k", "n"))
+            if totals.get(record["judge_pin"]["digest"]) != ours:
+                raise EvidenceUnavailable(f"calibration summary for pin {record['judge_pin']['digest'][:16]} disagrees with "
+                                          f"`calibration summarize`: {ours} against {totals.get(record['judge_pin']['digest'])}")
+        log["calibration_summaries"] = []
+        for record in records:
+            log["calibration_summaries"].append(publish(ctl, profile, seal_request(
+                record["record_id"], operator, "evidencebook-skills/weekly-blind-expert", stamp, record),
+                work, f"calibration-summary-{record['judge_pin']['digest'][:16]}"))
+        # The summaries cite only their pin; this action ties them to the
+        # sample they summarize (the manifest), as the blind-packets action does.
+        action("calibration-summary", inputs=[("sample_manifest", manifest_id)], output_digest=json_digest(log["calibration_summaries"]))
         log["agreement"] = [{"judge_pin_digest": p["judge_pin_digest"], "k": p["agreement_count"], "n": p["rated_count"]}
                             for p in summary["pins"]]
 

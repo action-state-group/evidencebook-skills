@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentactioncapsule.org/schemas/judge/calibration-summary-v1.json",
+  "title": "Calibration Summary v1",
+  "description": "Companion schema for spec/judge-record-family-v1.md section 8. The root schema validates a Calibration Summary record: per-clause k-of-n tallies for a judge pin's agreement and drift history. Never a rate -- no field in this schema is a computed ratio or percentage; a reader who wants a rate divides k by n at read time, mirroring capsule-judge's own JudgeCalibrationStats discipline (rates are None, not 0.0, when unmeasured -- a stored rate would silently assert a measurement that never happened). epistemic_type is fixed to derived_metric -- a value computed or aggregated from other records.",
+  "$ref": "#/$defs/CalibrationSummary",
+  "$defs": {
+    "HexDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "DigestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest_alg", "digest"],
+      "properties": {
+        "digest_alg": { "const": "SHA-256" },
+        "digest": { "$ref": "#/$defs/HexDigest" }
+      }
+    },
+    "Citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "digest_alg", "digest", "citation_purpose"],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "digest_alg": { "const": "SHA-256" },
+        "digest": { "$ref": "#/$defs/HexDigest" },
+        "citation_purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "JudgePinCitation": {
+      "allOf": [
+        { "$ref": "#/$defs/Citation" },
+        { "properties": { "citation_purpose": { "const": "calibrates" } } }
+      ]
+    },
+    "KOfN": {
+      "description": "A count pair, never a ratio. k MUST NOT exceed n; this is a cross-field constraint plain JSON Schema cannot express (the same class of gap evidence-result-v0.json section 4 documents for claim id uniqueness) -- a conforming verifier MUST check it in addition to schema validation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["k", "n"],
+      "properties": {
+        "k": { "type": "integer", "minimum": 0 },
+        "n": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ClauseTally": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clause_ref", "agreement", "drift"],
+      "properties": {
+        "clause_ref": { "type": "string", "minLength": 1 },
+        "agreement": { "$ref": "#/$defs/KOfN" },
+        "drift": { "$ref": "#/$defs/KOfN" }
+      }
+    },
+    "CalibrationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_version", "record_id", "epistemic_type", "computed_at",
+        "judge_pin", "clauses"
+      ],
+      "properties": {
+        "record_version": { "const": "calibration-summary/v1" },
+        "record_id": { "type": "string", "minLength": 1 },
+        "epistemic_type": { "const": "derived_metric" },
+        "computed_at": { "type": "string", "format": "date-time" },
+        "judge_pin": { "$ref": "#/$defs/JudgePinCitation" },
+        "clauses": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ClauseTally" }
+        }
+      }
+    }
+  }
+}
