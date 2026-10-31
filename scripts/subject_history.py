@@ -6,7 +6,7 @@ as a pack-namespaced document-level `x-` member of a day's Result v0
       "subject_history": {
         "handle_scope": {"pack": ..., "tier": "operator", "salting": "per-pack"},   # operator tier only
         "conversations": {
-          "<case_id>": {"request_label": ..., "usd_band": "e+1",
+          "<case_id>": {"request_labels": [...], "usd_band": "e+1",
                         "halves": {"present": 4, "of": 4},
                         "customer_handle": "<hex>", "follow_up_of": "<case_id>"}}}}
 
@@ -19,8 +19,8 @@ both wait for per-share salting. The handle is HMAC-SHA256 under a producer-held
 (scope, customer id); the customer id and the salt are never written. A field the inputs do not
 show is omitted, never guessed: no single customer id in the conversation means no handle.
 
-`request_label` is one of REQUEST_LABELS, chosen from the tool calls the agent made, never
-transcript text. `usd_band` is "e+N", the order of magnitude of the largest USD amount in the agent's own
+`request_labels` are drawn from LABEL_VALUES, in the order of the tool calls the agent made, never
+transcript text. The page shows `usd_band` as a dollar range, not as the stored "e+N". `usd_band` is "e+N", the order of magnitude of the largest USD amount in the agent's own
 successful write actions (a certificate's amount, or a payment in a write result's payment_history). `follow_up_of` (a `references[]` cite of the case record) and
 `halves` (from the bilateral records) are supplied by the caller and validated here.
 """
@@ -33,7 +33,8 @@ from rollup import RollupError
 TIERS = ("operator", "shared")
 MIN_SALT_BYTES = 16
 
-# Closed list, first match wins; "information request" is the fallback.
+# Closed list, one label per tool; "no change made" is the label of a conversation whose calls
+# made none (including a request the agent refused).
 REQUEST_LABELS = (
     ("cancel_reservation", "cancellation"),
     ("update_reservation_flights", "flight change"),
@@ -44,7 +45,7 @@ REQUEST_LABELS = (
     ("send_certificate", "compensation"),
     ("transfer_to_human_agents", "transfer to a person"),
 )
-FALLBACK_LABEL = "information request"
+FALLBACK_LABEL = "no change made"
 LABEL_VALUES = tuple(label for _, label in REQUEST_LABELS) + (FALLBACK_LABEL,)
 _WRITE_TOOLS = ("cancel_reservation", "update_reservation_flights", "update_reservation_cabin", "book_reservation",
                 "update_reservation_baggages", "update_reservation_passengers")
@@ -64,12 +65,16 @@ def _payload(message):
     return out if isinstance(out, dict) else None
 
 
-def request_label(messages):
-    names = {c.get("name") for c in _calls(messages)}
-    for tool, label in REQUEST_LABELS:
-        if tool in names:
-            return label
-    return FALLBACK_LABEL
+def request_labels(messages):
+    """Every distinct label the conversation's calls show, in tool-call order (a customer's
+    repeat asks stay visible); [FALLBACK_LABEL] when none made a change."""
+    by_tool = dict(REQUEST_LABELS)
+    out = []
+    for c in _calls(messages):
+        label = by_tool.get(c.get("name"))
+        if label and label not in out:
+            out.append(label)
+    return out or [FALLBACK_LABEL]
 
 
 def customer_id(messages):
@@ -149,7 +154,7 @@ def build_subject_history(pack_id, tier, conversations, facts=None, salt=None, k
         scope["salt_id"] = salt_id(salt)
     out = {}
     for case_id, messages in sorted(conversations.items()):
-        entry = {"request_label": request_label(messages)}
+        entry = {"request_labels": request_labels(messages)}
         band = usd_band(messages)
         if band:
             entry["usd_band"] = band

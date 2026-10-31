@@ -132,8 +132,8 @@ renderer's, and it is listed in #29's viewer follow-up. The renderers don't yet 
 (issue #29's viewer follow-up), so until they do the page keeps its
 "not evidence" labels. `rollup_day.py --subject-tier operator|shared` adds a pack-namespaced `x-<pack_id>` member to each
 day Result with what a viewer's "Same customer in this report" page draws
-(`scripts/subject_history.py`, evidencebook-skills#89): per conversation a request label (a closed
-list, chosen from the agent's tool calls), a USD band (`e+N`) and the halves present, and at the
+(`scripts/subject_history.py`, evidencebook-skills#89): per conversation request labels (a closed
+list, in the order of the agent's tool calls), a USD band (`e+N`) and the halves present, and at the
 `operator` tier a salted customer handle (HMAC under `--subject-salt-file`, never written) and
 `follow_up_of`. The `shared` tier omits the handle and `follow_up_of` until per-share salting exists.
 `--subject-facts` supplies `follow_up_of` (a `references[]` cite) and halves (from the bilateral

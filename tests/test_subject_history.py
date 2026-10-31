@@ -43,9 +43,11 @@ def convo(user_id, tool, amount, **arguments):
 
 
 CONVERSATIONS = {
-    "t-1": convo(CUSTOMER, "cancel_reservation", 430, reservation_id="R1"),
+    "t-1": convo(CUSTOMER, "cancel_reservation", 430, reservation_id="R1")
+    + [call(3, "send_certificate", user_id=CUSTOMER, amount=40), result(3, "Certificate added")],
     "t-2": convo(CUSTOMER, "send_certificate", 50),
-    "t-3": convo(CUSTOMER, "update_reservation_flights", 296, reservation_id="R2"),
+    "t-3": convo(CUSTOMER, "update_reservation_flights", 296, reservation_id="R2")
+    + [call(4, "transfer_to_human_agents"), result(4, "Transfer successful")],
     "t-4": convo(CUSTOMER, None, None),
 }
 FACTS = {f"t-{i}": {"halves": {"present": 4, "of": 4}} for i in range(1, 5)}
@@ -53,12 +55,14 @@ FACTS["t-3"]["follow_up_of"] = "t-1"
 
 
 class Fields(unittest.TestCase):
-    def test_label_comes_from_the_closed_list(self):
-        self.assertEqual(sh.request_label(convo("u", "update_reservation_cabin", 80)), "cabin change")
-        for case, label in (("t-1", "cancellation"), ("t-2", "compensation"), ("t-3", "flight change"),
-                            ("t-4", "information request")):
-            self.assertEqual(sh.request_label(CONVERSATIONS[case]), label)
-            self.assertIn(label, sh.LABEL_VALUES)
+    def test_labels_come_from_the_closed_list_in_tool_call_order(self):
+        self.assertEqual(sh.request_labels(convo("u", "update_reservation_cabin", 80)), ["cabin change"])
+        for case, labels in (("t-1", ["cancellation", "compensation"]), ("t-2", ["compensation"]),
+                             ("t-3", ["flight change", "transfer to a person"]), ("t-4", ["no change made"])):
+            self.assertEqual(sh.request_labels(CONVERSATIONS[case]), labels)
+            self.assertTrue(set(labels) <= set(sh.LABEL_VALUES))
+        reversed_ = CONVERSATIONS["t-1"][:2] + [call(5, "send_certificate", user_id="u", amount=5)] + CONVERSATIONS["t-1"][2:]
+        self.assertEqual(sh.request_labels(reversed_), ["compensation", "cancellation"])
 
     def test_band_is_the_order_of_magnitude_of_the_largest_amount(self):
         self.assertEqual([sh.usd_band(CONVERSATIONS[c]) for c in ("t-1", "t-2", "t-3", "t-4")],
@@ -104,7 +108,7 @@ class Member(unittest.TestCase):
         self.assertEqual(convs["t-3"]["follow_up_of"], "t-1")
         self.assertEqual(convs["t-1"]["halves"], {"present": 4, "of": 4})
         self.assertEqual(convs["t-2"]["usd_band"], "e+1")
-        self.assertEqual(convs["t-4"]["request_label"], "information request")
+        self.assertEqual(convs["t-4"]["request_labels"], ["no change made"])
         self.assertNotIn("usd_band", convs["t-4"])
         self.assertNotIn(CUSTOMER, json.dumps(sub))
 
@@ -112,7 +116,7 @@ class Member(unittest.TestCase):
         sub = self.build("shared")
         self.assertNotIn("handle_scope", sub)
         for entry in sub["conversations"].values():
-            self.assertEqual(set(entry) - {"request_label", "usd_band", "halves"}, set())
+            self.assertEqual(set(entry) - {"request_labels", "usd_band", "halves"}, set())
 
     def test_refusals(self):
         with self.assertRaises(RollupError):

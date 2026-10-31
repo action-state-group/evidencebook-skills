@@ -132,7 +132,10 @@
     "subject_history": {
       "conversations": {
         "t-1": {
-          "request_label": "cancellation",
+          "request_labels": [
+            "cancellation",
+            "compensation"
+          ],
           "usd_band": "e+2",
           "halves": {
             "present": 4,
@@ -141,7 +144,9 @@
           "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899"
         },
         "t-2": {
-          "request_label": "compensation",
+          "request_labels": [
+            "compensation"
+          ],
           "usd_band": "e+1",
           "halves": {
             "present": 4,
@@ -150,7 +155,10 @@
           "customer_handle": "17959ed5fca283139912dfe967c567f74d45738c872449082c28f03b04c7c899"
         },
         "t-3": {
-          "request_label": "flight change",
+          "request_labels": [
+            "flight change",
+            "transfer to a person"
+          ],
           "usd_band": "e+2",
           "halves": {
             "present": 4,
@@ -160,7 +168,9 @@
           "follow_up_of": "t-1"
         },
         "t-4": {
-          "request_label": "information request",
+          "request_labels": [
+            "no change made"
+          ],
           "halves": {
             "present": 4,
             "of": 4

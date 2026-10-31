@@ -768,7 +768,7 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         member = doc["x-airline-support-outcomes"]["subject_history"]
         self.assertEqual(member["handle_scope"]["pack"], "airline-support-outcomes")
         entry = member["conversations"]["case-a"]
-        self.assertEqual((entry["request_label"], entry["usd_band"]), ("cancellation", "e+2"))
+        self.assertEqual((entry["request_labels"], entry["usd_band"]), (["cancellation"], "e+2"))
         self.assertIn("customer_handle", entry)
         self.assertNotIn("synthetic_9", json.dumps(doc))
 
