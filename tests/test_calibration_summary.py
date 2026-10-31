@@ -83,6 +83,9 @@ class CalibrationSummaryMatchesSchema(unittest.TestCase):
             self.assertFalse([k for c in record["clauses"] for m in ("agreement", "drift") for k in c[m]
                               if k not in ("k", "n")], "k and n only, never a rate")
 
+    def test_an_empty_sample_seals_no_summary(self):
+        self.assertEqual(calibration_summaries([], [], "contract@1.0.0", "2026-W43", NOW), [])
+
     def test_record_ids_are_unique_per_pin_and_week(self):
         a, b = summaries([])
         self.assertNotEqual(a["record_id"], b["record_id"])

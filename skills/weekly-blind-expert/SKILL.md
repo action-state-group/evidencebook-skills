@@ -45,9 +45,14 @@ with a deterministic stand-in rating the packets in place of the person.
   (epistemic type `human_report`, `blind: true`), chained to the `evaluation-report/v1`
   Capsule it audits, via `publish`.
 - `calibration summarize REPORTS_FILE RATINGS_FILE` — reduce the week's ratings against
-  the sampled reports they audit into one `calibration-summary/v1` per judge pin: **agreement as k of
-  n per clause, and nothing else** (drift is 0 of 0 until a drift check is run); the drawn sample size and any shortfall are in the run's log, the sample manifest and the ratings, not in the record. See the flag below — this is a deliberate, narrower
-  output than this repo's own pre-existing calibration estimators.
+  the sampled reports they audit into **agreement as k of n per judge pin**, nothing more.
+  The verb returns those per-pin totals only. The sealed `calibration-summary/v1` records
+  (one per judge pin, k of n **per clause**, drift 0 of 0 until a drift check is run) are
+  built by `scripts/calibration_summary.py`, as `run_weekly.py` step 5 does, and checked
+  against the verb's totals before anything is sealed. The drawn sample size and any
+  shortfall are in the run's log, the sample manifest and the ratings, not in the record.
+  See the flag below — this is a deliberate, narrower output than this repo's own
+  pre-existing calibration estimators.
 - `book close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
   — seal the week's Close, with the same counterparty and refusal rules as the daily
   skill: unilateral when no peer bundle is held.
@@ -65,7 +70,7 @@ rules still apply.
 
 `scripts/run_weekly.py` seals one `skill-action/v1` capsule each for the week's frame
 read and the blind packets handed to the reviewer (their digest, never their content).
-The manifest, each rating, the calibration summary and the Close are their own
+The manifest, each rating, one calibration summary per judge pin and the Close are their own
 capsules. Any action run by hand seals one capsule too.
 Seal it with `scripts/skill_action.py`. That is one `skill-action/v1` capsule with
 digests only (inputs, stdout, argv), never contents, paths, profile or environment.
@@ -89,7 +94,9 @@ the next consequential step and reports `evidence unavailable`; it never infers 
 rating was given, or that the week closed, from the absence of its record. If fewer
 ratings come back than were drawn (a rater unavailable, a case dropped on
 verification), the run reports the shortfall against the drawn sample, not a silently
-smaller stated sample; a clause's `n` in the summary counts rated cases only.
+smaller stated sample; a clause's `n` in the summary counts rated cases only. A week with no
+sampled reports seals no summary (the schema needs a judge pin and a clause): the log
+reads `drawn: 0` and `calibration_summaries: []`.
 
 ## What this skill never does
 
