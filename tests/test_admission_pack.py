@@ -291,7 +291,7 @@ class Refusals(unittest.TestCase):
     def test_ids_with_a_trailing_newline(self):
         self.assertRefused("  - id: attestation\n", "  - id: \"attestation\\n\"\n", "id must be lowercase")
         self.assertRefused("pack_id: asg/admission_baseline/1.0.0", "pack_id: \"asg/admission_baseline/1.0.0\\n\"",
-                           "pack_id")
+                           "must be owner/name/version")
 
     def test_a_rail_pin_with_an_uppercase_digest(self):
         self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: x402, digest: \"" + "A" * 64 + "\"}]",
