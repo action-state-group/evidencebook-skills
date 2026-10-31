@@ -282,6 +282,30 @@ class Refusals(unittest.TestCase):
         self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: x402, digest: abc}]",
                            "trust_roots.rails[0] must be exactly")
 
+    def test_a_rail_digest_with_a_trailing_newline(self):
+        # Python's $ matches before a final newline; Go's RE2 and Rust's
+        # length check do not, so the lint must refuse what they refuse.
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: x402, digest: \"" + "a" * 64 + "\\n\"}]",
+                           "trust_roots.rails[0] must be exactly")
+
+    def test_ids_with_a_trailing_newline(self):
+        self.assertRefused("  - id: attestation\n", "  - id: \"attestation\\n\"\n", "id must be lowercase")
+        self.assertRefused("pack_id: asg/admission_baseline/1.0.0", "pack_id: \"asg/admission_baseline/1.0.0\\n\"",
+                           "pack_id")
+
+    def test_a_rail_pin_with_an_uppercase_digest(self):
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: x402, digest: \"" + "A" * 64 + "\"}]",
+                           "trust_roots.rails[0] must be exactly")
+
+    def test_a_rail_pin_with_no_id(self):
+        self.assertRefused("  judges: [placeholder-judge]", "  rails: [{id: \"\", digest: \"" + "a" * 64 + "\"}]",
+                           "trust_roots.rails[0] must be exactly")
+
+    def test_a_rail_pin_with_another_key(self):
+        self.assertRefused("  judges: [placeholder-judge]",
+                           "  rails: [{id: x402, digest: \"" + "a" * 64 + "\", weight: 2}]",
+                           "trust_roots.rails[0] must be exactly")
+
     def test_a_rail_pinned_twice(self):
         pin = "{id: x402, digest: \"" + "a" * 64 + "\"}"
         self.assertRefused("  judges: [placeholder-judge]", f"  rails: [{pin}, {pin}]", "x402 is listed twice")

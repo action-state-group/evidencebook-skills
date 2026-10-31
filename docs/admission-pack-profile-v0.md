@@ -213,10 +213,13 @@ that rule.
   net-settled (settled − refunded − charged back), and it is banded once,
   after netting. Each band maps through `accept` as an amount does: a decade
   in a currency is that decade plus the currency's `scale` in its band unit.
-  Bands that map to one decade of one unit are added together. A currency
-  outside `accept`, a band in another unit, and a count that does not read are
-  not counted. A count does not read when it is negative, above 2^53 − 1, or
-  has more adverse subjects than subjects.
+  Bands that map to one decade of one unit are added together. The added
+  subjects stop at 2^53 − 1, and the added adverse subjects never exceed the
+  added subjects. A currency outside `accept`, a band in another unit, and a
+  count that does not read are not counted. A count does not read when its
+  subjects or adverse subjects are negative, its subjects are above 2^53 − 1,
+  it has more adverse subjects than subjects, or its decade is outside −1,000
+  to 1,000.
 - **Earned band.** The highest decade, in the deal's band unit, with at least
   `k` subjects, of which at most `max_adverse_permille` per thousand were
   resolved against the counterparty. A lower band never adds up to a higher
@@ -224,9 +227,11 @@ that rule.
 - **Pass** when the deal's decade is at most the earned band plus
   `step_decades`, where 1 is the 10× step-up. It also passes when a stake on a
   pinned rail covers the deal, whatever the card shows.
-- **Fail** when the card's bands were read and neither road holds. **not_read**
-  when no stake covers and the card is not verified or carries no per-band
-  counts. Both ask, if the row carries an `ask`.
+- **Fail** when the card's bands were read and neither road holds. An empty
+  list of bands was read, so it fails. **not_read** when no stake covers and
+  the card is not verified, carries no per-band counts at all (absent, not
+  empty), or the deal's band does not read. Both ask, if the row carries an
+  `ask`.
 - **Effect.** A plain LIMIT row that does not pass lowers the tier admitted to
   the tier below its `from`. A ladder row lowers it only to the highest tier
   its earned limit holds whole: the earned limit holds a tier when every tier

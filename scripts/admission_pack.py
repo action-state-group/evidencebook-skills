@@ -159,7 +159,7 @@ def validate_admission(source):
     for k in sorted(set(source) - ADMISSION_KEYS):
         issues.append(f"{k} is not an admission pack field (known: {sorted(ADMISSION_KEYS)})")
     pack_id, version = source.get("pack_id"), source.get("pack_version")
-    if not isinstance(pack_id, str) or not PACK_ID_RE.match(pack_id):
+    if not isinstance(pack_id, str) or not PACK_ID_RE.fullmatch(pack_id):
         issues.append(f"pack_id {pack_id!r} must be owner/name/version")
     elif not isinstance(version, str) or not pack_id.endswith("/" + version):
         issues.append(f"pack_id {pack_id!r} must end in pack_version {version!r}")
@@ -250,7 +250,7 @@ def validate_admission(source):
     pins = set()
     for i, pin in enumerate(rails):
         if not isinstance(pin, dict) or set(pin) != RAIL_KEYS or not _nonempty(pin.get("id")) \
-                or not isinstance(pin.get("digest"), str) or not DIGEST_RE.match(pin["digest"]):
+                or not isinstance(pin.get("digest"), str) or not DIGEST_RE.fullmatch(pin["digest"]):
             issues.append(f"trust_roots.rails[{i}] must be exactly {{id: <declaration id>, digest: <64 lowercase hex>}}")
         elif (pin["id"], pin["digest"]) in pins:
             issues.append(f"trust_roots.rails[{i}]: {pin['id']} is listed twice")
@@ -270,7 +270,7 @@ def validate_admission(source):
         for k in sorted(set(r) - ROW_KEYS):
             issues.append(f"{where}.{k} is not a row field (known: {sorted(ROW_KEYS)})")
         rid = r.get("id")
-        if not isinstance(rid, str) or not ROW_ID_RE.match(rid):
+        if not isinstance(rid, str) or not ROW_ID_RE.fullmatch(rid):
             issues.append(f"{where}.id must be lowercase letters, digits, - or _")
         elif rid in seen:
             issues.append(f"{where}.id is listed twice")
