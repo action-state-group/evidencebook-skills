@@ -51,7 +51,9 @@ A pack source with `scope: {kind: live}` (absent means `after_the_fact`) is a
 capsule-engine live pack; scripts/live_pack.py validates it, and `compile` writes
 contract.json (the Evidence Contract) and pack-definition.json (the engine's pack
 definition and its definition_digest, also printed by `project`) instead of the
-four documents above.
+four documents above. A pack source with `scope: {kind: admission}` is an
+admission pack (docs/admission-pack-profile-v0.md); scripts/admission_pack.py
+validates it, and `compile` writes contract.json alone.
 
     python3 scripts/pack_compile.py validate packs/airline-support-outcomes/pack-source.yaml
     python3 scripts/pack_compile.py compile packs/airline-support-outcomes/pack-source.yaml \\
@@ -66,6 +68,7 @@ import sys
 
 import yaml
 
+import admission_pack
 import live_pack
 
 TIERS = {"judged", "recomputed"}
@@ -369,6 +372,8 @@ def validate_source(source):
         return scope_issues
     if live_pack.is_live(source):
         return live_pack.validate_live(source)
+    if admission_pack.is_admission(source):
+        return admission_pack.validate_admission(source)
 
     def require_str(key):
         v = source.get(key)
@@ -970,6 +975,14 @@ def write_live_pack(source, out_dir):
     (out_dir / "pack-definition.json").write_bytes(live_pack.projection_bytes(source))
 
 
+def write_admission_pack(source, out_dir):
+    """An admission pack compiles to its Evidence Contract alone: the evaluator
+    (capsule-engine#265) reads the pack source itself, pinned by its digest."""
+    import evidence_contract  # imports this module, so not at the top
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "contract.json").write_bytes(evidence_contract.to_bytes(admission_pack.from_admission(source)))
+
+
 def resolve_out_dir(out_arg):
     """--out must resolve inside this repo's root. A path under `demo/` must be
     exactly `demo/<name>` (two segments): scripts/run_daily.py derives its own repo
@@ -1054,6 +1067,18 @@ def main(argv):
             "scope": "live",
             "out": out_rel,
             "files": [f"{out_rel}/contract.json", f"{out_rel}/pack-definition.json"],
+        }, indent=2))
+        return 0
+
+    if admission_pack.is_admission(source):
+        write_admission_pack(source, out_abs)
+        print(json.dumps({
+            "valid": True,
+            "pack_id": source["pack_id"],
+            "pack_version": source["pack_version"],
+            "scope": "admission",
+            "out": out_rel,
+            "files": [f"{out_rel}/contract.json"],
         }, indent=2))
         return 0
 

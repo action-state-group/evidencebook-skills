@@ -49,6 +49,12 @@ way.
   `compiled.json` alone under `packs/inference-deals/compiled/`, and
   `scripts/report.sh` runs `scripts/evaluators/inference_deals.py` over the
   node's book for a window of whole closed periods. No model runs.
+  `admission-baseline` is an admission pack (`scope.kind: admission`,
+  [`docs/admission-pack-profile-v0.md`](docs/admission-pack-profile-v0.md)):
+  the policy a relying party runs before an act, over what it received about a
+  counterparty, giving GO, ASK, LIMIT or NO. It compiles to its Evidence
+  Contract alone; capsule-engine's evaluator reads the source, and its
+  `fixtures/cases.json` are run there. It is not a report pack.
 - [`contracts/`](contracts/) — published Evidence Contracts, one file per
   version at `contracts/<id>/<version>.json`. A pack source or a report spec
   stays the authoring form; `scripts/evidence_contract.py` compiles it to an

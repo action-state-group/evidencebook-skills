@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""A `scope.kind: admission` pack source: validation and the Evidence Contract
+it compiles to (admission pack profile v0, docs/admission-pack-profile-v0.md).
+
+An admission pack is the relying party's policy over what it has received about
+a counterparty, run before the act (#51; Steven's 2026-10-30 ruling: admission
+uses the Terms Pack build approach and the SDK does the math). It states
+thresholds only. The band, the tier, freshness, counts and denominators are the
+evaluator's, capsule-engine#265 (Go `go/admission`, Rust `rust/capsule-engine`),
+which is the only reader of a pack's rows. This module refuses what that loader
+refuses, so a pack that passes here loads there. Nothing here evaluates a pack.
+
+The admission design rules are held here, not trusted to the author: only
+platform, own_history and operator rows decide NO; a judged row only caps a
+tier; a missing input is never a silent GO; the lowest tier is the floor (no
+LIMIT below it); a pack has no field a weight or score could ride in.
+
+YAML note: PyYAML reads YAML 1.1, where a plain `NO` is the boolean false. An
+outcome is written quoted ("NO"); an unquoted one reaches this module as a
+boolean and is refused with that reason.
+"""
+import re
+
+SCOPE_KIND = "admission"
+
+OUTCOMES = ("GO", "ASK", "LIMIT", "NO")
+MISSING_DEFAULTS = ("LIMIT", "NO")
+ON_FAIL = ("NO", "LIMIT", "record")
+SOURCES = ("platform", "card", "own_history", "operator", "vouch", "stake", "judged")
+MAY_DECIDE_NO = ("platform", "own_history", "operator")
+
+# The evaluator's predicates: the source each reads and the params it takes.
+# The list is closed and versioned with the evaluator (capsule-engine#265).
+PREDICATES = {
+    "platform.attestation_not_invalid": ("platform", ()),
+    "platform.owner_signed": ("platform", ()),
+    "card.verified": ("card", ()),
+    "card.fresh": ("card", ("max_age_s",)),
+    "card.key_age": ("card", ("min_days",)),
+    "own.settled": ("own_history", ("min",)),
+    "own.held_halves": ("own_history", ("min",)),
+    "own.no_conflicting": ("own_history", ()),
+    "own.no_adverse_adjudication": ("own_history", ("window_days",)),
+    "operator.not_deny_listed": ("operator", ()),
+    "operator.allow_listed": ("operator", ()),
+    "vouch.distinct_controllers": ("vouch", ("min",)),
+    "stake.covers_deal": ("stake", ()),
+    "judged": ("judged", ()),
+}
+
+ADMISSION_KEYS = {"pack_id", "pack_version", "scope", "source", "outcomes", "missing", "accept", "tiers",
+                  "budget", "rows"}
+ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask"}
+
+PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
+ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+
+def is_admission(source):
+    scope = source.get("scope") if isinstance(source, dict) else None
+    return isinstance(scope, dict) and scope.get("kind") == SCOPE_KIND
+
+
+def _nonempty(v):
+    return isinstance(v, str) and bool(v.strip())
+
+
+def _is_int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _outcome(where, v, allowed, issues):
+    """An outcome name, refusing the YAML 1.1 boolean an unquoted NO reads as."""
+    if isinstance(v, bool):
+        issues.append(f"{where} is the boolean {v}: write the outcome quoted (\"NO\"), "
+                      "since YAML 1.1 reads a plain NO as false")
+        return None
+    if v not in allowed:
+        issues.append(f"{where} {v!r} must be one of {list(allowed)}")
+        return None
+    return v
+
+
+def validate_admission(source):
+    issues = []
+    for k in sorted(set(source) - ADMISSION_KEYS):
+        issues.append(f"{k} is not an admission pack field (known: {sorted(ADMISSION_KEYS)})")
+    pack_id, version = source.get("pack_id"), source.get("pack_version")
+    if not isinstance(pack_id, str) or not PACK_ID_RE.match(pack_id):
+        issues.append(f"pack_id {pack_id!r} must be owner/name/version")
+    elif not isinstance(version, str) or not pack_id.endswith("/" + version):
+        issues.append(f"pack_id {pack_id!r} must end in pack_version {version!r}")
+
+    outcomes = source.get("outcomes")
+    if not isinstance(outcomes, list) or not outcomes:
+        issues.append("outcomes must list the outcomes this pack yields")
+        outcomes = []
+    outcomes = [_outcome(f"outcomes[{i}]", o, OUTCOMES, issues) for i, o in enumerate(outcomes)]
+    if "GO" not in outcomes:
+        issues.append("outcomes must include GO")
+    missing = source.get("missing")
+    if missing == "GO":
+        issues.append("missing must not be GO: a missing input is never a silent GO")
+    elif _outcome("missing", missing, MISSING_DEFAULTS, issues) and missing not in outcomes:
+        issues.append(f"missing {missing} is not in outcomes")
+
+    accept = source.get("accept")
+    if not isinstance(accept, dict) or not accept:
+        issues.append("accept must map at least one currency to its band unit")
+    else:
+        for cur, unit in accept.items():
+            if not isinstance(unit, dict) or set(unit) != {"band", "scale"} \
+                    or not _nonempty(unit.get("band")) or not _is_int(unit.get("scale")):
+                issues.append(f"accept.{cur} must be exactly {{band: <unit>, scale: <integer>}}")
+
+    tiers = source.get("tiers")
+    tier_ids = []
+    if not isinstance(tiers, list) or not tiers:
+        issues.append("tiers must not be empty")
+        tiers = []
+    for i, t in enumerate(tiers):
+        if not isinstance(t, dict) or set(t) - {"id", "max_decade"} or not _nonempty(t.get("id")):
+            issues.append(f"tiers[{i}] must be {{id, max_decade}}")
+            tier_ids.append(None)
+            continue
+        if t["id"] in tier_ids:
+            issues.append(f"tier {t['id']!r} is listed twice")
+        tier_ids.append(t["id"])
+        decades = t.get("max_decade")
+        if not isinstance(decades, dict) or not all(_is_int(d) for d in decades.values()):
+            issues.append(f"tiers[{i}].max_decade must map band units to integer decades")
+            continue
+        prev = tiers[i - 1].get("max_decade") if i > 0 and isinstance(tiers[i - 1], dict) else None
+        for band, d in decades.items():
+            if isinstance(prev, dict) and _is_int(prev.get(band)) and d <= prev[band]:
+                issues.append(f"tier {t['id']}: max_decade.{band} {d} does not rise above the tier below ({prev[band]})")
+
+    budget = source.get("budget")
+    if not isinstance(budget, dict) or set(budget) != {"max_asks"} or not _is_int(budget["max_asks"]) \
+            or budget["max_asks"] < 0:
+        issues.append("budget must be exactly {max_asks: <non-negative integer>}")
+
+    rows = source.get("rows")
+    if not isinstance(rows, list) or not rows:
+        issues.append("rows must not be empty")
+        rows = []
+    seen = set()
+    for i, r in enumerate(rows):
+        where = f"rows[{i}]" + (f" ({r['id']!r})" if isinstance(r, dict) and _nonempty(r.get("id")) else "")
+        if not isinstance(r, dict):
+            issues.append(f"{where} must be a mapping")
+            continue
+        for k in sorted(set(r) - ROW_KEYS):
+            issues.append(f"{where}.{k} is not a row field (known: {sorted(ROW_KEYS)})")
+        rid = r.get("id")
+        if not isinstance(rid, str) or not ROW_ID_RE.match(rid):
+            issues.append(f"{where}.id must be lowercase letters, digits, - or _")
+        elif rid in seen:
+            issues.append(f"{where}.id is listed twice")
+        seen.add(rid)
+        if not _nonempty(r.get("statement")):
+            issues.append(f"{where}.statement must be a non-empty string")
+        src, check = r.get("source"), r.get("check")
+        if src not in SOURCES:
+            issues.append(f"{where}.source {src!r} must be one of {list(SOURCES)}")
+        params = r.get("params", {})
+        if check not in PREDICATES:
+            issues.append(f"{where}.check {check!r} is not an admission predicate")
+        elif PREDICATES[check][0] != src:
+            issues.append(f"{where}: check {check} reads {PREDICATES[check][0]}, not {src}")
+        elif not isinstance(params, dict) or not all(_is_int(v) for v in params.values()):
+            issues.append(f"{where}.params must map names to integers")
+        else:
+            for k in PREDICATES[check][1]:
+                if k not in params:
+                    issues.append(f"{where}: check {check} needs params.{k}")
+            for k in sorted(set(params) - set(PREDICATES[check][1])):
+                issues.append(f"{where}: check {check} takes no params.{k}")
+        frm = r.get("from")
+        if frm not in tier_ids:
+            issues.append(f"{where}.from {frm!r} is not a tier")
+        on_fail = r.get("on_fail")
+        if src == "judged":
+            # A judged row caps a tier and never decides NO (D-23).
+            if not isinstance(on_fail, dict) or set(on_fail) != {"cap"}:
+                issues.append(f"{where}: a judged row's on_fail must be {{cap: <tier>}}")
+            elif on_fail["cap"] not in tier_ids:
+                issues.append(f"{where}: cap {on_fail['cap']!r} is not a tier")
+        else:
+            on_fail = _outcome(f"{where}.on_fail", on_fail, ON_FAIL, issues)
+            if on_fail == "NO" and src not in MAY_DECIDE_NO:
+                issues.append(f"{where}: a {src} row may not decide NO; only platform, own_history and "
+                              "operator rows do")
+            if on_fail == "LIMIT" and tier_ids and frm == tier_ids[0]:
+                issues.append(f"{where}: a row from the lowest tier cannot LIMIT; it can decide NO or be recorded")
+            if on_fail in ("NO", "LIMIT") and on_fail not in outcomes:
+                issues.append(f"{where}.on_fail {on_fail} is not in outcomes")
+        ask = r.get("ask")
+        if ask is not None:
+            if not isinstance(ask, dict) or set(ask) != {"derivation"} or not _nonempty(ask.get("derivation")):
+                issues.append(f"{where}.ask must be exactly {{derivation: <name>}}")
+            if "ASK" not in outcomes:
+                issues.append(f"{where} carries an ask, but ASK is not in outcomes")
+    return issues
+
+
+def _evidence_rule(r):
+    params = ", ".join(f"{k} {v}" for k, v in sorted((r.get("params") or {}).items()))
+    rule = f"admission check {r['check']}" + (f" ({params})" if params else "")
+    rule += f", from tier {r['from']}"
+    on_fail = r["on_fail"]
+    if isinstance(on_fail, dict):
+        rule += f"; a failure caps the tier at {on_fail['cap']}"
+    elif on_fail == "record":
+        rule += "; recorded, deciding nothing"
+    else:
+        rule += f"; a failure gives {on_fail}"
+    if r.get("ask"):
+        rule += f"; asks for {r['ask']['derivation']}"
+    return rule
+
+
+def from_admission(source):
+    """A validated admission pack source -> the Evidence Contract v0 document:
+    one requirement per row, its statement and its rule in words."""
+    # A row is read before the act, from what was received: a recomputed row
+    # needs nothing more; a judged row needs a model (evidence_contract.py's
+    # FORWARD_JUDGED with MODEL-ASSISTED).
+    requirements = []
+    for r in source["rows"]:
+        judged = r["source"] == "judged"
+        requirements.append({
+            "id": r["id"],
+            "profile": "outcome",
+            "statement": r["statement"],
+            "tier": "must_have",
+            "evidence_rule": _evidence_rule(r),
+            "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED" if judged else "DETERMINISTIC",
+            "backward_verdict": "MODEL-ASSISTED" if judged else "DETERMINISTIC",
+        })
+    return {"id": source["pack_id"], "version": source["pack_version"], "requirements": requirements}

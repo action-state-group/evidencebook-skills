@@ -52,6 +52,7 @@ import sys
 import rfc8785
 import yaml
 
+import admission_pack
 import live_pack
 import pack_compile
 import report_spec
@@ -113,6 +114,8 @@ def from_pack(source):
     issues = pack_compile.validate_source(source)
     if not issues and live_pack.is_live(source):
         return _contract(source["pack_id"], source["pack_version"], live_pack.from_live(source)["requirements"])
+    if not issues and admission_pack.is_admission(source):
+        return _contract(source["pack_id"], source["pack_version"], admission_pack.from_admission(source)["requirements"])
     if isinstance(source, dict) and any(isinstance(c, dict) and "article" in c for c in source.get("checks") or []):
         # A check citing an article compiles to an obligation whose clause names
         # the instrument and the article (EC clauseSpec: both non-empty text).

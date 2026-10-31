@@ -1,0 +1,150 @@
+# admission-baseline@1 -- the baseline admission pack (#51), in admission pack
+# profile v0 (docs/admission-pack-profile-v0.md).
+#
+# A relying party runs it before an act, over what it received about the
+# counterparty. capsule-engine#265 is the evaluator (Go and Rust); this file
+# states thresholds only, and the evaluator computes the band, the tier,
+# freshness, counts and denominators.
+#
+# Sources: Reference v3 §3A.2 (the illustrative rows), §3A.14 (decade bands);
+# the admission design of 2026-10-27 §4 (the tier ladder: T0 micro, T1 small,
+# T2 standard, nothing offered above T2); Steven's 2026-10-30 ruling (the Terms
+# Pack build approach; the SDK does the math); the register §13.1 items 16 and
+# 26 (Action State authors and signs this pack; a refusal maps to LIMIT, never
+# NO; decade bands; USD-pegged stablecoins and Lightning msat accepted
+# directly, everything else through a mapping table).
+#
+# PLACEHOLDERS. Every band ceiling, threshold, window and budget below is a
+# labelled placeholder, to be calibrated first from the live stage-1 health
+# report. None is a recommendation.
+#
+# Outcomes are quoted: YAML 1.1 reads a plain NO as false.
+pack_id: asg/admission_baseline/1.0.0
+pack_version: 1.0.0
+scope:
+  kind: admission
+source: "evidencebook-skills#51; Reference v3 §3A.2, §3A.14; admission design 2026-10-27 §4"
+
+outcomes: ["GO", "ASK", "LIMIT", "NO"]
+# A missing input limits to T0; it is never a silent GO.
+missing: "LIMIT"
+
+# The mapping table: what each accepted currency's band is counted in. No
+# conversion across units: a sat band and a USD band are never compared.
+accept:
+  msat: {band: sat, scale: -3}
+  sat: {band: sat, scale: 0}
+  USD: {band: USD, scale: 0}
+  USDC: {band: USD, scale: 0}
+  USDT: {band: USD, scale: 0}
+
+# A deal sits in the first tier whose ceiling for its band unit holds the
+# band's decade. Above T2 nothing is offered: the decision is LIMIT at T2 with
+# the row above_tier, unless an operator row decides.
+tiers:
+  - id: T0                      # micro
+    max_decade: {sat: 3, USD: -1}  # placeholder
+  - id: T1                      # small
+    max_decade: {sat: 4, USD: 0}   # placeholder
+  - id: T2                      # standard
+    max_decade: {USD: 2}           # placeholder
+
+budget:
+  max_asks: 3                   # placeholder
+
+rows:
+  # T0: platform facts, our own adjudicated history and the operator's lists.
+  # These are the only rows that decide NO.
+  - id: attestation
+    statement: The platform does not report the counterparty's release attestation as invalid.
+    source: platform
+    check: platform.attestation_not_invalid
+    from: T0
+    on_fail: "NO"
+  - id: deny-list
+    statement: The counterparty is not on the operator's deny list.
+    source: operator
+    check: operator.not_deny_listed
+    from: T0
+    on_fail: "NO"
+  - id: allow-list
+    statement: When the operator keeps an allow list, the counterparty is on it.
+    source: operator
+    check: operator.allow_listed
+    from: T0
+    on_fail: "NO"
+  - id: adverse-adjudication
+    statement: No adjudication this party holds went against the counterparty in the last 180 days.
+    source: own_history
+    check: own.no_adverse_adjudication
+    params: {window_days: 180}  # placeholder
+    from: T0
+    on_fail: "NO"
+
+  # T1: the card is required and fresh. A missing or stale card is asked for
+  # (one ask answers both rows); a refused or unanswered ask limits to T0.
+  - id: card-verified
+    statement: The counterparty's history card verifies under the key that presents it.
+    source: card
+    check: card.verified
+    from: T1
+    on_fail: "LIMIT"
+    ask: {derivation: history_card/1}
+  - id: card-fresh
+    statement: The card's latest checkpoint is at most 7 days old.
+    source: card
+    check: card.fresh
+    params: {max_age_s: 604800}  # placeholder
+    from: T1
+    on_fail: "LIMIT"
+    ask: {derivation: history_card/1}
+  - id: key-age
+    statement: The card's first checkpoint is at least 60 days old.
+    source: card
+    check: card.key_age
+    params: {min_days: 60}      # placeholder
+    from: T1
+    on_fail: "LIMIT"
+  - id: no-conflicting-deal
+    statement: No deal with the counterparty is CONFLICTING in this party's own book.
+    source: own_history
+    check: own.no_conflicting
+    from: T1
+    on_fail: "LIMIT"
+  - id: corroboration
+    statement: This party holds the counterparty's half of at least one exchange.
+    source: own_history
+    check: own.held_halves
+    params: {min: 1}            # placeholder
+    from: T1
+    on_fail: "LIMIT"
+
+  # T2: our own settled deals with the counterparty, and vouches from distinct
+  # controllers. A judged adjacent-domain row caps a T2 deal at T1.
+  - id: performed-and-settled
+    statement: This party's own book holds at least 3 settled deals with the counterparty.
+    source: own_history
+    check: own.settled
+    params: {min: 3}            # placeholder
+    from: T2
+    on_fail: "LIMIT"
+  - id: independence
+    statement: At least 3 distinct controllers, not the counterparty's own, vouch for it.
+    source: vouch
+    check: vouch.distinct_controllers
+    params: {min: 3}            # placeholder
+    from: T2
+    on_fail: "LIMIT"
+  - id: adjacent-domain
+    statement: The disclosed history is from the same kind of work as the proposed deal.
+    source: judged
+    check: judged
+    from: T2
+    on_fail: {cap: T1}
+  # Stake is a row source only: recorded, deciding nothing, with no bond terms.
+  - id: stake
+    statement: Collateral posted on this deal covers its amount in the deal's band unit.
+    source: stake
+    check: stake.covers_deal
+    from: T2
+    on_fail: "record"
