@@ -101,7 +101,8 @@ class Ladder(unittest.TestCase):
         self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
 
     def test_the_baseline_has_no_ladder_yet(self):
-        # No served card carries per-band counts yet (profile §6).
+        # No served card carries per-band counts of corroborated, net-settled
+        # subjects yet (profile §6).
         checks = {r["check"] for r in load(baseline_text())["rows"]}
         self.assertNotIn("card.band_history_or_stake", checks)
 

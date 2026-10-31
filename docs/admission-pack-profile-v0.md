@@ -251,7 +251,9 @@ capsule-engine.
 **From a `standard_history/1` card.** The one served card with per-band
 counts is `standard_history/1` (AAC `spec/standard-history-v0.md` §4, §5.3).
 capsule-engine's `StandardHistoryCounts` reads a verified card's `bands` into
-the card input:
+the card input. The artifact must be the JCS of the card, as that spec's §3
+says; bytes that are not exactly the JCS of their own parse are refused, so
+every evaluator reads one card one way:
 
 - each band tally gives `subjects = held + did_not_hold` (its decided deals)
   and `adverse = did_not_hold`; its `undecided` deals are left out, and a band
@@ -375,7 +377,7 @@ v0. The baseline's numbers are placeholders, calibrated first from the live
 stage-1 health report. The fixtures are checked against the evaluator in
 capsule-engine's CI. `pack lint` and `pack test` are #56.
 
-Added after the first v0 compile (#79):
+Added after the first v0 compile (#79, #87):
 
 - **The per-band ladder** with k and a step-up (§3.1; Reference v3 §3A.14,
   item 26). The evaluator reads it. No served card carries per-band counts of
@@ -386,9 +388,9 @@ Added after the first v0 compile (#79):
 - **The ladder from a `standard_history/1` card** (§3.1) and
   `card.open_disputes` (§3.3), from #87.
 
-Both are additive within `admission-pack/v0`. An evaluator from before them
+All are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails
-closed. A pack that uses neither compiles to the same bytes as before, but
+closed. A pack that uses none of them compiles to the same bytes as before, but
 one meaning changes, in the fail-closed direction: a pack written before
 rails that has a `stake.covers_deal` row pins no rail, so every stake it reads
 is now `not_read` where a covering one used to pass.
