@@ -50,8 +50,8 @@ with a deterministic stand-in rating the packets in place of the person.
   (one per judge pin, k of n **per clause**, drift 0 of 0 until a drift check is run) are
   built by `scripts/calibration_summary.py`, as `run_weekly.py` step 5 does, and checked
   against the verb's totals before anything is sealed. The drawn sample size and any
-  shortfall are in the run's log, the sample manifest, the human-rating records (which cite the
-  manifest) and the step's skill action, not in the record.
+  shortfall are in the run's log, the sample manifest and the human-rating records (which cite
+  the manifest), not in the record; the step's skill action ties the summaries to the manifest.
   See the flag below — this is a deliberate, narrower output than this repo's own
   pre-existing calibration estimators.
 - `book close --period week --date DAY --counterparty BOOK_ID [--peer FILE --peer-checkpoint-key HEX]`
@@ -62,8 +62,8 @@ with a deterministic stand-in rating the packets in place of the person.
 
 `calibration-summary/v1` is a `derived_metric` reporting agreement as k of n per clause for
 one judge pin (the record cites the pin by digest). The drawn sample size and any shortfall are
-reported by the run's log, the sample manifest, the human-rating records (which cite the manifest)
-and the step's skill action, not by this record, and nobody computes an accuracy
+reported by the run's log, the sample manifest and the human-rating records (which cite the
+manifest), not by this record (the step's skill action ties it to the manifest), and nobody computes an accuracy
 score from it. The estimators in `docs/calibration-sampling-spec.md` (`Â`, `p̂`, the
 error rates) are marked superseded there; that document's sampling rule and blinding
 rules still apply.
