@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""A `scope.kind: admission` pack source: validation and the Evidence Contract
-it compiles to (admission pack profile v0, docs/admission-pack-profile-v0.md).
+"""A `scope.kind: admission` pack source: validation, and what it compiles to,
+the Evidence Contract and pack-definition.json, the pinned artifact (admission
+pack profile v0, docs/admission-pack-profile-v0.md).
 
 An admission pack is the relying party's policy over what it has received about
 a counterparty, run before the act (#51; Steven's 2026-10-30 ruling: admission
 uses the Terms Pack build approach and the SDK does the math). It states
 thresholds only. The band, the tier, freshness, counts and denominators are the
 evaluator's, capsule-engine#265 (Go `go/admission`, Rust `rust/capsule-engine`),
-which is the only reader of a pack's rows. This module refuses what that loader
-refuses, so a pack that passes here loads there. Nothing here evaluates a pack.
+which reads only the compiled pack-definition.json. This module refuses what
+that loader refuses, so a pack that compiles here loads there. Nothing here
+evaluates a pack.
 
 The admission design rules are held here, not trusted to the author: only
 platform, own_history and operator rows decide NO; a judged row only caps a
@@ -75,14 +77,15 @@ DECADE_MAX = 60
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
              "min": 2 ** 53 - 1}
 
-# The plain scalar rule (capsule-engine go/admission plainScalars). YAML
-# readers disagree on which plain scalars are strings: PyYAML (YAML 1.1) reads
-# NO, 1:30 and 010 as a boolean and integers, yaml.v3 (YAML 1.2) reads 1e3 and
-# 0o10 as numbers. So a pack may write a plain (unquoted) scalar only in a
-# form every reader reads alike: a plain decimal integer, a dotted version
-# (1.0.0), or text that starts with none of the characters numbers,
-# timestamps, nulls and merges start with and is not a boolean or null word.
-# Anything else is quoted.
+# The plain scalar rule. The compiler's PyYAML is the one YAML reader an
+# admission pack has (the evaluator reads the compiled pack-definition.json),
+# and YAML readers disagree on which plain scalars are strings: PyYAML (YAML
+# 1.1) reads NO, 1:30 and 010 as a boolean and integers where an author, or a
+# YAML 1.2 reader, sees strings. So a value it would misread is refused before
+# it is frozen into the pinned bytes: a plain (unquoted) scalar may only be a
+# plain decimal integer, a dotted version (1.0.0), or text that starts with
+# none of the characters numbers, timestamps, nulls and merges start with and
+# is not a boolean or null word. Anything else is quoted.
 _DECIMAL_INT = re.compile(r"^(0|-?[1-9][0-9]*)$")
 _DOTTED_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _SPECIAL_LEADERS = "0123456789+-.~<"
@@ -96,8 +99,8 @@ def _plain_ok(v):
 
 
 def text_issues(text):
-    """What the evaluator's loader refuses in the YAML text itself, which the
-    parsed mapping no longer shows: a plain scalar outside the plain scalar
+    """What the lint refuses in the YAML text itself, which the parsed mapping
+    no longer shows: a plain scalar outside the plain scalar
     rule above, anchors and aliases, and explicit tags (the non-specific `!`
     aside, which yaml.v3 ignores)."""
     issues = []

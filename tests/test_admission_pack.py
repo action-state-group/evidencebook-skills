@@ -336,9 +336,10 @@ class TextIssues(unittest.TestCase):
             self.assertTrue(any(want in i for i in got), (new, got))
 
     def test_the_shared_probes(self):
-        # A copy of capsule-engine's conformance-vectors/admission/v0/
-        # plain-scalars.json, which its Go and Rust loaders decide too.
-        probes = json.loads((REPO_ROOT / "tests/fixtures/capsule-engine/admission-plain-scalars.json").read_text())
+        # The source's plain scalar rule: PyYAML, in the compiler, is the one
+        # YAML reader an admission pack has (the evaluator reads the compiled
+        # pack-definition.json), so this guards what it would misread.
+        probes = json.loads((REPO_ROOT / "tests/fixtures/admission-plain-scalars.json").read_text())
         for doc in probes["accepted"]:
             self.assertEqual(admission_pack.text_issues(doc), [], doc)
         for doc in probes["refused"]:

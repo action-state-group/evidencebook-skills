@@ -1,5 +1,5 @@
 {
- "source": "capsule-engine#265: the plain scalar rule (go/admission plainScalars). Each document is read by the admission pack loader's YAML pre-pass; accepted ones pass it, refused ones fail it. evidencebook-skills scripts/admission_pack.py text_issues holds the same rule.",
+ "source": "The admission lint's plain scalar rule (scripts/admission_pack.py text_issues): accepted documents pass it, refused ones fail it.",
  "accepted": [
   "v: 1.0.0",
   "v: -3",
