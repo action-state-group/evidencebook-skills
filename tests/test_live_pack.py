@@ -7,9 +7,11 @@ go/packs/inference-0.1.0 and seller-0.1.6, whose digests are the
 `engine_definition_digest` recorded in each pack's PROVENANCE.json there, and
 the five other catalog packs (python/capsule_engine/packs/catalog/, #98), whose
 digests are what capsule-engine main f88a6e6 computes for them
-(`load_pack_dir(...).definition_digest()`).
+(`load_pack_dir(...).definition_digest()`). engine-fields-0.1.0 is a synthetic
+pack carrying the fields none of those uses, pinned the same way.
 """
 import copy
+import datetime
 import json
 import os
 import pathlib
@@ -44,6 +46,8 @@ ENGINE_DIGESTS = {
     "standard-vendor-1.0.1": "9ae420d59ebfb1f87ecd740c948be4d0df16cefac97d8640da24934302359ae2",
     "eu-ai-act-obligations-0.1.1": "9d3197935b6b002ccd4682c7cfa2bacf01d9dbc2b3b04811e94dd50e6a2b9cfa",
     "eu-ai-act-deterministic-0.1.0": "b6f6b62454380c6ab4fc1c11fd4418045cc310b95f6a7cbbf2ea23bf54ca5609",
+    # synthetic: every pack field no catalog pack uses
+    "engine-fields-0.1.0": "c345c247c987538986a6c2a0911499258584fbc0abae82c2a7eeb7ddb0c3b3ae",
 }
 
 
@@ -429,6 +433,75 @@ class EnginePackFields(unittest.TestCase):
         self.assertEqual(live_pack.canonical_definition(s, base(name))["scope_census"], census)
         self.assertEqual(self.check(name, lambda s: s.update(scope_census=dict(census, n=8)))[0],
                          ["scope_census must be a mapping of document_digest, n, m and review_by, with 0 <= n <= m and m >= 1"])
+
+    def test_malformed_values_are_issues_not_crashes(self):
+        name = "engine-fields-0.1.0"
+        cases = (
+            (lambda s: s["outcomes"][0].update(effect_claim=["x"]), "outcomes[0] ('O1').effect_claim must be a non-empty string"),
+            (lambda s: s["constraints"][1]["config"].update(selectors=[{"a": 1}]),
+             "constraints[1] ('engine_fields.dedupe/1.0.0').config.selectors must be a mapping or list keyed by selector name"),
+            (lambda s: s["constraints"][1]["config"].update(since=datetime.date(2026, 1, 1)),
+             "constraints[1].config.since is a date, not a JSON value (quote it to make it a string), which "
+             "capsule-engine does not digest"),
+            (lambda s: s["constraints"][1]["config"].update({1: 2}),
+             "constraints[1].config has a key 1 that is not a string, which capsule-engine does not digest"),
+            (lambda s: s["outcomes"][0].update(window={"duration": "P7D", "cure": 3}),
+             "outcomes[0] ('O1').window must be a mapping of a duration and optional cure and grace strings"),
+            (lambda s: s["outcomes"][0].update(epistemic_type="rumour"),
+             "outcomes[0] ('O1').epistemic_type 'rumour' must be one of ['observed_event', 'system_of_record_fact', "
+             "'producer_claim', 'human_report', 'semantic_judgment', 'derived_metric', 'adjudication', 'obligation_reference']"),
+            (lambda s: s["outcomes"][0].pop("evidence_instrument"),
+             "outcomes[0] ('O1') declares measurability=declared_not_measured but no evidence_instrument"),
+            (lambda s: s["outcomes"][0].update(clause_ref=""), "outcomes[0] ('O1').clause_ref must be a non-empty string"),
+            (lambda s: s["profiles"][0].update(counterparty_binding={"ultimate": "x"}),
+             "profiles[0] ('p3_mediated').counterparty_binding must name a direct and an optional ultimate counterparty"),
+        )
+        for edit, want in cases:
+            self.assertEqual(self.check(name, edit)[0], [want])
+
+    def test_malformed_fold_files_are_issues_not_crashes(self):
+        name = "engine-fields-0.1.0"
+        prefix = "folds[1] (folds/refunds.yaml)"
+        cases = (
+            ("", "folds[1].file 'folds/refunds.yaml' must hold a fold definition mapping"),
+            (b"\xff\xfe", None),
+            ("    erasure_class: preimage\n", None),
+            ("    op: in\n", None),
+            ("  mode: explicit\n", None),
+            ("  relation: supersedes\n", None),
+            ("  - field: disposition.decision\n", None),
+        )
+        original = (base(name) / "folds/refunds.yaml").read_text()
+        edits = {
+            "    erasure_class: preimage\n": (original.replace("    erasure_class: preimage", "    erasure_class: secret"),
+                                             f"{prefix}.reads[4].erasure_class must be one of ['commitment-ok', 'preimage']"),
+            "    op: in\n": (original.replace("    op: in", "    op: regex"),
+                            f"{prefix}.filter[0].op 'regex' must be one of ['eq', 'ne', 'in', 'not_in', 'prefix', 'gt', 'gte', 'lt', 'lte']"),
+            "  mode: explicit\n": (original.replace('  end: "2026-02-01T00:00:00Z"\n', ""),
+                                  f"{prefix}.window must be mode rolling with a duration, or mode explicit with a start and end"),
+            "  relation: supersedes\n": (original.replace("  relation: supersedes", "  relation: replaces"),
+                                        f"{prefix}.reversal must take back part of a sum: class_field, parent_field and "
+                                        "relation_field declared in reads, a non-empty classes list, and relation supersedes"),
+            "  - field: disposition.decision\n": (original.replace("  - field: disposition.decision", "  - field: [disposition]"),
+                                                 f"{prefix}.filter[0].field ['disposition'] is not declared in reads"),
+        }
+        for content, want in cases:
+            with tempfile.TemporaryDirectory() as tmp:
+                shutil.copytree(base(name), tmp, dirs_exist_ok=True)
+                fold = pathlib.Path(tmp) / "folds/refunds.yaml"
+                if isinstance(content, bytes):
+                    fold.write_bytes(content)
+                elif content in edits:
+                    content, want = edits[content]
+                    fold.write_text(content)
+                else:
+                    fold.write_text(content)
+                issues = pack_compile.validate_source(load(name), tmp)
+                if want is None:
+                    self.assertEqual(len(issues), 1, issues)
+                    self.assertTrue(issues[0].startswith("folds[1].file 'folds/refunds.yaml' is not valid YAML"), issues)
+                else:
+                    self.assertEqual(issues, [want])
 
     def test_a_number_the_engine_cannot_digest_is_refused(self):
         name = "payments-safety-1.0.0"

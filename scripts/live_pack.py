@@ -64,7 +64,9 @@ Checks that need the engine's registries or catalogs stay with its loader, which
 refuses a wrong pack: the registered check names, retired definitions, the
 taxonomy pin, a caps constraint's scope against its fold, a judge pin's input
 fields, and a fold's path grammar. This module checks shape and the closed
-vocabularies that decide the digest or the contract.
+vocabularies that decide the digest or the contract. It is stricter than the
+engine in two ways: it refuses a key the engine would ignore, and a fold file
+outside the source's directory, which the engine would read.
 """
 import hashlib
 import json
@@ -321,13 +323,20 @@ def _validate_constraint(i, c, issues):
         issues.append(f"{where}: a caps constraint must declare scope")
     selectors = None
     if ref_key == "wicket_id" and isinstance(c.get("config"), dict):
-        selectors = set(c["config"].get("selectors") or ())
+        named = c["config"].get("selectors") or []
+        # The engine reads a check's selectors as the names config.selectors holds.
+        if isinstance(named, (dict, list)) and all(_nonempty(k) for k in named):
+            selectors = set(named)
+        else:
+            issues.append(f"{where}.config.selectors must be a mapping or list keyed by selector name")
     return c.get(ref_key), c.get("check"), selectors
 
 
 def _read_fold_file(where, rel, base_dir, issues):
     """The fold definition a `folds[].file` names, read relative to the source's
-    directory, or None with the issue recorded."""
+    directory, or None with the issue recorded. A file outside that directory is
+    refused, although capsule-engine's loader would read it: a pack directory
+    carries every file its digest depends on."""
     if base_dir is None:
         issues.append(f"{where}.file is read relative to the pack source's directory, and none was given")
         return None
@@ -337,11 +346,15 @@ def _read_fold_file(where, rel, base_dir, issues):
         issues.append(f"{where}.file {rel!r} must be a path inside the pack source's directory")
         return None
     try:
-        return yaml.safe_load(path.read_text())
+        d = yaml.safe_load(path.read_text())
     except OSError:
         issues.append(f"{where}.file {rel!r} does not exist under {base}")
-    except yaml.YAMLError as e:
+    except (UnicodeDecodeError, yaml.YAMLError) as e:
         issues.append(f"{where}.file {rel!r} is not valid YAML: {e}")
+    else:
+        if isinstance(d, dict):
+            return d
+        issues.append(f"{where}.file {rel!r} must hold a fold definition mapping")
     return None
 
 
@@ -376,11 +389,11 @@ def _validate_fold_definition(where, d, issues):
             issues.append(f"{where}.filter[{j}] must be a mapping of field, op and value")
         elif f["op"] not in FILTER_OPS:
             issues.append(f"{where}.filter[{j}].op {f['op']!r} must be one of {list(FILTER_OPS)}")
-        elif f["field"] not in declared:
+        elif not isinstance(f["field"], str) or f["field"] not in declared:
             issues.append(f"{where}.filter[{j}].field {f['field']!r} is not declared in reads")
         elif f["op"] in ("in", "not_in") and not isinstance(f["value"], list):
             issues.append(f"{where}.filter[{j}].op {f['op']!r} needs a list value")
-    if "key" in d and d["key"] is not None and d["key"] not in declared:
+    if d.get("key") is not None and (not isinstance(d["key"], str) or d["key"] not in declared):
         issues.append(f"{where}.key {d['key']!r} is not declared in reads")
     window = d.get("window")
     if window is not None:
@@ -393,7 +406,7 @@ def _validate_fold_definition(where, d, issues):
     reduce = d.get("reduce")
     if not (isinstance(reduce, dict) and reduce.get("reducer") in REDUCERS and set(reduce) <= {"reducer", "field"}):
         issues.append(f"{where}.reduce.reducer must be one of {list(REDUCERS)}")
-    elif reduce["reducer"] in FIELD_REDUCERS and reduce.get("field") not in declared:
+    elif reduce["reducer"] in FIELD_REDUCERS and (not isinstance(reduce.get("field"), str) or reduce["field"] not in declared):
         issues.append(f"{where}.reduce.field must be a field declared in reads for reducer {reduce['reducer']!r}")
     elif reduce["reducer"] not in FIELD_REDUCERS and reduce.get("field") is not None:
         issues.append(f"{where}.reduce: reducer {reduce['reducer']!r} takes no field")
@@ -404,7 +417,7 @@ def _validate_fold_definition(where, d, issues):
     rev = d.get("reversal")
     if rev is not None:
         if not (isinstance(rev, dict) and set(rev) == {"class_field", "classes", "parent_field", "relation_field", "relation"}
-                and all(rev[k] in declared for k in ("class_field", "parent_field", "relation_field"))
+                and all(isinstance(rev[k], str) and rev[k] in declared for k in ("class_field", "parent_field", "relation_field"))
                 and _str_list(rev["classes"]) and rev["classes"] and rev["relation"] == "supersedes"
                 and isinstance(reduce, dict) and reduce.get("reducer") == "sum"):
             issues.append(f"{where}.reversal must take back part of a sum: class_field, parent_field and "
@@ -479,9 +492,9 @@ def _validate_outcome(i, o, issues):
     if bwd not in BACKWARD_VERDICTS:
         issues.append(f"{where}.backward_verdict {bwd!r} must be one of {list(BACKWARD_VERDICTS)}")
     claim = o.get("effect_claim")
-    if claim is not None and claim not in EFFECT_CLAIMS:
+    if _nonempty(claim) and claim not in EFFECT_CLAIMS:
         issues.append(f"{where}.effect_claim {claim!r} must be one of {sorted(EFFECT_CLAIMS)}")
-    elif EFFECT_CLAIMS.get(claim) and (fwd, bwd) != EFFECT_CLAIMS[claim][:2]:
+    elif _nonempty(claim) and EFFECT_CLAIMS[claim] and (fwd, bwd) != EFFECT_CLAIMS[claim][:2]:
         issues.append(f"{where}.effect_claim {claim!r} must compile to forward_verdict/backward_verdict "
                       f"{EFFECT_CLAIMS[claim][0]}/{EFFECT_CLAIMS[claim][1]}")
     if "REFUSED" in (fwd, bwd) and _refusal_reason(o) not in REFUSAL_REASON_CODES:
@@ -586,20 +599,24 @@ def _validate_scope_census(c, issues):
         issues.append("scope_census must be a mapping of document_digest, n, m and review_by, with 0 <= n <= m and m >= 1")
 
 
-def _unsafe_numbers(v, path):
-    """Paths in the projection the engine refuses to digest: a float, or an
-    integer outside the IEEE-754 safe range."""
-    if isinstance(v, bool):
+def _undigestable(v, path):
+    """Issues for each value in a body the engine refuses to digest: a float, an
+    integer outside the IEEE-754 safe range, a mapping key that is not a
+    string, or a value JSON cannot carry (an unquoted YAML date or timestamp)."""
+    if v is None or isinstance(v, (bool, str)):
         return []
-    if isinstance(v, float):
-        return [path]
+    if isinstance(v, float) or (isinstance(v, int) and abs(v) > MAX_SAFE_INTEGER):
+        return [f"{path} is a float or an integer beyond 2^53-1, which capsule-engine does not digest"]
     if isinstance(v, int):
-        return [path] if abs(v) > MAX_SAFE_INTEGER else []
+        return []
     if isinstance(v, dict):
-        return [p for k, x in v.items() for p in _unsafe_numbers(x, f"{path}.{k}")]
+        return [i for k, x in v.items()
+                for i in ([f"{path} has a key {k!r} that is not a string, which capsule-engine does not digest"]
+                          if not isinstance(k, str) else _undigestable(x, f"{path}.{k}"))]
     if isinstance(v, list):
-        return [p for j, x in enumerate(v) for p in _unsafe_numbers(x, f"{path}[{j}]")]
-    return []
+        return [i for j, x in enumerate(v) for i in _undigestable(x, f"{path}[{j}]")]
+    return [f"{path} is a {type(v).__name__}, not a JSON value (quote it to make it a string), "
+            "which capsule-engine does not digest"]
 
 
 def _forward_list(source, key, has_outcomes, issues):
@@ -729,10 +746,8 @@ def validate_live(source, base_dir=None):
                   if "wicket_ref" not in c]
         bodies += [(f"folds[{i}] ({f['file']})", _fold_body(f, base_dir)) for i, f in enumerate(source.get("folds") or ())
                    if "file" in f]
-        paths = [p for where, body in bodies for p in _unsafe_numbers(body, where)]
-        paths = paths or _unsafe_numbers(canonical_definition(source, base_dir), "definition")
-        for path in paths:
-            issues.append(f"{path} is a float or an integer beyond 2^53-1, which capsule-engine does not digest")
+        issues = [i for where, body in bodies for i in _undigestable(body, where)]
+        issues = issues or _undigestable(canonical_definition(source, base_dir), "definition")
     return issues
 
 
@@ -740,7 +755,8 @@ def _refusal_reason(o):
     """An outcome's refusal_reason_code, or the one its effect_claim compiles to."""
     if o.get("refusal_reason_code") is not None:
         return o["refusal_reason_code"]
-    compiled = EFFECT_CLAIMS.get(o.get("effect_claim"))
+    claim = o.get("effect_claim")
+    compiled = EFFECT_CLAIMS.get(claim) if isinstance(claim, str) else None
     return compiled[2] if compiled else None
 
 
