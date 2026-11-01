@@ -108,6 +108,13 @@ CARD_FOR_TEMPLATE = {
 # its place. No renderer in this repo reads it.
 CONTRACT_REPORT_KEY = "contract-report/v1"
 
+# The pack's calendar, timeline and co-failure view declarations and their wording
+# (scripts/chart_views.py, evidencebook-skills#94). Copied onto the bundle as-is
+# beside the template block: capsule-viewer reads `charts` as its builder setting and
+# `wording` as wording-pack entries. Presentation, never evidence; the bundle digest
+# covers it like every extension.
+CHART_VIEWS_KEY = "chart-views/v1"
+
 # The templates whose renderer draws a `producer_note` from the block (under its
 # own fixed "Producer's note ... not evidence" label). Only outcome-report/v1's
 # reader (agent-action-capsule ts/src/outcome-report-presentation.ts) has one.
@@ -170,7 +177,7 @@ def prepare_block(presentation, sealed=False):
     as-is). The argument is not modified."""
     if not isinstance(presentation, dict) or not presentation:
         raise WireError("presentation.json is empty or not a JSON object")
-    known = set(CARD_FOR_TEMPLATE) | {CONTRACT_REPORT_KEY}
+    known = set(CARD_FOR_TEMPLATE) | {CONTRACT_REPORT_KEY, CHART_VIEWS_KEY}
     unknown = sorted(set(presentation) - known)
     if unknown:
         raise WireError(f"presentation.json carries block(s) this report does not know: {unknown!r} "
@@ -178,6 +185,13 @@ def prepare_block(presentation, sealed=False):
     if CONTRACT_REPORT_KEY in presentation and presentation[CONTRACT_REPORT_KEY] != {}:
         raise WireError(f"{CONTRACT_REPORT_KEY} must be exactly {{}} (a closed, empty opt-in: no words, "
                         "data or flags)")
+    if CHART_VIEWS_KEY in presentation:
+        views = presentation[CHART_VIEWS_KEY]
+        if not (isinstance(views, dict) and set(views) == {"charts", "wording"}
+                and isinstance(views["charts"], list) and views["charts"]
+                and isinstance(views["wording"], dict)):
+            raise WireError(f"{CHART_VIEWS_KEY} must be exactly {{charts: [..], wording: {{..}}}} "
+                            "with at least one view")
     template_items = {k: v for k, v in presentation.items() if k in CARD_FOR_TEMPLATE}
     if len(template_items) != 1:
         raise WireError(f"presentation.json carries {len(template_items)} report-template block(s) "
@@ -212,6 +226,8 @@ def wire(bundle, presentation, sealed_digest=None):
         raise WireError(f"bundle already carries a {template} extension; refusing to overwrite it")
     if extensions and CONTRACT_REPORT_KEY in extensions:
         raise WireError(f"bundle already carries a {CONTRACT_REPORT_KEY} extension; refusing to overwrite it")
+    if extensions and CHART_VIEWS_KEY in extensions and CHART_VIEWS_KEY in presentation:
+        raise WireError(f"bundle already carries a {CHART_VIEWS_KEY} extension; refusing to overwrite it")
     if sealed_digest is not None and sealed_digest != digest_member(template, block):
         raise WireError(f"the {template} block to wire does not match the digest sealed in the Result "
                         f"({DIGEST_MEMBER}); refusing to wire words the producer did not sign")
@@ -219,6 +235,8 @@ def wire(bundle, presentation, sealed_digest=None):
     wired.setdefault("extensions", {})[template] = block
     if CONTRACT_REPORT_KEY in presentation:
         wired["extensions"][CONTRACT_REPORT_KEY] = {}
+    if CHART_VIEWS_KEY in presentation:
+        wired["extensions"][CHART_VIEWS_KEY] = copy.deepcopy(presentation[CHART_VIEWS_KEY])
     return wired, template, card
 
 

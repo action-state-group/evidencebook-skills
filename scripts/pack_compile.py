@@ -70,6 +70,7 @@ import sys
 import yaml
 
 import admission_pack
+import chart_views
 import live_pack
 
 TIERS = {"judged", "recomputed"}
@@ -937,6 +938,9 @@ def build_presentation_json(source):
         # The closed empty object agent-action-capsule spec/contract-report-v1.md
         # section 1 defines: never words, data or flags, just the opt-in.
         presentation[CONTRACT_REPORT_KEY] = {}
+    views = chart_views.build_block(source.get("pack_id"))
+    if views is not None:
+        presentation[chart_views.BLOCK_KEY] = views
     return presentation
 
 
