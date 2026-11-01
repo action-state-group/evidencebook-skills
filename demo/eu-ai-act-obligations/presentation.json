@@ -314,5 +314,315 @@
       "note": "Blind human re-grades through skills/weekly-blind-expert: run_weekly.py draws per_stratum reports from each verdict stratum across this pack's reports, recomputed tests included. No re-grade has run yet, and the report says so."
     }
   },
-  "contract-report/v1": {}
+  "contract-report/v1": {},
+  "chart-views/v1": {
+    "charts": [
+      {
+        "view": "calendar",
+        "lanes": [
+          {
+            "id": "activity",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "case"
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "activity"
+          },
+          {
+            "id": "judgment",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "case"
+                  }
+                }
+              ],
+              "mark": "rect",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "field": "statement.verdict",
+                  "type": "nominal"
+                },
+                "color": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "judgment",
+            "classes": {
+              "met_all": "good",
+              "not_met": "bad",
+              "not_evaluable": "open"
+            }
+          },
+          {
+            "id": "adjudications",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "adjudication"
+                  }
+                }
+              ],
+              "mark": "rect",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "field": "statement.agreement",
+                  "type": "nominal"
+                },
+                "color": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "adjudication",
+            "classes": {
+              "concur": "good",
+              "differs": "bad"
+            }
+          }
+        ]
+      },
+      {
+        "view": "timeline",
+        "lanes": [
+          {
+            "id": "routed",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "verdict_class",
+                    "equal": "hitl_dispatched"
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "mark": "tick"
+          },
+          {
+            "id": "effects_unconfirmed",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "verdict_class",
+                    "equal": "effects_not_confirmed"
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "mark": "tick"
+          },
+          {
+            "id": "incident_flags",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "verdict_class",
+                    "equal": "incident_flag"
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "mark": "diamond"
+          },
+          {
+            "id": "adjudications_close",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "and": [
+                      {
+                        "field": "record_type",
+                        "equal": "adjudication"
+                      },
+                      {
+                        "field": "statement.phase",
+                        "equal": "close"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "mark": "diamond"
+          }
+        ]
+      },
+      {
+        "view": "co-failure",
+        "count": {
+          "id": "failing",
+          "chart": {
+            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+            "data": {
+              "name": "dataset"
+            },
+            "transform": [
+              {
+                "filter": {
+                  "and": [
+                    {
+                      "field": "record_type",
+                      "equal": "case"
+                    },
+                    {
+                      "field": "statement.verdict",
+                      "equal": "not_met"
+                    }
+                  ]
+                }
+              }
+            ],
+            "mark": "bar",
+            "encoding": {
+              "x": {
+                "field": "event_time_claim",
+                "type": "temporal",
+                "timeUnit": "utcyearmonthdate"
+              },
+              "y": {
+                "aggregate": "count",
+                "type": "quantitative"
+              },
+              "color": {
+                "field": "statement.requirement",
+                "type": "nominal"
+              }
+            }
+          }
+        },
+        "subject": "statement.session"
+      }
+    ],
+    "wording": {
+      "calendar.activity.one": "{n} session",
+      "calendar.activity.other": "{n} sessions",
+      "calendar.class.good": "{n} met all",
+      "calendar.class.bad": "{n} did not",
+      "calendar.class.open": "{n} undecided",
+      "calendar.legend.good": "all, or all but one, met all",
+      "calendar.legend.some": "some did not or are undecided",
+      "calendar.legend.most": "most did not",
+      "cofail.failing.one": "{n} session did not meet at least one requirement",
+      "cofail.failing.other": "{n} sessions did not meet at least one requirement",
+      "lane.routed.title": "Routed to a person",
+      "lane.effects_unconfirmed.title": "Effects not confirmed",
+      "lane.incident_flags.title": "Incident flags",
+      "lane.adjudications_close.title": "Adjudications \u00b7 close"
+    }
+  }
 }

@@ -104,5 +104,131 @@
       "grounded_communication.no_invented_policy": "No invented policy"
     }
   },
-  "contract-report/v1": {}
+  "contract-report/v1": {},
+  "chart-views/v1": {
+    "charts": [
+      {
+        "view": "calendar",
+        "lanes": [
+          {
+            "id": "activity",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "case"
+                  }
+                }
+              ],
+              "mark": "bar",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "activity"
+          },
+          {
+            "id": "judgment",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "case"
+                  }
+                }
+              ],
+              "mark": "rect",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "field": "statement.verdict",
+                  "type": "nominal"
+                },
+                "color": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "judgment",
+            "classes": {
+              "met": "good",
+              "not_met": "bad",
+              "not_evaluable": "open"
+            }
+          },
+          {
+            "id": "adjudications",
+            "chart": {
+              "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+              "data": {
+                "name": "dataset"
+              },
+              "transform": [
+                {
+                  "filter": {
+                    "field": "record_type",
+                    "equal": "adjudication"
+                  }
+                }
+              ],
+              "mark": "rect",
+              "encoding": {
+                "x": {
+                  "field": "event_time_claim",
+                  "type": "temporal",
+                  "timeUnit": "utcyearmonthdate"
+                },
+                "y": {
+                  "field": "statement.agreement",
+                  "type": "nominal"
+                },
+                "color": {
+                  "aggregate": "count",
+                  "type": "quantitative"
+                }
+              }
+            },
+            "role": "adjudication",
+            "classes": {
+              "concur": "good",
+              "differs": "bad"
+            }
+          }
+        ]
+      }
+    ],
+    "wording": {
+      "calendar.activity.one": "{n} conversation",
+      "calendar.activity.other": "{n} conversations",
+      "calendar.class.good": "{n} resolved",
+      "calendar.class.bad": "{n} missed",
+      "calendar.class.open": "{n} undecided",
+      "calendar.legend.good": "all, or all but one, resolved",
+      "calendar.legend.some": "some missed or undecided",
+      "calendar.legend.most": "most missed"
+    }
+  }
 }
