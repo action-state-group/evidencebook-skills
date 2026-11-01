@@ -221,13 +221,14 @@
       }
     ],
     "wording": {
-      "calendar.activity": "conversations",
-      "calendar.class.good": "resolved",
-      "calendar.class.bad": "missed",
-      "calendar.class.open": "undecided",
-      "calendar.legend.good": "at most one judged conversation missed, most resolved",
-      "calendar.legend.bad": "more than half of the judged conversations missed",
-      "calendar.legend.open": "anything between"
+      "calendar.activity.one": "{n} conversation",
+      "calendar.activity.other": "{n} conversations",
+      "calendar.class.good": "{n} resolved",
+      "calendar.class.bad": "{n} missed",
+      "calendar.class.open": "{n} undecided",
+      "calendar.legend.good": "all, or all but one, resolved",
+      "calendar.legend.some": "some missed or undecided",
+      "calendar.legend.most": "most missed"
     }
   }
 }

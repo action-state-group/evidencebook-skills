@@ -35,12 +35,24 @@ CLASSES = ("good", "bad", "open")
 MARKS = ("tick", "diamond")
 ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 
-# The wording-pack keys a pack may set (report-views.md "Words"): the calendar's
-# nouns and verbs, the legend and the co-failure caption, and a title per
-# timeline lane.
-WORDING_KEYS = re.compile(
-    r"^(calendar\.activity|calendar\.class\.(good|bad|open)|calendar\.adj\.[a-z_]+"
-    r"|calendar\.legend\.[a-z_]+|cofail\.failing|lane\.[a-z][a-z0-9_]{0,31}\.title)$")
+# The wording-pack keys a pack may set: the entries capsule-viewer's calendar,
+# timeline and co-failure draw with (its default entries, go/pageruntime
+# evidence-graph.iife.js, "calendar.*" and "cofail.*"), plus a title per timeline
+# lane. The viewer fills `{n}` into a counted word, and reads a plural word
+# (`.one` / `.other`) through its `p()`, so an override without them is ignored or
+# draws no figure; each key says whether its words must carry `{n}`.
+WORDING_KEYS = {
+    "calendar.activity.one": True, "calendar.activity.other": True,
+    "calendar.class.good": True, "calendar.class.bad": True, "calendar.class.open": True,
+    "calendar.adj.recorded.one": True, "calendar.adj.recorded.other": True,
+    "calendar.adj.concur": False,
+    "calendar.adj.differ.one": True, "calendar.adj.differ.other": True,
+    "calendar.adj.open": True,
+    "calendar.legend.good": False, "calendar.legend.some": False, "calendar.legend.most": False,
+    "calendar.legend.adjudication": False,
+    "cofail.failing.one": True, "cofail.failing.other": True,
+}
+LANE_TITLE_RE = re.compile(r"^lane\.([a-z][a-z0-9_]{0,31})\.title$")
 
 
 def _filter(where):
@@ -106,7 +118,8 @@ def validate(decl, where="views"):
         ids = set()
         roles = set()
         if not isinstance(items, list) or not items:
-            return [f"{where}.{name} must be a non-empty list"]
+            issues.append(f"{where}.{name} must be a non-empty list")
+            return
         for i, lane in enumerate(items):
             at = f"{where}.{name}[{i}]"
             if not isinstance(lane, dict):
@@ -142,17 +155,16 @@ def validate(decl, where="views"):
                 if not (isinstance(classes, dict) and classes
                         and all(isinstance(k, str) and v in CLASSES for k, v in classes.items())):
                     issues.append(f"{at}.classes must map each verdict value to one of {list(CLASSES)}")
-            if role in ("judgment",) and not classes:
+            if role == "judgment" and not classes:
                 issues.append(f"{at}: a judgment lane needs classes")
-        return []
 
     if not isinstance(decl, dict) or not decl:
         return [f"{where} must be a non-empty mapping"]
-    extra = sorted(set(decl) - {"calendar", "timeline", "cofail", "wording"})
-    issues += [f"{where}.{k} is not a view member" for k in extra]
+    issues += [f"{where}.{k} is not a view member"
+               for k in sorted(set(decl) - {"calendar", "timeline", "cofail", "wording"})]
     for name in ("calendar", "timeline"):
         if name in decl:
-            issues += lanes(name, decl[name], name == "timeline")
+            lanes(name, decl[name], name == "timeline")
     if "cofail" in decl:
         c = decl["cofail"]
         if not (isinstance(c, dict) and ID_RE.match(str(c.get("id", ""))) and c.get("where")
@@ -162,14 +174,16 @@ def validate(decl, where="views"):
     if not isinstance(wording, dict) or not all(isinstance(v, str) and v.strip() for v in wording.values()):
         issues.append(f"{where}.wording must map keys to non-empty strings")
     else:
-        for key in wording:
-            if not WORDING_KEYS.match(key):
-                issues.append(f"{where}.wording.{key} is not a wording key a view reads")
         timeline_ids = {l.get("id") for l in decl.get("timeline", []) if isinstance(l, dict)}
-        for key in wording:
-            m = re.match(r"^lane\.(.+)\.title$", key)
-            if m and m.group(1) not in timeline_ids:
-                issues.append(f"{where}.wording.{key} names no timeline lane")
+        for key, text in wording.items():
+            m = LANE_TITLE_RE.match(key)
+            if m:
+                if m.group(1) not in timeline_ids:
+                    issues.append(f"{where}.wording.{key} names no timeline lane")
+            elif key not in WORDING_KEYS:
+                issues.append(f"{where}.wording.{key} is not a wording key the views read")
+            elif WORDING_KEYS[key] and "{n}" not in text:
+                issues.append(f"{where}.wording.{key} must carry {{n}}: the viewer fills the count into it")
     return issues
 
 
@@ -197,13 +211,14 @@ PACK_VIEWS = {
     "airline-support-outcomes": {
         "calendar": _TERMS_CALENDAR,
         "wording": {
-            "calendar.activity": "conversations",
-            "calendar.class.good": "resolved",
-            "calendar.class.bad": "missed",
-            "calendar.class.open": "undecided",
-            "calendar.legend.good": "at most one judged conversation missed, most resolved",
-            "calendar.legend.bad": "more than half of the judged conversations missed",
-            "calendar.legend.open": "anything between",
+            "calendar.activity.one": "{n} conversation",
+            "calendar.activity.other": "{n} conversations",
+            "calendar.class.good": "{n} resolved",
+            "calendar.class.bad": "{n} missed",
+            "calendar.class.open": "{n} undecided",
+            "calendar.legend.good": "all, or all but one, resolved",
+            "calendar.legend.some": "some missed or undecided",
+            "calendar.legend.most": "most missed",
         },
     },
     "eu-ai-act-obligations": {
@@ -218,14 +233,16 @@ PACK_VIEWS = {
         "cofail": {"id": "failing", "where": [("record_type", "case"), ("statement.verdict", "not_met")],
                    "key": "statement.requirement", "subject": "statement.session"},
         "wording": {
-            "calendar.activity": "sessions",
-            "calendar.class.good": "met all",
-            "calendar.class.bad": "did not",
-            "calendar.class.open": "undecided",
-            "calendar.legend.good": "at most one judged session did not meet all, most met all",
-            "calendar.legend.bad": "more than half of the judged sessions did not",
-            "calendar.legend.open": "anything between",
-            "cofail.failing": "sessions failing",
+            "calendar.activity.one": "{n} session",
+            "calendar.activity.other": "{n} sessions",
+            "calendar.class.good": "{n} met all",
+            "calendar.class.bad": "{n} did not",
+            "calendar.class.open": "{n} undecided",
+            "calendar.legend.good": "all, or all but one, met all",
+            "calendar.legend.some": "some did not or are undecided",
+            "calendar.legend.most": "most did not",
+            "cofail.failing.one": "{n} session did not meet at least one requirement",
+            "cofail.failing.other": "{n} sessions did not meet at least one requirement",
             "lane.routed.title": "Routed to a person",
             "lane.effects_unconfirmed.title": "Effects not confirmed",
             "lane.incident_flags.title": "Incident flags",

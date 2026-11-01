@@ -12,7 +12,15 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
 import chart_views  # noqa: E402
 import wire_presentation  # noqa: E402
-from chart_views import BLOCK_KEY, PACK_VIEWS, build_block, validate  # noqa: E402
+from chart_views import BLOCK_KEY, PACK_VIEWS, WORDING_KEYS, build_block, validate  # noqa: E402
+
+VIEWER_KEYS = (
+    "calendar.activity.one", "calendar.activity.other", "calendar.class.good", "calendar.class.bad",
+    "calendar.class.open", "calendar.adj.recorded.one", "calendar.adj.recorded.other",
+    "calendar.adj.concur", "calendar.adj.differ.one", "calendar.adj.differ.other", "calendar.adj.open",
+    "calendar.legend.good", "calendar.legend.some", "calendar.legend.most", "calendar.legend.adjudication",
+    "cofail.failing.one", "cofail.failing.other",
+)
 
 
 def lane(**kw):
@@ -34,8 +42,8 @@ class Registry(unittest.TestCase):
         self.assertEqual(set(judgment["classes"].values()), {"good", "bad", "open"})
         self.assertNotIn("classes", cal["lanes"][0])
         w = block["wording"]
-        self.assertEqual((w["calendar.activity"], w["calendar.class.good"], w["calendar.class.bad"]),
-                         ("conversations", "resolved", "missed"))
+        self.assertEqual((w["calendar.activity.other"], w["calendar.class.good"], w["calendar.class.bad"]),
+                         ("{n} conversations", "{n} resolved", "{n} missed"))
 
     def test_eu_pack_has_the_four_timeline_lanes_and_a_cofailure(self):
         block = build_block("eu-ai-act-obligations")
@@ -49,8 +57,21 @@ class Registry(unittest.TestCase):
         self.assertEqual(views["co-failure"]["count"]["chart"]["encoding"]["color"]["field"],
                          "statement.requirement")
         w = block["wording"]
-        self.assertEqual((w["calendar.activity"], w["calendar.class.good"], w["calendar.class.bad"]),
-                         ("sessions", "met all", "did not"))
+        self.assertEqual((w["calendar.activity.other"], w["calendar.class.good"], w["calendar.class.bad"]),
+                         ("{n} sessions", "{n} met all", "{n} did not"))
+
+    def test_every_wording_key_is_one_the_viewer_reads(self):
+        # capsule-viewer's default entries (go/pageruntime/evidence-graph.iife.js, main 3fb7ae8):
+        # a key it does not look up is ignored, so the page would keep its default words.
+        viewer = set(VIEWER_KEYS)
+        for pid in PACK_VIEWS:
+            for key, text in build_block(pid)["wording"].items():
+                with self.subTest(pid=pid, key=key):
+                    if key.startswith("lane."):
+                        continue
+                    self.assertIn(key, viewer)
+                    if WORDING_KEYS[key]:
+                        self.assertIn("{n}", text)
 
     def test_a_pack_without_views_gets_no_block(self):
         self.assertIsNone(build_block("inference-deals"))
@@ -86,29 +107,33 @@ class Validate(unittest.TestCase):
         self.assertEqual(validate(self.ok()), [])
 
     def test_each_refusal(self):
+        two_activity = [lane(), lane(id="b")]
         cases = {
-            "role twice": {"calendar": [lane(), lane(id="b")]},
-            "unknown role": {"calendar": [lane(role="x")]},
-            "class not good/bad/open": {"calendar": [lane(key="k", classes={"a": "great"})]},
-            "classes without key": {"calendar": [lane(classes={"a": "good"})]},
-            "judgment without classes": {"calendar": [lane(role="judgment", key="k")]},
-            "duplicate id": {"calendar": [lane(role=None), lane(role=None)]},
-            "bad id": {"calendar": [lane(id="Bad Id")]},
-            "timeline mark missing": {"timeline": [lane(role=None)]},
-            "timeline role": {"timeline": [lane(mark="tick")]},
-            "empty where": {"calendar": [lane(where=[])]},
-            "cofail without subject": {"cofail": {"id": "c", "where": [("a", "b")], "key": "k"}},
-            "stray member": {"calendar": [lane()], "extra": 1},
-            "wording key unknown": {"calendar": [lane()], "wording": {"nope": "x"}},
-            "lane title without lane": {"calendar": [lane()], "wording": {"lane.zz.title": "x"}},
-            "empty wording": {"calendar": [lane()], "wording": {"calendar.activity": " "}},
+            "is on more than one lane": {"calendar": two_activity},
+            "is not one of": {"calendar": [lane(role="x")]},
+            "must map each verdict value": {"calendar": [lane(key="k", classes={"a": "great"})]},
+            "needs a keyed lane": {"calendar": [lane(classes={"a": "good"})]},
+            "a judgment lane needs classes": {"calendar": [lane(role="judgment", key="k")]},
+            "is used twice": {"calendar": [lane(role=None), lane(role=None)]},
+            "must match": {"calendar": [lane(id="Bad Id")]},
+            ".mark must be one of": {"timeline": [lane(role=None)]},
+            "is a calendar member": {"timeline": [lane(mark="tick")]},
+            "non-empty list of (field, value)": {"calendar": [lane(where=[])]},
+            "cofail needs id": {"cofail": {"id": "c", "where": [("a", "b")], "key": "k"}},
+            "is not a view member": {"calendar": [lane()], "extra": 1},
+            "is not a wording key the views read": {"calendar": [lane()], "wording": {"calendar.activity": "{n} x"}},
+            "names no timeline lane": {"calendar": [lane()], "wording": {"lane.zz.title": "x"}},
+            "must carry {n}": {"calendar": [lane()], "wording": {"calendar.class.good": "resolved"}},
+            "must map keys to non-empty": {"calendar": [lane()], "wording": {"calendar.legend.good": " "}},
         }
-        for name, decl in cases.items():
-            decl = {k: v for k, v in decl.items()}
-            if name == "role twice":
-                decl["calendar"][1]["role"] = "activity"
-            with self.subTest(name):
-                self.assertNotEqual(validate(decl), [], name)
+        for fragment, decl in cases.items():
+            with self.subTest(fragment):
+                self.assertTrue(any(fragment in i for i in validate(decl)), validate(decl))
+
+    def test_the_viewers_plural_and_counted_words_are_accepted(self):
+        w = {"calendar.activity.one": "{n} case", "cofail.failing.other": "{n} cases failing",
+             "calendar.legend.most": "most not met"}
+        self.assertEqual(validate(self.ok(wording=w)), [])
 
 
 class Wire(unittest.TestCase):
