@@ -790,6 +790,11 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         self.assertEqual(rec["lane_totals"], {"routed_action": 1, "incident_flag": 0})
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             self._main("--day-spans", str(spans))
+        for bad in ([{"lane": "routed_action", "case_id": "case-zz", "start": "2026-09-23T01:00:00Z",
+                      "end": "2026-09-23T01:05:00Z"}], "not a list"):
+            spans.write_text(json.dumps(bad))
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
 
     def test_shared_subject_tier_salts_the_handle_per_share(self):
         calls = [{"role": "assistant", "tool_calls": [{"id": "1", "name": "get_user_details",

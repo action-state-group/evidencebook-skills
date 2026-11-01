@@ -33,6 +33,10 @@ out_of_scope; such a verdict is refused, not counted.
 """
 
 
+# Between the case id and the clause id in a day document's claim ids.
+CASE_SEPARATOR = "::"
+
+
 class RollupError(ValueError):
     """A rollup was asked to combine something other than exactly the verdicts it
     needs -- refused rather than silently combined over the wrong shape (absent is

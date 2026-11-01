@@ -62,9 +62,9 @@ class Build(unittest.TestCase):
     def test_informational_tier_comes_from_the_clause(self):
         clauses = [dict(CLAUSES[0], requirement_tier="informational")]
         claims = day(["t-1"], {})["claims"]
-        self.assertEqual(dr.case_terms(claims, "t-1", clauses)[0]["tier"], "informational")
+        self.assertEqual(dr.case_terms(dr.claim_verdicts(claims)["t-1"], clauses)[0]["tier"], "informational")
         with self.assertRaises(RollupError):
-            dr.case_terms(claims, "t-1", [dict(CLAUSES[0], requirement_tier="optional")])
+            dr.case_terms(dr.claim_verdicts(claims)["t-1"], [dict(CLAUSES[0], requirement_tier="optional")])
 
     def test_bad_inputs_are_refused(self):
         bad = [

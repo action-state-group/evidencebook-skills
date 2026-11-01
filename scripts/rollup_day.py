@@ -535,8 +535,14 @@ def main(argv):
         ap.error(f"--subject-*: {e}")
     try:
         day_spans = json.loads(args.day_spans.read_text()) if args.day_spans else None
+        day_record.check_spans(day_spans or [], set(by_case))
     except (OSError, ValueError) as e:
         ap.error(f"--day-spans: {e}")
+    placed = {c["id"].rpartition(CASE_SEPARATOR)[0] for _, d, _ in days if d for c in d["claims"]}
+    unplaced = sorted({s["case_id"] for s in day_spans or []} - placed)
+    if unplaced:
+        print(json.dumps({"evidence_unavailable": f"--day-spans name case(s) that are in no day Result: {unplaced!r}"}, indent=2))
+        return 2
     day_entries = []
     for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}

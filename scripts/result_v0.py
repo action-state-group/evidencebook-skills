@@ -41,11 +41,9 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rollup import RollupError, all_required_met, refuse_unknown_verdicts  # noqa: E402
+from rollup import CASE_SEPARATOR, RollupError, all_required_met, refuse_unknown_verdicts  # noqa: E402
 from day_record import merge_day_records  # noqa: E402
 from subject_history import merge_subject_history  # noqa: E402
-
-CASE_SEPARATOR = "::"
 
 _VERDICTS = ("met", "not_met", "not_evaluable")
 _VERDICTS_WITH_OOS = _VERDICTS + ("out_of_scope",)

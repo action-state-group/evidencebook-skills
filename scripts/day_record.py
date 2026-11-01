@@ -21,12 +21,11 @@ records (this repo holds none): validated, never inferred. `lane_totals` count t
 import datetime
 import re
 
-from rollup import RollupError
+from rollup import CASE_SEPARATOR, RollupError
 from subject_history import request_labels, usd_band
 
 LANES = ("routed_action", "incident_flag")
 REQUIREMENT_TIERS = ("must_have", "informational")
-CASE_SEPARATOR = "::"
 
 
 _RFC3339 = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)")
@@ -61,9 +60,17 @@ def check_spans(spans, known_cases):
     return out
 
 
-def case_terms(claims, case_id, clauses):
-    """The terms of one case: the contract's clauses in order, each with the case's claim verdict."""
-    verdicts = {c["requirement_ref"]: c["verdict"] for c in claims if c["id"] == f"{case_id}{CASE_SEPARATOR}{c['requirement_ref']}"}
+def claim_verdicts(claims):
+    """case_id -> {clause id: verdict} from a day Result's claims (ids are `<case_id>::<clause id>`)."""
+    out = {}
+    for c in claims:
+        out.setdefault(c["id"].rpartition(CASE_SEPARATOR)[0], {})[c["requirement_ref"]] = c["verdict"]
+    return out
+
+
+def case_terms(verdicts, clauses):
+    """The terms of one case: the contract's clauses in order, each with the case's verdict
+    (`verdicts`: clause id -> verdict), `out_of_scope` where it has none."""
     terms = []
     for clause in clauses:
         tier = clause.get("requirement_tier", "must_have")
@@ -80,13 +87,13 @@ def build_day_record(generated_at, claims, clauses, conversations, spans=None, k
     rfc3339(generated_at, "judged_at")
     known = set(known_cases if known_cases is not None else conversations)
     checked = check_spans(spans or [], known)
-    cases = {}
+    cases, verdicts = {}, claim_verdicts(claims)
     for case_id, messages in sorted(conversations.items()):
         entry = {"request_labels": request_labels(messages)}
         band = usd_band(messages)
         if band:
             entry["usd_band"] = band
-        entry["terms"] = case_terms(claims, case_id, clauses)
+        entry["terms"] = case_terms(verdicts.get(case_id, {}), clauses)
         cases[case_id] = entry
     day_cases = set(conversations)
     spans_here = [s for s in checked if s["case_id"] in day_cases]
