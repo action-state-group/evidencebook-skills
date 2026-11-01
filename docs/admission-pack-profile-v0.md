@@ -167,6 +167,7 @@ records its count, and its denominator where one exists.
 | `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, a stake on a rail `trust_roots.rails` does not pin, or a different unit | |
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
+| `card.self_reported_served_periods` | card | `window`, `min_periods` | at least `min_periods` of the last `window` closed periods have a published served total (§3.4) | card not verified, or it carries no served periods | periods counted / `window` |
 | `judged` | judged | | the judge met the row | not judged, or judged by a judge outside `trust_roots.judges` (reported, not counted) | |
 
 **A missing input versus nothing to read.** `not_read` has two causes. The
@@ -290,6 +291,32 @@ shows them. From a `standard_history/1` card these are
 card-level, across all bands, since `/1` carries no disputes per band. It is a
 `card` row, so it records or limits and never decides NO.
 
+### 3.4 Self-reported served periods
+
+A Mesh node's history is an `inference-service-history/0` Standard answer
+(AAC `spec/inference-service-history-profile-v0.md`, cited here as ISH). It
+carries the node's own count of the exchanges it served in each closed period,
+labelled `self_reported` (ISH §7.1). It has no amounts, no outcomes and no
+disputes, so it fills neither the ladder nor `card.open_disputes`.
+capsule-engine reads it into the card as its served periods: each closed
+period, in order to the anchor, with its `exchanges_served` total or the
+reason that total is suppressed (`below_floor` or `complementary`, ISH §6.2).
+
+`card.self_reported_served_periods` reads the last `window` of those periods. A
+period is counted when its served total is published. A suppressed total is not
+counted, and neither is a period the answer does not list because the node's
+stream is younger than `window`. Neither is a fail on its own. The row passes
+when at least `min_periods` periods are counted. `min_periods` is at most
+`window`.
+
+The row never adds counts across periods or models, and never reads
+`exchanges_requested`. Every count it reads is the node's own statement, so the
+decision says so: the row's block entry carries `label: "self_reported"` and
+`not_counted`, the number of periods not counted for each reason. Exchanges the
+other side's own half confirms come only from the relying party's own book, in
+`own.held_halves`. It is a `card` row, so it records or limits and never
+decides NO.
+
 ## 4. Resolution
 
 In order:
@@ -333,8 +360,8 @@ The evaluator's input is the deal and what was received:
   - the platform facts;
   - the card, with its state, first and latest checkpoint times, witness,
     declared controller, claims held and made, per-band counts
-    `{currency, decade, subjects, adverse}`, and its received disputes
-    `{open, of}`;
+    `{currency, decade, subjects, adverse}`, its received disputes
+    `{open, of}`, and its served periods (§3.4);
   - a bound selection, with its state and its unanswered disputes;
   - the party's own book with the counterparty, as counts and adjudications;
   - the operator's list result;
@@ -366,6 +393,11 @@ The new members are additive:
 - `asks`, each `{row, derivation, deadline_s}`;
 - each row's `effect` (`none`, `NO`, `LIMIT`, `ASK` or `cap`), with `count` and
   `denominator` where it counts.
+- on a `card.self_reported_served_periods` row, `label` (`self_reported`)
+  and `not_counted`, `{below_floor, complementary, not_listed}`;
+- `coverage`, only when the card carries served periods:
+  `{kind: "stream_interval", population: "NOT_CHECKED"}`. The counts were not
+  checked against records, so completeness is not established (ISH §4.2).
 
 The caller seals the block and names the counterparty by its own reference.
 The block is about one counterparty, so it is local-only and is never exported
@@ -377,7 +409,7 @@ v0. The baseline's numbers are placeholders, calibrated first from the live
 stage-1 health report. The fixtures are checked against the evaluator in
 capsule-engine's CI. `pack lint` and `pack test` are #56.
 
-Added after the first v0 compile (#79, #87):
+Added after the first v0 compile (#79, #87, capsule-engine#273):
 
 - **The per-band ladder** with k and a step-up (§3.1; Reference v3 §3A.14,
   item 26). The evaluator reads it. No served card carries per-band counts of
@@ -387,6 +419,8 @@ Added after the first v0 compile (#79, #87):
   digest (AAC#406).
 - **The ladder from a `standard_history/1` card** (§3.1) and
   `card.open_disputes` (§3.3), from #87.
+- **Self-reported served periods** (§3.4), from an `inference-service-history/0`
+  card, for a personal agent admitting a Mesh node (capsule-engine#273).
 
 All are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails

@@ -100,6 +100,30 @@ class Ladder(unittest.TestCase):
             "check: card.open_disputes\n    params: {max: 1}\n    from: T1\n    on_fail: \"NO\"")))
         self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
 
+    def test_self_reported_served_periods(self):
+        # A Mesh node's inference-service-history/0 card (capsule-engine#273).
+        row = """  - id: served-periods
+    statement: The node's own counts show served exchanges in at least 3 of the last 4 weeks.
+    source: card
+    check: card.self_reported_served_periods
+    params: {window: 4, min_periods: 3}
+    from: T1
+    on_fail: "LIMIT"
+"""
+        text = ladder_text().replace("rows:\n", "rows:\n" + row, 1)
+        self.assertEqual(pack_compile.validate_source(load(text)), [])
+        for params, want in [("{window: 4}", "needs params.min_periods"),
+                             ("{window: 4, min_periods: 5}", "params.min_periods must be at most params.window"),
+                             ("{window: 0, min_periods: 0}", "params.window 0 must be from 1 to 10000"),
+                             ("{window: 4, min_periods: 0}", "params.min_periods 0 must be from 1 to 10000"),
+                             ("{window: 10001, min_periods: 1}", "params.window 10001 must be from 1 to 10000")]:
+            issues = pack_compile.validate_source(load(text.replace("{window: 4, min_periods: 3}", params)))
+            self.assertTrue(any(want in i for i in issues), (params, issues))
+        issues = pack_compile.validate_source(load(text.replace(
+            "params: {window: 4, min_periods: 3}\n    from: T1\n    on_fail: \"LIMIT\"",
+            "params: {window: 4, min_periods: 3}\n    from: T1\n    on_fail: \"NO\"")))
+        self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
+
     def test_the_baseline_has_no_ladder_yet(self):
         # No served card carries per-band counts of corroborated, net-settled
         # subjects yet (profile §6).
