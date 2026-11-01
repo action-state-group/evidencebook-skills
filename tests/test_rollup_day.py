@@ -796,6 +796,18 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
 
+    def test_day_spans_on_a_case_in_no_day_result_are_refused(self):
+        book = json.loads((self.tmp / "book.json").read_text())
+        last = self.spec["clauses"][-1]["id"]
+        book = [e for e in book if not (e["payload"].get("case_id") == "case-a" and e["payload"].get("clause_id") == last)]
+        (self.tmp / "book.json").write_text(json.dumps(book))
+        spans = self.tmp / "spans.json"
+        spans.write_text(json.dumps([{"lane": "incident_flag", "case_id": "case-a",
+                                      "start": "2026-09-23T01:00:00Z", "end": "2026-09-23T01:05:00Z"}]))
+        code, out = self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
+        self.assertEqual(code, 2)
+        self.assertIn("'case-a'", out["evidence_unavailable"])
+
     def test_shared_subject_tier_salts_the_handle_per_share(self):
         calls = [{"role": "assistant", "tool_calls": [{"id": "1", "name": "get_user_details",
                                                        "arguments": {"user_id": "synthetic_9"}}]}]
