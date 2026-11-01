@@ -77,7 +77,7 @@ TIERS = {"judged", "recomputed"}
 # whether it decides the overall answer. Distinct from `tier` above (how it is checked).
 REQUIREMENT_TIERS = {"must_have", "informational"}
 
-# scripts/result_v0.py's CASE_SEPARATOR, repeated here rather than imported so
+# scripts/rollup.py's CASE_SEPARATOR, repeated here rather than imported so
 # this compiler keeps no dependency on the rollup modules: a day document's
 # claim id is <case_id>::<clause_id>, so no check or criterion id may carry it.
 CASE_SEPARATOR = "::"

@@ -772,6 +772,42 @@ class ScopingExclusionsAreCounted(unittest.TestCase):
         self.assertIn("customer_handle", entry)
         self.assertNotIn("synthetic_9", json.dumps(doc))
 
+    def test_day_record_writes_terms_spans_and_the_run_time_beside_no_subject_tier(self):
+        self._with_case_record([{"role": "assistant", "tool_calls": [{"id": "1", "name": "cancel_reservation",
+                                                                      "arguments": {}}]}])
+        spans = self.tmp / "spans.json"
+        spans.write_text(json.dumps([{"lane": "routed_action", "case_id": "case-a",
+                                      "start": "2026-09-23T01:00:00Z", "end": "2026-09-23T01:05:00Z"}]))
+        code, _ = self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
+        self.assertEqual(code, 0)
+        doc = json.loads(next((self.tmp / "out").glob("result-v0-*.json")).read_text())
+        member = doc["x-airline-support-outcomes"]
+        self.assertNotIn("subject_history", member)
+        rec = member["day_record"]
+        self.assertEqual(rec["judged_at"], "2026-09-24T23:59:59Z")
+        self.assertEqual(rec["cases"]["case-a"]["request_labels"], ["cancellation"])
+        self.assertEqual([t["id"] for t in rec["cases"]["case-a"]["terms"]], [c["id"] for c in self.spec["clauses"]])
+        self.assertEqual(rec["lane_totals"], {"routed_action": 1, "incident_flag": 0})
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            self._main("--day-spans", str(spans))
+        for bad in ([{"lane": "routed_action", "case_id": "case-zz", "start": "2026-09-23T01:00:00Z",
+                      "end": "2026-09-23T01:05:00Z"}], "not a list"):
+            spans.write_text(json.dumps(bad))
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
+
+    def test_day_spans_on_a_case_in_no_day_result_are_refused(self):
+        book = json.loads((self.tmp / "book.json").read_text())
+        last = self.spec["clauses"][-1]["id"]
+        book = [e for e in book if not (e["payload"].get("case_id") == "case-a" and e["payload"].get("clause_id") == last)]
+        (self.tmp / "book.json").write_text(json.dumps(book))
+        spans = self.tmp / "spans.json"
+        spans.write_text(json.dumps([{"lane": "incident_flag", "case_id": "case-a",
+                                      "start": "2026-09-23T01:00:00Z", "end": "2026-09-23T01:05:00Z"}]))
+        code, out = self._main("--judge-model-id", self.SEALED_UNDER, "--day-record", "--day-spans", str(spans))
+        self.assertEqual(code, 2)
+        self.assertIn("'case-a'", out["evidence_unavailable"])
+
     def test_shared_subject_tier_salts_the_handle_per_share(self):
         calls = [{"role": "assistant", "tool_calls": [{"id": "1", "name": "get_user_details",
                                                        "arguments": {"user_id": "synthetic_9"}}]}]

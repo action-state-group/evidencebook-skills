@@ -141,6 +141,12 @@ handles (`handle_scope.salting: "per-share"`) and one customer cannot be linked 
 Case ids stay the same in every share of one report.
 `--subject-facts` supplies `follow_up_of` (a `references[]` cite) and halves (from the bilateral
 records); they are validated, never inferred. Synthetic fixtures: `tests/fixtures/subject-history/`.
+`rollup_day.py --day-record` adds a `day_record` section beside it in the same `x-<pack_id>` member
+(`scripts/day_record.py`, evidencebook-skills#95): per case the request labels, USD band and per-term results
+(`{id, tier, verdict}` in the contract's clause order), the run's `judged_at` (`--generated-at`), and the
+`spans` (`routed_action` and `incident_flag`, start and end) with `lane_totals`. `--day-spans` supplies the spans
+from the records the caller read; they are validated, never inferred. The multi-day merge joins the cases and
+spans and recounts the totals.
 `--attach-input-originals`
 carries each conversation's full transcript in the bundle (off by default: it
 discloses the raw conversations, not only digests). `--date`/`--to` take a day range; more than one

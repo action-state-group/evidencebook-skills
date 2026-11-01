@@ -41,10 +41,9 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from rollup import RollupError, all_required_met, refuse_unknown_verdicts  # noqa: E402
+from rollup import CASE_SEPARATOR, RollupError, all_required_met, refuse_unknown_verdicts  # noqa: E402
+from day_record import merge_day_records  # noqa: E402
 from subject_history import merge_subject_history  # noqa: E402
-
-CASE_SEPARATOR = "::"
 
 _VERDICTS = ("met", "not_met", "not_evaluable")
 _VERDICTS_WITH_OOS = _VERDICTS + ("out_of_scope",)
@@ -449,12 +448,22 @@ def merge_result_v0_documents(docs, title, generated_at):
             "title": title,
         },
     }
-    # A pack's subject-history member (scripts/subject_history.py) is combined across the days and
-    # must be on every day or none; any other document-level x- member is per-document and not carried.
-    names = {n for d in docs for n, v in d.items() if n.startswith("x-") and isinstance(v, dict) and "subject_history" in v}
+    # A pack's subject-history and day-record sections (scripts/subject_history.py, scripts/day_record.py)
+    # are combined across the days and must be on every day or none; any other document-level x- member
+    # is per-document and not carried.
+    sections = ("subject_history", "day_record")
+    names = {n for d in docs for n, v in d.items() if n.startswith("x-") and isinstance(v, dict)
+             and any(key in v for key in sections)}
     for name in sorted(names):
-        absent = [d["view"]["title"] for d in docs if "subject_history" not in (d.get(name) or {})]
-        if absent:
-            raise RollupError(f"{name} is missing from some documents: {absent!r}")
-        merged[name] = merge_subject_history([d[name] for d in docs])
+        merged[name] = {}
+        for key in sections:
+            absent = [d["view"]["title"] for d in docs if key not in (d.get(name) or {})]
+            if len(absent) == len(docs):
+                continue
+            if absent:
+                raise RollupError(f"{name} {key} is missing from some documents: {absent!r}")
+            if key == "subject_history":
+                merged[name].update(merge_subject_history([d[name] for d in docs]))
+            else:
+                merged[name][key] = merge_day_records([d[name][key] for d in docs])
     return merged
