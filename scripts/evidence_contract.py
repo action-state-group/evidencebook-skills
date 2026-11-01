@@ -109,9 +109,11 @@ def _judged_evidence(source):
             [e.replace(*_SECOND_PERSON) for e in pack_compile._LEGACY_JUDGE_EVIDENCE])
 
 
-def from_pack(source):
-    """A validated pack source (pack_compile.validate_source) -> the contract."""
-    issues = pack_compile.validate_source(source)
+def from_pack(source, base_dir=None):
+    """A validated pack source (pack_compile.validate_source) -> the contract.
+    base_dir is the source's directory, which a live pack's fold files are read
+    relative to."""
+    issues = pack_compile.validate_source(source, base_dir)
     if not issues and live_pack.is_live(source):
         return _contract(source["pack_id"], source["pack_version"], live_pack.from_live(source)["requirements"])
     if not issues and admission_pack.is_admission(source):
@@ -315,7 +317,7 @@ def load_input(path):
             raise ContractError(str(e)) from e
         return from_report_spec(spec)
     if isinstance(doc, dict) and "pack_id" in doc:
-        return from_pack(pack_compile.load_source(pathlib.Path(path).read_text()))
+        return from_pack(pack_compile.load_source(pathlib.Path(path).read_text()), pathlib.Path(path).parent)
     raise ContractError(f"{path}: neither a pack source (pack_id) nor a report-spec/v1")
 
 

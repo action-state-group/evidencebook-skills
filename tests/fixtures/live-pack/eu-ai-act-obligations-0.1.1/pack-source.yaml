@@ -1,0 +1,97 @@
+# Live fixture for evidencebook-skills#98: capsule-engine's
+# python/capsule_engine/packs/catalog/eu-ai-act/pack.yaml (capsule-engine main
+# f88a6e6) as a `scope.kind: live` pack-source.yaml, with `scope` and
+# `pack_version` added. Its definition_digest is the engine's.
+#
+# The original header follows.
+# SPDX-License-Identifier: Apache-2.0
+# EU AI Act obligations pack -- backward-only (no forward guard/constraint
+# integration; see AI-BOOTSTRAP.md for scope). `outcomes[]` below is the
+# EvidenceCompiler-compiled candidate from `register.yaml`, transcribed
+# verbatim -- `tests/test_pack_eu_ai_act_trace.py`
+# recompiles the register and asserts the two never drift apart.
+pack_id: asg/eu-ai-act-obligations/0.1.1
+scope:
+  kind: live
+pack_version: 0.1.1
+
+outcomes:
+  - id: EU-53
+    statement: >-
+      The agent's model epoch cites the provider's downstream documentation
+      (Annex XII) for the model version actually used.
+    evidence_rule: "FACT. every TRACE-attested execution naming a GPAI model"
+    forward_verdict: DETERMINISTIC
+    backward_verdict: DETERMINISTIC
+    profile: obligation
+    epistemic_type: observed_event
+    clause_ref: EU AI Act Article 53
+    clause:
+      instrument: Regulation (EU) 2024/1689
+      article: Article 53
+      paragraph: "1(b)"
+      jurisdiction: EU
+
+  - id: EU-14-3
+    statement: >-
+      Human-oversight measures commensurate with the agent's autonomy were
+      in place and operated -- not merely declared.
+    evidence_rule: "RULE. every TRACE-attested execution carrying a policy binding"
+    forward_verdict: DETERMINISTIC
+    backward_verdict: DETERMINISTIC
+    profile: obligation
+    clause_ref: EU AI Act Article 14
+    clause:
+      instrument: Regulation (EU) 2024/1689
+      article: Article 14
+      paragraph: "3"
+      jurisdiction: EU
+
+  - id: EU-75
+    statement: >-
+      Records demanded by the AI Office were producible: complete,
+      checkpointed, and verifiable offline via a transparency-log receipt.
+    evidence_rule: "CONFIRM. every TRACE-attested execution of a GPAI-based or VLOP-embedded system"
+    forward_verdict: DETERMINISTIC
+    backward_verdict: DETERMINISTIC
+    profile: obligation
+    epistemic_type: producer_claim
+    clause_ref: EU AI Act Article 75
+    clause:
+      instrument: Regulation (EU) 2024/1689
+      article: Article 75
+      as_amended_by: ["Regulation (EU) 2026/1744"]
+      jurisdiction: EU
+
+  - id: EU-04
+    statement: >-
+      The deployer took measures to support AI literacy of staff operating
+      the agent.
+    evidence_rule: "DOC. all deployments Presence-by-digest only -- never graded 'compliant'."
+    forward_verdict: DETERMINISTIC
+    backward_verdict: DETERMINISTIC
+    profile: obligation
+    epistemic_type: obligation_reference
+    clause_ref: EU AI Act Article 4
+    clause:
+      instrument: Regulation (EU) 2024/1689
+      article: Article 4
+      as_amended_by: ["Regulation (EU) 2026/1744"]
+      jurisdiction: EU
+
+  - id: EU-50-1
+    statement: >-
+      Each natural person interacting with the agent was informed they were
+      interacting with an AI system, at the latest at first interaction.
+    evidence_rule: "FACT. every person-facing session"
+    forward_verdict: DETERMINISTIC
+    backward_verdict: DETERMINISTIC
+    profile: obligation
+    epistemic_type: observed_event
+    tier: must_have
+    clause_ref: EU AI Act Article 50
+    clause:
+      instrument: Regulation (EU) 2024/1689
+      article: Article 50
+      paragraph: "1"
+      jurisdiction: EU

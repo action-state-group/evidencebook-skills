@@ -1,0 +1,121 @@
+# Live fixture for evidencebook-skills#98: capsule-engine's
+# python/capsule_engine/packs/catalog/payments-safety/pack.yaml and its fold file
+# (capsule-engine main f88a6e6) as a `scope.kind: live` pack-source.yaml,
+# with `scope` and `pack_version` added. Its definition_digest is the engine's.
+#
+# The original header follows.
+# payments-safety starter pack: caps per scope/window, dedupe, and
+# verify-before-dispatch on money movement, plus the spend fold that makes
+# those checks' numbers real replays rather than guessed limits.
+#
+# Every obligation below maps 1:1 to a constraint's `check` (the recipe
+# shape: obligation -> deterministic check -> dry-run -> evidence -> what a
+# stranger can verify -> limits -- the full recipe doc lands per-pack in a
+# later phase; this file is the machine-checked contract that doc describes).
+#
+# Holds (reserve/release) integration is intentionally NOT built here --
+# `holds_integration: stubbed` below records that the seam is deferred, not
+# silently absent.
+pack_id: asg/payments-safety/1.0.0
+scope:
+  kind: live
+pack_version: 1.0.0
+
+obligations:
+  - id: caps-per-scope-window
+    statement: >-
+      No payment.dispatch action may push an operator's rolling weekly
+      spend -- pooled per developer identity, the same scope the caps check
+      already uses -- over the configured cap without a human approver
+      resolving the hold.
+    check: caps
+  - id: no-duplicate-dispatch
+    statement: >-
+      No payment.dispatch action may be recorded twice for the same
+      operator, developer, action type, and counterparty within the dedupe
+      window.
+    check: dedupe
+  - id: verify-before-dispatch
+    statement: >-
+      No payment.dispatch action may proceed on a cited authorization
+      capsule that cannot be re-verified, byte-for-byte, against what is
+      actually sitting in the ledger.
+    check: verify_before_dispatch
+
+action_semantics:
+  - action_type: payment.dispatch
+    action_class: money.transfer
+    required_fields: [amount_minor, currency, target]
+    optional_fields: [cited_mandate_capsule_id, equivalence_key]
+    # Pack-facing names shown in obligations/docs/AI-BOOTSTRAP.md; the wire
+    # and engine contract is always the normalized field on the left.
+    field_aliases:
+      target: counterparty_ref
+
+constraints:
+  - wicket_id: payments_safety.caps/1.0.0
+    check: caps
+    # Declared scope (registry-architecture-and-namespace-2026-08-10.md's
+    # generalization of capsule-emit PR #54's cross-class TOCTOU finding):
+    # this cap is enforced per developer -- matches the cited fold's own
+    # `key: developer`. Only one action class is configured today
+    # (money.transfer), so there is nothing to pool across yet; the loader
+    # would refuse a second caps_minor entry here without also adding
+    # 'action_class' to this list AND a class-scoped filter/key to the fold.
+    scope: [developer]
+    config:
+      fold_id: payments_safety.spend.weekly/1.0.0
+      # Real, independently-recomputable digest of
+      # folds/spend_weekly.yaml (folds/definition.py's definition_digest()) --
+      # documentary cross-check only, mirroring the core caps wicket's own
+      # `fold_digest` field; the manifest's own fold ref is what the engine
+      # actually resolves against.
+      fold_digest: f7ba1ddae6f60ba1c4b8d6d5244c02180a601452442f3360b8ac6c290dd73c60
+      caps_minor:
+        money.transfer: 1000000
+  - wicket_id: payments_safety.dedupe/1.0.0
+    check: dedupe
+    config:
+      method: exact_match_index_v0
+      # Declared, not yet engine-consumed -- guards/engine.py's dedupe
+      # window is still the module-level `_DEDUPE_WINDOW_DAYS = 30`
+      # constant, matching the core dedupe wicket's own documented gap
+      # (guards/wickets/catalog_defs/dedupe.yaml). 30 here is the true,
+      # currently-in-effect value, not aspirational.
+      window_days: 30
+  - wicket_id: payments_safety.verify_before_dispatch/1.0.0
+    check: verify_before_dispatch
+    config:
+      method: agent_action_capsule.verify
+
+folds:
+  - file: folds/spend_weekly.yaml
+
+# Threshold proposers: declared and digested in P1, not yet runnable.
+# `capsule thresholds propose` (P2) is what folds these over real traffic
+# and turns them into a rendered dry-run recommendation.
+proposers:
+  - id: weekly-cap-proposer
+    fold_id: payments_safety.spend.weekly/1.0.0
+    strategy: percentile
+    status: planned
+
+holds_integration: stubbed
+
+fixtures:
+  ledger: fixtures/mini_ledger.jsonl
+  scenarios:
+    - id: caps-allow
+      outcome: allow
+    - id: caps-escalate
+      outcome: escalate
+    - id: dedupe-deny
+      outcome: deny
+    - id: verify-before-dispatch-refusal
+      outcome: deny
+    - id: verify-before-dispatch-pass
+      outcome: allow
+    - id: caps-boundary-at-cap
+      outcome: allow
+
+bootstrap: AI-BOOTSTRAP.md
