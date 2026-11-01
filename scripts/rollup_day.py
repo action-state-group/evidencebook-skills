@@ -58,6 +58,7 @@ from result_v0 import (CASE_SEPARATOR, build_result_v0, build_result_v0_for_day,
                        resolve_contract_ref)
 from rollup import (RollupError, all_criteria_from_clauses, all_required_met,  # noqa: E402
                     checks_from_clauses, check_verdicts, never_out_of_scope_from_clauses)
+import day_record  # noqa: E402
 import subject_history  # noqa: E402
 from run_daily import effective_tier  # noqa: E402
 
@@ -452,7 +453,15 @@ def main(argv):
     ap.add_argument("--subject-facts", type=pathlib.Path, default=None,
                     help="JSON {case_id: {follow_up_of: case_id, halves: {present, of}}}: the references[] cite and "
                          "bilateral-record counts the caller read; validated, never inferred")
+    ap.add_argument("--day-record", action="store_true",
+                    help="add the pack's day_record section (scripts/day_record.py) to every day Result: per case request "
+                         "labels, USD band and per-term results, the run time, and the spans and lane totals. Off by default.")
+    ap.add_argument("--day-spans", type=pathlib.Path, default=None,
+                    help="with --day-record, JSON [{lane: routed_action|incident_flag, case_id, start, end}]: the routed "
+                         "actions' and incident flags' start and end the caller read; validated, never inferred")
     args = ap.parse_args(argv)
+    if args.day_spans and not args.day_record:
+        ap.error("--day-spans goes with --day-record")
     if args.subject_tier and not args.subject_salt_file:
         ap.error(f"--subject-tier {args.subject_tier} needs --subject-salt-file")
     if (args.subject_tier == "shared") != (args.subject_share_id is not None):
@@ -524,19 +533,30 @@ def main(argv):
             subject_history.share_key(subject_salt, args.subject_share_id)
     except (OSError, ValueError, RollupError) as e:
         ap.error(f"--subject-*: {e}")
+    try:
+        day_spans = json.loads(args.day_spans.read_text()) if args.day_spans else None
+    except (OSError, ValueError) as e:
+        ap.error(f"--day-spans: {e}")
     day_entries = []
     for period, day_doc, skipped in days:
         entry = {"period": period, "cases_skipped": skipped}
         if day_doc is not None:
             day_label = period.split(":", 1)[1] if period and ":" in period else (period or "unknown-period")
             day_doc["view"]["title"] = report_title(spec, day_label)
-            if args.subject_tier:
+            if args.subject_tier or args.day_record:
+                pack_id = contract_ref.rpartition("@")[0]
                 day_cases = sorted({c["id"].rpartition(CASE_SEPARATOR)[0] for c in day_doc["claims"]})
                 try:
                     conversations = {cid: case_messages(args.capsulectl, args.profile, by_case[cid]) for cid in day_cases}
-                    day_doc[subject_history.extension_name(contract_ref.rpartition("@")[0])] = subject_history.build_subject_history(
-                        contract_ref.rpartition("@")[0], args.subject_tier, conversations,
-                        subject_facts, subject_salt, known_cases=set(by_case), share_id=args.subject_share_id)
+                    member = day_doc.setdefault(subject_history.extension_name(pack_id), {})
+                    if args.subject_tier:
+                        member.update(subject_history.build_subject_history(
+                            pack_id, args.subject_tier, conversations,
+                            subject_facts, subject_salt, known_cases=set(by_case), share_id=args.subject_share_id))
+                    if args.day_record:
+                        member["day_record"] = day_record.build_day_record(
+                            args.generated_at, day_doc["claims"], spec["clauses"], conversations,
+                            day_spans, known_cases=set(by_case))
                 except RollupError as e:
                     print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
                     return 2
