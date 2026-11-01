@@ -1,0 +1,589 @@
+# Live fixture for evidencebook-skills#98: capsule-engine's
+# python/capsule_engine/packs/catalog/eu-ai-act-deterministic/pack.yaml (capsule-engine main
+# f88a6e6) as a `scope.kind: live` pack-source.yaml, with `scope` and
+# `pack_version` added. Its definition_digest is the engine's.
+#
+# The original header follows.
+# SPDX-License-Identifier: Apache-2.0
+# EU AI Act deterministic obligations pack -- backward-only.
+#
+# `outcomes[]` is the deterministic obligations pack that
+# `EvidenceCompiler.compile_obligations` produces from
+# `../eu-ai-act/obligations-register.yaml`, transcribed verbatim: 26 rows,
+# each checked mechanically from sealed records. The 10 rows that need
+# judgment, a live system-of-record read, or a reading of a contested clause
+# are not here; `../eu-ai-act/obligations-pack-note.md` lists them and why.
+#
+# One human edit on top of the compiled rows: `tier: must_have` on the
+# Article 5, 50 and 26 rows (every other row is `informational`, the
+# default). `tests/test_pack_eu_ai_act_deterministic.py` recompiles the
+# register and fails if any outcome differs from it in anything but `tier`.
+#
+# Most rows name the field they need in `evidence_instrument` and so are
+# `declared_not_measured`: a plain `{"messages": [...]}` transcript corpus
+# does not carry a disclosure event, an approver id or a document digest.
+# Running `capsule-engine packs propose` over such a corpus reports MISSING
+# INSTRUMENT on those rows, naming the field. That is the expected result.
+#
+# DOC rows are presence-by-digest only and never graded "compliant".
+pack_id: asg/eu-ai-act-deterministic/0.1.0
+scope:
+  kind: live
+pack_version: 0.1.0
+
+outcomes:
+- id: EU-05d
+  statement: The agent generated no intimate/sexual imagery of an identifiable person
+    without explicit consent, and no CSAM.
+  evidence_rule: RULE. every content-generation action; refusals for prohibited
+    content classes are sealed and none executed
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: refusal_verdict_class
+  clause_ref: EU AI Act Article 5
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 5
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 1(ba)/(bb)
+    jurisdiction: EU
+    effective_from: '2026-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  tier: must_have
+- id: EU-04
+  statement: The deployer took measures to support AI literacy of staff operating
+    the agent.
+  evidence_rule: DOC. all deployments Presence-by-digest only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  clause_ref: EU AI Act Article 4
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 4
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    jurisdiction: EU
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-53
+  statement: The agent's model epoch cites the provider's downstream documentation
+    (Annex XII) for the model version actually used.
+  evidence_rule: FACT. every TRACE-attested execution naming a GPAI model
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  clause_ref: EU AI Act Article 53
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 53
+    paragraph: 1(b)
+    jurisdiction: EU
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-55
+  statement: Serious incidents involving the model were tracked and reported to
+    the AI Office without undue delay.
+  evidence_rule: FACT. every model serious incident, flag to AI Office report, within
+    the declared deadline
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: ai_office_acknowledgement_digest
+  clause_ref: EU AI Act Article 55
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 55
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 1(c)
+    jurisdiction: EU
+    effective_from: '2025-08-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-50-1
+  statement: Each natural person interacting with the agent was informed they were
+    interacting with an AI system, at the latest at first interaction.
+  evidence_rule: FACT. every person-facing session
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  clause_ref: EU AI Act Article 50
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 50
+    paragraph: '1'
+    jurisdiction: EU
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-50-2
+  statement: Synthetic audio/image/video/text output by the agent carried machine-readable
+    marking.
+  evidence_rule: FACT. every output capsule of a synthetic media class carries a
+    marking reference
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: output_media_class
+  clause_ref: EU AI Act Article 50
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 50
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '2'
+    jurisdiction: EU
+    effective_from: '2026-08-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-50-3
+  statement: Persons exposed to emotion-recognition or biometric categorisation
+    by the agent were informed.
+  evidence_rule: FACT. an emotion or biometric disclosure is sealed before the relevant
+    action
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: interaction_disclosure_kind
+  clause_ref: EU AI Act Article 50
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 50
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '3'
+    jurisdiction: EU
+    effective_from: '2026-08-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-50-4
+  statement: Deepfakes and AI-generated public-interest text published via the agent
+    were disclosed as such, unless human-reviewed under editorial responsibility.
+  evidence_rule: FACT. every publish action carries a disclosure flag or a chained
+    human-review approval
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: publish_disclosure_flag
+  clause_ref: EU AI Act Article 50
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 50
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '4'
+    jurisdiction: EU
+    effective_from: '2026-08-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-75
+  statement: 'Records demanded by the AI Office were producible: complete, checkpointed,
+    and verifiable offline via a transparency-log receipt.'
+  evidence_rule: CONFIRM. every TRACE-attested execution of a GPAI-based or VLOP-embedded
+    system
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  clause_ref: EU AI Act Article 75
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 75
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    jurisdiction: EU
+  profile: obligation
+  epistemic_type: producer_claim
+- id: EU-12-1
+  statement: The agent automatically records events over its lifetime -- every consequential
+    action sealed at the time it occurred.
+  evidence_rule: FACT. all agent actions producing a consequential capsule, reconciled
+    against the runtime's native event log
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: native_log_event_kind
+  clause_ref: EU AI Act Article 12
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 12
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '1'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-12-2
+  statement: The logs are sufficient to identify risk situations, support post-market
+    monitoring, and support the deployer's monitoring duty.
+  evidence_rule: DOC. the registered log schema, plus the record types present in
+    each range Presence-by-digest only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: record_kind
+  clause_ref: EU AI Act Article 12
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 12
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 2(a)-(c)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-12-3
+  statement: 'For each use: period of use (start/end), reference database checked,
+    input data, and the natural persons who verified the result are recorded. Remote
+    biometric identification only.'
+  evidence_rule: 'FACT. every remote biometric identification use: session start/end,
+    reference database and input digests, verifier'
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: biometric_reference_db_digest
+  clause_ref: EU AI Act Article 12
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 12
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '3'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-13
+  statement: The deployer was given the means to collect, store and interpret the
+    agent's logs.
+  evidence_rule: DOC. the instructions-of-use artifact provided to the deployer
+    Presence-by-digest only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: instructions_of_use_digest
+  clause_ref: EU AI Act Article 13
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 13
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 3(f)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-14-3
+  statement: Human-oversight measures commensurate with the agent's autonomy were
+    in place and operated -- not merely declared.
+  evidence_rule: RULE. every TRACE-attested execution carrying a policy binding
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  clause_ref: EU AI Act Article 14
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 14
+    paragraph: '3'
+    jurisdiction: EU
+  profile: obligation
+- id: EU-14-4d
+  statement: The overseer could and did disregard, override or reverse the agent's
+    output where warranted.
+  evidence_rule: FACT. override and reversal capsules chained to the output they
+    supersede
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: chain_relation_supersedes
+  clause_ref: EU AI Act Article 14
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 14
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 4(d)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-14-4e
+  statement: The agent could be interrupted or brought to a safe halt; every stop
+    was recorded.
+  evidence_rule: FACT. every stop or interrupt is sealed as its own capsule
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: stop_interrupt_capsule
+  clause_ref: EU AI Act Article 14
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 14
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 4(e)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-15
+  statement: The agent performed consistently through its lifecycle; feedback loops
+    in continually-learning systems were mitigated.
+  evidence_rule: FACT. per-epoch results, never blended across epochs
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: epoch_id
+  clause_ref: EU AI Act Article 15
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 15
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 1, 4
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+- id: EU-17
+  statement: Post-market monitoring and incident reporting operated as documented
+    QMS components.
+  evidence_rule: DOC. the quality-management-system artifact Presence-by-digest
+    only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: qms_artifact_digest
+  clause_ref: EU AI Act Article 17
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 17
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 1(i), 1(j)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-26-2
+  statement: Human oversight was assigned to competent, trained, authorised persons.
+  evidence_rule: DOC. every approval capsule's approver id against the declared
+    roster Presence-by-digest only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: approver_id
+  clause_ref: EU AI Act Article 26
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 26
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '2'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+  tier: must_have
+- id: EU-26-5
+  statement: Operation was monitored; risks to health/safety/rights were escalated
+    (suspend + notify) and serious incidents were reported to the provider immediately.
+  evidence_rule: FACT. incident flag to suspend to provider notification, within
+    the declared deadline
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: suspend_notify_capsule
+  clause_ref: EU AI Act Article 26
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 26
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '5'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-26-6
+  statement: Automatically generated logs were retained for at least six months.
+  evidence_rule: FACT. log chain continuity over at least six months
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: retention_checkpoint_at
+  clause_ref: EU AI Act Article 26
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 26
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '6'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-26-7
+  statement: Workers' representatives and affected workers were informed before
+    the agent was deployed at the workplace.
+  evidence_rule: FACT. a worker notice is sealed before the first workplace action
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: worker_notice_at
+  clause_ref: EU AI Act Article 26
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 26
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '7'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-26-11
+  statement: Natural persons subject to decisions made or assisted by the agent
+    were informed of that fact.
+  evidence_rule: FACT. every decision capsule paired with a subject notice
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: subject_notice_at
+  clause_ref: EU AI Act Article 26
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 26
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: '11'
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: observed_event
+  tier: must_have
+- id: EU-27
+  statement: 'A fundamental-rights impact assessment was performed before first
+    use and notified to the authority. Narrow trigger: public bodies; credit/insurance
+    uses.'
+  evidence_rule: DOC. the impact-assessment artifact, sealed before the first-use
+    capsule Presence-by-digest only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: fria_artifact_digest
+  clause_ref: EU AI Act Article 27
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 27
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-09
+  statement: Risk management consumed post-market monitoring data across the lifecycle.
+  evidence_rule: DOC. the risk-management artifact citing the period reports Presence-by-digest
+    only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: risk_management_citation_digest
+  clause_ref: EU AI Act Article 9
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 9
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    paragraph: 2(c)
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference
+- id: EU-11
+  statement: Technical documentation describes the logging capability actually deployed.
+  evidence_rule: DOC. the technical documentation cited by the epoch capsule Presence-by-digest
+    only -- never graded 'compliant'.
+  forward_verdict: DETERMINISTIC
+  backward_verdict: DETERMINISTIC
+  measurability: declared_not_measured
+  evidence_instrument:
+    kind: structured_field
+    field: technical_documentation_digest
+  clause_ref: EU AI Act Article 11 / Annex IV
+  clause:
+    instrument: Regulation (EU) 2024/1689
+    article: Article 11 / Annex IV
+    as_amended_by:
+    - Regulation (EU) 2026/1744
+    jurisdiction: EU
+    effective_from: '2027-12-02'
+    source_url: https://eur-lex.europa.eu/eli/reg/2024/1689/oj
+  profile: obligation
+  epistemic_type: obligation_reference

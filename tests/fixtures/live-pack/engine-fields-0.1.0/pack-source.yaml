@@ -1,0 +1,142 @@
+# Live fixture for evidencebook-skills#98: a synthetic pack carrying the pack
+# fields no catalog pack uses, so each is pinned to the digest capsule-engine
+# main f88a6e6 computes for it (load_pack_dir(...).definition_digest() on this
+# file as pack.yaml, without scope and pack_version). Not a real pack.
+pack_id: asg/engine-fields/0.1.0
+scope:
+  kind: live
+pack_version: 0.1.0
+
+obligations:
+  - id: caps-per-window
+    statement: No dispatch may push weekly spend over the cap.
+    check: caps
+    default_disposition: ASK
+    re_derivability_grade: ledger_state_dependent
+    mode: value
+  - id: no-duplicate
+    statement: No dispatch may be recorded twice.
+    check: dedupe
+  - id: tone-judged
+    statement: The message to the counterparty was courteous.
+    mode: judged
+    default_disposition: ASK
+    re_derivability_grade: ledger_state_dependent
+    judge_pin:
+      model_id: judge-model-1
+      prompt_template_hash: "1111111111111111111111111111111111111111111111111111111111111111"
+      schema_hash: "2222222222222222222222222222222222222222222222222222222222222222"
+      input_refs: [outgoing_content]
+      model_hosting: self_hosted
+      model_digest: "3333333333333333333333333333333333333333333333333333333333333333"
+  - id: authority-declared
+    statement: The action cited its task authority.
+    measurability: declared_not_measured
+    evidence_instrument:
+      kind: tool_call_name
+      name: cite_authority
+    requirement_tier: informational
+
+action_semantics:
+  - action_type: payment.dispatch
+    action_class: money.transfer
+    required_fields: [amount_minor, currency, target]
+    optional_fields: [equivalence_key]
+    field_aliases:
+      target: counterparty_ref
+      currency: iso_currency
+
+constraints:
+  - wicket_id: engine_fields.caps/1.0.0
+    check: caps
+    scope: [developer]
+    config:
+      fold_id: payments_safety.spend.weekly/1.0.0
+      caps_minor:
+        money.transfer: 1000000
+  - wicket_id: engine_fields.dedupe/1.0.0
+    check: dedupe
+    semantics: One dispatch per equivalence key within the window.
+    config:
+      method: exact_match_index_v0
+      window_days: 30
+
+folds:
+  - file: folds/spend_weekly.yaml
+  - file: folds/refunds.yaml
+
+outcomes:
+  - id: O1
+    statement: The counterparty acted on the recommendation within a week.
+    evidence_rule: a recommendation capsule followed by the counterparty's acting capsule
+    forward_verdict: UNAVAILABLE-STATE-REQUIRED
+    backward_verdict: WITH-INSTRUMENTATION
+    window:
+      duration: P7D
+      cure: P1D
+    effect_claim: recommendation.acted_on
+    re_derivability_grade: ledger_state_dependent
+    declared_by: vendor
+    evidence_mapping_by: vendor
+    required_assurance_grade: attributable
+    exposure_denominator_ref: sessions.closed
+    retention_check: worm_tier_1
+    measurability: declared_not_measured
+    evidence_instrument:
+      kind: tool_call_name
+      name: act_on_recommendation
+    tier: must_have
+    mode: fold_counterparty
+    clause_ref: Contract section 4.2
+    clause:
+      instrument: Master services agreement
+      article: Section 4
+      as_amended_by: [Amendment 1]
+      paragraph: "2"
+      jurisdiction: US
+      text_snapshot_digest: "4444444444444444444444444444444444444444444444444444444444444444"
+      effective_from: "2026-03-01"
+      source_url: https://example.com/msa
+      contested: true
+    profile: obligation
+    epistemic_type: producer_claim
+  - id: O2
+    statement: The agent stated its uncertainty.
+    evidence_rule: a judge reads the sealed prose
+    forward_verdict: UNAVAILABLE-MODEL-REQUIRED
+    backward_verdict: MODEL-ASSISTED
+    mode: judged
+  - id: O3
+    statement: No claim that the agent caused the resolution.
+    evidence_rule: compile-time refusal
+    forward_verdict: REFUSED
+    backward_verdict: REFUSED
+    refusal_reason_code: unbounded_goal_unmonitorable
+    tier: informational
+
+profiles:
+  - profile_id: p3_mediated
+    counterparty_binding:
+      direct: employee
+      ultimate: downstream
+    overrides:
+      - outcome_id: O2
+        tier: must_have
+      - outcome_id: O1
+        applies: false
+  - profile_id: p1_external_serve
+    counterparty_binding:
+      direct: customer
+
+proposers:
+  - id: weekly-cap-proposer
+    fold_id: payments_safety.spend.weekly/1.0.0
+    strategy: percentile
+
+scope_census:
+  document_digest: "5555555555555555555555555555555555555555555555555555555555555555"
+  n: 3
+  m: 4
+  review_by: "2027-01-01"
+
+holds_integration: stubbed

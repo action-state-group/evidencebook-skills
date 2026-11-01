@@ -51,7 +51,8 @@ A pack source with `scope: {kind: live}` (absent means `after_the_fact`) is a
 capsule-engine live pack; scripts/live_pack.py validates it, and `compile` writes
 contract.json (the Evidence Contract) and pack-definition.json (the engine's pack
 definition and its definition_digest, also printed by `project`) instead of the
-four documents above. A pack source with `scope: {kind: admission}` is an
+four documents above; a fold `file` it names is read relative to the source's
+directory, as capsule-engine reads it. A pack source with `scope: {kind: admission}` is an
 admission pack (docs/admission-pack-profile-v0.md); scripts/admission_pack.py
 validates it, and `compile` writes contract.json and pack-definition.json, the
 pinned artifact the evaluator reads.
@@ -359,10 +360,11 @@ def _validate_deterministic(source, checks):
     return issues
 
 
-def validate_source(source):
+def validate_source(source, base_dir=None):
     """Every issue found, not just the first -- same `issues[]` convention
     evidence-contract-compile's own `capsulectl contract validate --json` uses.
-    A failing validation means nothing downstream is compiled."""
+    A failing validation means nothing downstream is compiled. base_dir is the
+    source's directory, which a live pack's fold files are read relative to."""
     issues = []
     if not isinstance(source, dict):
         return ["pack source must be a mapping"]
@@ -372,7 +374,7 @@ def validate_source(source):
     if scope_issues:
         return scope_issues
     if live_pack.is_live(source):
-        return live_pack.validate_live(source)
+        return live_pack.validate_live(source, base_dir)
     if admission_pack.is_admission(source):
         return admission_pack.validate_admission(source) or admission_pack.compile_issues(source)
 
@@ -967,13 +969,13 @@ def write_pack(source, out_dir, out_rel):
     return compiled
 
 
-def write_live_pack(source, out_dir):
+def write_live_pack(source, out_dir, base_dir=None):
     """A live pack compiles to its Evidence Contract and the projection to the
     engine's pack definition, not to the four after-the-fact documents."""
     import evidence_contract  # imports this module, so not at the top
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "contract.json").write_bytes(evidence_contract.to_bytes(live_pack.from_live(source)))
-    (out_dir / "pack-definition.json").write_bytes(live_pack.projection_bytes(source))
+    (out_dir / "pack-definition.json").write_bytes(live_pack.projection_bytes(source, base_dir))
 
 
 def write_admission_pack(source, out_dir):
@@ -1042,7 +1044,7 @@ def main(argv):
     args = ap.parse_args(argv)
     text = args.source.read_text()
     source = load_source(text)
-    issues = validate_source(source)
+    issues = validate_source(source, args.source.parent)
     if admission_pack.is_admission(source):
         issues = admission_pack.text_issues(text) + issues
 
@@ -1058,7 +1060,7 @@ def main(argv):
         if not live_pack.is_live(source):
             print(json.dumps({"valid": False, "issues": ["project needs a pack source with scope.kind: live"]}, indent=2))
             return 1
-        sys.stdout.buffer.write(live_pack.projection_bytes(source))
+        sys.stdout.buffer.write(live_pack.projection_bytes(source, args.source.parent))
         return 0
 
     try:
@@ -1068,7 +1070,7 @@ def main(argv):
         return 1
 
     if live_pack.is_live(source):
-        write_live_pack(source, out_abs)
+        write_live_pack(source, out_abs, args.source.parent)
         print(json.dumps({
             "valid": True,
             "pack_id": source["pack_id"],

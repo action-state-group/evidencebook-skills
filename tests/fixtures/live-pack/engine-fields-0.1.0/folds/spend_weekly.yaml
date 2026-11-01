@@ -1,0 +1,29 @@
+# payments-safety pack's own weekly-spend fold -- namespaced under
+# `payments_safety.` so it can coexist in a catalog directory alongside the
+# core repo's own `spend.weekly/1.0.0` (capsule_ledger/folds/catalog_defs/)
+# without a fold_id collision. Shape is otherwise identical: sum of
+# `asg_payload.amount_minor` over accepted decisions, per developer, in a
+# rolling 7-day window -- see folds/catalog_defs/spend.weekly.yaml for the
+# reference this mirrors.
+fold_id: payments_safety.spend.weekly/1.0.0
+reads:
+  - path: developer
+    erasure_class: commitment-ok
+  - path: timestamp
+    erasure_class: commitment-ok
+  - path: asg_payload.amount_minor
+    erasure_class: commitment-ok
+  - path: disposition.decision
+    erasure_class: commitment-ok
+filter:
+  - field: disposition.decision
+    op: eq
+    value: accept
+key: developer
+window:
+  mode: rolling
+  duration: 7d
+reduce:
+  reducer: sum
+  field: asg_payload.amount_minor
+emit: weekly_spend_minor

@@ -1,0 +1,39 @@
+# A fold exercising what the catalog folds do not: a read default, an `in`
+# filter, an explicit window and a reversal.
+fold_id: engine_fields.refunds/1.0.0
+reads:
+  - path: developer
+    erasure_class: commitment-ok
+  - path: timestamp
+    erasure_class: commitment-ok
+  - path: asg_payload.amount_minor
+    erasure_class: commitment-ok
+    default: 0
+  - path: asg_payload.kind
+    erasure_class: commitment-ok
+  - path: asg_payload.parent
+    erasure_class: preimage
+  - path: asg_payload.relation
+    erasure_class: commitment-ok
+  - path: disposition.decision
+    erasure_class: commitment-ok
+filter:
+  - field: disposition.decision
+    op: in
+    value: [accept, escalate]
+key: developer
+window:
+  mode: explicit
+  start: "2026-01-01T00:00:00Z"
+  end: "2026-02-01T00:00:00Z"
+reduce:
+  reducer: sum
+  field: asg_payload.amount_minor
+emit: net_spend_minor
+reversal:
+  class_field: asg_payload.kind
+  classes: [refund]
+  parent_field: asg_payload.parent
+  relation_field: asg_payload.relation
+  relation: supersedes
+derivation_class: deterministic
