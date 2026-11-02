@@ -1,0 +1,69 @@
+{
+  "id": "asg/admission_node_baseline/1.0.0",
+  "version": "1.0.0",
+  "requirements": [
+    {
+      "id": "deny-list",
+      "profile": "outcome",
+      "statement": "The node is not on the operator's deny list.",
+      "tier": "must_have",
+      "evidence_rule": "admission check operator.not_deny_listed, from tier T0; a failure gives NO",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "confirmed-exchanges",
+      "profile": "outcome",
+      "statement": "Our own book holds an exchange with the node whose half the node's half cites.",
+      "tier": "must_have",
+      "evidence_rule": "admission check own.held_halves (min 1), from tier T0; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "card-verified",
+      "profile": "outcome",
+      "statement": "The node's card verified.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.verified, from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "card-fresh",
+      "profile": "outcome",
+      "statement": "The node's card is at most eight days old, one weekly answer and a day.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.fresh (max_age_s 691200), from tier T1; a failure gives LIMIT; asks for cbc96d800ad206791db7e0793b80a2720c1908468ba99692b739aa8e74aab2d8",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "served-periods",
+      "profile": "outcome",
+      "statement": "The node's own counts show served exchanges in at least 2 of the last 4 weeks.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.self_reported_served_periods (min_periods 2, window 4), from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "witness-receipts",
+      "profile": "outcome",
+      "statement": "The verifier counted at least one witness receipt on the card's checkpoints.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.witness_receipts (min 1), from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "referee-verdicts",
+      "profile": "outcome",
+      "statement": "The node's own counts show referee verdicts in at least 2 of the last 4 weeks.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.referee_verdicts (min_periods 2, window 4), from tier T2; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    }
+  ]
+}
