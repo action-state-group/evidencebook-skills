@@ -100,6 +100,23 @@ class Ladder(unittest.TestCase):
             "check: card.open_disputes\n    params: {max: 1}\n    from: T1\n    on_fail: \"NO\"")))
         self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
 
+    def test_not_stapled_row_asks_above_t0(self):
+        # A stapled card decides T0 only (capsule-engine#277).
+        row = """  - id: card-asked
+    statement: The card was asked for, not stapled to the holder's message.
+    source: card
+    check: card.not_stapled
+    from: T1
+    on_fail: "LIMIT"
+    ask: {derivation: history_card/1}
+"""
+        text = ladder_text().replace("rows:\n", "rows:\n" + row, 1)
+        self.assertEqual(pack_compile.validate_source(load(text)), [])
+        issues = pack_compile.validate_source(load(text.replace(
+            "check: card.not_stapled\n", "check: card.not_stapled\n    params: {max: 1}\n", 1)))
+        self.assertTrue(any("check card.not_stapled takes no params.max" in i for i in issues), issues)
+        self.assertTrue(issues, issues)
+
     def test_self_reported_served_periods(self):
         # A Mesh node's inference-service-history/0 card (capsule-engine#273).
         row = """  - id: served-periods
