@@ -57,7 +57,8 @@ from judge_pin import DEFAULT_JUDGE_TIMEOUT, describe_judge, pin_input  # noqa: 
 from result_v0 import (CASE_SEPARATOR, build_result_v0, build_result_v0_for_day, headline_from_result, report_title,  # noqa: E402
                        resolve_contract_ref)
 from rollup import (RollupError, all_criteria_from_clauses, all_required_met,  # noqa: E402
-                    checks_from_clauses, check_verdicts, never_out_of_scope_from_clauses)
+                    checks_from_clauses, check_verdicts, informational_from_clauses,
+                    never_out_of_scope_from_clauses)
 import day_record  # noqa: E402
 import subject_history  # noqa: E402
 from run_daily import effective_tier  # noqa: E402
@@ -282,16 +283,17 @@ def partition_stale(clause_verdicts, all_criteria):
 
 
 def rollup_case(case_id, clause_verdicts, generated_at, checks, all_criteria, contract_ref, tiers,
-                allow_out_of_scope=False, never_out_of_scope=frozenset(), determinations=None):
+                allow_out_of_scope=False, never_out_of_scope=frozenset(), determinations=None,
+                informational=frozenset()):
     tiers = case_tiers(clause_verdicts, tiers, determinations)
     verdicts = {cid: v for cid, (v, _, _) in clause_verdicts.items()}
     digests = {cid: cap_id for cid, (_, cap_id, _) in clause_verdicts.items()}
     source_capsule_ids = {cid: src for cid, (_, _, src) in clause_verdicts.items() if src}
     check_results = check_verdicts(verdicts, checks, allow_out_of_scope)
-    resolved = all_required_met(verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
+    resolved = all_required_met(verdicts, all_criteria, allow_out_of_scope, never_out_of_scope, informational)
     result_v0, resolved_again = build_result_v0(case_id, verdicts, digests, generated_at, all_criteria, contract_ref,
                                                  tiers, allow_out_of_scope, never_out_of_scope,
-                                                 source_capsule_ids=source_capsule_ids)
+                                                 source_capsule_ids=source_capsule_ids, informational=informational)
     assert resolved == resolved_again  # same rollup, computed twice on purpose: must agree
     return {
         "case_id": case_id,
@@ -307,7 +309,7 @@ REASON_CONFLICTING = "conflicting verdicts under one pin"
 
 def day_document(period, day_cases, generated_at, all_criteria, contract_ref, tiers,
                  allow_out_of_scope=False, never_out_of_scope=frozenset(), determinations=None,
-                 conflicting=None):
+                 conflicting=None, informational=frozenset()):
     """Pure: one day's Result v0 over every case that can be rolled up, plus the
     list of cases left out and why -- nothing is dropped silently. Returns
     (document or None, skipped). `determinations` (report_determinations())
@@ -331,7 +333,7 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
             this_case_tiers = case_tiers(current, tiers, determinations)
             build_result_v0_for_day(period, [(case_id, verdicts, digests, this_case_tiers)], generated_at,
                                     all_criteria, contract_ref, allow_out_of_scope, never_out_of_scope,
-                                    source_capsule_ids={case_id: case_sources})
+                                    source_capsule_ids={case_id: case_sources}, informational=informational)
         except RollupError as e:
             skipped.append({"case_id": case_id, "reason": str(e)})
             continue
@@ -341,7 +343,7 @@ def day_document(period, day_cases, generated_at, all_criteria, contract_ref, ti
         return None, skipped
     return build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
                                    allow_out_of_scope, never_out_of_scope,
-                                   source_capsule_ids=source_capsule_ids), skipped
+                                   source_capsule_ids=source_capsule_ids, informational=informational), skipped
 
 
 def case_messages(capsulectl, profile, clause_verdicts):
@@ -400,7 +402,7 @@ def conflicting_cases_by_day(capsule_bodies, contract, expected_pin, expected_pa
 
 def day_results(capsule_bodies, contract, expected_pin, expected_pack, conflicts, generated_at, all_criteria,
                 contract_ref, tiers, allow_out_of_scope=False, never_out_of_scope=frozenset(),
-                determinations=None):
+                determinations=None, informational=frozenset()):
     """Pure: [(period, day document or None, cases_skipped)] for every period
     the book carries an in-scope report for. `conflicts` is the record
     collect_reports() already filled (per case, across days); the per-day
@@ -412,7 +414,7 @@ def day_results(capsule_bodies, contract, expected_pin, expected_pack, conflicts
     for period in sorted(set(by_day) | set(conflicted), key=lambda p: (p is None, p)):
         doc, skipped = day_document(period, by_day.get(period, {}), generated_at, all_criteria, contract_ref,
                                     tiers, allow_out_of_scope, never_out_of_scope, determinations,
-                                    conflicted.get(period))
+                                    conflicted.get(period), informational)
         out.append((period, doc, skipped))
     return out
 
@@ -480,6 +482,7 @@ def main(argv):
     all_criteria = all_criteria_from_clauses(spec["clauses"])
     tiers = clause_tiers(spec)
     never_oos = never_out_of_scope_from_clauses(spec["clauses"])
+    informational = informational_from_clauses(spec["clauses"])
     allow_out_of_scope = bool((spec.get("switches") or {}).get("out_of_scope_verdict"))
     args.out.mkdir(parents=True, exist_ok=True)
     work = args.out / "work"
@@ -496,7 +499,7 @@ def main(argv):
                                           conflicts)
         determinations = report_determinations(bodies)
         days = day_results(bodies, contract, expected_pin, expected_pack, conflicts, args.generated_at,
-                           all_criteria, contract_ref, tiers, allow_out_of_scope, never_oos, determinations)
+                           all_criteria, contract_ref, tiers, allow_out_of_scope, never_oos, determinations, informational)
     except (EvidenceUnavailable, RollupError) as e:
         print(json.dumps({"evidence_unavailable": str(e)}, indent=2))
         return 2
@@ -513,7 +516,7 @@ def main(argv):
             continue
         try:
             case_rollup = rollup_case(case_id, current, args.generated_at, checks, all_criteria, contract_ref, tiers,
-                                      allow_out_of_scope, never_oos, determinations)
+                                      allow_out_of_scope, never_oos, determinations, informational)
         except RollupError as e:
             incomplete.append({"case_id": case_id, "error": str(e)})
             continue
@@ -568,8 +571,8 @@ def main(argv):
                     return 2
             out_path = args.out / f"result-v0-{safe_filename(day_label)}.json"
             out_path.write_text(json.dumps(day_doc, indent=2))
-            entry.update(cases=headline_from_result(day_doc)["cases"], claims=len(day_doc["claims"]),
-                         headline=headline_from_result(day_doc), out=str(out_path))
+            entry.update(cases=headline_from_result(day_doc, informational)["cases"], claims=len(day_doc["claims"]),
+                         headline=headline_from_result(day_doc, informational), out=str(out_path))
         day_entries.append(entry)
 
     summary = {

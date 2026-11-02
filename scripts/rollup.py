@@ -12,9 +12,12 @@ criteria, so a pack that adds, removes or renames a criterion rolls up correctly
 without a code change here -- only scripts/rollup_day.py's caller needs to derive
 the shape from the spec it already loaded.
 
-The rollup treats every criterion the same way regardless of tier: it never reads
-a clause's tier/recompute_eligible fields, only the verdicts a day's judging
-produced.
+The rollup never reads a clause's tier/recompute_eligible fields, only the
+verdicts a day's judging produced. The one clause field it does read is
+`requirement_tier`: a criterion a pack marks `informational` reports its verdict
+but never decides `resolved` (Steven, 2026-11-01, evidencebook-skills#68). It is
+dropped before combining, so it can be neither the criterion that is met nor one
+that holds the conversation back; every other criterion decides as above.
 
 A conversation resolves only when something was actually checked: at least one
 criterion is met, and every criterion that applies to it is met. An out_of_scope
@@ -60,6 +63,12 @@ def all_criteria_from_clauses(clauses):
 def never_out_of_scope_from_clauses(clauses):
     """The clause ids a pack marks never_out_of_scope. Pure, derived from clauses[]."""
     return frozenset(clause["id"] for clause in clauses if clause.get("never_out_of_scope"))
+
+
+def informational_from_clauses(clauses):
+    """The clause ids a pack marks requirement_tier informational. Pure, derived
+    from clauses[]; a clause with no requirement_tier decides, as it always has."""
+    return frozenset(clause["id"] for clause in clauses if clause.get("requirement_tier") == "informational")
 
 
 VERDICTS = ("met", "not_met", "not_evaluable")
@@ -127,9 +136,12 @@ def check_verdicts(criterion_verdicts, checks, allow_out_of_scope=False):
 
 
 def all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope=False,
-                     never_out_of_scope=frozenset()):
+                     never_out_of_scope=frozenset(), informational=frozenset()):
     """The all-required rollup: a conversation is resolved only when at least one
     criterion is met and every required criterion that applies to it is met.
+    A criterion in `informational` is not required: it must still be present with
+    a valid verdict, but it is set aside before combining, so it never decides
+    and is never the one met.
     When the out_of_scope_verdict switch is on, an out_of_scope criterion does
     not apply to this conversation: it is set aside, never counted toward
     satisfaction -- it cannot be the one met, so all out_of_scope is NOT
@@ -152,4 +164,9 @@ def all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope=False,
     forbidden = sorted(c for c in never_out_of_scope if criterion_verdicts.get(c) == OUT_OF_SCOPE)
     if forbidden:
         raise RollupError(f"criteria that may never be out_of_scope came back out_of_scope: {forbidden!r}")
-    return combine(criterion_verdicts.values(), allow_out_of_scope) == "met"
+    # An informational verdict is set aside, not exempt: a malformed one is still refused.
+    refuse_unknown_verdicts(criterion_verdicts.values(), VERDICTS_WITH_OOS if allow_out_of_scope else VERDICTS)
+    deciding = [v for c, v in criterion_verdicts.items() if c not in informational]
+    if not deciding:
+        return False
+    return combine(deciding, allow_out_of_scope) == "met"

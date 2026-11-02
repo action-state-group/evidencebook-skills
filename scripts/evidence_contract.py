@@ -18,8 +18,8 @@ members EC v0 defines: `id`, `version` and one requirement per row.
   - A pack row's `tier` is its criterion's `requirement_tier`, `must_have` or
     `informational` (default `must_have`, as every criterion decides in
     rollup.all_required_met): whether the row decides the overall answer.
-    A pack source may only say `must_have` until the rollup can set a
-    criterion aside.
+    The compiled clause carries it too, and the rollup sets an `informational`
+    row aside in `resolved` while still reporting its verdict.
     A report-spec row carries none. It is not the clause's judged/recomputed
     `tier`, which the contract states as `mode` and `evidence_rule`.
   - A pack check that names an `article` is a native obligation citing it; any
@@ -149,7 +149,7 @@ def from_pack(source, base_dir=None):
             req["statement"] = crit["label"]
             # EC requirement `tier`: whether the row decides the overall answer.
             # Always written, so a reader never infers it; an unmarked criterion
-            # decides, as in rollup.all_required_met. Not the judged/recomputed
+            # decides, as in rollup.all_required_met; an informational one does not. Not the judged/recomputed
             # `tier` of a clause, which is `checkability` here.
             req["tier"] = crit.get("requirement_tier", "must_have")
             oos = out_of_scope and not crit.get("never_out_of_scope")

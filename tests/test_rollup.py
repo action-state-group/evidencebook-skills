@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 
 from rollup import (OUT_OF_SCOPE, VERDICTS_WITH_OOS, RollupError, all_criteria_from_clauses,  # noqa: E402
                     all_required_met, checks_from_clauses, check_verdicts, combine,
-                    never_out_of_scope_from_clauses)
+                    informational_from_clauses, never_out_of_scope_from_clauses)
 
 # A nine-criteria, three-check fixture (the airline pack's own shape) -- plain data, not
 # imported from any compiled contract, so these tests stay pure and don't depend on
@@ -243,6 +243,51 @@ class OutOfScopeNeverSatisfies(unittest.TestCase):
                 with self.assertRaisesRegex(RollupError, "not_applicable is not an adjudicator verdict"):
                     all_required_met(dict(ALL_MET, **{"task_resolution.right_change": "not_applicable"}),
                                      ALL_CRITERIA, allow_out_of_scope=allow)
+
+
+
+class Informational(unittest.TestCase):
+    """An informational criterion reports its verdict but never decides resolved."""
+    INFO = informational_from_clauses([dict(c, requirement_tier="informational") if c["id"] == "a.two" else c
+                                       for c in SMALL_CLAUSES])
+
+    def resolved(self, verdicts, **kw):
+        return all_required_met(verdicts, SMALL_ALL_CRITERIA, informational=self.INFO, **kw)
+
+    def test_the_set_is_the_clauses_marked_informational(self):
+        self.assertEqual(self.INFO, frozenset({"a.two"}))
+        self.assertEqual(informational_from_clauses(SMALL_CLAUSES), frozenset())
+        self.assertEqual(informational_from_clauses([dict(SMALL_CLAUSES[0], requirement_tier="must_have")]), frozenset())
+
+    def test_a_not_met_informational_does_not_block_resolution(self):
+        self.assertTrue(self.resolved({"a.one": "met", "a.two": "not_met", "b.one": "met", "b.two": "met"}))
+
+    def test_a_not_evaluable_informational_does_not_block_resolution(self):
+        self.assertTrue(self.resolved({"a.one": "met", "a.two": "not_evaluable", "b.one": "met", "b.two": "met"}))
+
+    def test_a_required_criterion_still_decides(self):
+        self.assertFalse(self.resolved({"a.one": "met", "a.two": "met", "b.one": "met", "b.two": "not_met"}))
+
+    def test_an_informational_met_is_never_the_one_that_is_met(self):
+        verdicts = {"a.one": "out_of_scope", "a.two": "met", "b.one": "out_of_scope", "b.two": "out_of_scope"}
+        self.assertFalse(self.resolved(verdicts, allow_out_of_scope=True))
+
+    def test_without_the_set_every_criterion_decides_as_before(self):
+        verdicts = {"a.one": "met", "a.two": "not_met", "b.one": "met", "b.two": "met"}
+        self.assertFalse(all_required_met(verdicts, SMALL_ALL_CRITERIA))
+
+    def test_an_informational_criterion_still_has_to_be_present_and_valid(self):
+        with self.assertRaisesRegex(RollupError, "missing criteria"):
+            self.resolved({"a.one": "met", "b.one": "met", "b.two": "met"})
+        with self.assertRaisesRegex(RollupError, "not a verdict"):
+            self.resolved({"a.one": "met", "a.two": "bogus", "b.one": "met", "b.two": "met"})
+
+    def test_all_informational_resolves_nothing_and_still_refuses_bad_verdicts(self):
+        info = frozenset(SMALL_ALL_CRITERIA)
+        verdicts = {c: "met" for c in SMALL_ALL_CRITERIA}
+        self.assertFalse(all_required_met(verdicts, SMALL_ALL_CRITERIA, informational=info))
+        with self.assertRaisesRegex(RollupError, "not a verdict"):
+            all_required_met(dict(verdicts, **{"a.one": "bogus"}), SMALL_ALL_CRITERIA, informational=info)
 
 
 if __name__ == "__main__":

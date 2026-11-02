@@ -483,6 +483,21 @@ class DayDocument(unittest.TestCase):
         self.assertEqual(headline_from_result(doc), {"cases": 3, "resolved": expected})
         self.assertEqual(expected, 2, "case-met and case-some-na resolve; case-not-met does not")
 
+    def test_an_informational_criterion_reports_its_verdict_but_does_not_decide_the_headline(self):
+        info = frozenset({ALL_CRITERIA[0]})
+        day = {"case-info-not-met": dict(ALL_MET_WITH_DIGESTS),
+               "case-required-not-met": dict(ALL_MET_WITH_DIGESTS)}
+        day["case-info-not-met"][ALL_CRITERIA[0]] = ("not_met",) + ALL_MET_WITH_DIGESTS[ALL_CRITERIA[0]][1:]
+        day["case-required-not-met"][ALL_CRITERIA[1]] = ("not_met",) + ALL_MET_WITH_DIGESTS[ALL_CRITERIA[1]][1:]
+        doc, skipped = day_document(self.PERIOD, day, "2026-09-23T23:59:59Z", ALL_CRITERIA, CONTRACT_REF, TIERS,
+                                    informational=info)
+        self.assertEqual(skipped, [])
+        self.assertEqual(headline_from_result(doc, info), {"cases": 2, "resolved": 1})
+        self.assertEqual(headline_from_result(doc), {"cases": 2, "resolved": 0})
+        reported = {c["id"]: c["verdict"] for c in doc["claims"]}
+        self.assertEqual(reported[f"case-info-not-met::{ALL_CRITERIA[0]}"], "not_met")
+        self.assertIn(f"case-info-not-met::{ALL_CRITERIA[0]}", doc["aggregate"]["buckets"]["not_met"])
+
     def test_each_case_s_claims_cite_that_case_s_own_source_capsule(self):
         # Two cases in one day document must never cross-cite each other's case
         # record -- each case's claims carry only its own source_capsule_id.

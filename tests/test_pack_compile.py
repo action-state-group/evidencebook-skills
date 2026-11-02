@@ -122,6 +122,20 @@ class ValidateSource(unittest.TestCase):
         import result_v0
         self.assertEqual(pack_compile.CASE_SEPARATOR, result_v0.CASE_SEPARATOR)
 
+    def test_informational_requirement_tier_is_accepted_and_compiled_into_the_clause(self):
+        source = minimal_source()
+        source["checks"][0]["criteria"][0]["requirement_tier"] = "informational"
+        self.assertEqual(validate_source(source), [])
+        by_id = {c["id"]: c for c in build_clauses(source)}
+        first = f"{source['checks'][0]['id']}.{source['checks'][0]['criteria'][0]['id']}"
+        self.assertEqual(by_id[first]["requirement_tier"], "informational")
+        self.assertEqual([c["id"] for c in by_id.values() if "requirement_tier" in c], [first])
+
+    def test_an_unknown_requirement_tier_is_still_refused(self):
+        source = minimal_source()
+        source["checks"][0]["criteria"][0]["requirement_tier"] = "optional"
+        self.assertTrue(any("requirement_tier" in i for i in validate_source(source)))
+
     def test_bad_tier_is_refused(self):
         source = minimal_source()
         source["checks"][0]["criteria"][0]["tier"] = "vibes"
