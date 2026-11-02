@@ -43,7 +43,7 @@ session reads `recomputed` for that session and `judged` for the rest.
 
 Writes one JSON file per fully-judged case (rollup + the Result v0 document), one
 Result v0 per day, and a summary.json whose per-day headline is re-derived from
-each day document alone (scripts/result_v0.py:headline_from_result).
+each day document and the contract's informational clauses (scripts/result_v0.py:headline_from_result).
 """
 import argparse
 import json

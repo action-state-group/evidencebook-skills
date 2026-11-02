@@ -29,9 +29,11 @@ criterion therefore gets NO claim here: it is never folded into `met`, and never
 into `not_evaluable` either -- that verdict means the requirement applies and
 could not be determined, which is a different claim.
 
-The headline re-derives from the document alone. In a day document every claim's
-id is `<case_id>::<criterion_id>`; a case is resolved exactly when every one of its
-claims that decides is met (headline_from_result()). That equals scripts/rollup.py's
+The headline re-derives from the document plus the contract's informational clause
+ids (rollup.informational_from_clauses; a claim does not record its requirement
+tier, and none is needed when no criterion is informational). In a day document
+every claim's id is `<case_id>::<criterion_id>`; a case is resolved exactly when
+every one of its claims that decides is met (headline_from_result()). That equals scripts/rollup.py's
 all_required_met for every case the document carries, because a case reaches a
 document only when it has at least one evaluated claim (an all-out_of_scope
 case resolves nothing and is refused here, reported by the caller instead) and a
@@ -381,7 +383,7 @@ def report_title(spec, label):
 
 
 def headline_from_result(document, informational=frozenset()):
-    """The headline, from a day document alone: {"cases", "resolved"}. Claims are
+    """The headline, from a day document and the informational set: {"cases", "resolved"}. Claims are
     regrouped by the `<case_id>::` prefix of their id; a case is resolved exactly
     when every one of its claims that decides is met and at least one does.
     `informational` names the requirement_refs that report but never decide; a

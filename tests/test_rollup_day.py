@@ -483,6 +483,16 @@ class DayDocument(unittest.TestCase):
         self.assertEqual(headline_from_result(doc), {"cases": 3, "resolved": expected})
         self.assertEqual(expected, 2, "case-met and case-some-na resolve; case-not-met does not")
 
+    def test_rollup_case_resolves_over_the_criteria_that_decide(self):
+        info = frozenset({ALL_CRITERIA[0]})
+        verdicts = dict(ALL_MET_WITH_DIGESTS)
+        verdicts[ALL_CRITERIA[0]] = ("not_met",) + ALL_MET_WITH_DIGESTS[ALL_CRITERIA[0]][1:]
+        args = ("case", verdicts, "2026-09-23T23:59:59Z", CHECKS, ALL_CRITERIA, CONTRACT_REF, TIERS)
+        self.assertFalse(rollup_case(*args)["resolved"])
+        out = rollup_case(*args, informational=info)
+        self.assertTrue(out["resolved"])
+        self.assertEqual(out["criterion_verdicts"][ALL_CRITERIA[0]], "not_met")
+
     def test_an_informational_criterion_reports_its_verdict_but_does_not_decide_the_headline(self):
         info = frozenset({ALL_CRITERIA[0]})
         day = {"case-info-not-met": dict(ALL_MET_WITH_DIGESTS),
