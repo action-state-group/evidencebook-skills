@@ -465,11 +465,6 @@ def validate_source(source, base_dir=None):
                 rt = crit["requirement_tier"]
                 if not isinstance(rt, str) or rt not in REQUIREMENT_TIERS:
                     issues.append(f"{cwhere}.requirement_tier must be one of {sorted(REQUIREMENT_TIERS)}, got {rt!r}")
-                elif rt == "informational":
-                    # rollup.all_required_met still makes every criterion decide `resolved`, so a
-                    # contract saying "informational" would contradict the Results built from it.
-                    issues.append(f"{cwhere}.requirement_tier 'informational' is not supported yet: "
-                                  "scripts/rollup.py has no informational criteria")
             tier = crit.get("tier")
             if tier not in TIERS:
                 issues.append(f"{cwhere}.tier must be one of {sorted(TIERS)}, got {tier!r}")
@@ -734,6 +729,9 @@ def build_clauses(source):
             }
             if crit.get("never_out_of_scope"):
                 clause["never_out_of_scope"] = True
+            if crit.get("requirement_tier") == "informational":
+                # Only the tier that changes the rollup is written; a clause without it decides.
+                clause["requirement_tier"] = "informational"
             if crit.get("rule_id"):
                 clause["rule_id"] = crit["rule_id"]
             if crit.get("measurability"):

@@ -29,9 +29,11 @@ criterion therefore gets NO claim here: it is never folded into `met`, and never
 into `not_evaluable` either -- that verdict means the requirement applies and
 could not be determined, which is a different claim.
 
-The headline re-derives from the document alone. In a day document every claim's
-id is `<case_id>::<criterion_id>`; a case is resolved exactly when every one of its
-claims is met (headline_from_result()). That equals scripts/rollup.py's
+The headline re-derives from the document plus the contract's informational clause
+ids (rollup.informational_from_clauses; a claim does not record its requirement
+tier, and none is needed when no criterion is informational). In a day document
+every claim's id is `<case_id>::<criterion_id>`; a case is resolved exactly when
+every one of its claims that decides is met (headline_from_result()). That equals scripts/rollup.py's
 all_required_met for every case the document carries, because a case reaches a
 document only when it has at least one evaluated claim (an all-out_of_scope
 case resolves nothing and is refused here, reported by the caller instead) and a
@@ -181,7 +183,8 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
 
 def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, all_criteria, contract_ref, tiers,
                      allow_out_of_scope=False, never_out_of_scope=frozenset(), judge_pin_digests=None,
-                     judge_pins=None, rule_ids=None, source_capsule_ids=None, case_scoped_ids=False):
+                     judge_pins=None, rule_ids=None, source_capsule_ids=None, case_scoped_ids=False,
+                     informational=frozenset()):
     """criterion_verdicts: dict[criterion_id -> verdict]. report_digests: dict
     [criterion_id -> sealed evaluation-report capsule digest]. An evaluated
     criterion with neither a report digest nor a source capsule id is refused
@@ -219,6 +222,9 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
     `<case_id>::<criterion_id>`, the scheme build_result_v0_for_day uses, so documents
     for different cases merge (merge_result_v0_documents refuses shared claim ids).
 
+    `informational`: criterion ids that report a verdict but do not decide
+    `resolved` (all_required_met's own rule). They keep their claims and buckets.
+
     Returns (document, resolved) -- resolved is the same all_required_met() boolean
     that produced the buckets, so a caller never has to re-derive it from the
     document to know whether this conversation resolved.
@@ -233,7 +239,7 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
         # (headline_from_result at the last, the card's parseClaimGrouping at
         # the first), so a case id holding one would be grouped two ways.
         raise RollupError(f"case id {case_id!r} contains {CASE_SEPARATOR!r}; claim ids could not be regrouped")
-    resolved = all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
+    resolved = all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope, informational)
     report_digests = report_digests or {}
     source_capsule_ids = source_capsule_ids or {}
     evaluated = [cid for cid in all_criteria if criterion_verdicts[cid] != "out_of_scope"]
@@ -273,7 +279,7 @@ def build_result_v0(case_id, criterion_verdicts, report_digests, generated_at, a
 
 def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, contract_ref,
                              allow_out_of_scope=False, never_out_of_scope=frozenset(),
-                             source_capsule_ids=None, claim_extras=None):
+                             source_capsule_ids=None, claim_extras=None, informational=frozenset()):
     """One Result v0 document spanning every complete case judged for one day/
     period: an outcome report renders from a single Result root, so a
     conversation's criteria live beside every other conversation's in one document
@@ -324,7 +330,7 @@ def build_result_v0_for_day(period, case_rollups, generated_at, all_criteria, co
             raise RollupError(f"case {case_id!r} carries unrecognized verdicts: {e}") from e
         if CASE_SEPARATOR in case_id:
             raise RollupError(f"case id {case_id!r} contains {CASE_SEPARATOR!r}; claim ids could not be regrouped")
-        all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope)
+        all_required_met(criterion_verdicts, all_criteria, allow_out_of_scope, never_out_of_scope, informational)
         if all(criterion_verdicts[c] == "out_of_scope" for c in all_criteria):
             raise RollupError(f"case {case_id!r}: every criterion is out_of_scope; nothing was evaluated")
         report_digests = report_digests or {}
@@ -376,18 +382,22 @@ def report_title(spec, label):
     return f"{name}{TITLE_SEPARATOR}{label}"
 
 
-def headline_from_result(document):
-    """The headline, from a day document alone: {"cases", "resolved"}. Claims are
+def headline_from_result(document, informational=frozenset()):
+    """The headline, from a day document and the informational set: {"cases", "resolved"}. Claims are
     regrouped by the `<case_id>::` prefix of their id; a case is resolved exactly
-    when every one of its claims is met."""
+    when every one of its claims that decides is met and at least one does.
+    `informational` names the requirement_refs that report but never decide; a
+    case still counts in "cases" when only informational claims remain."""
     by_case = {}
     for claim in document["claims"]:
         case_id, sep, _ = claim["id"].rpartition(CASE_SEPARATOR)
         if not sep:
             raise RollupError(f"claim id {claim['id']!r} names no case (expected <case_id>{CASE_SEPARATOR}<criterion>)")
-        by_case.setdefault(case_id, []).append(claim["verdict"])
+        by_case.setdefault(case_id, [])
+        if claim["requirement_ref"] not in informational:
+            by_case[case_id].append(claim["verdict"])
     return {"cases": len(by_case),
-            "resolved": sum(1 for verdicts in by_case.values() if all(v == "met" for v in verdicts))}
+            "resolved": sum(1 for verdicts in by_case.values() if verdicts and all(v == "met" for v in verdicts))}
 
 
 def merge_result_v0_documents(docs, title, generated_at):

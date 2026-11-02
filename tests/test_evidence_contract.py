@@ -153,9 +153,15 @@ class FromPack(unittest.TestCase):
         for req in contract["requirements"]:
             self.assertIn(req["mode"], ("judged", "value"))
 
-    def test_a_bad_or_unsupported_requirement_tier_is_refused(self):
-        # informational waits for rollup support: see pack_compile.validate_source
-        for bad in ("optional", "informational", [], {}, None, 3):
+    def test_informational_requirement_tier_compiles_to_the_row(self):
+        src = minimal_source()
+        src["checks"][0]["criteria"][1]["requirement_tier"] = "informational"
+        contract = ec.from_pack(src)
+        self.assertEqual([r["tier"] for r in contract["requirements"]],
+                         ["must_have", "informational", "must_have", "must_have"])
+
+    def test_a_bad_requirement_tier_is_refused(self):
+        for bad in ("optional", [], {}, None, 3):
             src = minimal_source()
             src["checks"][0]["criteria"][0]["requirement_tier"] = bad
             with self.assertRaisesRegex(ec.ContractError, "requirement_tier"):
