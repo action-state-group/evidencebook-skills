@@ -59,6 +59,8 @@ PREDICATES = {
     "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
     "card.open_disputes": ("card", ("max",)),
     "card.self_reported_served_periods": ("card", ("window", "min_periods")),
+    "card.referee_verdicts": ("card", ("window", "min_periods")),
+    "card.witness_receipts": ("card", ("min",)),
     "judged": ("judged", ()),
 }
 
@@ -308,7 +310,7 @@ def validate_admission(source):
                 if not lo <= params[k] <= PARAM_MAX[k]:
                     issues.append(f"{where}: params.{k} {params[k]} must be from {lo} to {PARAM_MAX[k]}")
             # A row that needs more periods than it reads could never pass.
-            if (check == "card.self_reported_served_periods" and _is_int(params.get("window"))
+            if (check in ("card.self_reported_served_periods", "card.referee_verdicts") and _is_int(params.get("window"))
                     and _is_int(params.get("min_periods")) and params["min_periods"] > params["window"]):
                 issues.append(f"{where}: params.min_periods must be at most params.window")
         if frm is None or frm not in tier_ids:

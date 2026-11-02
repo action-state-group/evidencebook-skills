@@ -168,6 +168,8 @@ records its count, and its denominator where one exists.
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
 | `card.self_reported_served_periods` | card | `window`, `min_periods` | at least `min_periods` of the last `window` closed periods have a published served total (§3.4) | card not verified, or it carries no served periods | periods counted / `window` |
+| `card.referee_verdicts` | card | `window`, `min_periods` | at least `min_periods` of the last `window` closed periods have a published corroborated referee verdict count above zero (§3.5) | card not verified, or it carries no referee verdict counts | periods counted / `window` |
+| `card.witness_receipts` | card | `min` | witness receipts the verifier counted on the card's checkpoints ≥ `min` (§3.5) | card not verified, or the verifier counted none | receipts / checkpoints |
 | `judged` | judged | | the judge met the row | not judged, or judged by a judge outside `trust_roots.judges` (reported, not counted) | |
 
 **A missing input versus nothing to read.** `not_read` has two causes. The
@@ -317,6 +319,33 @@ other side's own half confirms come only from the relying party's own book, in
 `own.held_halves`. It is a `card` row, so it records or limits and never
 decides NO.
 
+### 3.5 Referee verdicts and witness receipts
+
+Two more units of an `inference-service-history/0` answer (ISH §5.1), each read
+by a row of its own and never added to the served periods or to each other.
+
+`card.witness_receipts` reads the receipts on the card's checkpoints (ISH §5.2).
+The node does not state them: the verifier counts the receipts it checked
+offline under a witness key its own policy configures, out of the card's
+checkpoints. A receipt under another key is shown and not counted. The row
+passes when the counted receipts are at least `min`; its denominator is the
+card's checkpoints. The witness keys sit outside the pack and its digest, with
+the verifier that counts: the pack states how many receipts it wants, not whose
+they are, so `trust_roots.witnesses` of this pack stays empty.
+
+`card.referee_verdicts` reads the closed periods' `referee_verdicts` cells of
+one class, `corroborated`, as `card.self_reported_served_periods` reads served
+totals, with the same `not_counted` and `label`. A period is counted when that
+cell is published above zero. The count is the node's own statement (ISH §5.3).
+The four verdict classes stay separate counts and are never added, so the unit's
+total is not read and a period with only other classes is not counted. The
+profile leaves how a class sits in a cell to vectors (ISH SH-12, and SH-14 for
+verdict counts): the evaluator reads the cell whose dimension is
+`{"verdict": "corroborated"}`.
+A Mesh node's answer carries no referee verdicts, so the row is not read and the
+pack's `missing` decides. Both are `card` rows, so they record or limit and
+never decide NO.
+
 ## 4. Resolution
 
 In order:
@@ -395,6 +424,7 @@ The new members are additive:
   `denominator` where it counts.
 - on a `card.self_reported_served_periods` row, `label` (`self_reported`)
   and `not_counted`, `{below_floor, complementary, not_listed}`;
+- on a `card.referee_verdicts` row, `label` and `not_counted` as above;
 - on a failing `card.verified` row, `reason`: the History property an
   `inference-service-history/0` answer failed, never free text: one of
   `definition_form`, `definition_binding`, `artifact_form`, `anchor_match`,

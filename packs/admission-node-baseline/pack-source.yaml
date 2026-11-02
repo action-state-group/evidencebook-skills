@@ -1,0 +1,114 @@
+# admission-node-baseline@1 -- the node baseline admission pack
+# (capsule-engine#276), in admission pack profile v0
+# (docs/admission-pack-profile-v0.md).
+#
+# A personal agent runs it before an act with a Mesh node, over the node's
+# inference-service-history/0 Standard answer that capsule-engine#273 reads
+# into the card (profile section 3.4, 3.5). It states thresholds only; the
+# evaluator (capsule-engine, Go and Rust) computes the band, the tier,
+# freshness, counts and denominators.
+#
+# What it reads, each in its own unit and never added to another (ISH 5.1):
+#   - the node's own weekly served counts (card.self_reported_served_periods);
+#     self_reported, the node's statement;
+#   - the witness receipts the verifier counted on the card's checkpoints
+#     (card.witness_receipts), the verifier's count, not the node's;
+#   - the node's corroborated referee verdicts (card.referee_verdicts), when
+#     its answer carries them; self_reported. A Mesh answer carries none.
+# Confirmed exchanges stay in our own book (own.held_halves), recorded and
+# never added to the node's counts. The coverage the counts declare is not
+# established as complete: the Decision keeps coverage_declaration_population
+# NOT_CHECKED.
+#
+# A missing input is LIMIT, never a silent GO. The referee row applies from
+# T2 only: a larger deal wants adjudication evidence, and a card that carries
+# none limits the deal to T1. It carries no ask: no published derivation
+# counts referee verdicts yet, so there is no Evidence Request to name (the
+# card-fresh row asks for the service history the Mesh plugin serves).
+#
+# PLACEHOLDERS. Every ceiling, threshold, window and budget below is a
+# labelled placeholder. None is a recommendation.
+#
+# Outcomes are quoted: YAML 1.1 reads a plain NO as false.
+pack_id: asg/admission_node_baseline/1.0.0
+pack_version: 1.0.0
+scope:
+  kind: admission
+source: "capsule-engine#276; capsule-engine#273; AAC spec/inference-service-history-profile-v0.md"
+
+outcomes: ["GO", "ASK", "LIMIT", "NO"]
+missing: "LIMIT"
+
+accept:
+  USD: {band: USD, scale: 0}
+
+tiers:
+  - id: T0                      # micro
+    max_decade: {USD: 0}        # placeholder
+  - id: T1                      # small
+    max_decade: {USD: 2}        # placeholder
+  - id: T2                      # standard
+    max_decade: {USD: 4}        # placeholder
+
+budget:
+  max_asks: 1                   # placeholder
+  deadline_s: 3600              # placeholder
+
+trust_roots:
+  controllers: []
+  witnesses: []  # the witness keys card.witness_receipts counts under sit with the verifier, outside this digest
+  judges: []
+
+rows:
+  - id: deny-list
+    statement: The node is not on the operator's deny list.
+    source: operator
+    check: operator.not_deny_listed
+    from: T0
+    on_fail: "NO"
+  - id: confirmed-exchanges
+    statement: Our own book holds an exchange with the node whose half the node's half cites.
+    source: own_history
+    check: own.held_halves
+    params: {min: 1}            # placeholder
+    from: T0
+    on_fail: "record"
+
+  # T1: the node's card verifies, is fresh and shows the node serving.
+  - id: card-verified
+    statement: The node's card verified.
+    source: card
+    check: card.verified
+    from: T1
+    on_fail: "LIMIT"
+  - id: card-fresh
+    statement: The node's card is at most eight days old, one weekly answer and a day.
+    source: card
+    check: card.fresh
+    params: {max_age_s: 691200}
+    from: T1
+    on_fail: "LIMIT"
+    ask: {derivation: cbc96d800ad206791db7e0793b80a2720c1908468ba99692b739aa8e74aab2d8}
+  - id: served-periods
+    statement: The node's own counts show served exchanges in at least 2 of the last 4 weeks.
+    source: card
+    check: card.self_reported_served_periods
+    params: {window: 4, min_periods: 2}  # placeholder
+    from: T1
+    on_fail: "LIMIT"
+  - id: witness-receipts
+    statement: The verifier counted at least one witness receipt on the card's checkpoints.
+    source: card
+    check: card.witness_receipts
+    params: {min: 1}            # placeholder
+    from: T1
+    on_fail: "LIMIT"
+
+  # T2: a larger deal wants the node's referee verdicts too.
+  - id: referee-verdicts
+    statement: The node's own counts show corroborated referee verdicts in at least 2 of the last 4 weeks.
+    source: card
+    check: card.referee_verdicts
+    params: {window: 4, min_periods: 2}  # placeholder
+    from: T2
+    on_fail: "LIMIT"

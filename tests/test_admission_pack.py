@@ -124,6 +124,35 @@ class Ladder(unittest.TestCase):
             "params: {window: 4, min_periods: 3}\n    from: T1\n    on_fail: \"NO\"")))
         self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
 
+    def test_referee_verdicts_and_witness_receipts(self):
+        # The units of a Mesh node's card beside its served periods
+        # (capsule-engine#276).
+        rows = """  - id: referee-verdicts
+    statement: The node's own counts show referee verdicts in at least 2 of the last 4 weeks.
+    source: card
+    check: card.referee_verdicts
+    params: {window: 4, min_periods: 2}
+    from: T1
+    on_fail: "LIMIT"
+  - id: witness-receipts
+    statement: The verifier counted at least one witness receipt.
+    source: card
+    check: card.witness_receipts
+    params: {min: 1}
+    from: T1
+    on_fail: "LIMIT"
+"""
+        text = ladder_text().replace("rows:\n", "rows:\n" + rows, 1)
+        self.assertEqual(pack_compile.validate_source(load(text)), [])
+        for old, new, want in [("{window: 4, min_periods: 2}", "{window: 1, min_periods: 2}",
+                                "params.min_periods must be at most params.window"),
+                               ("{window: 4, min_periods: 2}", "{window: 4}", "needs params.min_periods"),
+                               ("params: {min: 1}\n    from: T1\n    on_fail: \"LIMIT\"\n  - id: ladder",
+                                "params: {window: 4}\n    from: T1\n    on_fail: \"LIMIT\"\n  - id: ladder",
+                                "takes no params.window")]:
+            issues = pack_compile.validate_source(load(text.replace(old, new, 1)))
+            self.assertTrue(any(want in i for i in issues), (new, issues))
+
     def test_the_baseline_has_no_ladder_yet(self):
         # No served card carries per-band counts of corroborated, net-settled
         # subjects yet (profile §6).
@@ -201,6 +230,16 @@ class Baseline(unittest.TestCase):
         self.assertEqual(doc["format"], "admission-pack/v0")
         self.assertEqual(set(doc["trust_roots"]), {"controllers", "witnesses", "judges"})
         self.assertTrue(all("params" in r for r in doc["rows"]))
+
+class NodeBaseline(unittest.TestCase):
+    NODE = REPO_ROOT / "packs/admission-node-baseline"
+
+    def test_the_committed_artifact_is_the_compiled_source(self):
+        source = load((self.NODE / "pack-source.yaml").read_text())
+        self.assertEqual(pack_compile.validate_source(source), [])
+        self.assertEqual((self.NODE / "compiled/pack-definition.json").read_bytes(), admission_pack.compiled_bytes(source))
+        self.assertEqual((self.NODE / "compiled/contract.json").read_bytes(), ec.to_bytes(admission_pack.from_admission(source)))
+
 
 class Fixtures(unittest.TestCase):
     def setUp(self):
