@@ -58,6 +58,7 @@ PREDICATES = {
     "stake.covers_deal": ("stake", ()),
     "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
     "card.open_disputes": ("card", ("max",)),
+    "card.not_stapled": ("card", ()),
     "card.self_reported_served_periods": ("card", ("window", "min_periods")),
     "judged": ("judged", ()),
 }
