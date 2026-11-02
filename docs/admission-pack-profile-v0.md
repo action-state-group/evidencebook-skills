@@ -396,8 +396,10 @@ The new members are additive:
 - on a `card.self_reported_served_periods` row, `label` (`self_reported`)
   and `not_counted`, `{below_floor, complementary, not_listed}`;
 - on a failing `card.verified` row, `reason`: the History property an
-  `inference-service-history/0` answer failed (`definition_form`,
-  `period_alignment` and the rest), never free text;
+  `inference-service-history/0` answer failed, never free text: one of
+  `definition_form`, `definition_binding`, `artifact_form`, `anchor_match`,
+  `coverage_declaration_form`, `coverage_declaration_anchor`, `units`,
+  `labels`, `period_alignment`, `period_anchor` or `period_floor`;
 - `coverage`, only when the card carries served periods:
   `{kind: "stream_interval", population: "NOT_CHECKED"}`. The counts were not
   checked against records, so completeness is not established (ISH §4.2).
