@@ -677,6 +677,10 @@ class RenderTitle(unittest.TestCase):
 
     def test_small_numbers_and_non_integer_floats_are_unchanged(self):
         self.assertEqual(render_title(self._spec("{a} {b} {c}"), "d", {"a": 108, "b": 0, "c": 0.5}), "108 0 0.5")
+        self.assertEqual(render_title(self._spec("{a}"), "d", {"a": 12345.5}), "12,345.5")
+
+    def test_a_field_with_its_own_format_spec_keeps_it(self):
+        self.assertEqual(render_title(self._spec("{n:.2f} {m:05d}"), "d", {"n": 1919, "m": 42}), "1919.00 00042")
 
     def test_an_unknown_metric_renders_unknown_and_never_raises(self):
         self.assertEqual(render_title(self._spec("${t}, {n} calls"), "d", {"t": None, "n": 2000}),

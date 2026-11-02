@@ -93,7 +93,10 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
     presentation:
       card: <one of capsule-cli's reportCards, e.g. "outcome", "settlement">
       title_template: <a str.format() template over {title}, {period}, and
-                       every metric name, rendered once per group and passed
+                       every metric name (a missing metric reads "unknown";
+                       a bare numeric field gets comma thousands separators,
+                       "{n}" -> "1,919", unless it carries its own spec,
+                       "{n:.2f}"), rendered once per group and passed
                        to `capsulectl book report build --presentation` -- the
                        Result v0 View block's own schema is closed over
                        spec_version/producer_name/logo_data_url/title (no room
@@ -130,6 +133,7 @@ import json
 import math
 import pathlib
 import re
+import string
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -759,18 +763,19 @@ def contract_ref(spec):
     return f"{spec['id']}@{spec['version']}"
 
 
-def _title_value(v):
-    """A metric as a title shows it: None is "unknown"; an int, or a float that
-    is a whole number, gets comma thousands separators (1919 -> "1,919"). The
-    comma form is fixed, with no locale lookup, so a sealed title never varies
-    by machine. bool, other floats and strings are left to str.format."""
-    if v is None:
-        return "unknown"
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, int) or (isinstance(v, float) and v.is_integer()):
-        return f"{int(v):,}"
-    return v
+class _TitleFormatter(string.Formatter):
+    """str.format for a title: a bare numeric field (no format spec) gets comma
+    thousands separators (1919 -> "1,919", 1919.0 -> "1,919", 12345.5 -> "12,345.5"); a field
+    with its own spec keeps it. The comma form is fixed, with no locale
+    lookup, so a sealed title never varies by machine. bool and "unknown"
+    are left alone."""
+
+    def format_field(self, value, format_spec):
+        if not format_spec and isinstance(value, (int, float)) and not isinstance(value, bool):
+            if isinstance(value, float) and value.is_integer():
+                value = int(value)
+            return f"{value:,}"
+        return super().format_field(value, format_spec)
 
 
 def render_title(spec, group_key, metric_values):
@@ -778,8 +783,8 @@ def render_title(spec, group_key, metric_values):
     if not template:
         return report_title(spec, group_key)
     try:
-        shown = {k: _title_value(v) for k, v in metric_values.items()}
-        return template.format(title=spec.get("title", spec["id"]), period=group_key, **shown)
+        shown = {k: ("unknown" if v is None else v) for k, v in metric_values.items()}
+        return _TitleFormatter().format(template, title=spec.get("title", spec["id"]), period=group_key, **shown)
     except (KeyError, IndexError) as e:
         raise ReportSpecError(f"presentation.title_template {template!r} names a field this spec "
                                f"doesn't compute: {e}") from e
