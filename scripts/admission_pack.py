@@ -58,6 +58,7 @@ PREDICATES = {
     "stake.covers_deal": ("stake", ()),
     "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
     "card.open_disputes": ("card", ("max",)),
+    "card.self_reported_served_periods": ("card", ("window", "min_periods")),
     "judged": ("judged", ()),
 }
 
@@ -83,10 +84,16 @@ SCALE_MAX = 30
 MAX_ASKS_MAX = 1000
 DEADLINE_S_MAX = 100 * 365 * 24 * 3600
 DECADE_MAX = 60
+# The most periods a served periods row reads: over 190 years of weeks, as
+# many as one inference-service-history answer lists (the loader's
+# periodsMax).
+PERIODS_MAX = 10_000
 PARAM_MAX = {"max_age_s": 100 * 365 * 24 * 3600, "min_days": 100 * 365, "window_days": 100 * 365,
-             "min": 2 ** 53 - 1, "k": 2 ** 53 - 1, "max": 2 ** 53 - 1, "step_decades": DECADE_MAX, "max_adverse_permille": 1000}
-# A ladder needs at least one subject in a band to earn it (paramMin).
-PARAM_MIN = {"k": 1}
+             "min": 2 ** 53 - 1, "k": 2 ** 53 - 1, "max": 2 ** 53 - 1,
+             "window": PERIODS_MAX, "min_periods": PERIODS_MAX, "step_decades": DECADE_MAX, "max_adverse_permille": 1000}
+# A ladder needs at least one subject in a band to earn it, and a served
+# periods row at least one period to read and to count (paramMin).
+PARAM_MIN = {"k": 1, "window": 1, "min_periods": 1}
 
 # The plain scalar rule. The compiler's PyYAML is the one YAML reader an
 # admission pack has (the evaluator reads the compiled pack-definition.json),
@@ -300,6 +307,10 @@ def validate_admission(source):
                 lo = PARAM_MIN.get(k, 0)
                 if not lo <= params[k] <= PARAM_MAX[k]:
                     issues.append(f"{where}: params.{k} {params[k]} must be from {lo} to {PARAM_MAX[k]}")
+            # A row that needs more periods than it reads could never pass.
+            if (check == "card.self_reported_served_periods" and _is_int(params.get("window"))
+                    and _is_int(params.get("min_periods")) and params["min_periods"] > params["window"]):
+                issues.append(f"{where}: params.min_periods must be at most params.window")
         if frm is None or frm not in tier_ids:
             issues.append(f"{where}.from {frm!r} is not a tier")
         on_fail = r.get("on_fail")
