@@ -13,8 +13,8 @@
 #     self_reported, the node's statement;
 #   - the witness receipts the verifier counted on the card's checkpoints
 #     (card.witness_receipts), the verifier's count, not the node's;
-#   - the node's referee verdict totals (card.referee_verdicts), when its
-#     answer carries them; self_reported. A Mesh answer carries none.
+#   - the node's corroborated referee verdicts (card.referee_verdicts), when
+#     its answer carries them; self_reported. A Mesh answer carries none.
 # Confirmed exchanges stay in our own book (own.held_halves), recorded and
 # never added to the node's counts. The coverage the counts declare is not
 # established as complete: the Decision keeps coverage_declaration_population
@@ -56,7 +56,7 @@ budget:
 
 trust_roots:
   controllers: []
-  witnesses: []
+  witnesses: []  # the witness keys card.witness_receipts counts under sit with the verifier, outside this digest
   judges: []
 
 rows:
@@ -106,7 +106,7 @@ rows:
 
   # T2: a larger deal wants the node's referee verdicts too.
   - id: referee-verdicts
-    statement: The node's own counts show referee verdicts in at least 2 of the last 4 weeks.
+    statement: The node's own counts show corroborated referee verdicts in at least 2 of the last 4 weeks.
     source: card
     check: card.referee_verdicts
     params: {window: 4, min_periods: 2}  # placeholder

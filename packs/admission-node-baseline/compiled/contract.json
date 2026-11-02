@@ -59,7 +59,7 @@
     {
       "id": "referee-verdicts",
       "profile": "outcome",
-      "statement": "The node's own counts show referee verdicts in at least 2 of the last 4 weeks.",
+      "statement": "The node's own counts show corroborated referee verdicts in at least 2 of the last 4 weeks.",
       "tier": "must_have",
       "evidence_rule": "admission check card.referee_verdicts (min_periods 2, window 4), from tier T2; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
