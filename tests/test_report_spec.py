@@ -664,6 +664,27 @@ class RenderTitle(unittest.TestCase):
         self.assertEqual(render_title(spec, "2026-09-23", {"conversation_count": 5}),
                           "Tau2 report (2026-09-23): 5 conversations")
 
+    def _spec(self, template):
+        return {"id": "x", "title": "T", "presentation": {"title_template": template}}
+
+    def test_a_large_count_gets_thousands_separators(self):
+        self.assertEqual(render_title(self._spec("{n} calls"), "d", {"n": 1234567}), "1,234,567 calls")
+
+    def test_a_money_sum_gets_thousands_separators(self):
+        self.assertEqual(render_title(self._spec("totaling ${total_refunded}"), "d", {"total_refunded": 1919}),
+                          "totaling $1,919")
+        self.assertEqual(render_title(self._spec("${t}"), "d", {"t": 1919.0}), "$1,919")
+
+    def test_small_numbers_and_non_integer_floats_are_unchanged(self):
+        self.assertEqual(render_title(self._spec("{a} {b} {c}"), "d", {"a": 108, "b": 0, "c": 0.5}), "108 0 0.5")
+
+    def test_an_unknown_metric_renders_unknown_and_never_raises(self):
+        self.assertEqual(render_title(self._spec("${t}, {n} calls"), "d", {"t": None, "n": 2000}),
+                          "$unknown, 2,000 calls")
+
+    def test_a_bool_is_not_treated_as_a_count(self):
+        self.assertEqual(render_title(self._spec("{ok}"), "d", {"ok": True}), "True")
+
 
 class WorkedSpecTitles(unittest.TestCase):
     """The two worked specs' titles as a page shows them: one day through the

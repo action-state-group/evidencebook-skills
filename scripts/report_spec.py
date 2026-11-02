@@ -759,12 +759,26 @@ def contract_ref(spec):
     return f"{spec['id']}@{spec['version']}"
 
 
+def _title_value(v):
+    """A metric as a title shows it: None is "unknown"; an int, or a float that
+    is a whole number, gets comma thousands separators (1919 -> "1,919"). The
+    comma form is fixed, with no locale lookup, so a sealed title never varies
+    by machine. bool, other floats and strings are left to str.format."""
+    if v is None:
+        return "unknown"
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int) or (isinstance(v, float) and v.is_integer()):
+        return f"{int(v):,}"
+    return v
+
+
 def render_title(spec, group_key, metric_values):
     template = (spec.get("presentation") or {}).get("title_template")
     if not template:
         return report_title(spec, group_key)
     try:
-        shown = {k: ("unknown" if v is None else v) for k, v in metric_values.items()}
+        shown = {k: _title_value(v) for k, v in metric_values.items()}
         return template.format(title=spec.get("title", spec["id"]), period=group_key, **shown)
     except (KeyError, IndexError) as e:
         raise ReportSpecError(f"presentation.title_template {template!r} names a field this spec "
