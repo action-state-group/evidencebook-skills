@@ -112,7 +112,9 @@ class Ladder(unittest.TestCase):
 """
         text = ladder_text().replace("rows:\n", "rows:\n" + row, 1)
         self.assertEqual(pack_compile.validate_source(load(text)), [])
-        issues = pack_compile.validate_source(load(text.replace("    from: T1\n    on_fail: \"LIMIT\"\n    ask", "    params: {max: 1}\n    from: T1\n    on_fail: \"LIMIT\"\n    ask")))
+        issues = pack_compile.validate_source(load(text.replace(
+            "check: card.not_stapled\n", "check: card.not_stapled\n    params: {max: 1}\n", 1)))
+        self.assertTrue(any("check card.not_stapled takes no params.max" in i for i in issues), issues)
         self.assertTrue(issues, issues)
 
     def test_self_reported_served_periods(self):
