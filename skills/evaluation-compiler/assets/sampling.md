@@ -25,7 +25,7 @@ one period.
 ## Select the population and stratify
 
 Resolve the runtime profile and the period window. Enumerate the CLL, accept only
-`case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with a `record_type` and no `cases[]`) from this bundle's cohort (matching `axes` digest,
+`case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with `axis_judgments` and no `cases[]`) from this bundle's cohort (matching `axes` digest,
 evaluated subject and dataset revision), verify each Capsule's identity, producer
 signature and bound payload, and deduplicate by the case/trial key. This frozen,
 verified set is the population.

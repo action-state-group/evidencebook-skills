@@ -275,7 +275,7 @@ Compilation is a short **dialog** (full script in `DEMO.md`):
 2. **Run the generated skill** — `selection=(1,2]` → verifies the seq-2 Capsule
    (`ec5b0c62…`, task 1), reads the **declared** desired outcome by `task_id`,
    extracts the **agent** outcome from the transcript in a separate context, judges
-   the axes, and **publishes an `case-evaluation/v1` Capsule at seq 51**.
+   the axes, and **publishes a `case-evaluation/v1` Capsule at seq 51**.
 
 Only *after* B3 has run does seq 51 exist; then read the report back like any Capsule:
 

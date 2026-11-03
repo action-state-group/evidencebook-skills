@@ -17,7 +17,7 @@ unsampled cases, which remain judge-derived.
 ## Select and verify reports and ratings
 
 Resolve the runtime profile and the period window. Enumerate the CLL and separate:
-- `case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with a `record_type` and no `cases[]`) of this bundle's cohort (matching `axes` digest,
+- `case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with `axis_judgments` and no `cases[]`) of this bundle's cohort (matching `axes` digest,
   evaluated subject and dataset revision), deduplicated by case/trial key — the
   population, total size `N`, split by the audited quantity into judge-`pass` `N_p`,
   judge-`fail` `N_f`, and an excluded group whose audited quantity is

@@ -20,7 +20,7 @@ identity, trusted producer signature and bound payload before reading its judgme
 A failed or missing required verification is an execution error that drops that report
 from the set with an explicit reason; it is not counted as any axis status.
 
-Accept only `case-evaluation/v1` Capsules, plus legacy ones: a payload named `evaluation-report/v1` counts only when it has a `record_type` and no `cases[]`; one with `cases[]` is a real Judge Record Family report and is not ours. Skip and record any other spec version,
+Accept only `case-evaluation/v1` Capsules, plus legacy ones: a payload whose `spec_version` is `evaluation-report/v1` counts only when it has `axis_judgments` and no `cases[]`; one with `cases[]` is a real Judge Record Family report and is not ours. Skip and record any other spec version,
 and skip a report produced by a different bundle (different `axes` digest) rather than
 mixing incomparable axes into one rate.
 
