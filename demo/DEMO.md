@@ -226,7 +226,7 @@ is independent of B1/B2; the CLL that the run step below reads is the one B1/B2 
 It enumerates the CLL, `get --raw` + `verify`s the seq-2 Capsule (`ec5b0c62…`, task 1),
 reads the declared desired outcome by `payload.case.task_id` in one isolated context,
 extracts the agent outcome from the transcript in another, judges the axes, publishes
-the `evaluation-report/v1` Capsule at **seq 51**, and reads it back.
+the `case-evaluation/v1` Capsule at **seq 51**, and reads it back.
 
 Read the published report back like any capsule:
 
@@ -247,7 +247,7 @@ B3 publishes one report per case (`aggregate:null` — the *within-case* roll-up
 A benchmark story also wants the *cross-case* roll-up: how the system did across
 many tasks. That is a separate compiler output, generated only when
 `cross_case_aggregation` is not `none`: a second **aggregation skill** whose input is
-the `evaluation-report/v1` Capsules (never the source interactions). It selects the
+the `case-evaluation/v1` Capsules (never the source interactions). It selects the
 report range, verifies each report, reduces their `axis_judgments` across cases
 (per-axis pass/fail/unjudgeable counts and pass rate; the `all_required` or `native`
 overall), and publishes one `evaluation-summary/v1` Capsule back into the same CLL —
@@ -260,18 +260,18 @@ itself signed, checkpointable and witnessable.
 > so you also generate the aggregation skill.
 >
 > **evaluation-compiler:** Compiling with `cross_case_aggregation=rate`; it adds an
-> aggregation bundle whose input is the `evaluation-report/v1` Capsules (not the source
+> aggregation bundle whose input is the `case-evaluation/v1` Capsules (not the source
 > interactions).
 >
 > **You:** Now run that aggregation skill: `profile=airlinedemo`, over this run's
-> `evaluation-report/v1` Capsules. Select them by **type + shared axes digest +
+> `case-evaluation/v1` Capsules. Select them by **type + shared axes digest +
 > cohort**, not by a fixed sequence window — a full 50-case run appends its reports
 > after the 50 backfilled entries, but any earlier one-case B3 report shifts those
 > positions. Reduce the axis judgments across cases under one cohort with unique
 > case/trial dedup, and publish one `evaluation-summary/v1` Capsule.
 
 ```sh
-# the appended evaluation reports — filter to evaluation-report/v1 with this bundle's
+# the appended evaluation reports — filter to case-evaluation/v1 with this bundle's
 # axes digest; don't assume a fixed seq window (seq 51+ only if nothing else appended)
 capsulectl cll list --profile airlinedemo --after 50 --limit 1000
 ```

@@ -2,7 +2,7 @@
 
 The agent executing a generated **sampling-and-rating** skill owns this workflow.
 It runs only after per-case evaluation reports exist: its input is
-`evaluation-report/v1` Capsules, and its output is one `human-rating/v1` Capsule
+`case-evaluation/v1` Capsules, and its output is one `human-rating/v1` Capsule
 per expert rating. Use Capsule CLI commands from `capsule-cli.md` and ordinary
 file operations. Do not create runners, helper programs, scripts or Makefiles. Do
 not edit the generated bundle; corrections belong in the compiler and require
@@ -25,7 +25,7 @@ one period.
 ## Select the population and stratify
 
 Resolve the runtime profile and the period window. Enumerate the CLL, accept only
-`evaluation-report/v1` Capsules from this bundle's cohort (matching `axes` digest,
+`case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with a `record_type` and no `cases[]`) from this bundle's cohort (matching `axes` digest,
 evaluated subject and dataset revision), verify each Capsule's identity, producer
 signature and bound payload, and deduplicate by the case/trial key. This frozen,
 verified set is the population.
@@ -103,13 +103,13 @@ such — not completed by the agent.
 
 Create a new rating identity per expert rating. Write a `human-rating/v1` payload
 holding: the audited quantity, the `pass`/`fail`/`unsure` verdict, rater identity
-and role, a blind attestation, the audited `evaluation-report/v1` Capsule id, the
+and role, a blind attestation, the audited `case-evaluation/v1` Capsule id, the
 subject case/trial identity (matching that report), the sample manifest reference,
 and any rationale.
 
 Prepare a `capsule-seal-request/v1` request as specified in `capsule-cli.md`. Chain
 the rating to the report it audits: add a `Chain` block whose `ParentCapsuleID` is
-that `evaluation-report/v1` Capsule id and whose `Relation` is
+that `case-evaluation/v1` Capsule id and whose `Relation` is
 `io.evaluation.human_rates` (`ledger_mode: chained` is derived, not caller-set). This
 makes each rating audit exactly one verdict, so the calibration join is the chain
 link itself. Call `capsulectl publish`, then get the returned Capsule, verify its

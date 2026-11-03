@@ -126,7 +126,7 @@ just the envelope. A mismatch is a verification error.
 ## Capsule: `human-rating/v1`
 
 One Capsule per human rating, appended to the same CLL, chained to the
-`evaluation-report/v1` Capsule it audits (reuse of the `chain` mechanism — see
+`case-evaluation/v1` Capsule it audits (reuse of the `chain` mechanism — see
 `skills/evaluation-compiler/references/capsule-cli.md`), forming the provenance chain
 interaction ← report ← rating. The sampling skill sets the chain parent to the report;
 the **rater sees the full packet defined in "Blinding"** (the interaction plus the
@@ -147,7 +147,7 @@ not caller-set):
     "Developer": "<rating-tool identity>",
     "Timestamp": "<UTC>",
     "Chain": {
-      "ParentCapsuleID": "<evaluation-report capsule_id being audited>",
+      "ParentCapsuleID": "<case-evaluation capsule_id being audited>",
       "Relation": "io.evaluation.human_rates"
     }
   },
@@ -161,7 +161,7 @@ not caller-set):
     "sampling": {
       "frame_window": "2026-09-01T00:00Z/2026-09-08T00:00Z",
       "stratum": "judge_pass",    // judge_pass | judge_fail
-      "audited_report_capsule_id": "<evaluation-report capsule_id>",
+      "audited_report_capsule_id": "<case-evaluation capsule_id>",
       "sample_manifest_capsule_id": "<required — the manifest Capsule this sample belongs to>"
     },
     "rationale": "optional",
@@ -180,7 +180,7 @@ Notes:
 ## Sampling-and-rating bundle
 
 Generated before the calibration bundle (ratings must exist before they are reduced).
-Its host agent reads the period's `evaluation-report/v1` Capsules, stratifies by the
+Its host agent reads the period's `case-evaluation/v1` Capsules, stratifies by the
 judge verdict on `rated_quantity`, draws the reproducible per-stratum sample (canonical
 hash ordering + digested manifest above), and for each sampled report resolves and
 verifies the source interaction and assembles the rater packet (interaction + the
@@ -193,7 +193,7 @@ bundle below stays reports-and-ratings-only.
 
 ## Calibration aggregation bundle
 
-A sibling of the existing aggregation bundle. It reduces `evaluation-report/v1`
+A sibling of the existing aggregation bundle. It reduces `case-evaluation/v1`
 (the judged population) together with `human-rating/v1` (the audit sample) over a
 period; it never re-judges, never creates ratings, and never re-opens source
 interactions.
@@ -207,7 +207,7 @@ Resources (mirrors the aggregate bundle):
 - `references/capsule-cli.md` — copied as usual (`capsulectl` stays a host prereq).
 
 Steps:
-1. Select over the window: all `evaluation-report/v1` (population, with judge
+1. Select over the window: all `case-evaluation/v1` (population, with judge
    verdict on `rated_quantity`) and all `human-rating/v1` (sample).
 2. `verify` each consumed Capsule, and verify each rating's complete binding to its
    report: `chain.relation == io.evaluation.human_rates`, `chain.parent_capsule_id`

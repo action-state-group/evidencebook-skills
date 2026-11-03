@@ -1,7 +1,7 @@
 # Calibration execution
 
 The agent executing a generated **calibration** skill owns this workflow. Its
-inputs are the period's `evaluation-report/v1` Capsules (the judged population) and
+inputs are the period's `case-evaluation/v1` Capsules (the judged population) and
 the `human-rating/v1` Capsules that audit a sample of them; it produces one
 `calibration-summary/v1` Capsule. Use Capsule CLI commands from `capsule-cli.md`
 and ordinary file operations. Do not create runners, helper programs, scripts or
@@ -17,7 +17,7 @@ unsampled cases, which remain judge-derived.
 ## Select and verify reports and ratings
 
 Resolve the runtime profile and the period window. Enumerate the CLL and separate:
-- `evaluation-report/v1` Capsules of this bundle's cohort (matching `axes` digest,
+- `case-evaluation/v1` Capsules (or legacy `evaluation-report/v1` with a `record_type` and no `cases[]`) of this bundle's cohort (matching `axes` digest,
   evaluated subject and dataset revision), deduplicated by case/trial key — the
   population, total size `N`, split by the audited quantity into judge-`pass` `N_p`,
   judge-`fail` `N_f`, and an excluded group whose audited quantity is

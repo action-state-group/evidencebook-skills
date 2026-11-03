@@ -26,7 +26,7 @@ way.
 - [`skills/evaluation-compiler/assets/aggregation.md`](skills/evaluation-compiler/assets/aggregation.md)
   — the cross-case aggregation template; adapted into a second **aggregation**
   bundle only when `cross_case_aggregation` is requested. It reduces
-  `evaluation-report/v1` Capsules into one `evaluation-summary/v1` Capsule, never
+  `case-evaluation/v1` Capsules into one `evaluation-summary/v1` Capsule, never
   re-judging.
 - [`skills/evaluation-compiler/references/capsule-cli.md`](skills/evaluation-compiler/references/capsule-cli.md)
   — the Capsule CLI contract copied verbatim into bundles.

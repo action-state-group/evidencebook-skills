@@ -1,7 +1,7 @@
 # Cross-case aggregation execution
 
 The agent executing a generated **aggregation** skill owns this workflow. It runs
-only after per-case evaluation reports exist: its input is `evaluation-report/v1`
+only after per-case evaluation reports exist: its input is `case-evaluation/v1`
 Capsules, never source interactions. Use Capsule CLI commands from
 `capsule-cli.md` and ordinary file operations. Do not create runners, helper
 programs, scripts or Makefiles. Do not edit the generated bundle; corrections
@@ -20,7 +20,7 @@ identity, trusted producer signature and bound payload before reading its judgme
 A failed or missing required verification is an execution error that drops that report
 from the set with an explicit reason; it is not counted as any axis status.
 
-Accept only `evaluation-report/v1` Capsules. Skip and record any other spec version,
+Accept only `case-evaluation/v1` Capsules, plus legacy ones: a payload named `evaluation-report/v1` counts only when it has a `record_type` and no `cases[]`; one with `cases[]` is a real Judge Record Family report and is not ours. Skip and record any other spec version,
 and skip a report produced by a different bundle (different `axes` digest) rather than
 mixing incomparable axes into one rate.
 

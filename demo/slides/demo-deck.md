@@ -38,12 +38,12 @@ Two demos:
 - **evaluation-compiler** — compiles *value proposition → axes → skill bundle*;
   the per-case skill selects a **range** of cases (a sequence range or time
   window), verifies each, extracts **desired** vs **agent** outcome in isolated
-  contexts, judges, and publishes **one `evaluation-report/v1` Capsule per case**.
+  contexts, judges, and publishes **one `case-evaluation/v1` Capsule per case**.
   When cross-case aggregation is asked for, it also generates a second
   **aggregation skill** that reduces those reports into one
   `evaluation-summary/v1` Capsule.
 
-*The interaction and the evaluation-report Capsules are signed and re-verifiable; the
+*The interaction and the case-evaluation Capsules are signed and re-verifiable; the
 desired outcome is sourced independently and its provenance recorded in the report.*
 
 ---
@@ -61,7 +61,7 @@ scenario + value proposition
                                  → extract agent outcome (from the Capsule)
                                  → judge against axes
         ▼
- publish one evaluation-report/v1 Capsule per case  → checkpoint / witness
+ publish one case-evaluation/v1 Capsule per case  → checkpoint / witness
 ```
 
 The selection is a sequence range `(after, through]` or a time window; the pipeline
@@ -275,7 +275,7 @@ Compilation is a short **dialog** (full script in `DEMO.md`):
 2. **Run the generated skill** — `selection=(1,2]` → verifies the seq-2 Capsule
    (`ec5b0c62…`, task 1), reads the **declared** desired outcome by `task_id`,
    extracts the **agent** outcome from the transcript in a separate context, judges
-   the axes, and **publishes an `evaluation-report/v1` Capsule at seq 51**.
+   the axes, and **publishes an `case-evaluation/v1` Capsule at seq 51**.
 
 Only *after* B3 has run does seq 51 exist; then read the report back like any Capsule:
 
@@ -288,7 +288,7 @@ capsulectl get --profile airlinedemo --capsule-id "$ID"
 
 ---
 
-## The evaluation report Capsule (`evaluation-report/v1`)
+## The evaluation report Capsule (`case-evaluation/v1`)
 
 Bound payload of the published report:
 
@@ -303,7 +303,7 @@ buyer can **verify offline**, no access to the vendor's systems.
 
 ---
 
-## The report Prompt 2 produces (`evaluation-report/v1`)
+## The report Prompt 2 produces (`case-evaluation/v1`)
 
 For the airline seq-2 case (`ec5b0c62…`, task 1), the generated skill judges each
 compiled axis against the real transcript and publishes one report:
@@ -316,7 +316,7 @@ axis_judgments (one entry per compiled axis; produced by running Prompt 2):
   aggregate              = null   (within-case aggregation: none)
 ```
 
-→ signed `evaluation-report/v1` Capsule at **seq 51**, verifiable offline;
+→ signed `case-evaluation/v1` Capsule at **seq 51**, verifiable offline;
 desired/agent/judge each run in an **isolated context**. Airline B3 is **not yet run**,
 so the statuses above are the report *shape*, not pinned values — **Demo A (Investigation)**
 below is a pinned, real validated run of this exact pipeline.
@@ -329,7 +329,7 @@ One report per case answers *"was this run good?"* A benchmark also asks *"how g
 across all tasks?"* — the **cross-case** roll-up.
 
 - A **second compiler output** (generated when `cross_case_aggregation ≠ none`): an
-  **aggregation skill** whose input is the `evaluation-report/v1` Capsules, **not**
+  **aggregation skill** whose input is the `case-evaluation/v1` Capsules, **not**
   the source interactions.
 - It verifies each report, reduces `axis_judgments` across cases (per-axis pass rate;
   `all_required` / `native` overall), and publishes one **`evaluation-summary/v1`**

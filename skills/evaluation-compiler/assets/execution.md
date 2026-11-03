@@ -31,7 +31,7 @@ Keep provider, tool and validation failures separate from business judgments. Ac
 
 ## Judge and report
 
-Write one new `evaluation-report/v1` JSON report per source run. Include evaluation identity, subject/case/run identity, source selection, bundle provenance, desired and agent outcomes, evidence manifest/cutoff, all axis judgments, an `outcomes` list carrying each outcome's per-outcome aggregate, the case aggregate, the benchmark's native result when the resolved policy is `native` (the cross-case `native` reducer consumes it), stage provenance, verification references and limitations. Preserve judge-stage limitations as well as extraction limitations.
+Write one new `case-evaluation/v1` JSON report per source run, with `record_type: case-evaluation/v1`. (Reports sealed before 2026-11-03 carry the name `evaluation-report/v1`, which the AAC Judge Record Family owns for a different shape; readers take it as ours only with a `record_type` and no `cases[]`.) Include evaluation identity, subject/case/run identity, source selection, bundle provenance, desired and agent outcomes, evidence manifest/cutoff, all axis judgments, an `outcomes` list carrying each outcome's per-outcome aggregate, the case aggregate, the benchmark's native result when the resolved policy is `native` (the cross-case `native` reducer consumes it), stage provenance, verification references and limitations. Preserve judge-stage limitations as well as extraction limitations.
 
 Each judgment has `axis_id`, `outcome_id`, `status`, `rationale` and `evidence_ids`. Status is `pass`, `fail`, `not_applicable` or `unjudgeable`. Missing evidence makes an applicable axis `unjudgeable`, not `not_applicable`. Do not infer correctness from the agent's confidence or from a prior evaluation.
 
