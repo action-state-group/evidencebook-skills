@@ -52,7 +52,8 @@ and a seller's deal, not stickers. This file is the worked example. If the selle
 something else (coffee beans, a course, a used bike), write the same three rows in their
 goods and words, set `pack_id` and `title` to match (for example `coffee-beans-sale`), put
 the file at `~/studio/packs/<pack_id>/pack-source.yaml`, and keep `evaluator: transaction`.
-`packs/coffee-beans-sale` is a second example.
+The commands below show the sticker-sale path; for other goods, give each `terms` command
+the path of the file you wrote.
 
 The three checks are all there is: `paid_before_delivered`, `delivered_within_days(N)` (a
 whole number of days, written inside the row) and `price_as_offered`. When the seller
