@@ -49,7 +49,7 @@ import deal_pack  # noqa: E402
 import deal_store  # noqa: E402
 import pack_compile  # noqa: E402
 import result_v0  # noqa: E402
-import sticker_deal  # noqa: E402
+import transaction  # noqa: E402
 
 DEFAULT_WORKSPACE = "~/studio"
 
@@ -139,7 +139,7 @@ def build_result(source, deals, generated_at, rehearsal):
     compiled = deal_pack.compiled(source)
     rows = compiled["rows"]
     ids = tuple(r["id"] for r in rows)
-    verdicts = sticker_deal.evaluate(source["rows"], deals)
+    verdicts = transaction.evaluate(source["rows"], deals)
     docs = []
     for deal in deals:
         evidence = hashlib.sha256(rfc8785.dumps(deal)).hexdigest()
@@ -238,9 +238,9 @@ def cmd_test(args):
     source = load_pack(args.src)
     results, failed = [], False
     for row in source["rows"]:
-        name, arg = sticker_deal.parse_check(row["check"])
-        met_case, miss_case = sticker_deal.CASES[name](arg)
-        fold, _ = sticker_deal.row_check(row)
+        name, arg = transaction.parse_check(row["check"])
+        met_case, miss_case = transaction.CASES[name](arg)
+        fold, _ = transaction.row_check(row)
         got = (fold(met_case, arg), fold(miss_case, arg))
         ok = got == ("met", "not_met")
         failed |= not ok

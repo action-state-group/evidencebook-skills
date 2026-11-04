@@ -1,0 +1,8 @@
+{
+  "trades": [
+    {"deal_id": "beans-01", "offered_price": 1800, "accepted_price": 1800, "paid_at": "2026-10-11T10:00:00Z", "delivered_at": "2026-10-12T09:00:00Z"},
+    {"deal_id": "beans-02", "offered_price": 1800, "accepted_price": 1800, "paid_at": "2026-10-12T10:00:00Z", "delivered_at": "2026-10-15T10:00:00Z"},
+    {"deal_id": "beans-03", "offered_price": 2400, "accepted_price": 2400, "paid_at": "2026-10-13T10:00:00Z", "delivered_at": "2026-10-17T10:00:00Z"},
+    {"deal_id": "beans-04", "offered_price": 2400, "accepted_price": 2000, "paid_at": "2026-10-14T10:00:00Z", "delivered_at": "2026-10-15T10:00:00Z"}
+  ]
+}

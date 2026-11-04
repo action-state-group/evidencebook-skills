@@ -7,7 +7,7 @@ demo, evidencebook-skills#117; first-demo scope section 3). The source:
 
     scope: {kind: deal}
     pack_id, pack_version, title, statement
-    evaluator: sticker_deal          scripts/evaluators/<evaluator>.py
+    evaluator: transaction          scripts/evaluators/<evaluator>.py
     rows:
       - id            the row's name in reports
         statement     the term in the seller's words
@@ -31,10 +31,10 @@ import sys
 import rfc8785
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "evaluators"))
-import sticker_deal  # noqa: E402
+import transaction  # noqa: E402
 
 SCOPE_KIND = "deal"
-EVALUATORS = {"sticker_deal": sticker_deal}
+EVALUATORS = {"transaction": transaction}
 TOP_KEYS = {"scope", "pack_id", "pack_version", "title", "statement", "evaluator", "rows"}
 ROW_KEYS = {"id", "statement", "tier", "check", "proves"}
 FIELDS = ("offered_price", "accepted_price", "paid_at", "delivered_at")
@@ -86,18 +86,18 @@ def validate_deal(source):
         if row.get("tier") != "recomputed":
             issues.append(f"{where}.tier must be recomputed")
         if not _nonempty(row.get("check")):
-            issues.append(f"{where} has no check: every row needs one of {sorted(sticker_deal.CHECKS)}")
+            issues.append(f"{where} has no check: every row needs one of {sorted(transaction.CHECKS)}")
         else:
             try:
-                sticker_deal.row_check(row)
+                transaction.row_check(row)
             except ValueError as e:
                 issues.append(str(e))
         proves = row.get("proves")
         if not isinstance(proves, list) or not proves or any(p not in FIELDS for p in proves):
             issues.append(f"{where}.proves must list fields from {list(FIELDS)}")
         elif _nonempty(row.get("check")):
-            parsed = sticker_deal.parse_check(row["check"])
-            reads = sticker_deal.READS.get(parsed[0]) if parsed else None
+            parsed = transaction.parse_check(row["check"])
+            reads = transaction.READS.get(parsed[0]) if parsed else None
             if parsed and parsed[1] is not None and not re.search(rf"(?<!\d){parsed[1]}(?!\d)", str(row.get("statement"))):
                 issues.append(f"{where}.statement must say {parsed[1]}, the number in its check {row['check']!r}")
             if reads and sorted(proves) != sorted(reads):
@@ -132,7 +132,7 @@ def from_deal(source):
     row, its statement and how it is recomputed, in words."""
     requirements = []
     for r in source["rows"]:
-        name, arg = sticker_deal.parse_check(r["check"])
+        name, arg = transaction.parse_check(r["check"])
         reads = ", ".join(r["proves"])
         rule = f"Recomputed with no model from the sale's own records ({reads}) by {name}" + \
                (f" with {arg} day(s)" if arg is not None else "") + "."

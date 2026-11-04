@@ -53,7 +53,12 @@ way.
   node's book for a window of whole closed periods. No model runs.
   `sticker-sale` is a deal terms pack (`scope.kind: deal`, `scripts/deal_pack.py`):
   a seller's three sticker-sale rows, all recomputed by
-  `scripts/evaluators/sticker_deal.py` from each sale's own records. Terms Pack
+  `scripts/evaluators/transaction.py` from each sale's own records. That
+  evaluator is about transactions, not stickers: `packs/coffee-beans-sale` is a
+  second example pack over it for different goods. It stays apart from
+  `inference_deals.py`: that one reads a Mesh node's sealed capsule records
+  over whole closed periods, this one a flat record per sale, so they share no
+  inputs and no code. Terms Pack
   Studio's `scripts/studio/terms` (`lint`, `test`, `run --dry-run`, `verify`,
   `compare`, `publish`) and the [`terms-pack-author`](skills/terms-pack-author/SKILL.md)
   skill author, rehearse and publish it; `run` writes only into the workspace it is given.

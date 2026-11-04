@@ -10,7 +10,7 @@ title: Sticker sale terms
 statement: >-
   A sticker sale came through when the buyer paid before delivery, the sticker
   was delivered within a day of payment, and the price was the price offered.
-evaluator: sticker_deal
+evaluator: transaction
 rows:
   - id: paid_before_delivered
     statement: The buyer paid before the sticker was delivered.

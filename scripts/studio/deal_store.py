@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a seller's deal store into the sales scripts/evaluators/sticker_deal.py folds.
+"""Read a seller's deal store into the transactions scripts/evaluators/transaction.py folds.
 
 The shapes are evidencebook-deal's (testdata/studio/README.md, PR 142): `capsulectl
 --profile deal deal list --json` names the closed deals (kind "deal"), and

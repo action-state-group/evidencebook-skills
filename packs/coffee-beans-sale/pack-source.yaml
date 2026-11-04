@@ -1,0 +1,30 @@
+# coffee-beans-sale -- a roaster's terms for selling a bag of beans, three rows,
+# all recomputed from the sale's own records (no judge, no key). The second
+# example pack over the transaction evaluator (evidencebook-skills#124): a
+# different good and a different delivery window, the same evaluator.
+scope:
+  kind: deal
+pack_id: coffee-beans-sale
+pack_version: 0.1.0
+title: Coffee beans sale terms
+statement: >-
+  A coffee beans sale came through when the buyer paid before delivery, the
+  beans were delivered within 3 days of payment, and the price was the price
+  offered.
+evaluator: transaction
+rows:
+  - id: paid_before_delivered
+    statement: The buyer paid before the beans were delivered.
+    tier: recomputed
+    check: paid_before_delivered
+    proves: [paid_at, delivered_at]
+  - id: delivered_within_days
+    statement: The beans were delivered within 3 days of payment.
+    tier: recomputed
+    check: delivered_within_days(3)
+    proves: [paid_at, delivered_at]
+  - id: price_as_offered
+    statement: The price was the price offered.
+    tier: recomputed
+    check: price_as_offered
+    proves: [offered_price, accepted_price]

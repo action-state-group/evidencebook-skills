@@ -1,4 +1,4 @@
-"""The Terms Pack Studio verbs (scripts/studio/terms) and the sticker_deal evaluator
+"""The Terms Pack Studio verbs (scripts/studio/terms) and the transaction evaluator
 (evidencebook-skills#117), end to end on tests/fixtures/sticker-sale/trades.json:
 the ten-sale rehearsal reads 9 of 10 with the price miss, the page verifies
 offline and carries result.json's bytes, `compare` of a 1-day and a 2-day pack
@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "evaluators"))
 
 import jsonschema  # noqa: E402
 
-import sticker_deal  # noqa: E402
+import transaction  # noqa: E402
 import terms  # noqa: E402
 
 SOURCE = ROOT / "packs" / "sticker-sale" / "pack-source.yaml"
@@ -195,20 +195,20 @@ class StickerDeal(unittest.TestCase):
 class Folds(unittest.TestCase):
     def test_a_missing_field_is_not_evaluable_never_not_met(self):
         for name, arg in (("paid_before_delivered", None), ("delivered_within_days", 1), ("price_as_offered", None)):
-            fold, _ = sticker_deal.CHECKS[name]
+            fold, _ = transaction.CHECKS[name]
             self.assertEqual(fold({}, arg), "not_evaluable", name)
-        fold, _ = sticker_deal.CHECKS["delivered_within_days"]
+        fold, _ = transaction.CHECKS["delivered_within_days"]
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:00Z"}, 1), "not_evaluable")
 
     def test_delivered_within_days_is_inclusive_and_reads_whole_days(self):
-        fold, _ = sticker_deal.CHECKS["delivered_within_days"]
+        fold, _ = transaction.CHECKS["delivered_within_days"]
         sale = lambda d: {"paid_at": "2026-11-01T10:00:00Z", "delivered_at": d}  # noqa: E731
         self.assertEqual(fold(sale("2026-11-02T10:00:00Z"), 1), "met")
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 1), "not_met")
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 2), "met")
 
     def test_paid_before_delivered_fails_when_delivery_comes_first(self):
-        fold, _ = sticker_deal.CHECKS["paid_before_delivered"]
+        fold, _ = transaction.CHECKS["paid_before_delivered"]
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:00Z", "delivered_at": "2026-11-01T09:00:00Z"}, None), "not_met")
 
 
@@ -353,9 +353,9 @@ class Hardening(unittest.TestCase):
         self.t = pathlib.Path(self.tmp.name)
 
     def test_a_bare_time_or_a_non_number_price_is_not_evaluable(self):
-        fold, _ = sticker_deal.CHECKS["paid_before_delivered"]
+        fold, _ = transaction.CHECKS["paid_before_delivered"]
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:00", "delivered_at": "2026-11-01T11:00:00Z"}, None), "not_evaluable")
-        fold, _ = sticker_deal.CHECKS["price_as_offered"]
+        fold, _ = transaction.CHECKS["price_as_offered"]
         for a, b in ((True, 1), ({}, {}), ("5", "5")):
             self.assertEqual(fold({"offered_price": a, "accepted_price": b}, None), "not_evaluable")
 
@@ -454,6 +454,46 @@ class Hardening(unittest.TestCase):
         bad = lambda argv, **kw: subprocess.CompletedProcess(argv, 1, "", "no such profile")
         with self.assertRaises(deal_store.StoreError):
             deal_store.sales_from_store(self.t, run=bad)
+
+
+class OtherGoods(unittest.TestCase):
+    """The evaluator is about transactions, not stickers (evidencebook-skills#124): a
+    second pack for different goods lints, tests and runs with no evaluator change."""
+    BEANS = ROOT / "packs" / "coffee-beans-sale" / "pack-source.yaml"
+    BEAN_TRADES = ROOT / "tests" / "fixtures" / "coffee-beans-sale" / "trades.json"
+
+    def test_both_example_packs_name_the_one_transaction_evaluator(self):
+        import deal_pack
+        for src in (SOURCE, self.BEANS):
+            self.assertEqual(terms.load_pack(src)["evaluator"], "transaction")
+        self.assertEqual(sorted(deal_pack.EVALUATORS), ["transaction"])
+        self.assertNotIn("sticker", transaction.__doc__.split("\n\n")[0].lower())  # its summary names no good
+        self.assertNotIn("sticker", pathlib.Path(transaction.__file__).name)
+
+    def test_the_renamed_evaluator_leaves_the_sticker_sale_digest_unchanged(self):
+        # the evaluator name is not part of definition_digest, so existing pins hold
+        import deal_pack
+        self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
+                         "a1831156589ca58cdb7a7fcd22e2378dd2130ea7c288d22b8ceeaa8a0b75c6e7")
+
+    def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
+        self.assertEqual(call("lint", self.BEANS)[0], 0)
+        code, res = call("test", self.BEANS)
+        self.assertEqual(code, 0, res)
+        self.assertEqual([r["passed"] for r in res["rows"]], [True, True, True])
+        with tempfile.TemporaryDirectory() as tmp:
+            code, res = call("run", self.BEANS, "--deals", self.BEAN_TRADES, "--dry-run",
+                             "--workspace", pathlib.Path(tmp) / "ws", "--generated-at", GENERATED)
+            self.assertEqual(code, 0, res)
+            self.assertEqual((res["came_through"], res["sales"]), (2, 4))
+            result = json.loads(pathlib.Path(res["result"]).read_bytes())
+            misses = {c["id"] for c in result["claims"] if c["verdict"] == "not_met"}
+            self.assertEqual(misses, {"beans-03::delivered_within_days", "beans-04::price_as_offered"})
+
+    def test_the_second_pack_shipped_compiled_is_current(self):
+        import deal_pack
+        committed = json.loads((ROOT / "packs" / "coffee-beans-sale" / "compiled" / "compiled.json").read_text())
+        self.assertEqual(committed, deal_pack.compiled(terms.load_pack(self.BEANS)))
 
 
 if __name__ == "__main__":

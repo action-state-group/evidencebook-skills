@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-"""The sticker-sale deal terms pack's evaluator: three recomputed folds over a
-seller's sales, decided from each sale's own record with no model and no key.
+"""The transaction evaluator: three recomputed folds over a seller's
+transactions (a deal between a buyer and a seller, whatever is sold), decided
+from each transaction's own record with no model and no key.
 
-packs/sticker-sale/pack-source.yaml (`scope.kind: deal`) names this module as
-its `evaluator`; scripts/studio/terms.py runs it (`terms run`, `terms test`).
+A deal pack (`scope.kind: deal`; packs/sticker-sale and
+packs/coffee-beans-sale are the example packs) names this module as its
+`evaluator: transaction`; scripts/studio/terms.py runs it (`terms run`, `terms test`).
 Terms Pack Studio first demo, evidencebook-skills#117.
 
-A sale is one normalized dict, the fields the deal store's records carry once
+A transaction is one normalized dict, the fields the deal store's records carry once
 read (the field names are the replay fixture's, evidencebook-deal#136):
 
-    deal_id          the sale's id
-    offered_price    the asking price the sale was offered at (minor units)
+    deal_id          the transaction's id
+    offered_price    the asking price the goods were offered at (minor units)
     accepted_price   the price the buyer accepted and the seller committed to
     paid_at          when the payment was received (RFC 3339 UTC)
-    delivered_at     when the sticker was delivered (RFC 3339 UTC)
+    delivered_at     when the goods were delivered (RFC 3339 UTC)
 
 The folds, each met / not_met / not_evaluable. A fold that lacks a field it
-needs is not_evaluable, never not_met: a sale that is not delivered yet has not
+needs is not_evaluable, never not_met: a transaction that is not delivered yet has not
 missed a delivery term.
 
     paid_before_delivered      paid_at is not after delivered_at
@@ -26,7 +28,7 @@ missed a delivery term.
     price_as_offered           accepted_price equals offered_price
 
 `CHECKS` is the closed list of check names a row may use; `CASES` builds the two
-sales per check (one met, one not) that `terms test` runs.
+transactions per check (one met, one not) that `terms test` runs.
 """
 import datetime
 import re
@@ -86,7 +88,7 @@ CHECKS = {
     "price_as_offered": (price_as_offered, False),
 }
 
-# name -> the sale fields the fold reads: what a row's `proves` must list
+# name -> the transaction fields the fold reads: what a row's `proves` must list
 READS = {
     "paid_before_delivered": ("paid_at", "delivered_at"),
     "delivered_within_days": ("paid_at", "delivered_at"),
@@ -104,7 +106,7 @@ def _delivered_after(delta):
     return {"paid_at": _stamp(_PAID), "delivered_at": _stamp(_PAID + delta)}
 
 
-# name -> fn(arg) -> (a sale that meets the row, a sale that misses it)
+# name -> fn(arg) -> (a transaction that meets the row, one that misses it)
 CASES = {
     "paid_before_delivered": lambda arg: (_delivered_after(datetime.timedelta(hours=2)),
                                           _delivered_after(datetime.timedelta(hours=-1))),
@@ -130,6 +132,6 @@ def row_check(row):
 
 
 def evaluate(rows, deals):
-    """{deal_id: {row_id: verdict}} for every sale and every row."""
+    """{deal_id: {row_id: verdict}} for every transaction and every row."""
     folds = [(row["id"], *row_check(row)) for row in rows]
     return {deal["deal_id"]: {rid: fold(deal, arg) for rid, fold, arg in folds} for deal in deals}
