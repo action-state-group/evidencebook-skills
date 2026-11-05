@@ -351,8 +351,16 @@ class RulesChecker(unittest.TestCase):
 
     def test_the_cards_words_name_the_row_by_the_packs_statement(self):
         # a changed price: the row's statement and both amounts, in the card's units
-        bad = self.price_finding(check_input("deal-a", 50, 60))
-        self.assertEqual(bad["reason"], 'your rule "The price was the price offered" did not hold: the commit was $0.60, the offer $0.50')
+        usd = check_input("deal-a", 50, 60)
+        usd["record"]["agent_input"]["body"]["currency"] = "USD"
+        bad = self.price_finding(usd)
+        self.assertEqual(bad["reason"], 'your rule "The price was the price offered" did not hold (the commit was $0.60, the offer $0.50)')
+        # a unit the card cannot format (sats), or none stated, leaves the amounts out, never printed wrong
+        self.assertNotIn("$", self.price_finding(check_input("deal-a", 50, 60))["reason"])
+        sats = check_input("deal-a", 50, 60)
+        sats["record"]["agent_input"]["body"]["currency"] = "SAT"
+        self.assertEqual(self.price_finding(sats)["reason"],
+                         'your rule "The price was the price offered" did not hold (the commit price is not the price offered)')
         # the offer stage: no commit yet, the row is said as pending, not as unchecked
         offer = check_input("deal-a", 50, 50)
         offer["record"]["agent_input"]["body"] = {"action": "offer", "amount_minor": 50}
@@ -363,6 +371,18 @@ class RulesChecker(unittest.TestCase):
         gap = check_input("deal-a", 50, 50)
         gap["history"] = []
         self.assertIn("could not be checked", self.price_finding(gap)["reason"])
+        # a commit that states no amount, an offer that states none, and a step after the commit
+        nocommit = check_input("deal-a", 50, 50)
+        del nocommit["record"]["agent_input"]["body"]["amount_minor"]
+        self.assertIn("the commit states no amount", self.price_finding(nocommit)["reason"])
+        nooffer = check_input("deal-a", 50, 50)
+        nooffer["history"][1]["agent_input"]["body"].pop("amount_minor")
+        self.assertIn("the offer states no amount", self.price_finding(nooffer)["reason"])
+        after = check_input("deal-a", 50, 50)
+        after["history"].append({"action_id": "deal-a/7", "agent_input": {"body": {"action": "commit", "amount_minor": 50}}})
+        after["record"]["agent_input"]["body"] = {"action": "share_contact"}
+        done = self.price_finding(after)
+        self.assertEqual((done["verdict"], done["reason"]), ("not_applicable", "decided at the commit"))
         # a clean commit says nothing
         self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
 

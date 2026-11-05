@@ -22,10 +22,16 @@ import json
 import sys
 
 
+def currency_of(body):
+    """The currency a step's body states, directly or in its terms; None when it states none."""
+    terms = body.get("terms")
+    return body.get("currency") or (terms.get("currency") if isinstance(terms, dict) else None)
+
+
 def money(minor, currency):
-    """An amount the way the seller's card says it: $0.50 for USD, else 0.50 CODE."""
-    text = f"{minor / 100:.2f}"
-    return "$" + text if currency in (None, "", "USD") else f"{text} {currency}"
+    """An amount the way the seller's card says it ($0.50), or None unless the step states USD:
+    another unit (sats) would print a wrong number, and an unstated one cannot be assumed."""
+    return f"${minor / 100:.2f}" if str(currency).upper() == "USD" else None
 
 
 def commit_findings(doc, rows):
@@ -33,11 +39,13 @@ def commit_findings(doc, rows):
     body = (record.get("agent_input") or {}).get("body") or {}
     deal_id = record.get("deal_id") or str(record.get("action_id", "")).split("/")[0]
     commit = body.get("amount_minor") if body.get("action") == "commit" else None
-    offer = None
+    offer, offered, committed = None, False, False
     for h in doc.get("history") or []:
         hb = (h.get("agent_input") or {}).get("body") or {}
-        if str(h.get("action_id", "")).startswith(deal_id + "/") and hb.get("action") == "offer":
-            offer = hb.get("amount_minor")
+        if str(h.get("action_id", "")).startswith(deal_id + "/"):
+            committed = committed or hb.get("action") == "commit"
+            if hb.get("action") == "offer":
+                offer, offered = hb.get("amount_minor"), True
     findings = []
     for row in rows:
         f = {"id": row["id"], "check": row["check"]}
@@ -46,20 +54,28 @@ def commit_findings(doc, rows):
             f["verdict"] = "not_applicable"
             f["reason"] = "decided after payment and delivery, over the closed sale"
         elif not all(isinstance(v, int) and not isinstance(v, bool) for v in (commit, offer)):
-            f["verdict"] = "not_evaluable"
             # The seller's card says this reason as it stands (a pack check
             # states its rows in the user's own words, evidencebook-deal#157).
-            if body.get("action") != "commit":
+            f["verdict"] = "not_evaluable"
+            if body.get("action") != "commit" and committed:
+                # Some other step of a deal whose price was already decided at the commit.
+                f["verdict"], f["reason"] = "not_applicable", "decided at the commit"
+            elif body.get("action") != "commit":
                 f["reason"] = f'your rule "{name}" is checked when the buyer commits'
-            else:
+            elif not offered:
                 f["reason"] = f'your rule "{name}" could not be checked: no offer of this deal on record'
+            elif not isinstance(commit, int) or isinstance(commit, bool):
+                f["reason"] = f'your rule "{name}" could not be checked: the commit states no amount'
+            else:
+                f["reason"] = f'your rule "{name}" could not be checked: the offer states no amount'
         else:
             f["verdict"] = "pass" if commit == offer else "fail"
             f["value"], f["limit"] = commit, offer
             if commit != offer:
-                cur = body.get("currency")
-                f["reason"] = (f'your rule "{name}" did not hold: the commit was {money(commit, cur)}, '
-                               f'the offer {money(offer, cur)}')
+                cur = currency_of(body)
+                detail = (f"the commit was {money(commit, cur)}, the offer {money(offer, cur)}" if money(commit, cur)
+                          else "the commit price is not the price offered")
+                f["reason"] = f'your rule "{name}" did not hold ({detail})'
         findings.append(f)
     return findings
 
