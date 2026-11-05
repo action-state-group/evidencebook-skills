@@ -58,11 +58,11 @@ def commit_findings(doc, rows):
             # states its rows in the user's own words, evidencebook-deal#157).
             f["verdict"] = "not_evaluable"
             if body.get("action") == "offer":
-                f["reason"] = f'your rule "{name}" is checked when the buyer commits'
+                f["reason"] = f'your rule "{name}" is checked at the commit'
             elif body.get("action") != "commit":
                 # Some other step: the commit may be in the thread yet outside the history this
                 # checker was given, so say only what is true either way. It still pauses.
-                f["reason"] = f'your rule "{name}" is decided at the buyer\'s commit'
+                f["reason"] = f'your rule "{name}" is decided at the commit'
             elif not offered:
                 f["reason"] = f'your rule "{name}" could not be checked: no offer of this deal on record'
             elif not isinstance(commit, int) or isinstance(commit, bool):

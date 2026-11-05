@@ -366,7 +366,7 @@ class RulesChecker(unittest.TestCase):
         offer["record"]["agent_input"]["body"] = {"action": "offer", "amount_minor": 50}
         pending = self.price_finding(offer)
         self.assertEqual((pending["verdict"], pending["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is checked when the buyer commits'))
+                         ("not_evaluable", 'your rule "The price was the price offered" is checked at the commit'))
         # a commit with no offer on record is a real gap, said as one
         gap = check_input("deal-a", 50, 50)
         gap["history"] = []
@@ -382,7 +382,7 @@ class RulesChecker(unittest.TestCase):
         after["record"]["agent_input"]["body"] = {"action": "share_contact"}
         done = self.price_finding(after)
         self.assertEqual((done["verdict"], done["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is decided at the buyer\'s commit'))
+                         ("not_evaluable", 'your rule "The price was the price offered" is decided at the commit'))
         # a clean commit says nothing
         self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
 
