@@ -378,11 +378,11 @@ class RulesChecker(unittest.TestCase):
         nooffer = check_input("deal-a", 50, 50)
         nooffer["history"][1]["agent_input"]["body"].pop("amount_minor")
         self.assertIn("the offer states no amount", self.price_finding(nooffer)["reason"])
-        after = check_input("deal-a", 50, 50)
-        after["history"].append({"action_id": "deal-a/7", "agent_input": {"body": {"action": "commit", "amount_minor": 50}}})
+        after = check_input("deal-a", 50, 60)
         after["record"]["agent_input"]["body"] = {"action": "share_contact"}
         done = self.price_finding(after)
-        self.assertEqual((done["verdict"], done["reason"]), ("not_applicable", "decided at the commit"))
+        self.assertEqual((done["verdict"], done["reason"]),
+                         ("not_evaluable", 'your rule "The price was the price offered" is decided at the buyer\'s commit'))
         # a clean commit says nothing
         self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
 

@@ -12,7 +12,8 @@ the seller's commit check (evidencebook-deal#137). One finding per pack row,
     price_as_offered   fail when the commit's amount_minor differs from the last
                        offer of the same deal in the history (action_id starts
                        with "<deal_id>/"), pass when equal, not_evaluable when
-                       either is missing
+                       either is missing (said as pending on an offer, as decided at
+                       the commit on any other step)
     other rows         not_applicable at commit time: they are decided after
                        payment and delivery, over the sale's closed record
 
@@ -39,11 +40,10 @@ def commit_findings(doc, rows):
     body = (record.get("agent_input") or {}).get("body") or {}
     deal_id = record.get("deal_id") or str(record.get("action_id", "")).split("/")[0]
     commit = body.get("amount_minor") if body.get("action") == "commit" else None
-    offer, offered, committed = None, False, False
+    offer, offered = None, False
     for h in doc.get("history") or []:
         hb = (h.get("agent_input") or {}).get("body") or {}
         if str(h.get("action_id", "")).startswith(deal_id + "/"):
-            committed = committed or hb.get("action") == "commit"
             if hb.get("action") == "offer":
                 offer, offered = hb.get("amount_minor"), True
     findings = []
@@ -57,11 +57,12 @@ def commit_findings(doc, rows):
             # The seller's card says this reason as it stands (a pack check
             # states its rows in the user's own words, evidencebook-deal#157).
             f["verdict"] = "not_evaluable"
-            if body.get("action") != "commit" and committed:
-                # Some other step of a deal whose price was already decided at the commit.
-                f["verdict"], f["reason"] = "not_applicable", "decided at the commit"
-            elif body.get("action") != "commit":
+            if body.get("action") == "offer":
                 f["reason"] = f'your rule "{name}" is checked when the buyer commits'
+            elif body.get("action") != "commit":
+                # Some other step: the commit may be in the thread yet outside the history this
+                # checker was given, so say only what is true either way. It still pauses.
+                f["reason"] = f'your rule "{name}" is decided at the buyer\'s commit'
             elif not offered:
                 f["reason"] = f'your rule "{name}" could not be checked: no offer of this deal on record'
             elif not isinstance(commit, int) or isinstance(commit, bool):
