@@ -22,6 +22,12 @@ import json
 import sys
 
 
+def money(minor, currency):
+    """An amount the way the seller's card says it: $0.50 for USD, else 0.50 CODE."""
+    text = f"{minor / 100:.2f}"
+    return "$" + text if currency in (None, "", "USD") else f"{text} {currency}"
+
+
 def commit_findings(doc, rows):
     record = doc.get("record") or {}
     body = (record.get("agent_input") or {}).get("body") or {}
@@ -35,17 +41,25 @@ def commit_findings(doc, rows):
     findings = []
     for row in rows:
         f = {"id": row["id"], "check": row["check"]}
+        name = str(row.get("statement") or row["id"]).strip().rstrip(".")
         if row["check"] != "price_as_offered":
             f["verdict"] = "not_applicable"
             f["reason"] = "decided after payment and delivery, over the closed sale"
         elif not all(isinstance(v, int) and not isinstance(v, bool) for v in (commit, offer)):
             f["verdict"] = "not_evaluable"
-            f["reason"] = "needs the commit's amount and the deal's last offer"
+            # The seller's card says this reason as it stands (a pack check
+            # states its rows in the user's own words, evidencebook-deal#157).
+            if body.get("action") != "commit":
+                f["reason"] = f'your rule "{name}" is checked when the buyer commits'
+            else:
+                f["reason"] = f'your rule "{name}" could not be checked: no offer of this deal on record'
         else:
             f["verdict"] = "pass" if commit == offer else "fail"
             f["value"], f["limit"] = commit, offer
             if commit != offer:
-                f["reason"] = "the commit price is not the price offered"
+                cur = body.get("currency")
+                f["reason"] = (f'your rule "{name}" did not hold: the commit was {money(commit, cur)}, '
+                               f'the offer {money(offer, cur)}')
         findings.append(f)
     return findings
 

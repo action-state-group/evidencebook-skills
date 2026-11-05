@@ -346,6 +346,27 @@ class RulesChecker(unittest.TestCase):
         self.assertEqual({f["id"]: f["verdict"] for f in res["findings"]}["price_as_offered"], "not_evaluable")
 
 
+    def price_finding(self, doc):
+        return {f["id"]: f for f in self.run_checker(doc)["findings"]}["price_as_offered"]
+
+    def test_the_cards_words_name_the_row_by_the_packs_statement(self):
+        # a changed price: the row's statement and both amounts, in the card's units
+        bad = self.price_finding(check_input("deal-a", 50, 60))
+        self.assertEqual(bad["reason"], 'your rule "The price was the price offered" did not hold: the commit was $0.60, the offer $0.50')
+        # the offer stage: no commit yet, the row is said as pending, not as unchecked
+        offer = check_input("deal-a", 50, 50)
+        offer["record"]["agent_input"]["body"] = {"action": "offer", "amount_minor": 50}
+        pending = self.price_finding(offer)
+        self.assertEqual((pending["verdict"], pending["reason"]),
+                         ("not_evaluable", 'your rule "The price was the price offered" is checked when the buyer commits'))
+        # a commit with no offer on record is a real gap, said as one
+        gap = check_input("deal-a", 50, 50)
+        gap["history"] = []
+        self.assertIn("could not be checked", self.price_finding(gap)["reason"])
+        # a clean commit says nothing
+        self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
+
+
 class Hardening(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
