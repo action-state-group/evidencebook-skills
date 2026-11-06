@@ -136,10 +136,10 @@ class Init(unittest.TestCase):
 
     def test_the_conduct_candidate_is_about_my_own_agent_and_never_a_buyer(self):
         _, res = self.init([self.sale()])
-        term = next(t for t in res["terms"] if t["id"] == "my_agent_stayed_within_authority")
+        term = next(t for t in res["terms"] if t["term"] == "my_agent_stayed_within_authority")
         self.assertEqual(term["status"], "not this pack's concern")
         self.assertIn("private conduct pack, which no buyer ever receives", term["detail"])
-        self.assertNotIn("buyer_stayed_polite", {t["id"] for t in res["terms"]})
+        self.assertNotIn("buyer_stayed_polite", {t["term"] for t in res["terms"]})
 
     def test_an_unwritable_readiness_file_leaves_the_verb_answer_alone(self):
         _, res = self.init([self.sale()])
