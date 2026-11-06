@@ -92,15 +92,18 @@ def run_admission(source, cases, engine, engine_commit):
             for name in two_case.CASES:
                 case_file = pathlib.Path(tmp) / "case.json"
                 case_file.write_text(json.dumps(pair[name]))
-                r = subprocess.run([engine, "admission", "evaluate", "--pack", str(pack_file), "--pack-id",
-                                    source["pack_id"], "--digest", digest, "--input", str(case_file)],
-                                   capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
-                if r.returncode != 0:
+                try:
+                    r = subprocess.run([engine, "admission", "evaluate", "--pack", str(pack_file), "--pack-id",
+                                        source["pack_id"], "--digest", digest, "--input", str(case_file)],
+                                       capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+                    if r.returncode != 0:
+                        raise ValueError(f"refused: {(r.stderr or r.stdout).strip()[:300]}")
+                    decided = {x["row"]: x["result"] for x in json.loads(r.stdout)["rows"]}
+                except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as e:
                     rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated",
-                                 "evaluated": False, "reason": f"the engine refused the {name} case: "
-                                 f"{(r.stderr or r.stdout).strip()[:300]}"})
+                                 "evaluated": False, "reason": f"the engine could not decide the {name} case: "
+                                 f"{type(e).__name__}: {e}"})
                     break
-                decided = {x["row"]: x["result"] for x in json.loads(r.stdout)["rows"]}
                 got.append(ROW_RESULTS.get(decided.get(row), decided.get(row, "not_decided")))
             else:
                 rows.append(row_report(row, tuple(got), {"decided_by": ident, "pack_digest": digest}))
@@ -113,12 +116,11 @@ def evaluator_identity(module):
     return {"name": f.stem, "path": f"scripts/evaluators/{f.name}", "sha256": hashlib.sha256(f.read_bytes()).hexdigest()}
 
 
-def run_inference_deals(source, cases, pack_dir):
+def run_inference_deals(source, cases):
     import inference_deals
-    try:
-        compiled = json.loads((pathlib.Path(pack_dir) / "compiled" / "compiled.json").read_text())
-    except (OSError, ValueError) as e:
-        return not_run(source, f"the evaluator reads the compiled pack, compiled/compiled.json, and it cannot be read: {e}")
+    import pack_compile
+    # Compiled from the source under test, never read from a compiled/ file that may be stale.
+    compiled = pack_compile.build_deterministic_compiled_json(source)
     rows = []
     for row, pair in by_row(cases).items():
         got = []
@@ -128,11 +130,18 @@ def run_inference_deals(source, cases, pack_dir):
                 records = [(c["capsule_id"], c) for c in inp["records"]]
                 doc, _ = inference_deals.build_result(records, compiled, datetime.date.fromisoformat(inp["date"]),
                                                       GENERATED_AT)
+                mine = [c for c in doc["claims"] if c["requirement_ref"] == row]
+                if len(mine) != 1:
+                    raise ValueError(f"a case must carry exactly one counted deal for the row; it gave {len(mine)}")
             except (KeyError, TypeError, ValueError, inference_deals.DealsError) as e:
-                got.append(f"error: {type(e).__name__}: {e}")
-                continue
-            verdicts = {c["requirement_ref"]: c["verdict"] for c in doc["claims"]}
-            got.append(verdicts.get(row, "not_decided"))
+                got.append(None)
+                why = f"the {name} case could not be built into a Result: {type(e).__name__}: {e}"
+                break
+            got.append(mine[0]["verdict"])
+        if None in got:
+            rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated",
+                         "evaluated": False, "reason": why})
+            continue
         rows.append(row_report(row, tuple(got), {"decided_by": evaluator_identity(inference_deals)}))
     return rows
 
@@ -140,7 +149,7 @@ def run_inference_deals(source, cases, pack_dir):
 EVALUATORS = {"inference_deals": run_inference_deals}
 
 
-def run(kind, source, cases, pack_dir, engine=None, engine_commit=None, environ=None):
+def run(kind, source, cases, engine=None, engine_commit=None, environ=None):
     environ = os.environ if environ is None else environ
     if kind == "admission":
         return run_admission(source, cases, engine or environ.get("CAPSULE_ENGINE"), engine_commit)
@@ -151,7 +160,7 @@ def run(kind, source, cases, pack_dir, engine=None, engine_commit=None, environ=
         runner = EVALUATORS.get(source["evaluator"])
         if runner is None:
             return not_run(source, f"no case runner for the {source['evaluator']} evaluator")
-        return runner(source, cases, pack_dir)
+        return runner(source, cases)
     if not environ.get("TYPESAFE_API_KEY"):
         return not_run(source, f"a {kind} pack's cases are judged by its pinned judge, which needs a model key "
                                "(TYPESAFE_API_KEY), and none is set")

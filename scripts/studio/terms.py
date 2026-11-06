@@ -268,7 +268,7 @@ def cmd_test(args):
     cases, issues = two_case.read_cases(path, source)
     if issues:
         return out({"passed": False, "kind": kind, "issues": issues}, 1)
-    rows = case_eval.run(kind, source, cases, path.parent, args.engine, args.engine_commit)
+    rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit)
     failed = any(r["evaluated"] and not r["passed"] for r in rows)
     unrun = sum(r["evaluated"] is False for r in rows)
     # `passed` is true only when every row ran and passed; a row that was not run is not a pass, so

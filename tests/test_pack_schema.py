@@ -347,15 +347,35 @@ class TestOnEveryKind(unittest.TestCase):
         self.assertEqual((bad["evaluated"], bad["passed"], bad["met_case"], bad["miss_case"]),
                          (True, False, "not_met", "met"))
 
-    def test_an_evaluator_case_that_cannot_be_read_fails_and_is_not_passed(self):
+    def test_an_evaluator_case_that_cannot_be_built_is_not_evaluated(self):
         dst = self.copy_evaluator_pack()
         f = dst / "fixtures/two-case.json"
         doc = json.loads(f.read_text())
         doc["cases"][0]["input"] = {"records": [], "date": "2026-11-01"}
         f.write_text(json.dumps(doc))
         code, res = run_test(dst / "pack-source.yaml")
-        self.assertEqual((code, res["passed"]), (1, False))
-        self.assertTrue(res["rows"][0]["met_case"].startswith("error:"))
+        self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, None, 4, 2), res)
+        self.assertFalse(res["rows"][0]["evaluated"])
+        self.assertIn("could not be built", res["rows"][0]["reason"])
+
+    def test_a_case_with_two_deals_is_not_evaluated(self):
+        dst = self.copy_evaluator_pack()
+        f = dst / "fixtures/two-case.json"
+        doc = json.loads(f.read_text())
+        met = [c for c in doc["cases"] if c["row"] == "come_through.paid_as_agreed"]
+        met[0]["input"]["records"] = met[0]["input"]["records"] + met[1]["input"]["records"]
+        f.write_text(json.dumps(doc))
+        code, res = run_test(dst / "pack-source.yaml")
+        self.assertIsNone(res["passed"])
+        row = [r for r in res["rows"] if r["row"] == "come_through.paid_as_agreed"][0]
+        self.assertFalse(row["evaluated"])
+        self.assertIn("exactly one counted deal", row["reason"])
+
+    def test_the_evaluator_runs_the_source_not_a_compiled_file(self):
+        dst = self.copy_evaluator_pack()
+        shutil_rmtree(dst / "compiled")
+        code, res = run_test(dst / "pack-source.yaml")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, True, 6), res)
 
     def copy_evaluator_pack(self):
         import shutil
@@ -419,13 +439,6 @@ class TestOnEveryKind(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertTrue(any("same input" in i for i in res["issues"]), res)
 
-    def test_an_evaluator_pack_without_its_compiled_file_is_not_run(self):
-        dst = self.copy_evaluator_pack()
-        (dst / "compiled/compiled.json").unlink()
-        code, res = run_test(dst / "pack-source.yaml")
-        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
-        self.assertIn("compiled/compiled.json", res["rows"][0]["reason"])
-
     def test_sample_fixtures_name_their_own_pack(self):
         for name, path in self.SAMPLES.items():
             doc = json.loads((path.parent / "fixtures/two-case.json").read_text())
@@ -448,6 +461,11 @@ class ConductIsAScopeKind(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def shutil_rmtree(path):
+    import shutil
+    shutil.rmtree(path)
 
 
 class AdmissionEngine(unittest.TestCase):
@@ -493,6 +511,16 @@ print(json.dumps({"verdict": "NO", "rows": [
         code, res = run_test(self.SAMPLE, "--engine", engine)
         self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
         self.assertIn("bad pack", res["rows"][0]["reason"])
+
+    def test_an_engine_that_cannot_start_leaves_the_rows_unrun(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        f = pathlib.Path(d.name) / "capsule-engine"
+        f.write_text("#!/nonexistent/interpreter\n")
+        f.chmod(0o755)
+        code, res = run_test(self.SAMPLE, "--engine", str(f))
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("could not decide", res["rows"][0]["reason"])
 
     def test_a_missing_engine_leaves_the_rows_unrun(self):
         code, res = run_test(self.SAMPLE, "--engine", "/nonexistent/capsule-engine")
