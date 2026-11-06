@@ -8,10 +8,11 @@ names: each sale is one record header
     {book_id, seq, record_type: "sale", deal_id, sale_digest}
 
 where `sale_digest` is SHA-256 of JCS(sale) (the digest x-pack.sales already states) and `seq`
-is the sale's place in `deal_id` order, so the order of the file never matters. The plan is one
-`traditional.population` node over those records; its header holds fixed values (not the run's
-time, the pack or its contract), so the plan, and with it the dataset, depends on the sales
-alone (it names each sale's digest): two packs run over the same sales cite the same pair, and other sales give another.
+is the sale's place in `deal_id` order, so the order of the file never matters. The plan is a
+`traditional.population` node over those records, then a `traditional.filter` node that names
+every sale digest, which binds the plan to the sales' content. Its header holds fixed values (not
+the run's time, the pack or its contract), so the plan, and with it the dataset, depends on the
+sales alone: two packs run over the same sales cite the same pair, and other sales give another.
 Rows hold digests only, never a sale's values.
 """
 import hashlib
@@ -33,7 +34,7 @@ def digest_ref(hex_digest):
 
 
 def sale_digests(deals):
-    """{deal_id: sale_digest}, the form x-pack.sales states."""
+    """{deal_id: sale_digest}, the table x-pack.sales states."""
     return {d["deal_id"]: digest_of(d) for d in deals}
 
 

@@ -197,7 +197,7 @@ def build_result(source, deals, generated_at, rehearsal):
         "pack_id": source["pack_id"], "pack_version": source["pack_version"],
         "definition_digest": compiled["definition_digest"],
         "rows": [{"id": r["id"], "statement": r["statement"], "row_digest": r["row_digest"]} for r in rows],
-        "sales": {d["deal_id"]: hashlib.sha256(rfc8785.dumps(d)).hexdigest() for d in deals},
+        "sales": dataset_plan.sale_digests(deals),
     }
     plan, dataset = dataset_plan.build(merged["x-pack"]["sales"])
     merged["plan_ref"] = dataset_plan.digest_ref(dataset_plan.digest_of(plan))

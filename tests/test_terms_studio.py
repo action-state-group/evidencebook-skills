@@ -164,6 +164,12 @@ class StickerDeal(unittest.TestCase):
         # one ref without the other is refused too
         self.rewrite_page(res, lambda r: (r.update(plan_ref=result["plan_ref"]), r.pop("dataset_ref")))
         self.assertEqual(call("verify", res["page"])[0], 1)
+        # x-pack.sales that is not a table of digests cannot be rebuilt: an issue, not a traceback
+        for bad in ([], "x", {"a": ["b"]}):
+            self.rewrite_page(res, lambda r: r["x-pack"].update(sales=bad))
+            code, ver = call("verify", res["page"])
+            self.assertEqual((code, ver["verified"]), (1, False), bad)
+            self.assertIn("cannot be rebuilt", ver["issues"][0])
         # a Result made before the refs were set has nothing to check
         self.rewrite_page(res, lambda r: (r.pop("plan_ref", None), r.pop("dataset_ref", None)))
         self.assertEqual(call("verify", res["page"])[0], 0)
