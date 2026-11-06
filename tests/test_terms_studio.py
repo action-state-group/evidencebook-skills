@@ -172,7 +172,7 @@ class StickerDeal(unittest.TestCase):
         self.assertEqual(code, 0, pub)
         self.assertEqual(listing(src), before)
         files = listing(self.ws)
-        self.assertTrue(files and all(f.startswith(("runs", "published")) for f in files), files)
+        self.assertTrue(files and all(f.startswith(("runs", "published", "packs")) for f in files), files)
         self.assertIn(pub["definition_digest"][:12], pub["published"])
         compiled = json.loads(pathlib.Path(pub["compiled"]).read_text())
         self.assertEqual(compiled["definition_digest"], pub["definition_digest"])

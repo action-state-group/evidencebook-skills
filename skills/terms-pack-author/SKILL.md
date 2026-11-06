@@ -42,6 +42,28 @@ again; `lint`, `test` and `run` also rewrite `readiness.json` beside the terms, 
 shows once one of them (or `readiness`) has run. Then continue with the steps below, using the
 terms `init` wrote.
 
+## Picking up where someone left off
+
+The workspace folder is the whole state; you remember nothing between sessions. Another
+agent, or the seller in a shell, may have started the terms. Read it first:
+`terms history ~/studio/packs/NAME/pack-source.yaml` prints the sales the terms were tried
+over, the last run, the table, and one line per version of the terms (its fingerprint,
+version, and the run made with it). Then continue: `terms run SRC` with no sales flag reads
+the same sales again. Nothing in the workspace records what was said in the conversation, and you
+do not write it down; if the seller asks to keep it, `terms keep-transcript SRC FILE` copies a
+file they name into a private folder beside the terms, and nothing else ever reads it.
+
+**Going back.** To undo a change, `terms checkout SRC FINGERPRINT` (six or more characters
+from `history`) puts that version of the terms back, `terms run SRC` tries it again, and
+`terms compare OLDER NEWER` takes two fingerprints and names both. `checkout` refuses when the
+terms have edits no run has recorded; tell the seller what would be lost and pass `--force`
+only if they say so.
+
+**A throwaway book for rehearsals** is an ordinary store in a throwaway folder, for example
+`~/studio/dev-book`: create it with the `capsulectl` commands the seller already uses
+(`profile create`, `store init`, `book backfill run`), then `terms init --store ~/studio/dev-book`.
+Delete the folder when done; nothing else points at it.
+
 ## The file
 
 Write `~/studio/packs/sticker-sale/pack-source.yaml`. Start from this, keep the three
@@ -114,7 +136,8 @@ Do not invent a row, a check or a field, and do not stretch one of the three to 
    the numbers come from. `terms verify PAGE` checks a page against its own record.
 5. **When the seller changes a term**, edit the row (both places), bump the version, run
    lint, test and run again, then
-   `terms compare RUN_BEFORE RUN_AFTER` with the two `run` folders the runs reported.
+   `terms compare RUN_BEFORE RUN_AFTER` with the two `run` folders the runs reported (or
+   the two fingerprints from `terms history`).
    Say what the answer's `summary` lines say: per term, whether it improved, got worse,
    traded one for another, or was a tie, and how many sales came through before and after.
    If `same_rows` is false, say which term was added or removed.

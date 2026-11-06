@@ -1,0 +1,170 @@
+"""The Terms Pack Studio workspace and its pack-digest history (evidencebook-skills#130):
+a second agent continues from the folder alone, `compare` takes any earlier digest in
+the history and names both, undo is `checkout` plus `run` plus `compare`, and no verb
+keeps an authoring transcript unless asked.
+
+    python3 -m unittest discover -s tests -p 'test_*.py'
+"""
+import contextlib
+import io
+import json
+import os
+import pathlib
+import stat
+import sys
+import tempfile
+import unittest
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts" / "studio"))
+sys.path.insert(0, str(ROOT / "scripts" / "evaluators"))
+
+import terms  # noqa: E402
+
+TRADES = ROOT / "tests" / "fixtures" / "sticker-sale" / "trades.json"
+GENERATED = "2026-11-05T12:00:00Z"
+
+
+def call(*argv):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+        code = terms.main([str(a) for a in argv])
+    return code, json.loads(buf.getvalue())
+
+
+class Workspace(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.ws = pathlib.Path(self.tmp.name) / "ws"
+        code, res = call("init", "--deals", TRADES, "--workspace", self.ws, "--pack-id", "stickers")
+        self.assertEqual(code, 0, res)
+        self.src = pathlib.Path(res["pack"])
+        self.folder = self.src.parent
+
+    def run_pack(self, *extra):
+        code, res = call("run", self.src, "--workspace", self.ws, "--dry-run", "--generated-at", GENERATED, *extra)
+        self.assertEqual(code, 0, res)
+        return res
+
+    def edit(self, old, new, version):
+        """Change the delivery limit in the check and in the words (lint holds them equal)."""
+        text = self.src.read_text()
+        self.assertIn(old, text)
+        days = lambda c: c.split("(")[1].rstrip(")")
+        text = text.replace(old, new).replace(f"within {days(old)} days", f"within {days(new)} days")
+        self.src.write_text(text.replace("pack_version: 0.1.0", f"pack_version: {version}"))
+
+    def test_init_records_the_dataset_and_run_needs_no_source_flag(self):
+        st = json.loads((self.folder / "workspace.json").read_text())
+        self.assertEqual((st["dataset"]["kind"], st["dataset"]["sales"]), ("deals", 10))
+        self.assertEqual(st["dataset"]["path"], str(TRADES.resolve()))
+        res = self.run_pack()  # a second agent: only the folder, no --deals
+        self.assertEqual(res["sales"], 10)
+        st = json.loads((self.folder / "workspace.json").read_text())
+        self.assertEqual(st["last_run"]["result"], res["result"])
+
+    def test_run_with_no_dataset_anywhere_says_so(self):
+        (self.folder / "workspace.json").unlink()
+        code, res = call("run", self.src, "--workspace", self.ws, "--dry-run")
+        self.assertEqual(code, 1)
+        self.assertIn("name the sales", res["error"])
+
+    def test_history_has_one_line_per_digest_and_a_snapshot_each(self):
+        first = self.run_pack()
+        again = self.run_pack()
+        self.assertEqual(first["pack_digest"], again["pack_digest"])
+        self.assertNotEqual(first["run"], again["run"])
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        second = self.run_pack()
+        lines = [json.loads(l) for l in (self.folder / "history.jsonl").read_text().splitlines()]
+        self.assertEqual([l["digest"] for l in lines], [first["pack_digest"], second["pack_digest"]])
+        self.assertEqual(lines[0]["run"], again["run"])  # the latest run under that digest
+        self.assertTrue((self.folder / "history" / f"{first['pack_digest'][:12]}.yaml").is_file())
+        code, hist = call("history", self.src, "--workspace", self.ws)
+        self.assertEqual((code, len(hist["history"])), (0, 2))
+        self.assertEqual(hist["last_run"]["digest"], second["pack_digest"])
+
+    def test_compare_by_digest_names_both_digests(self):
+        first = self.run_pack()
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        second = self.run_pack()
+        code, res = call("compare", first["pack_digest"][:12], second["pack_digest"][:12], "--workspace", self.ws)
+        self.assertEqual(code, 0, res)
+        self.assertEqual((res["before"]["pack_digest"], res["after"]["pack_digest"]),
+                         (first["pack_digest"], second["pack_digest"]))
+        # the same answer as comparing the run folders
+        self.assertEqual(res, call("compare", first["run"], second["run"])[1])
+
+    def test_compare_refuses_an_unknown_short_or_never_run_digest(self):
+        first = self.run_pack()
+        for bad in ("deadbeefcafe", first["pack_digest"][:4]):
+            code, res = call("compare", bad, first["run"], "--workspace", self.ws)
+            self.assertEqual(code, 1, bad)
+            self.assertIn("digest", res["error"])
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        code, pub = call("publish", self.src, "--workspace", self.ws)  # published, never run
+        code, res = call("compare", first["run"], pub["definition_digest"][:12], "--workspace", self.ws)
+        self.assertEqual(code, 1)
+        self.assertIn("never run", res["error"])
+
+    def test_undo_is_checkout_then_run_then_compare(self):
+        first = self.run_pack()
+        original = self.src.read_text()
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        second = self.run_pack()
+        code, res = call("checkout", self.src, first["pack_digest"][:10], "--workspace", self.ws)
+        self.assertEqual((code, res["restored"]), (0, first["pack_digest"]), res)
+        self.assertEqual(self.src.read_text(), original)
+        third = self.run_pack()
+        self.assertEqual(third["pack_digest"], first["pack_digest"])
+        code, cmp_ = call("compare", second["pack_digest"], third["pack_digest"], "--workspace", self.ws)
+        self.assertEqual((code, cmp_["before"]["pack_digest"], cmp_["after"]["pack_digest"]),
+                         (0, second["pack_digest"], first["pack_digest"]))
+        self.assertEqual(len((self.folder / "history.jsonl").read_text().splitlines()), 2)
+
+    def test_checkout_refuses_to_lose_unrecorded_edits_unless_forced(self):
+        first = self.run_pack()
+        self.edit("delivered_within_days(2)", "delivered_within_days(9)", "0.3.0")  # never run
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws)
+        self.assertEqual(code, 1)
+        self.assertIn("--force", res["error"])
+        self.assertIn("delivered_within_days(9)", self.src.read_text())
+        self.assertEqual(call("checkout", self.src, first["pack_digest"], "--workspace", self.ws, "--force")[0], 0)
+        self.assertIn("delivered_within_days(2)", self.src.read_text())
+
+    def test_checkout_refuses_a_link_and_a_pack_outside_the_workspace(self):
+        first = self.run_pack()
+        outside = pathlib.Path(self.tmp.name) / "elsewhere.yaml"
+        outside.write_text(self.src.read_text())
+        code, res = call("checkout", outside, first["pack_digest"], "--workspace", self.ws)
+        self.assertEqual(code, 1)
+        self.assertIn("outside the workspace", res["error"])
+
+    def test_nothing_keeps_a_transcript_by_default(self):
+        self.run_pack()
+        call("publish", self.src, "--workspace", self.ws)
+        names = [str(p.relative_to(self.ws)) for p in self.ws.rglob("*")]
+        self.assertFalse([n for n in names if "transcript" in n or "private" in n], names)
+
+    def test_keep_transcript_is_private_and_publish_leaves_it_out(self):
+        talk = pathlib.Path(self.tmp.name) / "talk.md"
+        talk.write_text("seller: delivered within a day\n")
+        code, res = call("keep-transcript", self.src, talk, "--workspace", self.ws)
+        self.assertEqual(code, 0, res)
+        kept = pathlib.Path(res["kept"])
+        self.assertEqual(stat.S_IMODE(kept.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(kept.parent.stat().st_mode), 0o700)
+        code, pub = call("publish", self.src, "--workspace", self.ws)
+        published = sorted(p.name for p in pathlib.Path(pub["published"]).iterdir())
+        self.assertEqual(published, ["compiled.json", "pack-source.yaml", "rules-checker.json"])
+
+    def test_read_only_verbs_do_not_make_the_workspace(self):
+        gone = pathlib.Path(self.tmp.name) / "never"
+        code, _ = call("compare", "aaaaaa", "bbbbbb", "--workspace", gone)
+        self.assertEqual(code, 1)
+        self.assertFalse(gone.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

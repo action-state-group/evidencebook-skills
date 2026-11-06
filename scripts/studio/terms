@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# terms -- the Terms Pack Studio verbs: init, readiness, lint, test, run, verify, compare, publish.
+# terms -- the Terms Pack Studio verbs: init, readiness, lint, test, run, verify, compare, history, checkout, keep-transcript, publish.
 # One entry point because a bare `test` is the shell's own; see terms.py.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
