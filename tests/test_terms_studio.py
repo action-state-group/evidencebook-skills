@@ -713,6 +713,8 @@ class CoverageReport(unittest.TestCase):
         sale = json.loads(TRADES.read_text())["trades"][0]
         self.assertNotIn("backfilled", sale)
         self.assertNotEqual(dataset_plan.digest_of(sale), dataset_plan.digest_of(dict(sale, backfilled=True)))
+        result = self.result_over(self.sales([False, False, False]))
+        self.assertEqual(result["x-pack"]["sales"][sale["deal_id"]], dataset_plan.digest_of(sale))
 
     def test_exported_records_are_backfilled_only_when_every_record_says_so(self):
         import deal_store  # noqa: E402
@@ -723,6 +725,7 @@ class CoverageReport(unittest.TestCase):
         self.assertIs(deal_store.sale_from_records("d", every)["backfilled"], True)
         mixed = every[:-1] + [stamp(records[-1], "contemporaneous")]
         self.assertNotIn("backfilled", deal_store.sale_from_records("d", mixed))
+        self.assertNotIn("backfilled", deal_store.sale_from_records("d", every + [None]))  # an unreadable record states no mode
         self.assertNotIn("backfilled", deal_store.sale_from_records("d", every[:-1] + [records[-1]]))
 
     def test_the_report_page_says_imported_only_over_backfill_alone(self):

@@ -39,7 +39,7 @@ A Result is Evidence Result v0 (scripts/result_v0.py), one claim per sale per
 row, `plan_ref` and `dataset_ref` (section 7.3: the digests of plan.json and dataset.json,
 written beside result.json; scripts/studio/dataset_plan.py), a `coverage_report` (per row,
 the sales as records: backfilled_count counts the sales a deal export or --deals marks backfilled,
-so a Result over backfill alone reads as imported on the Studio page), plus two document members: `x-pack` (the pack's id, version, definition
+so a Result over backfill alone reads as imported on the report page), plus two document members: `x-pack` (the pack's id, version, definition
 digest and each row's digest) and, on a rehearsal, `x-rehearsal: true`. The page
 carries result.json's exact bytes in a <script type="application/json">, and
 states their SHA-256 beside them; `terms verify` checks the page against itself

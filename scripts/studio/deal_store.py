@@ -59,6 +59,7 @@ def sale_from_records(deal_id, records):
     changed_price = None
     for rec in records:
         if not isinstance(rec, dict):
+            modes.append(None)  # a record we cannot read states no mode, so the sale is not all-backfilled
             continue
         pm = rec.get("provenance_mode")
         modes.append(pm.get("mode") if isinstance(pm, dict) else None)
