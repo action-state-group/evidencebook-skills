@@ -26,7 +26,7 @@ current after each edit, label (labels.json) or run; that is the one write `lint
 make, and `run` makes it only inside the workspace it is given.
 
 The workspace (default ~/studio, or $TERMS_WORKSPACE) is the only place a verb
-writes: `run` writes runs/<pack_id>/<n>/{result.json,report.html} and `publish`
+writes: `run` writes runs/<pack_id>/<n>/{result.json,report.html,plan.json,dataset.json} and `publish`
 writes published/<pack_id>/<digest>/; both also keep packs/<pack_id>/{workspace.json,
 history.jsonl,history/} (the dataset, the last run, one line per pack digest; see
 scripts/studio/workspace.py), `checkout` overwrites SRC (inside the workspace) and
@@ -199,7 +199,7 @@ def build_result(source, deals, generated_at, rehearsal):
         "rows": [{"id": r["id"], "statement": r["statement"], "row_digest": r["row_digest"]} for r in rows],
         "sales": {d["deal_id"]: hashlib.sha256(rfc8785.dumps(d)).hexdigest() for d in deals},
     }
-    plan, dataset = dataset_plan.build(deals)
+    plan, dataset = dataset_plan.build(merged["x-pack"]["sales"])
     merged["plan_ref"] = dataset_plan.digest_ref(dataset_plan.digest_of(plan))
     merged["dataset_ref"] = dataset_plan.digest_ref(dataset_plan.digest_of(dataset))
     if rehearsal:
@@ -470,7 +470,7 @@ def cmd_run(args):
     run = next_run_dir(ws, source["pack_id"])
     (run / "result.json").write_bytes(raw)
     (run / "report.html").write_text(page_html(result, raw), encoding="utf-8")
-    plan, dataset = dataset_plan.build(deals)  # the documents plan_ref and dataset_ref name
+    plan, dataset = dataset_plan.build(result["x-pack"]["sales"])  # the documents plan_ref and dataset_ref name
     (run / "plan.json").write_bytes(dataset_plan.canonical_bytes(plan))
     (run / "dataset.json").write_bytes(dataset_plan.canonical_bytes(dataset))
     met, total = came_through(result)
@@ -499,26 +499,28 @@ _SCRIPT = re.compile(r'<script type="application/json" id="terms-result" data-sh
 
 
 def cited_documents(result, folder):
-    """Issues with plan.json and dataset.json beside the page, which are optional: a document
-    that is there must be the one the Result's plan_ref / dataset_ref names, and the dataset
-    must cite that plan."""
-    found = {}
-    for name, member in (("plan.json", "plan_ref"), ("dataset.json", "dataset_ref")):
-        path = folder / name
-        if not path.exists():
-            continue
+    """Issues with plan_ref and dataset_ref, which a verifier can rebuild from the Result's own
+    x-pack.sales (scripts/studio/dataset_plan.py), and with plan.json and dataset.json beside the
+    page, which are optional: one that is there must be the canonical bytes of that rebuild. A
+    Result with neither ref (made before they were set) has nothing to check."""
+    if "plan_ref" not in result and "dataset_ref" not in result:
+        return []
+    try:
+        plan, dataset = dataset_plan.build(result["x-pack"]["sales"])
+    except (KeyError, TypeError, AttributeError, ValueError):
+        return ["the Result's plan_ref and dataset_ref cannot be rebuilt: x-pack.sales is not a table of sale digests"]
+    issues = []
+    for member, document in (("plan_ref", plan), ("dataset_ref", dataset)):
+        if result.get(member) != dataset_plan.digest_ref(dataset_plan.digest_of(document)):
+            issues.append(f"the Result's {member} is not the digest of the {member[:-4]} its x-pack.sales select")
+    for name, document in (("plan.json", plan), ("dataset.json", dataset)):
         try:
-            document = json.loads(path.read_bytes())
-        except ValueError:
-            return [f"{name} beside the page is not JSON"]
-        ref = result.get(member)
-        if not isinstance(ref, dict) or dataset_plan.digest_of(document) != ref.get("digest"):
-            return [f"{name} beside the page is not the document the Result's {member} names"]
-        found[name] = document
-    dataset = found.get("dataset.json")
-    if dataset is not None and "plan.json" in found and dataset.get("plan_ref", {}).get("digest") != result["plan_ref"]["digest"]:
-        return ["dataset.json does not cite the plan the Result's plan_ref names"]
-    return []
+            path = folder / name
+            if path.exists() and path.read_bytes() != dataset_plan.canonical_bytes(document):
+                issues.append(f"{name} beside the page is not the document the Result's sales give")
+        except OSError as e:
+            issues.append(f"cannot read {name} beside the page: {e}")
+    return issues
 
 
 def cmd_verify(args):

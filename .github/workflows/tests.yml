@@ -13,9 +13,19 @@ permissions:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    env:
+      # tests/test_terms_studio.py checks the dataset `terms run` cites against AAC's own checker.
+      AAC_REF: 09d2a9cb6174baa4b66ee39fda3b8b8830e244c9
+      AAC_CHECKOUT: ${{ github.workspace }}/.deps/agent-action-capsule
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/agent-action-capsule
+          ref: ${{ env.AAC_REF }}
+          path: .deps/agent-action-capsule
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:

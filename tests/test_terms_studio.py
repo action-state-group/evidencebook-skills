@@ -119,19 +119,28 @@ class StickerDeal(unittest.TestCase):
         ra = json.loads(pathlib.Path(self.rehearse(SOURCE)["result"]).read_bytes())
         sales = json.loads(TRADES.read_text())
         sales = sales["trades"] if isinstance(sales, dict) else sales
-        seen = set()
-        for fewer in (sales[:-1], [dict(sales[0], price=99999)] + sales[1:]):
+        # one sale fewer, and one sale's price changed with the same count: both refs move
+        for other in (sales[:-1], [dict(sales[0], price=99999)] + sales[1:]):
             path = self.tmp_path / "other.json"
-            path.write_text(json.dumps(fewer))
+            path.write_text(json.dumps(other))
             code, res = call("run", SOURCE, "--deals", path, "--dry-run", "--workspace", self.tmp_path / "ws2",
                              "--generated-at", GENERATED)
             self.assertEqual(code, 0, res)
             r = json.loads(pathlib.Path(res["result"]).read_bytes())
+            self.assertNotEqual(r["plan_ref"], ra["plan_ref"])
             self.assertNotEqual(r["dataset_ref"], ra["dataset_ref"])
-            seen.add(r["plan_ref"]["digest"] != ra["plan_ref"]["digest"])
-        self.assertEqual(seen, {True, False})  # one fewer sale moves the plan (through_seq); a changed sale only the dataset
+            self.assertEqual(call("verify", res["page"])[0], 0)
 
-    def test_plan_and_dataset_are_written_beside_the_result_and_verify_checks_them(self):
+    def rewrite_page(self, res, change):
+        """Replace the run's Result by change(result), with a page that draws it: a forged but
+        self-consistent page, so only the plan_ref / dataset_ref checks can refuse it."""
+        result = json.loads(pathlib.Path(res["result"]).read_bytes())
+        change(result)
+        raw = terms.result_bytes(result)
+        pathlib.Path(res["result"]).write_bytes(raw)
+        pathlib.Path(res["page"]).write_text(terms.page_html(result, raw), encoding="utf-8")
+
+    def test_verify_rebuilds_the_refs_from_the_results_own_sales(self):
         res = self.rehearse(SOURCE)
         run = pathlib.Path(res["run"])
         result = json.loads((run / "result.json").read_bytes())
@@ -144,12 +153,37 @@ class StickerDeal(unittest.TestCase):
         self.assertEqual(plan["nodes"][0]["params"]["through_seq"], 9)
         self.assertNotIn("price", json.dumps(dataset))  # digests only, never a sale's values
         self.assertEqual(call("verify", res["page"])[0], 0)
-        (run / "dataset.json").write_text(json.dumps(dict(dataset, rows=dataset["rows"][1:])))
+        # a ref that names other sales than x-pack.sales select is refused
+        other = dataset_plan.digest_ref("ab" * 32)
+        self.rewrite_page(res, lambda r: r.update(dataset_ref=other))
         code, ver = call("verify", res["page"])
         self.assertEqual(code, 1)
         self.assertIn("dataset_ref", ver["issues"][0])
-        (run / "dataset.json").write_bytes(dataset_plan.canonical_bytes(dataset))
+        self.rewrite_page(res, lambda r: r.update(plan_ref=other, dataset_ref=result["dataset_ref"]))
+        self.assertIn("plan_ref", call("verify", res["page"])[1]["issues"][0])
+        # one ref without the other is refused too
+        self.rewrite_page(res, lambda r: (r.update(plan_ref=result["plan_ref"]), r.pop("dataset_ref")))
+        self.assertEqual(call("verify", res["page"])[0], 1)
+        # a Result made before the refs were set has nothing to check
+        self.rewrite_page(res, lambda r: (r.pop("plan_ref", None), r.pop("dataset_ref", None)))
+        self.assertEqual(call("verify", res["page"])[0], 0)
+
+    def test_verify_refuses_a_sidecar_that_is_not_the_one_the_sales_give(self):
+        res = self.rehearse(SOURCE)
+        run = pathlib.Path(res["run"])
+        good = {n: (run / n).read_bytes() for n in ("plan.json", "dataset.json")}
+        for name, bad in (("dataset.json", json.dumps(dict(json.loads(good["dataset.json"]), rows=[])).encode()),
+                          ("plan.json", b'{"nodes":[]}'), ("plan.json", b"not json"), ("plan.json", b"NaN")):
+            (run / name).write_bytes(bad)
+            code, ver = call("verify", res["page"])
+            self.assertEqual((code, ver["verified"]), (1, False), (name, bad))
+            self.assertIn(name, ver["issues"][0])
+            (run / name).write_bytes(good[name])
         (run / "plan.json").unlink()
+        (run / "plan.json").mkdir()  # unreadable: an issue, not a traceback
+        code, ver = call("verify", res["page"])
+        self.assertEqual((code, ver["verified"]), (1, False))
+        (run / "plan.json").rmdir()
         (run / "dataset.json").unlink()
         self.assertEqual(call("verify", res["page"])[0], 0)  # the documents are optional
 
@@ -162,9 +196,10 @@ class StickerDeal(unittest.TestCase):
         sales = json.loads(TRADES.read_text())
         sales = sales["trades"] if isinstance(sales, dict) else sales
         deals = [dict(d, deal_id=d.get("deal_id", d.get("id"))) for d in sales]
-        plan, dataset = dataset_plan.build(deals)
-        evidence_dataset.check_dataset(plan, dataset, dataset_plan.headers(deals))
-        self.assertEqual(evidence_dataset.build_dataset(plan, dataset_plan.headers(deals)), dataset)
+        digests = dataset_plan.sale_digests(deals)
+        plan, dataset = dataset_plan.build(digests)
+        evidence_dataset.check_dataset(plan, dataset, dataset_plan.headers(digests))
+        self.assertEqual(evidence_dataset.build_dataset(plan, dataset_plan.headers(digests)), dataset)
 
     def test_the_page_verifies_offline_and_embeds_the_result_bytes(self):
         res = self.rehearse(SOURCE)

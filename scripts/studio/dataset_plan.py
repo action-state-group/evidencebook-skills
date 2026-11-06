@@ -11,7 +11,7 @@ where `sale_digest` is SHA-256 of JCS(sale) (the digest x-pack.sales already sta
 is the sale's place in `deal_id` order, so the order of the file never matters. The plan is one
 `traditional.population` node over those records; its header holds fixed values (not the run's
 time, the pack or its contract), so the plan, and with it the dataset, depends on the sales
-alone: two packs run over the same sales cite the same pair, and other sales give another.
+alone (it names each sale's digest): two packs run over the same sales cite the same pair, and other sales give another.
 Rows hold digests only, never a sale's values.
 """
 import hashlib
@@ -32,25 +32,34 @@ def digest_ref(hex_digest):
     return {"digest_alg": "SHA-256", "digest": hex_digest}
 
 
-def headers(deals):
-    """The sales' record headers, in seq order."""
-    ordered = sorted(deals, key=lambda d: d["deal_id"])
-    return [{"book_id": BOOK_ID, "seq": seq, "record_type": RECORD_TYPE, "deal_id": d["deal_id"],
-             "sale_digest": digest_of(d)} for seq, d in enumerate(ordered)]
+def sale_digests(deals):
+    """{deal_id: sale_digest}, the form x-pack.sales states."""
+    return {d["deal_id"]: digest_of(d) for d in deals}
 
 
-def build(deals):
-    """(plan, dataset) for these sales: both plain JSON documents."""
-    records = headers(deals)
+def headers(digests):
+    """The sales' record headers, in seq order (deal_id order); `digests` is {deal_id: sale_digest}."""
+    return [{"book_id": BOOK_ID, "seq": seq, "record_type": RECORD_TYPE, "deal_id": deal_id,
+             "sale_digest": digests[deal_id]} for seq, deal_id in enumerate(sorted(digests))]
+
+
+def build(digests):
+    """(plan, dataset) for these sales ({deal_id: sale_digest}): both plain JSON documents. The
+    plan's filter names every sale digest, so it selects exactly these sales and a changed sale
+    changes the plan as well as the dataset."""
+    records = headers(digests)
+    node = {"family": "traditional", "classification": "PUBLIC", "tier": "recomputed", "contract_ref": CONTRACT_REF}
     plan = {
         "header": {"contract_ref": CONTRACT_REF, "ir_version": "evidence-plan-ir-v0",
                    "planner_id": "local:terms", "created_at": "1970-01-01T00:00:00Z",
                    "replay_seed": "terms-sales-v1"},
-        "nodes": [{"id": "node-1", "family": "traditional", "operator": "traditional.population",
-                   "inputs": [], "classification": "PUBLIC", "tier": "recomputed",
-                   "contract_ref": CONTRACT_REF,
-                   "params": {"book_id": BOOK_ID, "through_seq": len(records) - 1,
-                              "record_types": [RECORD_TYPE]}}],
+        "nodes": [
+            dict(node, id="node-1", operator="traditional.population", inputs=[],
+                 params={"book_id": BOOK_ID, "through_seq": len(records) - 1, "record_types": [RECORD_TYPE]}),
+            dict(node, id="node-2", operator="traditional.filter",
+                 inputs=[{"by": "node", "node_id": "node-1"}],
+                 params={"where": [{"field": "sale_digest", "one_of": sorted(set(digests.values()))}]}),
+        ],
     }
     dataset = {
         "dataset_version": "evidence-dataset-v0",
