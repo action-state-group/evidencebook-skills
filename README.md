@@ -71,8 +71,8 @@ way.
   from `fixtures/two-case.json` beside the pack. An admission pack's cases are decided
   by a capsule-engine binary (`--engine PATH` or `$CAPSULE_ENGINE`, optionally pinned
   with `--engine-commit`), an evaluator pack's (`inference-deals`) by its evaluator over
-  the records the case carries (`{"records": [...], "date": "YYYY-MM-DD"}`; a
-  `not_met` case is an edited copy of sealed records, not itself sealed, since the
+  the records the case carries (`{"records": [...], "date": "YYYY-MM-DD"}`; the
+  `not_met` cases of the two served rows are edited copies of sealed records, not themselves sealed, since the
   evaluator reads fields and never verifies a seal), and
   each row says what decided it (`decided_by`, with the engine's commit or the
   evaluator's digest). A live pack's cases wait for a capsule-engine entry point

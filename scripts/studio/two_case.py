@@ -14,7 +14,7 @@ evaluator input, an evaluator pack's `records` and `date`, a report or conduct
 pack's disclosed facts). The test checks the
 file against the pack: every row has exactly one case of each name, and no case
 names a row the pack does not have. It evaluates a case through scripts/studio/case_eval.py: an admission pack's by a
-capsule-engine binary, an evaluator pack's by that evaluator over the sealed records
+capsule-engine binary, an evaluator pack's by that evaluator over the records
 the case's `input` carries. Live packs (capsule-engine#286) and judged rows (a pinned
 judge and a model key) are not run, so those cases are reported `evaluated: false`
 and never as passed.

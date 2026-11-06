@@ -4,9 +4,8 @@ the two ledgers a Mesh node's own producer sealed for one scripted run.
 
     python3 packs/inference-deals/fixtures/generate.py > packs/inference-deals/fixtures/two-case.json
 
-The `met` cases carry one deal's sealed records unchanged. A `not_met` case is a copy of a
-sealed record set with one value edited: the payer's deal whose settlement was short for
-paid_as_agreed; for served_as_agreed one settlement observation's amount_msat plus 1; for
+The `met` cases carry one deal's sealed records unchanged. The paid_as_agreed `not_met` case is the payer's own sealed deal whose settlement was short.
+The other two are a copy of a sealed record set with one value edited: for served_as_agreed one settlement observation's amount_msat plus 1; for
 served_named_model the resolved_model_id replaced. The edited records keep their original
 capsule_id and signature, so they are no longer sealed records: the evaluator
 (scripts/evaluators/inference_deals.py) never verifies a seal, and these cases test its

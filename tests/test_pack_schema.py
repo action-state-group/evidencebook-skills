@@ -576,10 +576,20 @@ print(json.dumps({"verdict": "NO", "rows": [
         self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
         self.assertIn("pinned abc123", res["rows"][0]["reason"])
 
+
+class RealAdmissionEngine(unittest.TestCase):
+    """The real capsule-engine, with nothing mocked: CI builds it at CAPSULE_ENGINE_REF."""
+    SAMPLE = AdmissionEngine.SAMPLE
+
     @unittest.skipUnless(os.environ.get("CAPSULE_ENGINE"), "CAPSULE_ENGINE names no capsule-engine build")
-    def test_the_real_engine_decides_the_sample_pack(self):
+    def test_the_real_engine_decides_the_sample_pack_and_names_its_commit(self):
         code, res = run_test(self.SAMPLE)
         self.assertEqual((code, res["passed"], res["evaluated"]), (0, True, 4), res)
+        ref = os.environ.get("CAPSULE_ENGINE_REF")
+        for r in res["rows"]:
+            self.assertRegex(r["decided_by"]["commit"], "^[0-9a-f]{40}$")
+            if ref:
+                self.assertEqual(r["decided_by"]["commit"], ref)
 
 
 if __name__ == "__main__":

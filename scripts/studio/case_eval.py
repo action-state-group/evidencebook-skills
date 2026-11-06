@@ -9,7 +9,7 @@ passed: the caller sets `passed` to null while any row is unrun.
     admission  the capsule-engine binary (`capsule-engine admission evaluate`),
                named by --engine or $CAPSULE_ENGINE, optionally pinned to a
                commit with --engine-commit
-    evaluator  the pack's own evaluator in scripts/evaluators, over the sealed
+    evaluator  the pack's own evaluator in scripts/evaluators, over the
                records the case carries: {"records": [<capsule>, ...], "date": "YYYY-MM-DD"}
     live       capsule-engine has no entry point for a pack and a list of actions
                yet (capsule-engine#286): not evaluated
