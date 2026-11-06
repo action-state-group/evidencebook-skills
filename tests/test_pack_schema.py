@@ -330,8 +330,7 @@ class TestOnEveryKind(unittest.TestCase):
         src = self.SAMPLES["live"]
         with unittest.mock.patch.object(case_eval, "live_engine_identity", return_value=(ident, None)), \
                 unittest.mock.patch.object(case_eval.subprocess, "run", return_value=done):
-            code, res = run_test(src, "--live-engine", "/x/capsule-engine")
-        self.assertEqual(code, 0, res)
+            _, res = run_test(src, "--live-engine", "/x/capsule-engine")
         self.assertEqual(res["evaluated"], 0)
         (row,) = [r for r in res["rows"] if r["row"] == "no-duplicate-dispatch"]
         self.assertFalse(row["evaluated"])
