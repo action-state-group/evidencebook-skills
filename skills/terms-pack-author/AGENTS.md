@@ -49,7 +49,8 @@ agent, or the seller in a shell, may have started the terms. Read it first:
 `terms history ~/studio/packs/NAME/pack-source.yaml` prints the sales the terms were tried
 over, the last run, the table, and one line per version of the terms (its fingerprint,
 version, and the run made with it). Then continue: `terms run SRC` with no sales flag reads
-the same sales again. Nothing in the workspace records what was said in the conversation, and you
+the same place again; if the answer says `dataset_changed: true`, tell the seller the sales are not
+the ones the earlier versions were tried on, and run those versions again before you compare them. Nothing in the workspace records what was said in the conversation, and you
 do not write it down; if the seller asks to keep it, `terms keep-transcript SRC FILE` copies a
 file they name into a private folder beside the terms, and nothing else ever reads it.
 

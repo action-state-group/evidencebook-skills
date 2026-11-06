@@ -187,7 +187,8 @@ class Workspace(unittest.TestCase):
         second = self.run_pack()
         code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws)
         self.assertEqual(res["replaced"], second["pack_digest"])
-        self.assertIn(f"terms compare {second['pack_digest'][:12]} {first['pack_digest'][:12]}", res["next"])
+        self.assertIn(f"terms compare {second['pack_digest'][:12]} {first['pack_digest'][:12]} --workspace", res["next"])
+        self.assertIn(str(self.ws.resolve()), res["next"])
 
     def test_a_linked_history_or_private_folder_is_refused(self):
         outside = pathlib.Path(self.tmp.name) / "outside"
@@ -236,6 +237,21 @@ class Workspace(unittest.TestCase):
         self.assertEqual((code, res["sales"]), (0, 10), res)
         code, hist = call("history", self.src)
         self.assertEqual((code, len(hist["history"]), hist["workspace"]), (0, 1, str(self.ws.resolve())))
+
+    def test_compare_takes_a_run_as_history_prints_it_and_a_dataset_inside_the_workspace_moves_too(self):
+        first = self.run_pack()
+        rel = json.loads((self.folder / "history.jsonl").read_text().splitlines()[0])["run"]
+        self.assertFalse(pathlib.Path(rel).is_absolute())
+        code, res = call("compare", rel, first["run"], "--workspace", self.ws)
+        self.assertEqual(code, 0, res)
+        inside = self.ws / "dev-sales.json"
+        inside.write_text(TRADES.read_text())
+        self.assertEqual(self.run_pack("--deals", inside)["sales"], 10)
+        self.assertEqual(json.loads((self.folder / "workspace.json").read_text())["dataset"]["path"], "dev-sales.json")
+        moved = pathlib.Path(self.tmp.name) / "moved2"
+        self.ws.rename(moved)
+        code, res = call("run", moved / "packs" / "stickers" / "pack-source.yaml", "--dry-run")
+        self.assertEqual((code, res["sales"]), (0, 10), res)
 
     def test_the_workspace_can_move_and_compare_by_digest_still_works(self):
         first = self.run_pack()

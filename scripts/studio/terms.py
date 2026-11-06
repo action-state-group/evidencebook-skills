@@ -152,7 +152,7 @@ def stored_dataset(args, ws, pack_id):
     ref = wsm.state(inside(ws, ws / "packs" / pack_id)).get("dataset")
     if not isinstance(ref, dict) or ref.get("kind") not in ("deals", "exports", "store") or not ref.get("path"):
         return
-    setattr(args, ref["kind"], ref["path"])
+    setattr(args, ref["kind"], str(ws / ref["path"]))  # an absolute path stays itself
 
 
 def load_sales(args):
@@ -424,7 +424,7 @@ def cmd_init(args):
     if issues:
         raise TermsError("the proposed pack does not lint: " + "; ".join(issues))
     census_doc = readiness.census(sales)
-    ref = wsm.dataset_ref(args, sales)  # may refuse (data JCS cannot digest): before anything is written
+    ref = wsm.dataset_ref(args, sales, ws)  # may refuse (data JCS cannot digest): before anything is written
     (folder / "pack-source.yaml").write_text(yaml.safe_dump(source, sort_keys=False, width=100), encoding="utf-8")
     (folder / "census.json").write_text(json.dumps(census_doc, indent=2) + "\n")
     (folder / "candidates.json").write_text(json.dumps(readiness.propose_candidates(), indent=2) + "\n")
@@ -463,7 +463,7 @@ def cmd_run(args):
     wsm.record(folder, args.src, result["x-pack"]["definition_digest"], source["pack_version"], generated_at,
                run=rel, rehearsal=args.dry_run)
     st = wsm.state(folder)
-    ref = wsm.dataset_ref(args, deals) or st.get("dataset")
+    ref = wsm.dataset_ref(args, deals, ws) or st.get("dataset")
     changed = bool(st.get("dataset")) and st["dataset"].get("sales_digest") != ref.get("sales_digest")
     st.update(pack_id=source["pack_id"], dataset=ref,
               last_run={"run": rel, "digest": result["x-pack"]["definition_digest"], "at": generated_at})
@@ -516,7 +516,9 @@ def cmd_verify(args):
 
 def read_result(arg, ws=None):
     path = pathlib.Path(arg)
-    if ws is not None and not path.exists():
+    if ws is not None and not path.is_absolute() and (ws / path).exists():
+        path = ws / path  # a run as `history` prints it, relative to the workspace
+    elif ws is not None and not path.exists():
         path = wsm.run_of_digest(ws, arg)
     if path.is_dir():
         path = path / "result.json"
@@ -643,7 +645,9 @@ def cmd_checkout(args):
     refresh_or_say(args.src, None, ws)
     out_ = {"restored": entry["digest"], "version": entry["version"], "pack": str(path), "replaced": current}
     ran = current and any(e["digest"] == current and e.get("run") for e in wsm.history(folder))
-    out_["next"] = f"terms run {args.src}" + (f", then terms compare {current[:12]} {entry['digest'][:12]}" if ran else "")
+    where = f" --workspace {shlex.quote(str(ws))}"
+    out_["next"] = f"terms run {shlex.quote(args.src)}{where}" + (
+        f", then terms compare {current[:12]} {entry['digest'][:12]}{where}" if ran else "")
     return out(out_)
 
 

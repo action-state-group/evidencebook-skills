@@ -62,12 +62,16 @@ def sales_digest(sales):
     return hashlib.sha256(rfc8785.dumps(sorted(hashlib.sha256(rfc8785.dumps(s)).hexdigest() for s in sales))).hexdigest()
 
 
-def dataset_ref(args, sales):
-    """The reference `terms init`/`run` was given: kind, absolute path, how many sales, their digest."""
+def dataset_ref(args, sales, ws):
+    """The reference `terms init`/`run` was given: kind, path (relative to the workspace when it sits
+    inside it, so the folder can move; absolute otherwise), how many sales, their digest."""
     for kind in ("deals", "exports", "store"):
         value = getattr(args, kind, None)
         if value:
-            return {"kind": kind, "path": str(pathlib.Path(value).expanduser().resolve()),
+            path = pathlib.Path(value).expanduser().resolve()
+            if ws == path or ws in path.parents:
+                path = path.relative_to(ws)
+            return {"kind": kind, "path": str(path),
                     "sales": len(sales), "sales_digest": sales_digest(sales)}
     return None
 
