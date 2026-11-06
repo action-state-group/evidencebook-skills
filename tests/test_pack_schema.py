@@ -321,6 +321,22 @@ class TestOnEveryKind(unittest.TestCase):
             _, res = run_test(self.SAMPLES["live"])
         self.assertIn("--live-engine", res["rows"][0]["reason"])
 
+    def test_live_row_the_engine_excludes_as_not_applicable_is_not_evaluated(self):
+        """capsule-engine#288: a row that does not apply is under `excluded_not_applicable`, not `rows`."""
+        doc = {"pack": {"digest": "d"}, "decision": "allow", "rows": [],
+               "excluded_not_applicable": [{"row": "no-duplicate-dispatch", "reason": "the rule is not configured for this action class"}]}
+        ident = {"name": "capsule-engine", "path": "/x/capsule-engine", "python": sys.executable, "commit": None, "version": "0"}
+        done = unittest.mock.Mock(returncode=0, stdout=json.dumps(doc), stderr="")
+        src = self.SAMPLES["live"]
+        with unittest.mock.patch.object(case_eval, "live_engine_identity", return_value=(ident, None)), \
+                unittest.mock.patch.object(case_eval.subprocess, "run", return_value=done):
+            code, res = run_test(src, "--live-engine", "/x/capsule-engine")
+        self.assertEqual(code, 0, res)
+        self.assertEqual(res["evaluated"], 0)
+        (row,) = [r for r in res["rows"] if r["row"] == "no-duplicate-dispatch"]
+        self.assertFalse(row["evaluated"])
+        self.assertIn("does not apply to this case: the rule is not configured", row["reason"])
+
     def test_the_evaluator_pack_runs_both_cases_of_every_row(self):
         code, res = run_test(ROOT / "packs/inference-deals/pack-source.yaml")
         self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, True, 6, 0))

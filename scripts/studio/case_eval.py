@@ -239,8 +239,11 @@ def run_live(source, cases, engine, engine_commit, src):
                     if r.returncode != 0:
                         raise ValueError(f"refused: {(r.stderr or r.stdout).strip()[:300]}")
                     doc = json.loads(r.stdout)
-                    (mine,) = [x for x in doc["rows"] if x["row"] == row]
                     digest = doc["pack"]["digest"]
+                    (gone,) = [x for x in doc.get("excluded_not_applicable", []) if x["row"] == row] or [None]
+                    if gone:
+                        raise ValueError(f"the row does not apply to this case: {gone.get('reason', '')}")
+                    (mine,) = [x for x in doc["rows"] if x["row"] == row]
                     if mine["result"] not in ROW_RESULTS.values():
                         raise ValueError(f"the row is {mine['result']}: {mine.get('reason', '')}")
                 except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as e:
