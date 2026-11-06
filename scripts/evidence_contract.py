@@ -181,8 +181,9 @@ def from_pack(source, base_dir=None):
                 req["forward_verdict"] = FORWARD_RECOMPUTED
                 req["backward_verdict"] = "DETERMINISTIC"
             if oos and checkability == "judged":
-                # EC out_of_scope_allowed: one spelling, present and true or absent.
-                # A recomputed row's answers are the three verdicts, so it never carries it.
+                # EC out_of_scope_allowed: one spelling, present and true or absent. Only
+                # judged rows carry it (#38); an evaluator-recomputed row may state
+                # out_of_scope in its prose but gets no member.
                 req["out_of_scope_allowed"] = True
             if crit.get("measurability"):
                 req["measurability"] = crit["measurability"]

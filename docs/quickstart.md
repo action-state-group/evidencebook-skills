@@ -235,11 +235,11 @@ python3 scripts/pack_compile.py compile packs/my-airline-pack/pack-source.yaml -
 {
   "valid": true,
   "pack_id": "my-airline-pack",
-  "pack_version": "1.5.0",
+  "pack_version": "1.6.0",
   "rubric_version": "3.3",
   "contract": "my-airline-pack/v1",
-  "contract_ref": "my-airline-pack@1.5.0",
-  "pack_source_digest": "c4df5e73e02f5858d2136aa6549adb4347fee1087720fa69fef25c4aa333333f",
+  "contract_ref": "my-airline-pack@1.6.0",
+  "pack_source_digest": "f7c081f14c13b64db135cee8788909a87566e2c5b1d23d0947a8f366833025c5",
   "clauses": 9,
   "out": "demo/my-airline-pack",
   "files": [
