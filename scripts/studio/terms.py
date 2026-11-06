@@ -37,7 +37,9 @@ reads are only read. With no --workspace or $TERMS_WORKSPACE, a SRC inside a pac
 
 A Result is Evidence Result v0 (scripts/result_v0.py), one claim per sale per
 row, `plan_ref` and `dataset_ref` (section 7.3: the digests of plan.json and dataset.json,
-written beside result.json; scripts/studio/dataset_plan.py), plus two document members: `x-pack` (the pack's id, version, definition
+written beside result.json; scripts/studio/dataset_plan.py), a `coverage_report` (per row,
+the sales as records: backfilled_count counts the sales a deal export or --deals marks backfilled,
+so a Result over backfill alone reads as imported on the Studio page), plus two document members: `x-pack` (the pack's id, version, definition
 digest and each row's digest) and, on a rehearsal, `x-rehearsal: true`. The page
 carries result.json's exact bytes in a <script type="application/json">, and
 states their SHA-256 beside them; `terms verify` checks the page against itself
@@ -181,20 +183,51 @@ def result_bytes(result):
     return json.dumps(result, sort_keys=True, ensure_ascii=True, separators=(",", ":")).replace("</", "<\\/").encode()
 
 
+def coverage_report(contract_ref, rows, deals, evidence, claims):
+    """The Result's `coverage_report` (coverage-report/v0, the members Evidence Result v0 already
+    has): per pack row, one source `sale-records` whose records are the sales. A sale is backfilled
+    when it says `backfilled: true` (deal_store.sale_from_records); every other sale counts as
+    contemporaneous, so a Result reads as backfill-only only when no sale is anything else.
+    Terms data names no producer, so each sale is an unattributed record and independence is
+    unmet: the row is UNKNOWN, never SATISFIED on a producer count nobody has."""
+    backfilled = sum(1 for d in deals if d.get("backfilled") is True)
+    claim_ids = {}
+    for c in claims:
+        claim_ids.setdefault(c["requirement_ref"], []).append(c["id"])
+    requirements = []
+    for r in rows:
+        requirements.append({
+            "requirement_ref": r["id"], "obligation_refs": [], "status": "UNKNOWN", "sufficiency": "UNKNOWN",
+            "claim_ids": claim_ids.get(r["id"], []),
+            "sources": [{
+                "source": "sale-records", "status": "SATISFIED", "record_count": len(deals),
+                "contemporaneous_count": len(deals) - backfilled, "backfilled_count": backfilled,
+                "duplicates_collapsed": 0, "producer_count": 0,
+                "evidence": [{"digest": evidence[d["deal_id"]], "digest_alg": "SHA-256"} for d in deals]}],
+            "independence": {"required_producers": 1, "independent_producers": 0, "correlated_records": 0,
+                             "unattributed_records": len(deals), "producer_basis": "none", "met": False},
+            "gaps": []})
+    return {"spec_version": "coverage-report/v0", "contract_ref": contract_ref, "requirements": requirements,
+            "summary": {"requirements": len(requirements), "satisfied": 0, "with_gaps": 0, "gaps": 0,
+                        "gaps_without_remedy": 0}}
+
+
 def build_result(source, deals, generated_at, rehearsal):
     compiled = deal_pack.compiled(source)
     rows = compiled["rows"]
     ids = tuple(r["id"] for r in rows)
     verdicts = transaction.evaluate(source["rows"], deals)
     docs = []
+    digests = {}
     for deal in deals:
-        evidence = hashlib.sha256(rfc8785.dumps(deal)).hexdigest()
+        evidence = digests[deal["deal_id"]] = hashlib.sha256(rfc8785.dumps(deal)).hexdigest()
         doc, _ = result_v0.build_result_v0(
             deal["deal_id"], verdicts[deal["deal_id"]], {}, generated_at, ids, compiled["contract_ref"],
             {rid: "recomputed" for rid in ids}, source_capsule_ids={rid: evidence for rid in ids},
             case_scoped_ids=True)
         docs.append(doc)
     merged = result_v0.merge_result_v0_documents(docs, f"{source['title']} -- {len(deals)} sales", generated_at)
+    merged["coverage_report"] = coverage_report(compiled["contract_ref"], rows, deals, digests, merged["claims"])
     merged["x-pack"] = {
         "pack_id": source["pack_id"], "pack_version": source["pack_version"],
         "definition_digest": compiled["definition_digest"],
@@ -234,6 +267,22 @@ def by_deal(result):
     return table
 
 
+def backfill_only(result):
+    """Whether the Result rests on backfill alone, read as capsule-viewer#303 reads it: at least one
+    record, and every source in `coverage_report.requirements[].sources[]` has contemporaneous_count 0
+    and backfilled_count equal to record_count. Anything else, a missing report included, is not."""
+    records = 0
+    for requirement in (result.get("coverage_report") or {}).get("requirements", []):
+        for s in requirement.get("sources", []):
+            if s.get("contemporaneous_count") != 0 or s.get("backfilled_count") != s.get("record_count"):
+                return False
+            records += s["record_count"]
+    return records > 0
+
+
+IMPORTED = "Imported: the records behind this result were all backfilled after the fact; none was recorded at the time."
+
+
 def page_html(result, raw):
     pack = result["x-pack"]
     met, total = came_through(result)
@@ -252,6 +301,7 @@ def page_html(result, raw):
     banner = ('<p id="stamp" class="stamp">REHEARSAL: nothing was switched on; these terms were tried over past sales.</p>'
               if rehearsal else "")
     digest = hashlib.sha256(raw).hexdigest()
+    imported = f'<p id="imported" class="stamp">{IMPORTED}</p>\n' if backfill_only(result) else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{esc(result['view']['title'])}</title>
@@ -262,7 +312,7 @@ code{{overflow-wrap:anywhere}}</style></head><body>
 {banner}
 <h1>{esc(pack['pack_id'])} {esc(pack['pack_version'])}</h1>
 <p id="headline" data-came-through="{met}" data-total="{total}"><strong>{met} of {total}</strong> sales came through.</p>
-<table><tr><th>Term</th><th>Met</th><th>Missed</th><th>Could not decide</th></tr>{cells}</table>
+{imported}<table><tr><th>Term</th><th>Met</th><th>Missed</th><th>Could not decide</th></tr>{cells}</table>
 <h2>Missed</h2><ul>{missed}</ul>
 <p>Pack digest <code id="pack-digest">{pack['definition_digest']}</code><br>
 The record below is the same bytes as <code>result.json</code>; its SHA-256 is <code id="result-digest">{digest}</code>.</p>

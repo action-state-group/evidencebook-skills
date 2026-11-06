@@ -651,5 +651,96 @@ class OtherGoods(unittest.TestCase):
         self.assertEqual(committed, deal_pack.compiled(terms.load_pack(self.BEANS)))
 
 
+class CoverageReport(unittest.TestCase):
+    """capsule-viewer#303 reads "imported" from coverage_report: backfill-only means every source
+    has contemporaneous_count 0 and backfilled_count equal to record_count."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.t = pathlib.Path(self.tmp.name)
+        sys.path.insert(0, str(ROOT / "tests"))
+        import test_result_v0_schema as schema  # noqa: E402
+        self.validator = jsonschema.Draft202012Validator(json.loads(schema.SCHEMA_PATH.read_bytes()))
+
+    def result_over(self, sales):
+        deals = self.t / "sales.json"
+        deals.write_text(json.dumps({"trades": sales}))
+        code, res = call("run", SOURCE, "--deals", deals, "--dry-run", "--workspace", self.t / "ws",
+                         "--generated-at", GENERATED)
+        self.assertEqual(code, 0, res)
+        result = json.loads(pathlib.Path(res["result"]).read_bytes())
+        self.assertEqual([e.message for e in self.validator.iter_errors(result)], [])
+        return result
+
+    def sources(self, result):
+        return [s for r in result["coverage_report"]["requirements"] for s in r["sources"]]
+
+    def sales(self, backfilled):
+        base = json.loads(TRADES.read_text())["trades"][:3]
+        return [dict(s, backfilled=True) if b else s for s, b in zip(base, backfilled)]
+
+    def test_a_backfill_only_result_counts_every_record_as_backfilled(self):
+        result = self.result_over(self.sales([True, True, True]))
+        sources = self.sources(result)
+        self.assertEqual(len(sources), 3)  # one per pack row
+        for s in sources:
+            self.assertEqual((s["record_count"], s["contemporaneous_count"], s["backfilled_count"]), (3, 0, 3))
+            self.assertEqual(len(s["evidence"]), 3)
+
+    def test_a_result_with_a_contemporaneous_sale_is_not_backfill_only(self):
+        for flags in ([True, True, False], [False, False, False]):
+            for s in self.sources(self.result_over(self.sales(flags))):
+                self.assertEqual((s["contemporaneous_count"], s["backfilled_count"]),
+                                 (flags.count(False), flags.count(True)))
+                self.assertNotEqual(s["backfilled_count"], s["record_count"])
+
+    def test_the_report_names_each_rows_claims_and_passes_the_engines_cross_checks(self):
+        result = self.result_over(self.sales([True, True, True]))
+        by_id = {c["id"]: c for c in result["claims"]}
+        for row in result["coverage_report"]["requirements"]:
+            self.assertEqual(len(row["claim_ids"]), 3)
+            for cid in row["claim_ids"]:
+                self.assertEqual(by_id[cid]["requirement_ref"], row["requirement_ref"])
+        try:
+            from capsule_engine.report.coverage import verify_coverage_report
+        except ImportError:
+            self.skipTest("capsule-engine is not installed")
+        verify_coverage_report(result["coverage_report"], by_id)
+
+    def test_a_sale_without_the_member_keeps_its_digest(self):
+        # plan_ref and dataset_ref hang on the sale digests: only a backfilled sale may differ.
+        sale = json.loads(TRADES.read_text())["trades"][0]
+        self.assertNotIn("backfilled", sale)
+        self.assertNotEqual(dataset_plan.digest_of(sale), dataset_plan.digest_of(dict(sale, backfilled=True)))
+
+    def test_exported_records_are_backfilled_only_when_every_record_says_so(self):
+        import deal_store  # noqa: E402
+        records = seller_export(1, 150, 150)
+        stamp = lambda r, mode: dict(r, provenance_mode={"mode": mode})  # noqa: E731
+        self.assertNotIn("backfilled", deal_store.sale_from_records("d", records))
+        every = [stamp(r, "backfilled") for r in records]
+        self.assertIs(deal_store.sale_from_records("d", every)["backfilled"], True)
+        mixed = every[:-1] + [stamp(records[-1], "contemporaneous")]
+        self.assertNotIn("backfilled", deal_store.sale_from_records("d", mixed))
+        self.assertNotIn("backfilled", deal_store.sale_from_records("d", every[:-1] + [records[-1]]))
+
+    def test_the_report_page_says_imported_only_over_backfill_alone(self):
+        for flags, says in (([True, True, True], True), ([True, True, False], False), ([False] * 3, False)):
+            result = self.result_over(self.sales(flags))
+            page = terms.page_html(result, terms.result_bytes(result))
+            self.assertEqual('id="imported"' in page, says, flags)
+            self.assertEqual(terms.IMPORTED in page, says, flags)
+            self.assertEqual(terms.backfill_only(result), says, flags)
+        self.assertFalse(terms.backfill_only({}))  # a Result with no coverage_report is not imported
+
+    def test_a_backfill_page_still_verifies(self):
+        deals = self.t / "sales.json"
+        deals.write_text(json.dumps({"trades": self.sales([True, True, True])}))
+        code, res = call("run", SOURCE, "--deals", deals, "--workspace", self.t / "ws", "--generated-at", GENERATED)
+        self.assertEqual(code, 0, res)
+        self.assertEqual(call("verify", res["page"])[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

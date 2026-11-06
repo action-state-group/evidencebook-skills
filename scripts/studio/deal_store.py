@@ -17,6 +17,8 @@ with `at` (or `x-deal-v0.at`), `type` and `body`. Per deal:
                     and not "not evaluable")
     paid_at         `at` of the evidence record with source x402_settle_response
     delivered_at    `at` of the evidence record with source seller_handoff
+    backfilled      true when every record carries provenance_mode.mode "backfilled"
+                    (AAC 5.3(bis)): the sale was imported, not recorded as it happened
 
 A fact the records do not carry stays absent, and the fold reports not_evaluable.
 """
@@ -52,11 +54,14 @@ def sale_from_records(deal_id, records):
     if not isinstance(records, list):
         raise StoreError(f"deal {deal_id}: the export is not a JSON array of records")
     sale = {"deal_id": deal_id}
+    modes = []  # each record's provenance_mode.mode, None when it states none
     attempted = None
     changed_price = None
     for rec in records:
         if not isinstance(rec, dict):
             continue
+        pm = rec.get("provenance_mode")
+        modes.append(pm.get("mode") if isinstance(pm, dict) else None)
         body = rec.get("body") if isinstance(rec.get("body"), dict) else {}
         x = rec.get("x-deal-v0") if isinstance(rec.get("x-deal-v0"), dict) else {}
         # typed records carry `type`; x-deal-v0 records (evidence, baseline, close,
@@ -84,6 +89,8 @@ def sale_from_records(deal_id, records):
                 sale["paid_at"] = _at(rec)
             elif body.get("source") == "seller_handoff" and _at(rec):
                 sale["delivered_at"] = _at(rec)
+    if modes and all(m == "backfilled" for m in modes):
+        sale["backfilled"] = True  # absent otherwise, so a sale's digest only changes when it is backfill
     sale.pop("commit_seen", None)
     if changed_price is not None:
         sale["accepted_price"] = changed_price
