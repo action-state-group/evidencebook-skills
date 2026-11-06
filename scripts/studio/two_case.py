@@ -10,13 +10,14 @@ next to its pack-source.yaml:
      "cases": [{"row": <row id>, "case": "met" | "not_met", "input": {...}}, ...]}
 
 `input` is what that kind's evaluator reads for the row (an admission pack's
-evaluator input, a report or conduct pack's disclosed facts). The test checks the
+evaluator input, an evaluator pack's `records` and `date`, a report or conduct
+pack's disclosed facts). The test checks the
 file against the pack: every row has exactly one case of each name, and no case
-names a row the pack does not have. It evaluates a case only when a local
-evaluator exists for the kind. Admission and live packs are decided by
-capsule-engine, judged rows by a pinned judge, and a report pack that names an
-`evaluator` by that evaluator over a node's sealed capsule records, none of which
-this script runs, so those cases are reported `evaluated: false` and never as passed.
+names a row the pack does not have. It evaluates a case through scripts/studio/case_eval.py: an admission pack's by a
+capsule-engine binary, an evaluator pack's by that evaluator over the sealed records
+the case's `input` carries. Live packs (capsule-engine#286) and judged rows (a pinned
+judge and a model key) are not run, so those cases are reported `evaluated: false`
+and never as passed.
 The two cases of a row must differ, or the pair says nothing.
 """
 import json

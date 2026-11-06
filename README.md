@@ -68,9 +68,15 @@ way.
   is its JSON Schema: `terms lint` checks any kind against it and names the field
   that breaks it, then runs the kind's cross-field rules. `terms test` runs the met
   and not-met case of every row: a deal pack's by its evaluator, any other kind's
-  from `fixtures/two-case.json` beside the pack, checked against the pack and
-  reported `evaluated: false` because capsule-engine, a pinned judge or a pack's
-  own evaluator over a node's sealed records decides them, not this script.
+  from `fixtures/two-case.json` beside the pack. An admission pack's cases are decided
+  by a capsule-engine binary (`--engine PATH` or `$CAPSULE_ENGINE`, optionally pinned
+  with `--engine-commit`), an evaluator pack's (`inference-deals`) by its evaluator over
+  the sealed records the case carries (`{"records": [...], "date": "YYYY-MM-DD"}`), and
+  each row says what decided it (`decided_by`, with the engine's commit or the
+  evaluator's digest). A live pack's cases wait for a capsule-engine entry point
+  (capsule-engine#286) and a judged pack's for its pinned judge and a model key. A case
+  that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun
+  is ever reported passed.
   A `conduct` pack is private: it is judged only for its owner and nobody else receives
   or adjudicates it. Keeping it out of a counterparty's scoped bundle is to be enforced
   where the bundle is built (tracked in capsule-emit#422), not by this repository.

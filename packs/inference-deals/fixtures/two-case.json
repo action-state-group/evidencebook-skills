@@ -1,0 +1,2809 @@
+{
+ "pack": "inference-deals",
+ "cases": [
+  {
+   "row": "come_through.paid_as_agreed",
+   "case": "met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "115cbce4899261eda532b24b714900f287f7ab63761b8b3e08cc93dcb8ff4e4d",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/2007ef128bb9715a64bda39719c68c474c544ab14f24f282d6edbb0ebafbb3fe",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "2007ef128bb9715a64bda39719c68c474c544ab14f24f282d6edbb0ebafbb3fe",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "payer_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "82f4fa4df4196afc2c0347e6aa2d0777b014b1c8e6e6f94adb75da9a9ccce913"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "standalone"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820115cbce4899261eda532b24b714900f287f7ab63761b8b3e08cc93dcb8ff4e4d584070b04f476e6ab0c527766e390f4a6f4eabc1d5db7151053fa876d378fbd76d98dadf153589897ab11e637c65c4e32e3501e7f7b6b57ee6814cda3adfe37fb106",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "32f8f27f0f43f93bbefa47ead3e200f69a510059d5619eccdd0ba8f097faa153",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/dc89d83693c9aa81bc0d91f9ba24ddecc9ddf949b0134f972d48ed4b99cc2453",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "dc89d83693c9aa81bc0d91f9ba24ddecc9ddf949b0134f972d48ed4b99cc2453",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500
+        },
+        "store_nonce": "de941012568f6f9eb4e9e07eda17478bb56e8b3dbbbe9fc852ec395072f48cf8"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "115cbce4899261eda532b24b714900f287f7ab63761b8b3e08cc93dcb8ff4e4d",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca0582032f8f27f0f43f93bbefa47ead3e200f69a510059d5619eccdd0ba8f097faa15358401dce96f13b52df578e23dbbf4740c29e6694e3449d7ccecb23f18c1525cb82a0e54afdea9f294dd8fbeae6a554c6d62418f826acf63286d80d3ffed440491c0b",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "7d47708b4e713668d86090480c118563980a24d713de79d5c479a7f37deff198",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/f4283aa4a65840038613e15a07ec78190809ad74fc2254323795b2b58739e125",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "f4283aa4a65840038613e15a07ec78190809ad74fc2254323795b2b58739e125",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500
+        },
+        "store_nonce": "670c63c6491ab208d21499909941d839d8d129375d2528ca1a51f56356ef1cf4"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "f48513749cf60b585191dbdb155db731832f7d102d1a34bf9c19e94fc6a0614e",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca058207d47708b4e713668d86090480c118563980a24d713de79d5c479a7f37deff1985840b3f04e94ee94ccd3308bafeb1e164933881be2bc711de08bcff9c306ad5d188529badc6780f935fb80d664dc4e12b53337d383fc686975ff3e97e5ae4ebdf506",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "c00d39ad57289aa3f472dd4e8031b8bad8f01fefdbeadb729ba70bcf2843fc93",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/6b930410e317d2963cdcdc4ceda31a165b5913bbfac3473e8244a1fa27af0f9e",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "6b930410e317d2963cdcdc4ceda31a165b5913bbfac3473e8244a1fa27af0f9e",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500,
+         "fee_msat": 0
+        },
+        "store_nonce": "c587fa652d84e408e4667bee236cd9b7b7379d5e43b8eb94d877a0ea8d08d115"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "33f4f4338ae30fea405e875426ed4a5a721259ca9592313c56b87c853aff588f",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820c00d39ad57289aa3f472dd4e8031b8bad8f01fefdbeadb729ba70bcf2843fc935840a060e4decf8127778a1ee8e4ca5be213355fbf9374b4c0d1e8b7e1c960506b7888ba6276a8d6e1adae1194a23d7fcac9f3a3899c0c0bd87eee699f6bf4cbda04",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "6e5f7a57dd495e777af44fd5146588cd4b48c39e26c356420c2fd25adf00b3ed",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/9a93a6952d66498e005a25ead887361e99bbec8806fc7587fd481b8a3fccb2d7",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "9a93a6952d66498e005a25ead887361e99bbec8806fc7587fd481b8a3fccb2d7",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500,
+         "fee_msat": 0
+        },
+        "store_nonce": "c39e7ee64fd75422592adf7ff00c5fbfc8890b684e5c4300e6266866557c4e79"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "af215eddf81051661fd6734d976d84af4fe39369c5448e9cae1017af37a505e0",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca058206e5f7a57dd495e777af44fd5146588cd4b48c39e26c356420c2fd25adf00b3ed584090aec7ffcccfb1202665d4ccec36fe37605a10b9476e40e59b7b6f34c5a8abaef3d8e5ba5ba9332ab1c5c8dbbd0abc432e5debdac98fc00f2917118550e7720a",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "bac86f605fc4753b765765f42ee368b6f7d2dc8e6c8345766946e7292f03ba2d",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-settled/8b7111b4ef9927e109b5316fe9814c00ed0776b4864ed9ebfa9b7da3afb68f45",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-settled",
+         "event_ref": "8b7111b4ef9927e109b5316fe9814c00ed0776b4864ed9ebfa9b7da3afb68f45",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "final_accounted",
+         "source": "payer_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "cd1c66d2058d82c0ae443d444dca5b54cf61d8bcd07a2f180f306a4d9aa6e05a"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "edccfc49da7165359d2939ea2f27d71ba89fda314ffdda08523881cb8f9240ce",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820bac86f605fc4753b765765f42ee368b6f7d2dc8e6c8345766946e7292f03ba2d584078bc8cdc52c310da18228f8f255dd7b14a05a47eda7a543256fad4d077194472e14b284fa404c7bd05fde3f5770a1bc3389c3676f1f28be555b7c842d632e002",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "83298410783731f470ca7d156495b476d079ed8f915acd58bf267251cf0e163f",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "qwen3-8b-q4",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "observed_event",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "remote_mesh",
+          "requesting_party": "unknown",
+          "exchange_id": "deal-settled",
+          "quantization": "unknown",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": null,
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 1,
+          "prev_seq": null,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "requested",
+         "observation_point": "client_egress",
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "ee5579ece09a028a8c406e46e8c385687d5dfc9507bf09bd26bb1dd561db653727a235a1d309df5a7dac28121ad0735c1449405ba35703ff1fa9cecad4ee4108",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "558f445bf474556d",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "f7a292359633e362dd1ac7ca785a6d80dfe2d1670f599b9371bfbfda5d3fa689"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "6daaabb60f88793cf41960b34dd675a0eaaeb74fa10b51df9f4a90eef27619d8",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca0582083298410783731f470ca7d156495b476d079ed8f915acd58bf267251cf0e163f5840746ecb62bd7e9c539ba10c1339dcce43ccde9328b35abb417ac5546b4071185d7a7a91166cc00a21d4ce49884d368315128ac487e46d061db26f499b5faf3402",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "row": "come_through.paid_as_agreed",
+   "case": "not_met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "06363db0dbf9cfb274e97dfbc550b4f24d0e1a404229f570f371d02f7521f1f3",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/88690d29c2024b6e4ebe0a596e7a4e0b37a0dff781bab6d6f8f4c6250835763d",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "88690d29c2024b6e4ebe0a596e7a4e0b37a0dff781bab6d6f8f4c6250835763d",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "payer_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "380f8fb25533477a3cb18e4a6ba3a6f542d2a74a62ffbaca03f6f8da0ba1d59d"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "83298410783731f470ca7d156495b476d079ed8f915acd58bf267251cf0e163f",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca0582006363db0dbf9cfb274e97dfbc550b4f24d0e1a404229f570f371d02f7521f1f35840bb4c22f19c015262513b83070c6b088b6edce356b2c39caa6c402c93f16ea686ef25c209b94440f7058544b020dbda6680bee83a29f00ef84242855532399205",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "c56e27d940336cce7c2c8301569e6512ce44f50c09ce400b18f6c22b3f7c8d63",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/40c3545fc8127450a4100383fa6ee265ff3876bd44463ab1cf5619dadb4b4a73",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "40c3545fc8127450a4100383fa6ee265ff3876bd44463ab1cf5619dadb4b4a73",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "517a3ddc4a93e1ffe00585efd2f5133e21c07c92cd46df5e1c31ec1c6faaae61",
+         "amount_msat": 500
+        },
+        "store_nonce": "5d2b7e35bd727d9f8703a2b4d7c64ae600bd33004fbbf8069d717c6412a7313f"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "06363db0dbf9cfb274e97dfbc550b4f24d0e1a404229f570f371d02f7521f1f3",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820c56e27d940336cce7c2c8301569e6512ce44f50c09ce400b18f6c22b3f7c8d635840dc9699934c6de9253f2d6449277dd81925d3b2a2b9e83a6e53dbcfe2e43d5f02ebc923030a3e12397b69d5a3dbb800b24e1d5b1b615de8624fcb827c2279c40e",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "e7305b8dcb48c499ab481d6913f06bb846496d40bd9ea5f96ae862bc74874d04",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/0026faf1e370c7c2507f4a2303c4191fe9f27c924460222252c1fd71f17f04d6",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "0026faf1e370c7c2507f4a2303c4191fe9f27c924460222252c1fd71f17f04d6",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "53084079e7d5c8fef2765637f36b5360befe5eb3d2e47abb6e4543eeb67a649c",
+         "amount_msat": 500
+        },
+        "store_nonce": "5969b618c704faaebfe183e60fdebb687ec67b5f7e6665987a55784437e3bf37"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "efe4cbe6e5f8b7fa21ff5daf2c7364f78cb7d32181cd30894924271dd2ea98c9",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820e7305b8dcb48c499ab481d6913f06bb846496d40bd9ea5f96ae862bc74874d04584090f232d74d1ebae16a90e96b4fa9a7fa45771fad51a95994cf0dc91c9b33cb2e5d4fa0b1c050087e92a6b073eff1afd706e2cd6695e45c8faef6a833289be300",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "a04139c96bcff2b1c9aeac71b86d3ed811fb50b45bb1854308b1d7638e104c9a",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/ed28b63fc448f3b1589b18ef6f4bab865be19afc4971d059204c88b3d7c504a4",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "ed28b63fc448f3b1589b18ef6f4bab865be19afc4971d059204c88b3d7c504a4",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "517a3ddc4a93e1ffe00585efd2f5133e21c07c92cd46df5e1c31ec1c6faaae61",
+         "amount_msat": 500,
+         "fee_msat": 0
+        },
+        "store_nonce": "7a12f4ad3b243f2c734a4906e5693cf05773b7eeeae58b12d429af3a7f4703e2"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "93c09b8764c917e679b320cf0424c6f5ec93d234489e576c0e8c9fdce5d678c0",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820a04139c96bcff2b1c9aeac71b86d3ed811fb50b45bb1854308b1d7638e104c9a58404637c35cf1b58a4f38594d6e903505e22365cf1e38c3849fc69e12ddf704a0c18c8a3ba75decfc04c763ce9c4669e36babcd9dd77f833c5af2a5dccf21206f0d",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "001b10afed7fb78b996e87c4e90534c4f01d003fe7ebaaf89febdb90590109fe",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/71d7e2977409e400cf56968aaed36b9ec5be588a7307acb96bb76db27f0395d5",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "71d7e2977409e400cf56968aaed36b9ec5be588a7307acb96bb76db27f0395d5",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "53084079e7d5c8fef2765637f36b5360befe5eb3d2e47abb6e4543eeb67a649c",
+         "amount_msat": 400,
+         "fee_msat": 0
+        },
+        "store_nonce": "29a2f29ab20264e1815fef967f4fc602f19ce7a83a492c9dc5ce8e666b620b58"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "57eab8a860d40e9d272247d23e6abc9c05b203244a42c451fb9ffc5346e35056",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca05820001b10afed7fb78b996e87c4e90534c4f01d003fe7ebaaf89febdb90590109fe5840323aa856a2b31e39bf4d89fe54d3b9ca805fe46c24fc9e8cdb8acbcf18e9e37446eeffb60e170aa0db06a469107188e42b850bbb3f3a110880a7352b1d3c7f0e",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "capsule_id": "21af4c187fab860485bfd6d0e7a67909fbaf9faac4b553c80328ebc8f714634f",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/deal-short/8e270e142f5f4f83160eda76623ee32ba37c6a1562149ac7daabf3b83bc5f1bc",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "payer",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "deal-short",
+         "event_ref": "8e270e142f5f4f83160eda76623ee32ba37c6a1562149ac7daabf3b83bc5f1bc",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "final_accounted",
+         "source": "payer_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "e664f7279576c9ccda076a0771e4a084757bb2583bbd89157fb036edcc59b50f"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "0f8254ff1d52b295a267aa93e5572f9ba7420a6efc8324431edbd636cbc45e5d",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca0582021af4c187fab860485bfd6d0e7a67909fbaf9faac4b553c80328ebc8f714634f58401a2ae9ddbd8c6a26570ce9b97e5be0cb979a4873ef969dfbefb701cf9326d322a55c1a08302a920270dfdee8b1f1b779f56405e3dc3faf925b1b0416beaff20d",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "0b3ed15c64793b51e2eb2e6e23a3368139441ef61a24fbe31502ce3d140edb01",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "qwen3-8b-q4",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "observed_event",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "remote_mesh",
+          "requesting_party": "unknown",
+          "exchange_id": "deal-short",
+          "quantization": "unknown",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": null,
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 2,
+          "prev_seq": 1,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "requested",
+         "observation_point": "client_egress",
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "ee5579ece09a028a8c406e46e8c385687d5dfc9507bf09bd26bb1dd561db653727a235a1d309df5a7dac28121ad0735c1449405ba35703ff1fa9cecad4ee4108",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "558f445bf474556d",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "2fb6bc52b65be51dba3b70bce744c760a139f79df35dfa42091bbd14e7a5e644"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "9db82bd0f92e6a35b83a5a5c6b10c2fa85e7ff176a5d7c0d278ebf31a842379d",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d69640458204bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7eca058200b3ed15c64793b51e2eb2e6e23a3368139441ef61a24fbe31502ce3d140edb0158404b5323e35873ce36a2ab7931042d10d43a3389107443c1710efc14e8d44378ee727fc1550e8dd25250d3d802fddc64b380b3d2b1ba3559319fa110f610847705",
+      "key_id": "4bed3c598672515a6aacfe48a2dc5848530f7b194150e37c9b01acd512f8e7ec"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "row": "come_through.served_as_agreed",
+   "case": "met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "provider_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "7eadcf0f0aff3cc3794435cc344ffea391e1e042f2bdb4c7dc8c227db1e24cde"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "standalone"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058208344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b565840ba3c332e94982c9c8a1f79bf3e9f492a8d582c4eff3fd15bb42002ae65f4540489c3bf36b1246e73e20e231fee1e9345799b58db9442fcc6a584c73e57dabf05",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500
+        },
+        "store_nonce": "b68a43d28148d45e2b085cfe5e2da9692c16be3fc0ee3b3bca4b48e2173c4f99"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058202a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed584002d074ea3377f0e5ca6ee26601da0a43ae9b10249d2e8411e0cc0798cde7caebb2b218538c320e9df74a0bd0e2c0842c1e2714f331fbf0989f7bd271cd434508",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500
+        },
+        "store_nonce": "210ed833ca0c88b0d45b4e290cd59154111f52eeda834631050d969ae5b9bf70"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a0582027d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad58403f51b8ce6c3970d5f3cde475667274400f5238ac6adf72a2d9a354d0d7e4f56ff680dd6841a18f9b2aa424d18176c55fd1c42c9c10ec6fd85acc8bfec918f80f",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "5226e0b559c89b4589f182fd58a1db24f490c8624cc75d6a754d1565eb8c9c14"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c8311755840152881bf91355f94183af3cf97b18407f95d1239971d9bf5e70632dbe626829dad3f893d8283df751acb587c569d19f01580aee3a35d47e7b6ff6b80c5fd8f0a",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "b6ef0aa61917691b5bcc4fb34de178172441847801accfd50391df0b42e47909"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d885840893c4ca6c986c90b584f791b601f5403e5205ee4300f98cd9eaa8d569387c372cb0b0866beeb29c3a0a259cab6174111ba8fbcb09a31e4f9bc3aa74bf4e57001",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "delivered",
+         "source": "provider_asserted",
+         "amount_msat": 0,
+         "tokens": 42
+        },
+        "store_nonce": "34dae56531349f4b826c007984f970aa8d1fe1380f6d4d555627622d983d34b1"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c785840a01f80fc2a74706b4f57a1d3380372ea2358c10505f0302368d1194682b0823cef0b91dfea704823ef1e28804c15337a1785dd69797a7b586731e032807c6c02",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "weights_digest": {
+         "digest_alg": "SHA-256",
+         "digest": "sha256:loaded-weights",
+         "scope": "file"
+        },
+        "quantization": "Q4_K_M",
+        "source": {
+         "weights_digest": "computed",
+         "quantization": "self_reported"
+        },
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "qwen3-8b-q4",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "producer_claim",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "raw_proxy",
+          "requesting_party": "9b1f0c3e5a7d2b4f6e8a0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f1a2b3c4d5e6f",
+          "exchange_id": "p-deal-settled",
+          "quantization": "Q4_K_M",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": "sha256:loaded-weights",
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 1,
+          "prev_seq": null,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "served",
+         "observation_point": null,
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "25e68a32da733381e39adf9d98bd22823609e38505d0c1d34dd84f244e3d0589f7a5ffc56d5a7336235e287fc5064e56ad5bfc1b9a0527c0b09aabace9398301",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "df3091dee1d26ffd",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "95f8ca2e71dda32cc3bb91187d6c4c4b3be2a7cd7719a654588655c9ec2c6137"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb5840b9a89274f893fe861776b61635670973a0df91e71f0b052c84c9470fbfc473406b9a59eaa536b4f5ffd0b22c01a81525d362156a0974e215e14004efc97ff904",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "row": "come_through.served_as_agreed",
+   "case": "not_met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "provider_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "7eadcf0f0aff3cc3794435cc344ffea391e1e042f2bdb4c7dc8c227db1e24cde"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "standalone"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058208344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b565840ba3c332e94982c9c8a1f79bf3e9f492a8d582c4eff3fd15bb42002ae65f4540489c3bf36b1246e73e20e231fee1e9345799b58db9442fcc6a584c73e57dabf05",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500
+        },
+        "store_nonce": "b68a43d28148d45e2b085cfe5e2da9692c16be3fc0ee3b3bca4b48e2173c4f99"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058202a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed584002d074ea3377f0e5ca6ee26601da0a43ae9b10249d2e8411e0cc0798cde7caebb2b218538c320e9df74a0bd0e2c0842c1e2714f331fbf0989f7bd271cd434508",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500
+        },
+        "store_nonce": "210ed833ca0c88b0d45b4e290cd59154111f52eeda834631050d969ae5b9bf70"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a0582027d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad58403f51b8ce6c3970d5f3cde475667274400f5238ac6adf72a2d9a354d0d7e4f56ff680dd6841a18f9b2aa424d18176c55fd1c42c9c10ec6fd85acc8bfec918f80f",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 501,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "5226e0b559c89b4589f182fd58a1db24f490c8624cc75d6a754d1565eb8c9c14"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c8311755840152881bf91355f94183af3cf97b18407f95d1239971d9bf5e70632dbe626829dad3f893d8283df751acb587c569d19f01580aee3a35d47e7b6ff6b80c5fd8f0a",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "b6ef0aa61917691b5bcc4fb34de178172441847801accfd50391df0b42e47909"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d885840893c4ca6c986c90b584f791b601f5403e5205ee4300f98cd9eaa8d569387c372cb0b0866beeb29c3a0a259cab6174111ba8fbcb09a31e4f9bc3aa74bf4e57001",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "delivered",
+         "source": "provider_asserted",
+         "amount_msat": 0,
+         "tokens": 42
+        },
+        "store_nonce": "34dae56531349f4b826c007984f970aa8d1fe1380f6d4d555627622d983d34b1"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c785840a01f80fc2a74706b4f57a1d3380372ea2358c10505f0302368d1194682b0823cef0b91dfea704823ef1e28804c15337a1785dd69797a7b586731e032807c6c02",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "weights_digest": {
+         "digest_alg": "SHA-256",
+         "digest": "sha256:loaded-weights",
+         "scope": "file"
+        },
+        "quantization": "Q4_K_M",
+        "source": {
+         "weights_digest": "computed",
+         "quantization": "self_reported"
+        },
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "qwen3-8b-q4",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "producer_claim",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "raw_proxy",
+          "requesting_party": "9b1f0c3e5a7d2b4f6e8a0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f1a2b3c4d5e6f",
+          "exchange_id": "p-deal-settled",
+          "quantization": "Q4_K_M",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": "sha256:loaded-weights",
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 1,
+          "prev_seq": null,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "served",
+         "observation_point": null,
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "25e68a32da733381e39adf9d98bd22823609e38505d0c1d34dd84f244e3d0589f7a5ffc56d5a7336235e287fc5064e56ad5bfc1b9a0527c0b09aabace9398301",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "df3091dee1d26ffd",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "95f8ca2e71dda32cc3bb91187d6c4c4b3be2a7cd7719a654588655c9ec2c6137"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb5840b9a89274f893fe861776b61635670973a0df91e71f0b052c84c9470fbfc473406b9a59eaa536b4f5ffd0b22c01a81525d362156a0974e215e14004efc97ff904",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "row": "come_through.served_named_model",
+   "case": "met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "provider_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "7eadcf0f0aff3cc3794435cc344ffea391e1e042f2bdb4c7dc8c227db1e24cde"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "standalone"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058208344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b565840ba3c332e94982c9c8a1f79bf3e9f492a8d582c4eff3fd15bb42002ae65f4540489c3bf36b1246e73e20e231fee1e9345799b58db9442fcc6a584c73e57dabf05",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500
+        },
+        "store_nonce": "b68a43d28148d45e2b085cfe5e2da9692c16be3fc0ee3b3bca4b48e2173c4f99"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058202a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed584002d074ea3377f0e5ca6ee26601da0a43ae9b10249d2e8411e0cc0798cde7caebb2b218538c320e9df74a0bd0e2c0842c1e2714f331fbf0989f7bd271cd434508",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500
+        },
+        "store_nonce": "210ed833ca0c88b0d45b4e290cd59154111f52eeda834631050d969ae5b9bf70"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a0582027d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad58403f51b8ce6c3970d5f3cde475667274400f5238ac6adf72a2d9a354d0d7e4f56ff680dd6841a18f9b2aa424d18176c55fd1c42c9c10ec6fd85acc8bfec918f80f",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "5226e0b559c89b4589f182fd58a1db24f490c8624cc75d6a754d1565eb8c9c14"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c8311755840152881bf91355f94183af3cf97b18407f95d1239971d9bf5e70632dbe626829dad3f893d8283df751acb587c569d19f01580aee3a35d47e7b6ff6b80c5fd8f0a",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "b6ef0aa61917691b5bcc4fb34de178172441847801accfd50391df0b42e47909"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d885840893c4ca6c986c90b584f791b601f5403e5205ee4300f98cd9eaa8d569387c372cb0b0866beeb29c3a0a259cab6174111ba8fbcb09a31e4f9bc3aa74bf4e57001",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "delivered",
+         "source": "provider_asserted",
+         "amount_msat": 0,
+         "tokens": 42
+        },
+        "store_nonce": "34dae56531349f4b826c007984f970aa8d1fe1380f6d4d555627622d983d34b1"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c785840a01f80fc2a74706b4f57a1d3380372ea2358c10505f0302368d1194682b0823cef0b91dfea704823ef1e28804c15337a1785dd69797a7b586731e032807c6c02",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "weights_digest": {
+         "digest_alg": "SHA-256",
+         "digest": "sha256:loaded-weights",
+         "scope": "file"
+        },
+        "quantization": "Q4_K_M",
+        "source": {
+         "weights_digest": "computed",
+         "quantization": "self_reported"
+        },
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "qwen3-8b-q4",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "producer_claim",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "raw_proxy",
+          "requesting_party": "9b1f0c3e5a7d2b4f6e8a0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f1a2b3c4d5e6f",
+          "exchange_id": "p-deal-settled",
+          "quantization": "Q4_K_M",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": "sha256:loaded-weights",
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 1,
+          "prev_seq": null,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "served",
+         "observation_point": null,
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "25e68a32da733381e39adf9d98bd22823609e38505d0c1d34dd84f244e3d0589f7a5ffc56d5a7336235e287fc5064e56ad5bfc1b9a0527c0b09aabace9398301",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "df3091dee1d26ffd",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "95f8ca2e71dda32cc3bb91187d6c4c4b3be2a7cd7719a654588655c9ec2c6137"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb5840b9a89274f893fe861776b61635670973a0df91e71f0b052c84c9470fbfc473406b9a59eaa536b4f5ffd0b22c01a81525d362156a0974e215e14004efc97ff904",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  },
+  {
+   "row": "come_through.served_named_model",
+   "case": "not_met",
+   "input": {
+    "records": [
+     {
+      "capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "23c3758fce68b7033a00cb2b481497bb2a8f2fb23421de036144a7d67908e046",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "terms_accepted",
+         "source": "provider_asserted",
+         "amount_msat": 1000
+        },
+        "store_nonce": "7eadcf0f0aff3cc3794435cc344ffea391e1e042f2bdb4c7dc8c227db1e24cde"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "standalone"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058208344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b565840ba3c332e94982c9c8a1f79bf3e9f492a8d582c4eff3fd15bb42002ae65f4540489c3bf36b1246e73e20e231fee1e9345799b58db9442fcc6a584c73e57dabf05",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "b0de4ec78ae31f82282ad137452cb16dc2a75898e654eaf1a50501969decb0d3",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500
+        },
+        "store_nonce": "b68a43d28148d45e2b085cfe5e2da9692c16be3fc0ee3b3bca4b48e2173c4f99"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "8344a33ed0710ccb821ba573dcbb0d8ccc47fa045e52a2a749cd56de9fd52b56",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a058202a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed584002d074ea3377f0e5ca6ee26601da0a43ae9b10249d2e8411e0cc0798cde7caebb2b218538c320e9df74a0bd0e2c0842c1e2714f331fbf0989f7bd271cd434508",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "509a26044492eaa952361d17637d55e84bd9cb0ce20ee661e5fe42fcfb1cb63a",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_invoice_issued",
+         "source": "provider_asserted",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500
+        },
+        "store_nonce": "210ed833ca0c88b0d45b4e290cd59154111f52eeda834631050d969ae5b9bf70"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "2a530569860eddc0684bb8efdd14ce1e9664559734d7da5fe1610028ef380eed",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a0582027d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad58403f51b8ce6c3970d5f3cde475667274400f5238ac6adf72a2d9a354d0d7e4f56ff680dd6841a18f9b2aa424d18176c55fd1c42c9c10ec6fd85acc8bfec918f80f",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "8731ba87e0fa9b0c7e5eee89b48cb58b76da9026e4168fd959c95cb91f920367",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "input_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 0,
+         "payment_hash": "9095504ffa8558a241ccf73027b3a8d8061b3a3ac1dbf909857b86a7de8694aa",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "5226e0b559c89b4589f182fd58a1db24f490c8624cc75d6a754d1565eb8c9c14"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "27d86ac8faed848fabd7b5ed15a8c8ac344d17163377ccaadebc9da5f04a80ad",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c8311755840152881bf91355f94183af3cf97b18407f95d1239971d9bf5e70632dbe626829dad3f893d8283df751acb587c569d19f01580aee3a35d47e7b6ff6b80c5fd8f0a",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a965b3bc577a6ee3565bc5af86043afcf986d8f50c65eee5aec2d473f3e56aea",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "output_settlement_observed",
+         "source": "wallet_reported",
+         "settlement": "terminal",
+         "segment": 1,
+         "payment_hash": "f276d90bf80ded58317b2fa6e6ffd2c2b4171a43430d835a6e2bc927873beb85",
+         "amount_msat": 500,
+         "credited_msat": 495,
+         "fee_msat": 5
+        },
+        "store_nonce": "b6ef0aa61917691b5bcc4fb34de178172441847801accfd50391df0b42e47909"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "d211f781f999ae55b6113c09789336cafb649525b54538321d3c1b0a1c831175",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d885840893c4ca6c986c90b584f791b601f5403e5205ee4300f98cd9eaa8d569387c372cb0b0866beeb29c3a0a259cab6174111ba8fbcb09a31e4f9bc3aa74bf4e57001",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/settlement/p-deal-settled/a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "n/a-settlement-observation",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "x-mesh-settlement-v1": {
+         "v": 1,
+         "observed_by": "provider",
+         "channel": "payment.lifecycle.v1",
+         "exchange_id": "p-deal-settled",
+         "event_ref": "a05e9a6b58948353f009e1fb90f17414b49d38f435af47439e4788dafa2de595",
+         "terms_digest": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d",
+         "phase": "delivered",
+         "source": "provider_asserted",
+         "amount_msat": 0,
+         "tokens": 42
+        },
+        "store_nonce": "34dae56531349f4b826c007984f970aa8d1fe1380f6d4d555627622d983d34b1"
+       }
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "not_applicable",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "448d6391e3e0080e8fe95d8edce3652c6e4715444b8627af0e2d95104e910d88",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c785840a01f80fc2a74706b4f57a1d3380372ea2358c10505f0302368d1194682b0823cef0b91dfea704823ef1e28804c15337a1785dd69797a7b586731e032807c6c02",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     },
+     {
+      "spec_version": "draft-mih-scitt-agent-action-capsule-05",
+      "format_version": "4",
+      "capsule_id": "af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb",
+      "canonicalization_id": "jcs",
+      "action_id": "mesh-poc/capsule-emit-mesh-host-served/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "action_type": "fyi",
+      "operator": "capsule-emit-mesh-poc-rust",
+      "developer": "capsule-emit-mesh/0.1.5",
+      "timestamp": "2026-10-29T22:42:00Z",
+      "domain": "action",
+      "provenance": "collector",
+      "model_attestation": {
+       "model_id": "qwen3-8b-q4",
+       "provider": "mesh-llm",
+       "compute_attestation": {
+        "agent_input_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "agent_output_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf",
+        "host_binding": {
+         "digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+         "construction": "mesh-llm/request-body-sha256/v1",
+         "purpose": "host-log-join"
+        },
+        "runtime": {
+         "name": "observer/capsule-emit-mesh",
+         "runtime_digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+         "measurement_class": "os_measured",
+         "platform_integrity": {
+          "sip_enabled": true,
+          "source": {
+           "sip_enabled": "os_reported"
+          }
+         }
+        },
+        "attestation_refs": [],
+        "weights_digest": {
+         "digest_alg": "SHA-256",
+         "digest": "sha256:loaded-weights",
+         "scope": "file"
+        },
+        "quantization": "Q4_K_M",
+        "source": {
+         "weights_digest": "computed",
+         "quantization": "self_reported"
+        },
+        "invocation": {
+         "requested_model_id": "qwen3-8b-q4",
+         "resolved_model_id": "another-model",
+         "usage": {
+          "prompt_tokens": 20,
+          "completion_tokens": 22,
+          "total_tokens": 42
+         },
+         "source": {
+          "requested_model_id": "self_reported",
+          "resolved_model_id": "self_reported",
+          "usage": "provider_reported"
+         }
+        },
+        "epistemic_type": "producer_claim",
+        "x-mesh-poc-v1": {
+         "client_nonce": "host-served-no-nonce",
+         "client_nonce_source": "host_served_observed",
+         "model_name_digest": "e5ff280d3f4a35e8aa794fe241f5c920b8920f86a2e9cbce2bf079e31dc12900",
+         "serving_provenance": {
+          "served_by_node_id": "284a8bb62c0491b1a27f57425ce585626f7dc9a1495de4519a869a8c11d9f478",
+          "dispatch_path": "raw_proxy",
+          "requesting_party": "9b1f0c3e5a7d2b4f6e8a0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f1a2b3c4d5e6f",
+          "exchange_id": "p-deal-settled",
+          "quantization": "Q4_K_M",
+          "model": {
+           "architecture": null,
+           "context_length": null,
+           "parameter_size": null,
+           "layer_count": null,
+           "identity_hash": null,
+           "weights_digest": "sha256:loaded-weights",
+           "canonical_ref": null,
+           "revision": null
+          },
+          "hardware": {
+           "gpu": null,
+           "vram_bytes": null,
+           "device": null,
+           "is_soc": null
+          },
+          "usage": {
+           "prompt_tokens": 20,
+           "completion_tokens": 22,
+           "total_tokens": 42
+          },
+          "seq": 1,
+          "prev_seq": null,
+          "peer_capsule_id": null,
+          "peer_capsule_id_provenance": null
+         },
+         "role": "served",
+         "observation_point": null,
+         "generation_parameters": {},
+         "latency_ms": "0.000",
+         "evidence_refs": {
+          "statistical_fingerprint": {
+           "type": "statistical_fingerprint",
+           "digest": null,
+           "context": null
+          },
+          "tee_attestation": {
+           "type": "tee_attestation",
+           "measurement_class": null,
+           "digest": null,
+           "context": "no TEE quote measured (no TDX hardware on this host, or the producer leg has not run here); recorded absent, never fabricated"
+          },
+          "binary_attestation": {
+           "type": "binary_attestation",
+           "measurement_class": "os_measured",
+           "digest": "db357bc2ad883a1d1d4070eb46060f547ce184287110a97a6c1b52ed8600ac0e",
+           "digest_alg": "sha256",
+           "binary_path": "capsules-93d983ab73865961",
+           "binary_size_bytes": 61959288,
+           "signature": "25e68a32da733381e39adf9d98bd22823609e38505d0c1d34dd84f244e3d0589f7a5ffc56d5a7336235e287fc5064e56ad5bfc1b9a0527c0b09aabace9398301",
+           "signature_algorithm": "ed25519",
+           "signer_key_id": "df3091dee1d26ffd",
+           "measured_at": "2026-10-29T22:42:00Z",
+           "code_directory_hash": "8e5979fcc3e5cf3bbc73b0f8e9c0fa06590e7ed1",
+           "cdhash_source": "csops(CS_OPS_CDHASH)",
+           "kernel_valid": true,
+           "kernel_signed": true,
+           "platform_binary": false,
+           "ad_hoc_signature": true,
+           "signing_authority": "unknown_local_or_ad_hoc",
+           "sip_enabled": true,
+           "context": "os_measured: the KERNEL (AMFI) reported this process's code-directory hash (cdhash) at exec time via csops(2) CS_OPS_CDHASH \u2014 an independent measurer beneath the process, so a compromised process cannot repoint this hash at a decoy file the way self-measurement can; the signature also binds this cdhash to the self-measured digest, so tampering with either after signing breaks verification. Trustworthy only up to: SIP enabled, a NON-ROOT attacker (root can disable SIP / bypass AMFI), and this binary's signing strength \u2014 signing_authority=unknown_local_or_ad_hoc, ad-hoc signed (no Developer-ID / notarization / library validation). Does NOT prove hardware-rooted measurement: no TEE and no hardware register are involved, so this is NOT tee_measured. A root attacker with SIP disabled is the named residual, closed only by tee_measured (out of scope here)."
+          }
+         }
+        },
+        "store_nonce": "95f8ca2e71dda32cc3bb91187d6c4c4b3be2a7cd7719a654588655c9ec2c6137"
+       }
+      },
+      "effect": {
+       "status": "confirmed",
+       "type": "inference_completion",
+       "effect_attestation": "host_served_observed",
+       "request_digest": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+       "response_digest": "33e3aff1f39db84ca6bc2e4a8d19703c57566b215e2fa5282dcfefc983bf4ebf"
+      },
+      "assurance": {
+       "attestation_mode": "self_attested",
+       "effect_mode": "confirmed",
+       "ledger_mode": "chained"
+      },
+      "disposition": {
+       "decision": "accept",
+       "approver": "policy",
+       "human_disposed": false,
+       "verdict_class": "executed"
+      },
+      "chain": {
+       "parent_capsule_id": "e123f54bbc7ab4208e8ddc16bb815f7acf666ff199e6d8cee8d2f83a96ad8c78",
+       "relation": "follows"
+      },
+      "signature": "d284584ca301270378236170706c69636174696f6e2f6167656e742d616374696f6e2d63617073756c652d696404582098cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65a05820af79aa9dfe68db5ab7043815ce3598c035df870f6d38862e50c69c2a15eb06eb5840b9a89274f893fe861776b61635670973a0df91e71f0b052c84c9470fbfc473406b9a59eaa536b4f5ffd0b22c01a81525d362156a0974e215e14004efc97ff904",
+      "key_id": "98cc23a49fee46fe5fb015736747daf76ef09a67a97b01ef177ecc3744dc5b65"
+     }
+    ],
+    "date": "2026-11-01"
+   }
+  }
+ ]
+}

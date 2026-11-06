@@ -2,7 +2,7 @@
 """terms -- the Terms Pack Studio verbs for a seller's deal terms pack.
 
     terms lint    SRC   (any kind: admission, deal, conduct, live, report)
-    terms test    SRC
+    terms test    SRC [--engine PATH [--engine-commit SHA]]
     terms run     SRC (--deals FILE | --exports DIR | --store HOME) [--dry-run] [--workspace DIR]
     terms verify  PAGE
     terms compare A B
@@ -46,6 +46,7 @@ import rfc8785  # noqa: E402
 import yaml  # noqa: E402
 
 import admission_pack  # noqa: E402
+import case_eval  # noqa: E402
 import deal_pack  # noqa: E402
 import deal_store  # noqa: E402
 import pack_compile  # noqa: E402
@@ -267,18 +268,16 @@ def cmd_test(args):
     cases, issues = two_case.read_cases(path, source)
     if issues:
         return out({"passed": False, "kind": kind, "issues": issues}, 1)
-    if kind in ("admission", "live"):
-        reason = f"a {kind} pack's cases are decided by capsule-engine, which terms test does not run"
-    elif source.get("evaluator"):
-        reason = (f"the {source['evaluator']} evaluator reads a node's sealed capsule records "
-                  "(scripts/evaluators), which terms test does not build")
-    else:
-        reason = f"a {kind} pack's cases are judged by its pinned judge, which terms test does not run"
-    rows = [{"row": r, "met_case": "not_evaluated", "miss_case": "not_evaluated", "evaluated": False, "reason": reason}
-            for r in two_case.row_ids(source)]
-    # Nothing was run, so nothing passed: `passed` is null, and the exit code says the fixtures are sound.
-    return out({"passed": None, "fixtures_valid": True, "kind": kind, "cases": len(cases),
-                "evaluated": 0, "not_evaluated": len(cases), "rows": rows}, 0)
+    rows = case_eval.run(kind, source, cases, path.parent, args.engine, args.engine_commit)
+    failed = any(r["evaluated"] and not r["passed"] for r in rows)
+    unrun = sum(r["evaluated"] is False for r in rows)
+    # `passed` is true only when every row ran and passed; a row that was not run is not a pass, so
+    # `null` says "not known" (and the exit code, 0, that the fixtures themselves are sound).
+    passed = False if failed else (None if unrun else True)
+    ran = [r for r in rows if r["evaluated"]]
+    return out({"passed": passed, "fixtures_valid": True, "kind": kind, "cases": len(cases),
+                "evaluated": 2 * len(ran), "not_evaluated": len(cases) - 2 * len(ran), "rows": rows},
+               1 if failed else 0)
 
 
 def test_deal(source):
@@ -449,6 +448,9 @@ def main(argv):
         p.add_argument("src")
         if name == "publish":
             p.add_argument("--workspace")
+        if name == "test":
+            p.add_argument("--engine", help="a capsule-engine binary, to decide admission cases (default: $CAPSULE_ENGINE)")
+            p.add_argument("--engine-commit", help="refuse an engine not built from this commit (a prefix is enough)")
     p = sub.add_parser("run")
     p.add_argument("src")
     g = p.add_mutually_exclusive_group(required=True)
