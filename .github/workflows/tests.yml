@@ -23,6 +23,38 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -p 'test_*.py'
 
+  admission-engine:
+    # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
+    runs-on: ubuntu-latest
+    env:
+      CAPSULE_ENGINE_REF: f5a84681835498907da70615701cca7b08edd465
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-engine
+          ref: ${{ env.CAPSULE_ENGINE_REF }}
+          path: .deps/capsule-engine
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .deps/capsule-engine/go/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: build capsule-engine
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
+      - name: the admission sample, decided by the engine
+        run: |
+          CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
+            python -m unittest tests.test_pack_schema.AdmissionEngine.test_the_real_engine_decides_the_sample_pack -v
+
   report-grades:
     runs-on: ubuntu-latest
     env:

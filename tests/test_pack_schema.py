@@ -15,6 +15,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 for sub in ("scripts", "scripts/evaluators", "scripts/studio"):
@@ -23,6 +24,7 @@ for sub in ("scripts", "scripts/evaluators", "scripts/studio"):
 import yaml  # noqa: E402
 
 import admission_pack  # noqa: E402
+import case_eval  # noqa: E402
 import deal_pack  # noqa: E402
 import live_pack  # noqa: E402
 import pack_compile  # noqa: E402
@@ -297,7 +299,6 @@ class TestOnEveryKind(unittest.TestCase):
         self.assertTrue(all(r["evaluated"] and (r["met_case"], r["miss_case"]) == ("met", "not_met") for r in res["rows"]))
 
     def test_each_other_kind_checks_its_fixtures_and_says_nothing_was_run(self):
-        import unittest.mock
         for name, path in self.SAMPLES.items():
             with self.subTest(kind=name), unittest.mock.patch.dict("os.environ", clear=True):
                 code, res = run_test(path)
@@ -307,19 +308,13 @@ class TestOnEveryKind(unittest.TestCase):
                 self.assertEqual((res["evaluated"], res["not_evaluated"]), (0, res["cases"]))
                 self.assertTrue(all(not r["evaluated"] and r["reason"] for r in res["rows"]))
 
-    def test_a_key_does_not_run_a_judged_pack(self):
-        import unittest.mock
+    def test_a_judged_pack_is_not_run_with_or_without_a_key(self):
         for name in ("report", "conduct"):
-            with self.subTest(kind=name), unittest.mock.patch.dict("os.environ", {"TYPESAFE_API_KEY": "x"}):
-                code, res = run_test(self.SAMPLES[name])
-                self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0))
-                self.assertIn("waits for the owner's go", res["rows"][0]["reason"])
-
-    def test_the_reason_a_judged_pack_did_not_run_names_the_missing_key(self):
-        import unittest.mock
-        with unittest.mock.patch.dict("os.environ", clear=True):
-            _, res = run_test(self.SAMPLES["report"])
-        self.assertIn("TYPESAFE_API_KEY", res["rows"][0]["reason"])
+            for env in ({}, {"TYPESAFE_API_KEY": "x"}):
+                with self.subTest(kind=name, key=bool(env)), unittest.mock.patch.dict("os.environ", env, clear=True):
+                    code, res = run_test(self.SAMPLES[name])
+                    self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0))
+                    self.assertIn("waits for the owner's go", res["rows"][0]["reason"])
 
     def test_live_names_the_engine_issue(self):
         _, res = run_test(self.SAMPLES["live"])
@@ -332,6 +327,12 @@ class TestOnEveryKind(unittest.TestCase):
             self.assertEqual((r["met_case"], r["miss_case"]), ("met", "not_met"))
             self.assertEqual(r["decided_by"]["name"], "inference_deals")
             self.assertRegex(r["decided_by"]["sha256"], "^[0-9a-f]{64}$")
+
+    def test_the_evaluator_fixture_is_what_its_generator_writes(self):
+        import subprocess
+        gen = ROOT / "packs/inference-deals/fixtures/generate.py"
+        made = subprocess.run([sys.executable, str(gen)], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(made, (ROOT / "packs/inference-deals/fixtures/two-case.json").read_text())
 
     def test_an_evaluator_case_the_evaluator_decides_otherwise_fails(self):
         dst = self.copy_evaluator_pack()
@@ -357,6 +358,16 @@ class TestOnEveryKind(unittest.TestCase):
         self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, None, 4, 2), res)
         self.assertFalse(res["rows"][0]["evaluated"])
         self.assertIn("could not be built", res["rows"][0]["reason"])
+
+    def test_a_malformed_record_is_not_evaluated_and_does_not_crash(self):
+        dst = self.copy_evaluator_pack()
+        f = dst / "fixtures/two-case.json"
+        doc = json.loads(f.read_text())
+        doc["cases"][0]["input"]["records"][0]["model_attestation"] = "x"
+        f.write_text(json.dumps(doc))
+        code, res = run_test(dst / "pack-source.yaml")
+        self.assertEqual((code, res["passed"]), (0, None), res)
+        self.assertFalse(res["rows"][0]["evaluated"])
 
     def test_a_case_with_two_deals_is_not_evaluated(self):
         dst = self.copy_evaluator_pack()
@@ -459,10 +470,6 @@ class ConductIsAScopeKind(unittest.TestCase):
         self.assertNotEqual(pack_compile.source_digest(a), pack_compile.source_digest(b))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def shutil_rmtree(path):
     import shutil
     shutil.rmtree(path)
@@ -481,6 +488,14 @@ class AdmissionEngine(unittest.TestCase):
         f.write_text("#!/usr/bin/env python3\nimport json, sys\n" + body)
         f.chmod(0o755)
         return str(f)
+
+    SHA = "f5a84681835498907da70615701cca7b08edd465"
+
+    def setUp(self):
+        self.info = unittest.mock.patch.object(
+            case_eval, "build_info", side_effect=lambda p: f"{p}: go1\n\tbuild\tvcs.revision={self.SHA}\n")
+        self.info.start()
+        self.addCleanup(self.info.stop)
 
     # An engine that fails the `attestation` row when the input says the attestation is invalid.
     ENGINE = """
@@ -526,6 +541,35 @@ print(json.dumps({"verdict": "NO", "rows": [
         code, res = run_test(self.SAMPLE, "--engine", "/nonexistent/capsule-engine")
         self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
 
+    def test_the_build_commit_is_reported_and_a_matching_pin_runs(self):
+        engine = self.fake(self.ENGINE)
+        code, res = run_test(self.SAMPLE, "--engine", engine, "--engine-commit", self.SHA[:8])
+        self.assertEqual((code, res["passed"]), (0, True), res)
+        self.assertEqual(res["rows"][0]["decided_by"]["commit"], self.SHA)
+
+    def test_an_engine_with_no_known_build_revision_is_not_used(self):
+        engine = self.fake(self.ENGINE)
+        with unittest.mock.patch.object(case_eval, "build_info", return_value=""):
+            code, res = run_test(self.SAMPLE, "--engine", engine)
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("build revision is unknown", res["rows"][0]["reason"])
+
+    def test_a_locally_modified_build_does_not_satisfy_a_pin(self):
+        engine = self.fake(self.ENGINE)
+        info = f"build\tvcs.revision={self.SHA}\nbuild\tvcs.modified=true\n"
+        with unittest.mock.patch.object(case_eval, "build_info", return_value=info):
+            code, res = run_test(self.SAMPLE, "--engine", engine, "--engine-commit", self.SHA)
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("local changes", res["rows"][0]["reason"])
+
+    def test_a_bare_engine_name_runs_the_file_it_identifies(self):
+        engine = self.fake(self.ENGINE)
+        path = str(pathlib.Path(engine).parent)
+        with unittest.mock.patch.dict("os.environ", {"PATH": path + os.pathsep + os.environ["PATH"]}):
+            code, res = run_test(self.SAMPLE, "--engine", "capsule-engine")
+        self.assertEqual((code, res["passed"]), (0, True), res)
+        self.assertEqual(res["rows"][0]["decided_by"]["path"], str(pathlib.Path(engine).resolve()))
+
     def test_an_engine_not_built_from_the_pinned_commit_is_not_used(self):
         engine = self.fake(self.ENGINE)
         code, res = run_test(self.SAMPLE, "--engine", engine, "--engine-commit", "abc123")
@@ -536,3 +580,7 @@ print(json.dumps({"verdict": "NO", "rows": [
     def test_the_real_engine_decides_the_sample_pack(self):
         code, res = run_test(self.SAMPLE)
         self.assertEqual((code, res["passed"], res["evaluated"]), (0, True, 4), res)
+
+
+if __name__ == "__main__":
+    unittest.main()
