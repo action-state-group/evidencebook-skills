@@ -127,7 +127,12 @@ def run_of_digest(ws, prefix):
     packs = ws / "packs"
     hits = []
     for folder in sorted(packs.iterdir()) if packs.is_dir() else []:
-        hits += [(folder, e) for e in history(folder) if prefix and e["digest"].startswith(prefix)]
+        if not folder.is_dir():
+            continue
+        try:
+            hits += [(folder, e) for e in history(folder) if prefix and e["digest"].startswith(prefix)]
+        except WorkspaceError:
+            continue  # one pack's unreadable history cannot hide another's digest
     if len(prefix) < 6 or not hits:
         raise WorkspaceError(f"{prefix} is neither a file nor a pack digest in the history of {ws} (at least 6 characters)")
     if len({e["digest"] for _, e in hits}) > 1:
@@ -135,7 +140,7 @@ def run_of_digest(ws, prefix):
     folder, entry = hits[0]
     if not entry.get("run"):
         raise WorkspaceError(f"digest {entry['digest'][:12]} was never run in this workspace; `terms run` it first")
-    return pathlib.Path(entry["run"]) / "result.json"
+    return ws / entry["run"] / "result.json"
 
 
 def checkout(folder, src, prefix, current_digest, force):
@@ -145,8 +150,9 @@ def checkout(folder, src, prefix, current_digest, force):
         mine = folder / "history" / f"{str(current_digest)[:12]}.yaml"
         if current_digest is None or not mine.is_file() or mine.read_bytes() != pathlib.Path(src).read_bytes():
             raise WorkspaceError(f"{src} has changes no run or publish has recorded; run it first, or pass --force to discard them")
+    subdir(folder, "history")
     snap = folder / "history" / f"{entry['digest'][:12]}.yaml"
-    if not snap.is_file():
+    if snap.is_symlink() or not snap.is_file():
         raise WorkspaceError(f"{snap} is missing; that digest cannot be restored")
     _checked(pathlib.Path(src))
     shutil.copyfile(snap, src)

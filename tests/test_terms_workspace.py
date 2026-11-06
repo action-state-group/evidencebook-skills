@@ -62,7 +62,7 @@ class Workspace(unittest.TestCase):
         res = self.run_pack()  # a second agent: only the folder, no --deals
         self.assertEqual(res["sales"], 10)
         st = json.loads((self.folder / "workspace.json").read_text())
-        self.assertEqual(st["last_run"]["result"], res["result"])
+        self.assertEqual(st["last_run"]["run"], pathlib.Path(res["run"]).relative_to(self.ws.resolve()).as_posix())
 
     def test_run_with_no_dataset_anywhere_says_so(self):
         (self.folder / "workspace.json").unlink()
@@ -79,7 +79,7 @@ class Workspace(unittest.TestCase):
         second = self.run_pack()
         lines = [json.loads(l) for l in (self.folder / "history.jsonl").read_text().splitlines()]
         self.assertEqual([l["digest"] for l in lines], [first["pack_digest"], second["pack_digest"]])
-        self.assertEqual(lines[0]["run"], again["run"])  # the latest run under that digest
+        self.assertEqual(self.ws.resolve() / lines[0]["run"], pathlib.Path(again["run"]))  # the latest run under that digest
         self.assertTrue((self.folder / "history" / f"{first['pack_digest'][:12]}.yaml").is_file())
         code, hist = call("history", self.src, "--workspace", self.ws)
         self.assertEqual((code, len(hist["history"])), (0, 2))
@@ -211,6 +211,84 @@ class Workspace(unittest.TestCase):
         one = workspace.keep_transcript(self.folder, talk, now)
         two = workspace.keep_transcript(self.folder, talk, now)
         self.assertNotEqual(one, two)
+
+    def test_force_checkout_restores_a_source_broken_by_an_edit(self):
+        first = self.run_pack()
+        self.src.write_text("rows: [unclosed\n")
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws, "--force")
+        self.assertEqual(code, 0, res)
+        self.assertIn("pack_id: stickers", self.src.read_text())
+
+    def test_a_new_pack_can_keep_a_transcript_before_its_first_run(self):
+        loose = self.ws / "drafts" / "foo.yaml"
+        loose.parent.mkdir()
+        loose.write_text(self.src.read_text().replace("pack_id: stickers", "pack_id: fresh"))
+        talk = pathlib.Path(self.tmp.name) / "talk.md"
+        talk.write_text("x")
+        code, res = call("keep-transcript", loose, talk, "--workspace", self.ws)
+        self.assertEqual(code, 0, res)
+        self.assertEqual(pathlib.Path(res["kept"]).parent, (self.ws / "packs" / "fresh" / "private").resolve())
+
+    def test_a_new_shell_finds_the_workspace_from_the_pack_folder(self):
+        env = os.environ.pop("TERMS_WORKSPACE", None)
+        self.addCleanup(lambda: env and os.environ.__setitem__("TERMS_WORKSPACE", env))
+        code, res = call("run", self.src, "--dry-run")  # no --workspace, no env, no sales flag
+        self.assertEqual((code, res["sales"]), (0, 10), res)
+        code, hist = call("history", self.src)
+        self.assertEqual((code, len(hist["history"]), hist["workspace"]), (0, 1, str(self.ws.resolve())))
+
+    def test_the_workspace_can_move_and_compare_by_digest_still_works(self):
+        first = self.run_pack()
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        second = self.run_pack()
+        moved = pathlib.Path(self.tmp.name) / "moved"
+        self.ws.rename(moved)
+        code, res = call("compare", first["pack_digest"][:12], second["pack_digest"][:12], "--workspace", moved)
+        self.assertEqual(code, 0, res)
+
+    def test_a_stray_file_or_bad_history_in_packs_does_not_block_compare(self):
+        first = self.run_pack()
+        (self.ws / "packs" / ".DS_Store").write_text("x")
+        (self.ws / "packs" / "other").mkdir()
+        (self.ws / "packs" / "other" / "history.jsonl").write_text("not json\n")
+        code, res = call("compare", first["pack_digest"][:12], first["run"], "--workspace", self.ws)
+        self.assertEqual(code, 0, res)
+
+    def test_run_says_when_the_remembered_sales_changed(self):
+        self.assertFalse(self.run_pack()["dataset_changed"])
+        data = json.loads(TRADES.read_text())
+        deals = data["trades"] if isinstance(data, dict) else data
+        deals[0]["note"] = "changed"
+        copy = pathlib.Path(self.tmp.name) / "trades2.json"
+        copy.write_text(json.dumps(deals))
+        self.assertTrue(self.run_pack("--deals", copy)["dataset_changed"])
+
+    def test_init_that_refuses_the_data_leaves_nothing_behind(self):
+        bad = pathlib.Path(self.tmp.name) / "big.json"
+        bad.write_text(json.dumps([{"deal_id": "a", "t": 1730000000000000000}]))
+        code, res = call("init", "--deals", bad, "--workspace", self.ws, "--pack-id", "big")
+        self.assertEqual(code, 1, res)
+        self.assertFalse((self.ws / "packs" / "big" / "pack-source.yaml").exists())
+
+    def test_force_checkout_of_an_unrun_edit_does_not_suggest_a_compare(self):
+        first = self.run_pack()
+        self.edit("delivered_within_days(2)", "delivered_within_days(9)", "0.3.0")  # lints, never run
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws, "--force")
+        self.assertEqual(code, 0, res)
+        self.assertNotIn("compare", res["next"])
+
+    def test_checkout_will_not_write_through_a_linked_source_or_read_a_linked_history(self):
+        first = self.run_pack()
+        real = pathlib.Path(self.tmp.name) / "real.yaml"
+        real.write_text(self.src.read_text())
+        link = self.ws / "packs" / "stickers" / "link.yaml"
+        link.symlink_to(real)
+        code, res = call("checkout", link, first["pack_digest"], "--workspace", self.ws, "--force")
+        self.assertEqual(code, 1, res)
+        (self.folder / "history").rename(self.folder / "history-real")
+        (self.folder / "history").symlink_to(self.folder / "history-real")
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws, "--force")
+        self.assertEqual(code, 1, res)
 
     def test_read_only_verbs_do_not_make_the_workspace(self):
         gone = pathlib.Path(self.tmp.name) / "never"
