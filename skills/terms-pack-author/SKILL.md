@@ -25,15 +25,15 @@ checked if it is published (`in_pack: true`). The others are ideas kept in `cand
 (`in_pack: false`): they are never checked, and the table says what each is waiting for.
 
 - **checkable now**: the sales carry what the term needs, and the answer says how many sales it can decide.
-- **needs examples**: the term takes the seller's judgment, which these terms cannot run yet.
+- **needs examples**: the term takes the seller's judgment, which these terms cannot run yet; a deal terms pack cannot run it, so it stays here even after four sales are labelled.
   Tell the seller so. If they want to say how it should go anyway, record their answer for
   each sale in `labels.json` beside the terms, as `{"matched_description": [{"deal_id": "...", "met": true}]}`
   (four sales; the table counts them).
 - **needs a field**: the answer names the field the sales lack, or that no sale carries
   it together with its partner. Ask whether they can add it to their sales records, or want to
   drop the term (delete the row from the pack, or the idea from `candidates.json`).
-- **needs the other side**: only the buyer's own record can show it.
-- **not this pack's concern**: it is about the buyer's conduct, not the seller's terms.
+- **needs the other side**: only the buyer's own signed record can decide it; a field in the seller's sales records is the seller's account of it, not the buyer's.
+- **not this pack's concern**: how the seller's own agent behaves belongs in their private conduct pack, which no buyer ever receives.
 
 Tell the seller what each term is and its status in a sentence each. The sales are not
 sent anywhere or shown to you: you see the field names and counts and the sales the seller labels.
@@ -56,11 +56,11 @@ file they name into a private folder beside the terms, and nothing else ever rea
 
 **Going back.** To undo a change, `terms checkout SRC FINGERPRINT` (six or more characters
 from `history`) puts that version of the terms back, `terms run SRC` tries it again, and
-`terms compare OLDER NEWER` takes two fingerprints and names both. `checkout` refuses when the
+`terms compare OLDER NEWER` takes two fingerprints and names both; it compares results, so a fingerprint that was only published and never run is refused until `checkout` and `terms run` have tried it. `history` and `checkout` are for deal terms packs only. `checkout` refuses when the
 terms have edits no run has recorded; tell the seller what would be lost and pass `--force`
 only if they say so.
 
-**A throwaway book for rehearsals** is an ordinary store in a throwaway folder, for example
+**A throwaway store for rehearsals** is an ordinary store in a throwaway folder, for example
 `~/studio/dev-book`: create it with the `capsulectl` commands the seller already uses
 (`profile create`, `store init`, `book backfill run`), then `terms init --store ~/studio/dev-book`.
 Delete the folder when done; nothing else points at it.
@@ -123,7 +123,9 @@ Do not invent a row, a check or a field, and do not stretch one of the three to 
    fix what `issues` names and run it again.
 3. **`terms test ~/studio/packs/sticker-sale/pack-source.yaml`**. Each row is tried on one
    sale it should accept and one it should refuse. If a row fails, fix it; never tell the
-   seller their terms are ready while a row fails.
+   seller their terms are ready while a row fails. The command exits 0 only when every
+   case ran and passed; it exits 3 when none failed but some could not run (`passed` is
+   `null`), and 1 when one failed. Treat 3 as "not tested", never as a pass.
 4. **Try the terms over past sales**:
    `terms run ~/studio/packs/sticker-sale/pack-source.yaml --store STORE --dry-run`
    where STORE is the seller's deal store (the home the studio setup names): the sales are

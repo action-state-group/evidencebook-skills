@@ -14,7 +14,9 @@
     terms publish SRC [--workspace DIR]
 
 SRC is a pack-source.yaml with `scope.kind: deal` (scripts/deal_pack.py). Every
-verb prints one JSON object on stdout and exits 0, or 1 with the reason in it.
+verb prints one JSON object on stdout and exits 0, or 1 with the reason in it. `test` also exits
+3 (UNRUN) when no case failed but some did not run (`passed: null`), so a script that checks
+only for 0 cannot read unrun cases as passed.
 The entry point is scripts/studio/terms (a bare `test` would be the shell's).
 
 `init` reads the sales, writes the field census and a proposed pack under
@@ -289,6 +291,10 @@ def cmd_lint(args):
     return out({"valid": not issues, "kind": kind, "issues": issues}, 0 if not issues else 1)
 
 
+UNRUN = 3  # `terms test`: nothing failed, but some case did not run
+MIN_COMMIT_PREFIX = 7
+
+
 def cmd_test(args):
     """Lint, then run the two cases (met, not met) of every row, on any kind."""
     path = pathlib.Path(args.src)
@@ -304,16 +310,19 @@ def cmd_test(args):
     cases, issues = two_case.read_cases(path, source)
     if issues:
         return out({"passed": False, "kind": kind, "issues": issues}, 1)
+    if args.engine_commit is not None and len(args.engine_commit) < MIN_COMMIT_PREFIX:
+        return out({"passed": False, "kind": kind, "issues": [
+            f"--engine-commit needs at least {MIN_COMMIT_PREFIX} characters of the commit; {args.engine_commit!r} could match any engine"]}, 1)
     rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit, live_engine=args.live_engine, src=path)
     failed = any(r["evaluated"] and not r["passed"] for r in rows)
     unrun = sum(r["evaluated"] is False for r in rows)
     # `passed` is true only when every row ran and passed; a row that was not run is not a pass, so
-    # `null` says "not known" (and the exit code, 0, that the fixtures themselves are sound).
+    # `null` says "not known", and the exit code is UNRUN (3), never 0, which a script reads as a pass.
     passed = False if failed else (None if unrun else True)
     ran = [r for r in rows if r["evaluated"]]
     return out({"passed": passed, "fixtures_valid": True, "kind": kind, "cases": len(cases),
                 "evaluated": 2 * len(ran), "not_evaluated": len(cases) - 2 * len(ran), "rows": rows},
-               1 if failed else 0)
+               1 if failed else UNRUN if unrun else 0)
 
 
 def test_deal(source):

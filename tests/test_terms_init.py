@@ -134,6 +134,13 @@ class Init(unittest.TestCase):
         self.assertEqual(code, 0)  # lint's own answer stands; the refresh failure goes to stderr
         self.assertEqual(target.read_text(), "keep")
 
+    def test_the_conduct_candidate_is_about_my_own_agent_and_never_a_buyer(self):
+        _, res = self.init([self.sale()])
+        term = next(t for t in res["terms"] if t["id"] == "my_agent_stayed_within_authority")
+        self.assertEqual(term["status"], "not this pack's concern")
+        self.assertIn("private conduct pack, which no buyer ever receives", term["detail"])
+        self.assertNotIn("buyer_stayed_polite", {t["id"] for t in res["terms"]})
+
     def test_an_unwritable_readiness_file_leaves_the_verb_answer_alone(self):
         _, res = self.init([self.sale()])
         folder = pathlib.Path(res["pack"]).parent

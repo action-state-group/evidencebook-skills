@@ -143,7 +143,9 @@ def run_of_digest(ws, prefix):
         raise WorkspaceError(f"{prefix!r} matches more than one digest; give more of it")
     folder, entry = hits[0]
     if not entry.get("run"):
-        raise WorkspaceError(f"digest {entry['digest'][:12]} was never run in this workspace; `terms run` it first")
+        how = "was published but never run" if entry.get("published") else "was never run"
+        raise WorkspaceError(f"digest {entry['digest'][:12]} {how} in this workspace, so there are no results to compare; "
+                             "`terms checkout` it, `terms run` it, then compare")
     return ws / entry["run"] / "result.json"
 
 

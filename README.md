@@ -79,18 +79,12 @@ way.
   `not_met` cases of the two served rows are edited copies of sealed records, not themselves sealed, since the
   evaluator reads fields and never verifies a seal), and
   each row says what decided it (`decided_by`, with the engine's commit or the
-  evaluator's digest). A live pack's cases are decided by the Python capsule-engine CLI's
-  `packs evaluate` (`--live-engine PATH` or `$CAPSULE_LIVE_ENGINE`; `--engine-commit` pins it
-  too). Its version number does not tell a source install from the release before it, so a git
-  install is named by the commit its install record holds, next to the version, and an install
-  from an index by its version alone; one from a directory (editable or not), an archive or a
-  wheel file names no engine and is not used. A judged pack's cases wait for its pinned judge,
+  evaluator's digest). A live pack's cases are decided by the Python capsule-engine CLI's `packs evaluate` (`--live-engine PATH` or `$CAPSULE_LIVE_ENGINE`). That CLI reports the same version number for a release and for later commits on main, so the version alone cannot name a source build. An install from a package index is named by its version. An install from git is named by the commit pip recorded, with the version beside it. An install from a local directory (editable or not), an archive or a wheel file records neither, so it is not used. `--engine-commit` (at least 7 characters of the commit) refuses any engine, admission or live, not built from that commit. A judged pack's cases wait for its pinned judge,
   a model key and the owner's go. An admission binary whose build revision is unknown is not used. A case
   that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun
-  is ever reported passed.
+  is ever reported passed. `terms test` then exits 3, not 0: 0 means every case ran and passed, 1 that one failed or the pack is invalid, and 3 that none failed but some did not run.
   A `conduct` pack is private: it is judged only for its owner and nobody else receives
-  or adjudicates it. Keeping it out of a counterparty's scoped bundle is to be enforced
-  where the bundle is built (tracked in capsule-emit#422), not by this repository.
+  or adjudicates it. Keeping it out of a counterparty's scoped bundle is enforced where the bundle is built: the evidencebook library refuses it (evidencebook#412), and `capsulectl` applies that refusal to `bundle` and `disclose` (evidencebook#414) from its next release. This repository does not enforce it.
   `admission-baseline` is an admission pack (`scope.kind: admission`,
   [`docs/admission-pack-profile-v0.md`](docs/admission-pack-profile-v0.md)):
   the policy a relying party runs before an act, over what it received about a

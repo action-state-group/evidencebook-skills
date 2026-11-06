@@ -49,7 +49,7 @@ PROPOSED_CANDIDATES = (
      "reads": [], "side": "own"},
     {"id": "buyer_confirmed_receipt", "statement": "The buyer confirmed they received the goods.",
      "tier": "recomputed", "reads": ["buyer_confirmed_at"], "side": "other"},
-    {"id": "buyer_stayed_polite", "statement": "The buyer stayed polite in the conversation.",
+    {"id": "my_agent_stayed_within_authority", "statement": "My agent offered only what I authorized.",
      "tier": "judged", "reads": [], "side": "own", "scope": "conduct"},
 )
 
@@ -117,9 +117,9 @@ def terms_of(source, candidates):
 def status_of(term, filled_fields, label_count, evaluable=None, records=0):
     """(status, detail, fields to add) of one term; `fields` is non-empty only for "needs a field"."""
     if term.get("scope") == "conduct":
-        return "not this pack's concern", "buyer conduct belongs to a conduct pack, not a deal terms pack", []
+        return "not this pack's concern", "how your own agent behaves belongs in your private conduct pack, which no buyer ever receives", []
     if term.get("side") == "other":
-        return "needs the other side", "decided from the buyer's own record, which this dataset does not hold", []
+        return "needs the other side", "only the buyer's own signed record can decide it; a field in your sales records is your account of it, not theirs", []
     missing = [f for f in term["reads"] if f not in filled_fields]
     if missing:
         return "needs a field", f"no record fills {', '.join(missing)}", missing

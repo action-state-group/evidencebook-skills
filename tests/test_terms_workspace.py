@@ -106,7 +106,8 @@ class Workspace(unittest.TestCase):
         code, pub = call("publish", self.src, "--workspace", self.ws)  # published, never run
         code, res = call("compare", first["run"], pub["definition_digest"][:12], "--workspace", self.ws)
         self.assertEqual(code, 1)
-        self.assertIn("never run", res["error"])
+        self.assertIn("published but never run", res["error"])
+        self.assertIn("checkout", res["error"])
 
     def test_undo_is_checkout_then_run_then_compare(self):
         first = self.run_pack()
