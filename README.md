@@ -79,8 +79,11 @@ way.
   `not_met` cases of the two served rows are edited copies of sealed records, not themselves sealed, since the
   evaluator reads fields and never verifies a seal), and
   each row says what decided it (`decided_by`, with the engine's commit or the
-  evaluator's digest). A live pack's cases wait for a capsule-engine entry point
-  (capsule-engine#286) and a judged pack's for its pinned judge, a model key and the
+  evaluator's digest). A live pack's cases are decided by the Python capsule-engine CLI's
+  `packs evaluate` (`--live-engine PATH` or `$CAPSULE_LIVE_ENGINE`; `--engine-commit` pins it
+  too). Its version number does not tell a source install from the release before it, so a git
+  install is named by the commit its install record holds, next to the version; an editable
+  install is not used. A judged pack's cases wait for its pinned judge, a model key and the
   owner's go. An engine whose build revision is unknown is not used. A case
   that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun
   is ever reported passed.

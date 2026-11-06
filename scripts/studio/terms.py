@@ -4,7 +4,7 @@
     terms init    (--deals FILE | --exports DIR | --store HOME) [--pack-id ID] [--workspace DIR]
     terms readiness SRC
     terms lint    SRC   (any kind: admission, deal, conduct, live, report)
-    terms test    SRC [--engine PATH [--engine-commit SHA]]
+    terms test    SRC [--engine PATH | --live-engine PATH] [--engine-commit SHA]
     terms run     SRC [--deals FILE | --exports DIR | --store HOME] [--dry-run] [--workspace DIR]   (no sales flag: the dataset the pack's workspace remembers)
     terms verify  PAGE
     terms compare A B [--workspace DIR]      (A, B: a run, or a pack digest from `history`)
@@ -304,7 +304,7 @@ def cmd_test(args):
     cases, issues = two_case.read_cases(path, source)
     if issues:
         return out({"passed": False, "kind": kind, "issues": issues}, 1)
-    rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit)
+    rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit, live_engine=args.live_engine, src=path)
     failed = any(r["evaluated"] and not r["passed"] for r in rows)
     unrun = sum(r["evaluated"] is False for r in rows)
     # `passed` is true only when every row ran and passed; a row that was not run is not a pass, so
@@ -667,6 +667,7 @@ def main(argv):
             p.add_argument("--workspace")
         if name == "test":
             p.add_argument("--engine", help="a capsule-engine binary, to decide admission cases (default: $CAPSULE_ENGINE)")
+            p.add_argument("--live-engine", help="the Python capsule-engine CLI, to decide live cases (default: $CAPSULE_LIVE_ENGINE)")
             p.add_argument("--engine-commit", help="refuse an engine not built from this commit (a prefix is enough)")
     p = sub.add_parser("run")
     p.add_argument("src")

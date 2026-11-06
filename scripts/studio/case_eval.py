@@ -11,8 +11,11 @@ passed: the caller sets `passed` to null while any row is unrun.
                commit with --engine-commit
     evaluator  the pack's own evaluator in scripts/evaluators, over the
                records the case carries: {"records": [<capsule>, ...], "date": "YYYY-MM-DD"}
-    live       capsule-engine has no entry point for a pack and a list of actions
-               yet (capsule-engine#286): not evaluated
+    live       the Python capsule-engine CLI (`capsule-engine packs evaluate`, capsule-engine#286),
+               named by --live-engine or $CAPSULE_LIVE_ENGINE, optionally pinned with
+               --engine-commit. Its version is a release number that a source install
+               shares with the release before it, so a git install is identified by the
+               commit its install record names
     judged     the pinned judge needs a model key, and a real judged run waits for
                the owner's go: not evaluated
 """
@@ -160,13 +163,89 @@ def run_inference_deals(source, cases):
 EVALUATORS = {"inference_deals": run_inference_deals}
 
 
-def run(kind, source, cases, engine=None, engine_commit=None, environ=None):
+LIVE_IDENTITY = """
+import importlib.metadata as m, json
+d = m.distribution("capsule-engine")
+u = json.loads(d.read_text("direct_url.json") or "{}")
+print(json.dumps({"version": d.version, "commit": (u.get("vcs_info") or {}).get("commit_id"),
+                  "editable": "dir_info" in u}))
+"""
+
+
+def live_engine_identity(engine):
+    """(identity, None) of the Python capsule-engine CLI `engine` names, or (None, why not). It is
+    identified by the interpreter its script runs under: the version of the installed distribution
+    and, for a git install, the commit its install record (PEP 610) names. An editable install has
+    neither a release nor a commit, so it is refused."""
+    found = shutil.which(engine)
+    if not found:
+        return None, f"{engine} is not an executable capsule-engine"
+    p = pathlib.Path(found).resolve()
+    try:
+        first = p.read_bytes()[:256].split(b"\n", 1)[0].decode()
+    except (OSError, UnicodeDecodeError):
+        first = ""
+    interp = first[2:].split() if first.startswith("#!") else []
+    if len(interp) != 1:
+        return None, f"{found} is not a Python console script with a single-interpreter shebang, so its install cannot be read"
+    try:
+        r = subprocess.run([interp[0], "-I", "-c", LIVE_IDENTITY], capture_output=True, text=True, timeout=30,
+                           stdin=subprocess.DEVNULL)
+        info = json.loads(r.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None, f"could not read the capsule-engine install under {interp[0]}"
+    if info["editable"]:
+        return None, "the engine is an editable install: it has no release or commit to name"
+    return {"name": "capsule-engine", "path": str(p), "version": info["version"], "commit": info["commit"]}, None
+
+
+def run_live(source, cases, engine, engine_commit, src):
+    if not engine:
+        return not_run(source, "no capsule-engine to decide it: pass --live-engine PATH or set CAPSULE_LIVE_ENGINE "
+                               "(the Python CLI with `packs evaluate`, capsule-engine#286)")
+    if src is None or pathlib.Path(src).name != "pack-source.yaml":
+        return not_run(source, "the engine reads a pack directory holding pack-source.yaml; this source is not named so")
+    ident, why = live_engine_identity(engine)
+    if why:
+        return not_run(source, why)
+    if engine_commit and not (ident["commit"] or "").startswith(engine_commit):
+        return not_run(source, f"the engine is {ident['version']} from {ident['commit'] or 'no recorded commit'}, "
+                               f"not the pinned {engine_commit}")
+    rows = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for row, pair in by_row(cases).items():
+            got, digest = [], None
+            for name in two_case.CASES:
+                case_file = pathlib.Path(tmp) / "case.json"
+                case_file.write_text(json.dumps(pair[name]))
+                try:
+                    r = subprocess.run([ident["path"], "packs", "evaluate", "--pack", str(pathlib.Path(src).parent),
+                                        "--input", str(case_file)],
+                                       capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+                    if r.returncode != 0:
+                        raise ValueError(f"refused: {(r.stderr or r.stdout).strip()[:300]}")
+                    doc = json.loads(r.stdout)
+                    (mine,) = [x for x in doc["rows"] if x["row"] == row]
+                    digest = doc["pack"]["digest"]
+                    if mine["result"] not in ROW_RESULTS.values():
+                        raise ValueError(f"the row is {mine['result']}: {mine.get('reason', '')}")
+                except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as e:
+                    rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated",
+                                 "evaluated": False, "reason": f"the engine could not decide the {name} case: "
+                                 f"{type(e).__name__}: {e}"})
+                    break
+                got.append(mine["result"])
+            else:
+                rows.append(row_report(row, tuple(got), {"decided_by": ident, "pack_digest": digest}))
+    return rows
+
+
+def run(kind, source, cases, engine=None, engine_commit=None, environ=None, live_engine=None, src=None):
     environ = os.environ if environ is None else environ
     if kind == "admission":
         return run_admission(source, cases, engine or environ.get("CAPSULE_ENGINE"), engine_commit)
     if kind == "live":
-        return not_run(source, "a live pack's cases are decided by capsule-engine, which has no entry point "
-                               "for a pack and a list of actions yet (capsule-engine#286)")
+        return run_live(source, cases, live_engine or environ.get("CAPSULE_LIVE_ENGINE"), engine_commit, src)
     if source.get("evaluator"):
         runner = EVALUATORS.get(source["evaluator"])
         if runner is None:

@@ -287,8 +287,8 @@ class LintNeverCrashes(unittest.TestCase):
 class TestOnEveryKind(unittest.TestCase):
     """`terms test` takes a pack of any kind and its met / not_met cases for every row.
     A deal pack and an evaluator pack (inference-deals) are run in process; an admission
-    pack by a capsule-engine binary named with --engine; live and judged packs have no
-    runner yet. A case that cannot run is reported not evaluated, never passed."""
+    pack by a capsule-engine binary named with --engine, a live pack by the Python CLI named
+    with --live-engine; judged packs have no runner yet. A case that cannot run is reported not evaluated, never passed."""
 
     SAMPLES = {k: ROOT / f"tests/fixtures/terms-samples/{k}/pack-source.yaml"
                for k in ("admission", "live", "report", "conduct")}
@@ -316,9 +316,10 @@ class TestOnEveryKind(unittest.TestCase):
                     self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0))
                     self.assertIn("waits for the owner's go", res["rows"][0]["reason"])
 
-    def test_live_names_the_engine_issue(self):
-        _, res = run_test(self.SAMPLES["live"])
-        self.assertIn("capsule-engine#286", res["rows"][0]["reason"])
+    def test_live_without_an_engine_says_how_to_name_one(self):
+        with unittest.mock.patch.dict("os.environ", clear=True):
+            _, res = run_test(self.SAMPLES["live"])
+        self.assertIn("--live-engine", res["rows"][0]["reason"])
 
     def test_the_evaluator_pack_runs_both_cases_of_every_row(self):
         code, res = run_test(ROOT / "packs/inference-deals/pack-source.yaml")
@@ -590,6 +591,128 @@ class RealAdmissionEngine(unittest.TestCase):
             self.assertRegex(r["decided_by"]["commit"], "^[0-9a-f]{40}$")
             if ref:
                 self.assertEqual(r["decided_by"]["commit"], ref)
+
+
+class LiveEngine(unittest.TestCase):
+    """`terms test` on a live pack, with the Python capsule-engine CLI named by --live-engine. The
+    fake CLI below checks the plumbing; its interpreter answers the identity query the way a git
+    install's metadata does. The real CLI runs when CAPSULE_LIVE_ENGINE names one."""
+    SAMPLE = ROOT / "tests/fixtures/terms-samples/live/pack-source.yaml"
+    SHA = "05185b02f121227d1e0cd30274396f7e826ec2d4"
+
+    def fake(self, body, identity=None):
+        """A CLI script under this interpreter, whose install record (the identity query) is `identity`."""
+        identity = {"version": "0.3.0", "commit": self.SHA, "editable": False} if identity is None else identity
+        patch = unittest.mock.patch.object(case_eval, "LIVE_IDENTITY", f"print({json.dumps(json.dumps(identity))})")
+        patch.start()
+        self.addCleanup(patch.stop)
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        f = pathlib.Path(d.name) / "capsule-engine"
+        f.write_text(f"#!{sys.executable}\nimport json, sys\n" + body)
+        f.chmod(0o755)
+        return str(f)
+
+    # An engine that reports the row not met when the input holds two actions.
+    ENGINE = """
+a = sys.argv
+doc = json.load(open(a[a.index("--input") + 1]))
+res = "not_met" if len(doc["actions"]) > 1 else "met"
+print(json.dumps({"engine": {"name": "capsule-engine", "version": "0.3.0"}, "pack": {"id": "x", "digest": "d" * 64},
+                  "verdict": "NO", "rows": [{"row": "no-duplicate-dispatch", "result": res, "reason": "r"}]}))
+"""
+
+    def test_cases_are_decided_by_the_engine_and_its_commit_is_named(self):
+        code, res = run_test(self.SAMPLE, "--live-engine", self.fake(self.ENGINE), "--engine-commit", self.SHA[:7])
+        self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, True, 2, 0), res)
+        by = res["rows"][0]["decided_by"]
+        self.assertEqual((by["name"], by["version"], by["commit"]), ("capsule-engine", "0.3.0", self.SHA))
+        self.assertEqual(res["rows"][0]["pack_digest"], "d" * 64)
+
+    def test_a_row_the_engine_decides_otherwise_fails(self):
+        code, res = run_test(self.SAMPLE, "--live-engine", self.fake(self.ENGINE.replace('"not_met"', '"met"')))
+        self.assertEqual((code, res["passed"]), (1, False), res)
+
+    def test_a_different_pin_leaves_the_rows_unrun(self):
+        code, res = run_test(self.SAMPLE, "--live-engine", self.fake(self.ENGINE), "--engine-commit", "deadbee")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("not the pinned deadbee", res["rows"][0]["reason"])
+
+    def test_a_pin_needs_a_recorded_commit(self):
+        engine = self.fake(self.ENGINE, {"version": "0.4.0", "commit": None, "editable": False})
+        _, res = run_test(self.SAMPLE, "--live-engine", engine, "--engine-commit", "05185b0")
+        self.assertIsNone(res["passed"])
+        _, res = run_test(self.SAMPLE, "--live-engine", engine)
+        self.assertEqual((res["passed"], res["rows"][0]["decided_by"]["version"]), (True, "0.4.0"), res)
+
+    def test_an_editable_install_is_not_used(self):
+        engine = self.fake(self.ENGINE, {"version": "0.3.0", "commit": None, "editable": True})
+        _, res = run_test(self.SAMPLE, "--live-engine", engine)
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+        self.assertIn("editable", res["rows"][0]["reason"])
+
+    def test_a_refusing_engine_leaves_the_rows_unrun(self):
+        engine = self.fake("sys.stderr.write('pack failed to load'); sys.exit(2)")
+        code, res = run_test(self.SAMPLE, "--live-engine", engine)
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("pack failed to load", res["rows"][0]["reason"])
+
+    def test_a_row_the_engine_cannot_evaluate_is_never_passed(self):
+        engine = self.fake(self.ENGINE.replace('"not_met" if len(doc["actions"]) > 1 else "met"', '"not_evaluable"'))
+        code, res = run_test(self.SAMPLE, "--live-engine", engine)
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, None, 0), res)
+        self.assertIn("not_evaluable", res["rows"][0]["reason"])
+
+    def test_output_that_is_not_the_verbs_is_unrun(self):
+        for body in ("print('hello')", "print(json.dumps({'rows': []}))"):
+            with self.subTest(body=body):
+                _, res = run_test(self.SAMPLE, "--live-engine", self.fake(body))
+                self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+
+    def test_a_missing_or_non_python_engine_leaves_the_rows_unrun(self):
+        _, res = run_test(self.SAMPLE, "--live-engine", "/nonexistent/capsule-engine")
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        f = pathlib.Path(d.name) / "capsule-engine"
+        f.write_bytes(b"\x7fELF binary")
+        f.chmod(0o755)
+        _, res = run_test(self.SAMPLE, "--live-engine", str(f))
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+        self.assertIn("shebang", res["rows"][0]["reason"])
+
+    def test_the_engine_may_be_named_by_the_environment(self):
+        with unittest.mock.patch.dict("os.environ", {"CAPSULE_LIVE_ENGINE": self.fake(self.ENGINE)}, clear=True):
+            _, res = run_test(self.SAMPLE)
+        self.assertEqual(res["passed"], True, res)
+
+    def test_a_pack_not_named_pack_source_is_unrun(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        import shutil
+        dst = pathlib.Path(d.name) / "pack"
+        shutil.copytree(self.SAMPLE.parent, dst)
+        (dst / "pack-source.yaml").rename(dst / "other.yaml")
+        _, res = run_test(dst / "other.yaml", "--live-engine", self.fake(self.ENGINE))
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+
+
+class RealLiveEngine(unittest.TestCase):
+    """The real Python capsule-engine, with nothing mocked: CI installs it at CAPSULE_ENGINE_PY_REF."""
+
+    @unittest.skipUnless(os.environ.get("CAPSULE_LIVE_ENGINE"), "CAPSULE_LIVE_ENGINE names no capsule-engine")
+    def test_the_real_engine_decides_the_sample_pack_and_names_its_commit(self):
+        code, res = run_test(LiveEngine.SAMPLE)
+        self.assertEqual((code, res["passed"], res["evaluated"]), (0, True, 2), res)
+        ref = os.environ.get("CAPSULE_ENGINE_PY_REF")
+        by = res["rows"][0]["decided_by"]
+        self.assertRegex(by["version"], r"^\d+\.\d+\.\d+")
+        if ref:
+            self.assertEqual(by["commit"], ref)
+            code, res = run_test(LiveEngine.SAMPLE, "--engine-commit", ref[:7])
+            self.assertEqual(res["passed"], True, res)
+            _, res = run_test(LiveEngine.SAMPLE, "--engine-commit", "deadbee")
+            self.assertIsNone(res["passed"])
 
 
 if __name__ == "__main__":
