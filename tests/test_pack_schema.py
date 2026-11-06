@@ -571,12 +571,14 @@ print(json.dumps({"verdict": "NO", "rows": [
         self.assertEqual((code, res["passed"]), (0, True), res)
         self.assertEqual(res["rows"][0]["decided_by"]["path"], str(pathlib.Path(engine).resolve()))
 
-    def test_a_commit_prefix_under_seven_characters_is_refused_before_any_engine_runs(self):
-        engine = self.fake(self.ENGINE)
-        for flag, kind_engine in (("--engine", engine), ("--live-engine", engine)):
-            code, res = run_test(self.SAMPLE, flag, kind_engine, "--engine-commit", "abc123")
-            self.assertEqual((code, res["passed"]), (1, False), res)
-            self.assertIn("at least 7", res["issues"][0])
+    def test_a_commit_prefix_under_seven_characters_is_refused_before_the_engine_runs(self):
+        marker = pathlib.Path(tempfile.mkdtemp()) / "ran"
+        self.addCleanup(lambda: marker.unlink(missing_ok=True))
+        engine = self.fake(f"open({str(marker)!r}, 'w').close()\n" + self.ENGINE)
+        code, res = run_test(self.SAMPLE, "--engine", engine, "--engine-commit", "abc123")
+        self.assertEqual((code, res["passed"]), (1, False), res)
+        self.assertIn("at least 7", res["issues"][0])
+        self.assertFalse(marker.exists())
 
     def test_an_engine_not_built_from_the_pinned_commit_is_not_used(self):
         engine = self.fake(self.ENGINE)
@@ -632,6 +634,15 @@ res = "not_met" if len(doc["actions"]) > 1 else "met"
 print(json.dumps({"engine": {"name": "capsule-engine", "version": "0.3.0"}, "pack": {"id": "x", "digest": "d" * 64},
                   "verdict": "NO", "rows": [{"row": "no-duplicate-dispatch", "result": res, "reason": "r"}]}))
 """
+
+    def test_a_commit_prefix_under_seven_characters_is_refused_before_the_engine_runs(self):
+        marker = pathlib.Path(tempfile.mkdtemp()) / "ran"
+        self.addCleanup(lambda: marker.unlink(missing_ok=True))
+        engine = self.fake(f"open({str(marker)!r}, 'w').close()\n" + self.ENGINE)
+        code, res = run_test(self.SAMPLE, "--live-engine", engine, "--engine-commit", self.SHA[:6])
+        self.assertEqual((code, res["passed"]), (1, False), res)
+        self.assertIn("at least 7", res["issues"][0])
+        self.assertFalse(marker.exists())
 
     def test_cases_are_decided_by_the_engine_and_its_commit_is_named(self):
         code, res = run_test(self.SAMPLE, "--live-engine", self.fake(self.ENGINE), "--engine-commit", self.SHA[:7])

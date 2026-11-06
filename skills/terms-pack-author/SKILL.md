@@ -25,7 +25,7 @@ checked if it is published (`in_pack: true`). The others are ideas kept in `cand
 (`in_pack: false`): they are never checked, and the table says what each is waiting for.
 
 - **checkable now**: the sales carry what the term needs, and the answer says how many sales it can decide.
-- **needs examples**: the term takes the seller's judgment, which these terms cannot run yet; a deal terms pack cannot run it, so it stays here even after four sales are labelled.
+- **needs examples**: the term takes the seller's judgment, which a deal terms pack cannot run yet, so it stays here even after four sales are labelled.
   Tell the seller so. If they want to say how it should go anyway, record their answer for
   each sale in `labels.json` beside the terms, as `{"matched_description": [{"deal_id": "...", "met": true}]}`
   (four sales; the table counts them).
@@ -33,7 +33,7 @@ checked if it is published (`in_pack: true`). The others are ideas kept in `cand
   it together with its partner. Ask whether they can add it to their sales records, or want to
   drop the term (delete the row from the pack, or the idea from `candidates.json`).
 - **needs the other side**: only the buyer's own signed record can decide it; a field in the seller's sales records is the seller's account of it, not the buyer's.
-- **not this pack's concern**: how the seller's own agent behaves belongs in their private conduct pack, which no buyer ever receives.
+- **not this pack's concern**: how the seller's own agent behaves belongs in their private conduct pack, which is kept for them and is never meant for a buyer.
 
 Tell the seller what each term is and its status in a sentence each. The sales are not
 sent anywhere or shown to you: you see the field names and counts and the sales the seller labels.

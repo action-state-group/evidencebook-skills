@@ -117,7 +117,7 @@ def terms_of(source, candidates):
 def status_of(term, filled_fields, label_count, evaluable=None, records=0):
     """(status, detail, fields to add) of one term; `fields` is non-empty only for "needs a field"."""
     if term.get("scope") == "conduct":
-        return "not this pack's concern", "how your own agent behaves belongs in your private conduct pack, which no buyer ever receives", []
+        return "not this pack's concern", "how your own agent behaves belongs in your private conduct pack, which is kept for you and is never meant for a buyer", []
     if term.get("side") == "other":
         return "needs the other side", "only the buyer's own signed record can decide it; a field in your sales records is your account of it, not theirs", []
     missing = [f for f in term["reads"] if f not in filled_fields]

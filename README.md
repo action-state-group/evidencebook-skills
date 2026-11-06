@@ -84,7 +84,7 @@ way.
   that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun
   is ever reported passed. `terms test` then exits 3, not 0: 0 means every case ran and passed, 1 that one failed or the pack is invalid, and 3 that none failed but some did not run.
   A `conduct` pack is private: it is judged only for its owner and nobody else receives
-  or adjudicates it. Keeping it out of a counterparty's scoped bundle is enforced where the bundle is built: the evidencebook library refuses it (evidencebook#412), and `capsulectl` applies that refusal to `bundle` and `disclose` (evidencebook#414) from its next release. This repository does not enforce it.
+  or adjudicates it. Keeping it out of a counterparty's scoped bundle is enforced where the bundle is built: the evidencebook library refuses it (evidencebook#412), and `capsulectl` applies that refusal to `bundle` and `disclose` (evidencebook#414) from its next release, for the Results of the conduct packs it is told about; covering every record type and finding the packs by itself is tracked in evidencebook#418. This repository does not enforce it.
   `admission-baseline` is an admission pack (`scope.kind: admission`,
   [`docs/admission-pack-profile-v0.md`](docs/admission-pack-profile-v0.md)):
   the policy a relying party runs before an act, over what it received about a

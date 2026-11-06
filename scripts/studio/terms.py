@@ -677,7 +677,7 @@ def main(argv):
         if name == "test":
             p.add_argument("--engine", help="a capsule-engine binary, to decide admission cases (default: $CAPSULE_ENGINE)")
             p.add_argument("--live-engine", help="the Python capsule-engine CLI, to decide live cases (default: $CAPSULE_LIVE_ENGINE)")
-            p.add_argument("--engine-commit", help="refuse an engine not built from this commit (a prefix is enough)")
+            p.add_argument("--engine-commit", help=f"refuse an engine not built from this commit (at least {MIN_COMMIT_PREFIX} characters of it)")
     p = sub.add_parser("run")
     p.add_argument("src")
     g = p.add_mutually_exclusive_group()
