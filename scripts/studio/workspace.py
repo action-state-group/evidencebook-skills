@@ -31,6 +31,16 @@ def _checked(path):
     return path
 
 
+def subdir(folder, name, mode=None):
+    """folder/name as a real directory (a link is refused: it would carry writes out of the workspace)."""
+    d = folder / name
+    if d.is_symlink() or (d.exists() and not d.is_dir()):
+        raise WorkspaceError(f"{d} is a link or not a folder; refusing to write through it")
+    if not d.exists():
+        d.mkdir(mode=mode) if mode else d.mkdir()
+    return d
+
+
 def _write(path, text):
     _checked(path)
     tmp = path.with_name(path.name + ".tmp")
@@ -93,11 +103,11 @@ def record(folder, source_path, digest, version, at, run=None, rehearsal=None, p
         entry["run"], entry["rehearsal"] = run, bool(rehearsal)
     if published is not None:
         entry["published"] = published
-    snap = folder / "history" / f"{digest[:12]}.yaml"
-    (folder / "history").mkdir(exist_ok=True)
-    if not snap.exists():
-        _checked(snap)
-        shutil.copyfile(source_path, snap)
+    # The snapshot is the source as last run or published under this digest: the digest leaves out
+    # words such as the title, so the latest bytes win and `checkout` can tell an unrecorded edit.
+    snap = subdir(folder, "history") / f"{digest[:12]}.yaml"
+    _checked(snap)
+    shutil.copyfile(source_path, snap)
     _write(folder / "history.jsonl", "".join(json.dumps(e) + "\n" for e in entries))
     return entry
 
@@ -131,8 +141,10 @@ def run_of_digest(ws, prefix):
 def checkout(folder, src, prefix, current_digest, force):
     entries = history(folder)
     entry = find(entries, prefix, str(folder / "history.jsonl"))
-    if not force and not any(e["digest"] == current_digest for e in entries):
-        raise WorkspaceError(f"{src} has changes no run or publish has recorded (digest {str(current_digest)[:12]}); run it first, or pass --force to discard them")
+    if not force:
+        mine = folder / "history" / f"{str(current_digest)[:12]}.yaml"
+        if current_digest is None or not mine.is_file() or mine.read_bytes() != pathlib.Path(src).read_bytes():
+            raise WorkspaceError(f"{src} has changes no run or publish has recorded; run it first, or pass --force to discard them")
     snap = folder / "history" / f"{entry['digest'][:12]}.yaml"
     if not snap.is_file():
         raise WorkspaceError(f"{snap} is missing; that digest cannot be restored")
@@ -143,11 +155,15 @@ def checkout(folder, src, prefix, current_digest, force):
 
 def keep_transcript(folder, file, now):
     """Opt-in, private: a copy under private/ (0700, files 0600). No other verb reads or copies it."""
-    private = folder / "private"
-    private.mkdir(mode=0o700, exist_ok=True)
+    private = subdir(folder, "private", 0o700)
     os.chmod(private, 0o700)
-    dest = private / f"transcript-{now.strftime('%Y%m%dT%H%M%SZ')}{pathlib.Path(file).suffix or '.txt'}"
-    _checked(dest)
+    stamp = f"transcript-{now.strftime('%Y%m%dT%H%M%S')}Z"
+    suffix = pathlib.Path(file).suffix or ".txt"
+    dest = private / f"{stamp}{suffix}"
+    n = 1
+    while dest.exists() or dest.is_symlink():
+        n += 1
+        dest = private / f"{stamp}-{n}{suffix}"
     try:
         data = pathlib.Path(file).read_bytes()
     except OSError as e:

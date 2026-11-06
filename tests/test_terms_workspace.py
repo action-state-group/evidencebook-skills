@@ -159,6 +159,59 @@ class Workspace(unittest.TestCase):
         published = sorted(p.name for p in pathlib.Path(pub["published"]).iterdir())
         self.assertEqual(published, ["compiled.json", "pack-source.yaml", "rules-checker.json"])
 
+    def test_history_and_checkout_find_the_pack_wherever_its_source_sits(self):
+        drafts = self.ws / "drafts"
+        drafts.mkdir()
+        loose = drafts / "foo.yaml"
+        loose.write_text(self.src.read_text())
+        code, res = call("run", loose, "--workspace", self.ws, "--dry-run", "--generated-at", GENERATED)
+        self.assertEqual(code, 0, res)
+        code, hist = call("history", loose, "--workspace", self.ws)
+        self.assertEqual((code, [e["digest"] for e in hist["history"]]), (0, [res["pack_digest"]]))
+        self.assertEqual(call("checkout", loose, res["pack_digest"][:8], "--workspace", self.ws)[0], 0)
+
+    def test_checkout_notices_an_edit_the_digest_does_not_cover(self):
+        first = self.run_pack()
+        text = self.src.read_text()
+        self.src.write_text(text.replace("stickers terms", "stickers, my words"))
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws)
+        self.assertEqual(code, 1, res)
+        self.assertIn("stickers, my words", self.src.read_text())
+        self.assertEqual(self.run_pack()["pack_digest"], first["pack_digest"])  # same digest, newest bytes kept
+        self.assertEqual(call("checkout", self.src, first["pack_digest"], "--workspace", self.ws)[0], 0)
+        self.assertIn("stickers, my words", self.src.read_text())
+
+    def test_checkout_says_which_two_digests_to_compare(self):
+        first = self.run_pack()
+        self.edit("delivered_within_days(2)", "delivered_within_days(3)", "0.2.0")
+        second = self.run_pack()
+        code, res = call("checkout", self.src, first["pack_digest"], "--workspace", self.ws)
+        self.assertEqual(res["replaced"], second["pack_digest"])
+        self.assertIn(f"terms compare {second['pack_digest'][:12]} {first['pack_digest'][:12]}", res["next"])
+
+    def test_a_linked_history_or_private_folder_is_refused(self):
+        outside = pathlib.Path(self.tmp.name) / "outside"
+        outside.mkdir()
+        talk = pathlib.Path(self.tmp.name) / "talk.md"
+        talk.write_text("x")
+        (self.folder / "private").symlink_to(outside)
+        code, res = call("keep-transcript", self.src, talk, "--workspace", self.ws)
+        self.assertEqual(code, 1, res)
+        (self.folder / "history").symlink_to(outside)
+        code, res = call("run", self.src, "--workspace", self.ws, "--dry-run")
+        self.assertEqual(code, 1, res)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_two_transcripts_in_one_second_are_both_kept(self):
+        talk = pathlib.Path(self.tmp.name) / "talk.md"
+        talk.write_text("x")
+        import workspace
+        import datetime
+        now = datetime.datetime(2026, 11, 6, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        one = workspace.keep_transcript(self.folder, talk, now)
+        two = workspace.keep_transcript(self.folder, talk, now)
+        self.assertNotEqual(one, two)
+
     def test_read_only_verbs_do_not_make_the_workspace(self):
         gone = pathlib.Path(self.tmp.name) / "never"
         code, _ = call("compare", "aaaaaa", "bbbbbb", "--workspace", gone)

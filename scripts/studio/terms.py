@@ -588,9 +588,16 @@ def cmd_publish(args):
 
 
 def pack_folder(args):
+    """(workspace, SRC, the pack's folder): history lives at packs/<pack_id> wherever SRC sits, as `run` writes it."""
     ws = workspace_of(args, create=False)
     path = pathlib.Path(args.src).resolve()
-    return ws, path, inside(ws, path.parent)
+    try:
+        pack_id = pack_compile.load_source(path.read_text())["pack_id"]
+    except (OSError, yaml.YAMLError, KeyError, TypeError) as e:
+        raise TermsError(f"cannot read a pack_id from {args.src}: {e}")
+    if not isinstance(pack_id, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", pack_id):
+        raise TermsError(f"{args.src} has no usable pack_id")
+    return ws, path, inside(ws, ws / "packs" / pack_id)
 
 
 def cmd_history(args):
@@ -604,6 +611,7 @@ def cmd_history(args):
 
 def cmd_checkout(args):
     ws, path, folder = pack_folder(args)
+    inside(ws, path)  # the one file checkout overwrites
     try:
         current = deal_pack.compiled(load_pack(args.src))["definition_digest"]
     except TermsError:
@@ -612,8 +620,9 @@ def cmd_checkout(args):
         current = None
     entry = wsm.checkout(folder, path, args.digest, current, args.force)
     refresh_or_say(args.src, None, ws)
-    return out({"restored": entry["digest"], "version": entry["version"], "pack": str(path),
-                "next": f"terms run {args.src}, then terms compare {entry['digest'][:12]} <the digest it reports>"})
+    out_ = {"restored": entry["digest"], "version": entry["version"], "pack": str(path), "replaced": current}
+    out_["next"] = f"terms run {args.src}" + (f", then terms compare {current[:12]} {entry['digest'][:12]}" if current else "")
+    return out(out_)
 
 
 def cmd_keep_transcript(args):
