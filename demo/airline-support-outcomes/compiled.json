@@ -1,7 +1,7 @@
 {
   "contract": "airline-support-outcomes/v1",
   "contract_version": "rubric-v3.3",
-  "contract_ref": "airline-support-outcomes@1.5.0",
+  "contract_ref": "airline-support-outcomes@1.6.0",
   "outcome_statement": "The customer's request is resolved correctly, within airline policy",
   "resolution_rule": "a conversation is resolved only when at least one criterion is met and every required criterion that applies to it is met; a criterion judged out_of_scope, where allowed, does not apply and never counts toward resolution (scripts/rollup.py:all_required_met)",
   "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
@@ -128,7 +128,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "40a4f6278511c972232293efb6cacca359641d81a04e268cd2c7c3f59870c9bc",
+  "pack_source_digest": "e205b20e6b5a7690432672c894b700234dbfd28e8f8d2f05c83c1c4d48d66cb7",
   "title": "Airline support outcomes",
   "switches": {
     "within_fare_rules_recomputed": false,

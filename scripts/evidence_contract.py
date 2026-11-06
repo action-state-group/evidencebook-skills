@@ -180,6 +180,10 @@ def from_pack(source, base_dir=None):
                 req["evidence_rule"] = "\n".join(rule)
                 req["forward_verdict"] = FORWARD_RECOMPUTED
                 req["backward_verdict"] = "DETERMINISTIC"
+            if oos and checkability == "judged":
+                # EC out_of_scope_allowed: one spelling, present and true or absent.
+                # A recomputed row's answers are the three verdicts, so it never carries it.
+                req["out_of_scope_allowed"] = True
             if crit.get("measurability"):
                 req["measurability"] = crit["measurability"]
             if req["profile"] == "obligation":

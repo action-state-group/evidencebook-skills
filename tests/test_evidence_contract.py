@@ -35,8 +35,8 @@ EU_SOURCE = REPO_ROOT / "packs/eu-ai-act-obligations/pack-source.yaml"
 EU_PUBLISHED = REPO_ROOT / "contracts/eu-ai-act-obligations/0.2.1.json"
 SCHEMA = REPO_ROOT / "tests/fixtures/capsule-engine/evidence-contract-v0.json"
 # The EC v0 schema agent-action-capsule's interop profile pins (its Dependency
-# boundary, row EC): capsule-engine's file at fd43d43, by SHA-256.
-SCHEMA_SHA256 = "6d10d5eb97e15421db0ab922b5f6d1f0a2e9f453fb64e52fb45306ba029ad480"
+# boundary, row EC): capsule-engine's file at 773ae9e, by SHA-256.
+SCHEMA_SHA256 = "6b969610e6f120a9f5b98555aa5045644c62665f14075bb83fb9e78bab21b770"
 SOURCES = sorted(REPO_ROOT.glob("packs/*/pack-source.yaml")) + sorted(REPO_ROOT.glob("scripts/specs/*.yaml"))
 
 
@@ -174,6 +174,28 @@ class FromPack(unittest.TestCase):
         reqs = ec.from_pack(source)["requirements"]
         self.assertNotIn("out_of_scope", reqs[0]["evidence_rule"])
         self.assertIn("out_of_scope when", reqs[1]["evidence_rule"])
+
+    def test_out_of_scope_allowed_member_is_true_or_absent(self):
+        # EC out_of_scope_allowed: judged native rows the switch offers it on;
+        # none for never_out_of_scope, for a recomputed row, or with the switch off.
+        source = minimal_source()
+        source["switches"] = {"out_of_scope_verdict": True}
+        source["checks"][0]["criteria"][0]["never_out_of_scope"] = True
+        reqs = ec.from_pack(source)["requirements"]
+        self.assertNotIn("out_of_scope_allowed", reqs[0])
+        self.assertIs(reqs[1].get("out_of_scope_allowed"), True)
+        self.assertEqual(reqs[1]["mode"], "judged")
+        off = minimal_source()
+        off["switches"] = {"out_of_scope_verdict": False}
+        self.assertFalse(any("out_of_scope_allowed" in r for r in ec.from_pack(off)["requirements"]))
+
+    def test_a_recomputed_row_never_carries_out_of_scope_allowed(self):
+        source = minimal_source()
+        source["switches"] = {"out_of_scope_verdict": True}
+        source["checks"][0]["criteria"][1] = _criterion("two", tier="recomputed", fold_id="fold.two")
+        reqs = ec.from_pack(source)["requirements"]
+        self.assertEqual(reqs[1]["backward_verdict"], "DETERMINISTIC")
+        self.assertNotIn("out_of_scope_allowed", reqs[1])
 
     def test_switches_resolve_to_what_runs(self):
         source = minimal_source()

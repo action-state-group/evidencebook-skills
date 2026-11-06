@@ -40,8 +40,8 @@
     },
     "verdict": {
       "type": "string",
-      "description": "The three-bucket judged-outcome vocabulary, a DIFFERENT axis from bundleAssertionStatus/contractResult: verdict is about the judged outcome once evidence sufficiency allows a determination at all. A fold MUST NOT render met/not_met when the underlying contractResult is anything but SATISFIED; NOT_APPLICABLE is a distinct requirement-level exclusion, never spelled not_evaluable.",
-      "enum": ["met", "not_met", "not_evaluable"]
+      "description": "The judged-outcome vocabulary, a DIFFERENT axis from bundleAssertionStatus/contractResult: verdict is about the judged outcome once evidence sufficiency allows a determination at all. A fold MUST NOT render met, not_met or out_of_scope when the underlying contractResult is anything but SATISFIED. out_of_scope is a judged outcome (evaluated against sufficient evidence, the situation the requirement asks about did not arise), only for a requirement carrying out_of_scope_allowed, and never met. NOT_APPLICABLE is a distinct requirement-level exclusion with no claim, never spelled not_evaluable or out_of_scope.",
+      "enum": ["met", "not_met", "not_evaluable", "out_of_scope"]
     },
     "window": {
       "type": "object",
@@ -167,7 +167,7 @@
       }
     },
     "requirementNativeBase": {
-      "description": "capsule-engine's own EvidenceContract.canonical_dict() shape (field-for-field for outcome, reused unchanged for obligation) -- the outcome and obligation profiles are the only two that reuse this flat dataclass shape in real code today.",
+      "description": "capsule-engine's own EvidenceContract.canonical_dict() shape (field-for-field for outcome, reused unchanged for obligation) -- the outcome and obligation profiles are the only two that reuse this flat dataclass shape in real code today. One member is not a dataclass field: out_of_scope_allowed, which a contract compiler writes (no capsule-engine pack offers out_of_scope today).",
       "type": "object",
       "required": ["id", "statement", "evidence_rule", "forward_verdict", "backward_verdict"],
       "additionalProperties": false,
@@ -207,7 +207,11 @@
         },
         "clause_ref": { "type": "string" },
         "clause": { "$ref": "#/$defs/clauseSpec" },
-        "epistemic_type": { "$ref": "#/$defs/epistemicType" }
+        "epistemic_type": { "$ref": "#/$defs/epistemicType" },
+        "out_of_scope_allowed": {
+          "description": "The requirement allows the out_of_scope verdict (Evidence Result v0, the out_of_scope verdict): a pack's switch compiled per requirement, absent on a requirement marked never out of scope. One spelling: present and true, or absent. Only the two native shapes carry it; the abstract shapes are closed to it, and on an open stub the same name grants nothing.",
+          "const": true
+        }
       }
     },
     "requirementOutcomeNative": {
