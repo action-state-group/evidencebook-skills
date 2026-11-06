@@ -166,17 +166,29 @@ EVALUATORS = {"inference_deals": run_inference_deals}
 LIVE_IDENTITY = """
 import importlib.metadata as m, json
 d = m.distribution("capsule-engine")
-u = json.loads(d.read_text("direct_url.json") or "{}")
-print(json.dumps({"version": d.version, "commit": (u.get("vcs_info") or {}).get("commit_id"),
-                  "editable": "dir_info" in u}))
+print(json.dumps({"version": d.version, "direct_url": json.loads(d.read_text("direct_url.json") or "null")}))
 """
+
+
+def classify_install(info):
+    """(identity fields, None) or (None, why not) for an installed capsule-engine: `info` is its
+    version and its PEP 610 install record (None for an install from an index). A git install is
+    named by its commit; an index install by its version alone. A directory, an archive or a wheel
+    file is neither a commit nor a release, so it names no engine."""
+    record = info.get("direct_url")
+    if record is None:
+        return {"version": info["version"], "commit": None}, None
+    commit = (record.get("vcs_info") or {}).get("commit_id") if isinstance(record, dict) else None
+    if not commit:
+        return None, ("the engine was installed from a directory or an archive, not from a git commit or an index: "
+                      "it has no commit or release to name")
+    return {"version": info["version"], "commit": commit}, None
 
 
 def live_engine_identity(engine):
     """(identity, None) of the Python capsule-engine CLI `engine` names, or (None, why not). It is
-    identified by the interpreter its script runs under: the version of the installed distribution
-    and, for a git install, the commit its install record (PEP 610) names. An editable install has
-    neither a release nor a commit, so it is refused."""
+    identified by the interpreter its console script names; `python` in the identity is that
+    interpreter, which also runs the script (isolated, so what was identified is what runs)."""
     found = shutil.which(engine)
     if not found:
         return None, f"{engine} is not an executable capsule-engine"
@@ -186,17 +198,19 @@ def live_engine_identity(engine):
     except (OSError, UnicodeDecodeError):
         first = ""
     interp = first[2:].split() if first.startswith("#!") else []
-    if len(interp) != 1:
-        return None, f"{found} is not a Python console script with a single-interpreter shebang, so its install cannot be read"
+    if len(interp) != 1 or not pathlib.Path(interp[0]).name.startswith("python"):
+        return None, (f"{found} is not a console script that names its Python interpreter in its shebang "
+                      "(pip writes a /bin/sh launcher when that path has a space or is long), so its install cannot be read")
     try:
         r = subprocess.run([interp[0], "-I", "-c", LIVE_IDENTITY], capture_output=True, text=True, timeout=30,
                            stdin=subprocess.DEVNULL)
         info = json.loads(r.stdout)
-    except (OSError, subprocess.SubprocessError, ValueError):
+        fields, why = classify_install(info)
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
         return None, f"could not read the capsule-engine install under {interp[0]}"
-    if info["editable"]:
-        return None, "the engine is an editable install: it has no release or commit to name"
-    return {"name": "capsule-engine", "path": str(p), "version": info["version"], "commit": info["commit"]}, None
+    if why:
+        return None, why
+    return {"name": "capsule-engine", "path": str(p), "python": interp[0], **fields}, None
 
 
 def run_live(source, cases, engine, engine_commit, src):
@@ -219,7 +233,7 @@ def run_live(source, cases, engine, engine_commit, src):
                 case_file = pathlib.Path(tmp) / "case.json"
                 case_file.write_text(json.dumps(pair[name]))
                 try:
-                    r = subprocess.run([ident["path"], "packs", "evaluate", "--pack", str(pathlib.Path(src).parent),
+                    r = subprocess.run([ident["python"], "-I", ident["path"], "packs", "evaluate", "--pack", str(pathlib.Path(src).parent),
                                         "--input", str(case_file)],
                                        capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
                     if r.returncode != 0:

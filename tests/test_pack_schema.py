@@ -593,6 +593,9 @@ class RealAdmissionEngine(unittest.TestCase):
                 self.assertEqual(r["decided_by"]["commit"], ref)
 
 
+GIT = {"url": "https://example/capsule-engine", "vcs_info": {"vcs": "git", "commit_id": "05185b02f121227d1e0cd30274396f7e826ec2d4"}}
+
+
 class LiveEngine(unittest.TestCase):
     """`terms test` on a live pack, with the Python capsule-engine CLI named by --live-engine. The
     fake CLI below checks the plumbing; its interpreter answers the identity query the way a git
@@ -600,10 +603,11 @@ class LiveEngine(unittest.TestCase):
     SAMPLE = ROOT / "tests/fixtures/terms-samples/live/pack-source.yaml"
     SHA = "05185b02f121227d1e0cd30274396f7e826ec2d4"
 
-    def fake(self, body, identity=None):
+    def fake(self, body, identity=None):  # noqa: D417
         """A CLI script under this interpreter, whose install record (the identity query) is `identity`."""
-        identity = {"version": "0.3.0", "commit": self.SHA, "editable": False} if identity is None else identity
-        patch = unittest.mock.patch.object(case_eval, "LIVE_IDENTITY", f"print({json.dumps(json.dumps(identity))})")
+        identity = {"version": "0.3.0", "direct_url": GIT} if identity is None else identity
+        info = {"version": identity["version"], "direct_url": identity["direct_url"]}
+        patch = unittest.mock.patch.object(case_eval, "LIVE_IDENTITY", f"print({json.dumps(json.dumps(info))})")
         patch.start()
         self.addCleanup(patch.stop)
         d = tempfile.TemporaryDirectory()
@@ -639,17 +643,27 @@ print(json.dumps({"engine": {"name": "capsule-engine", "version": "0.3.0"}, "pac
         self.assertIn("not the pinned deadbee", res["rows"][0]["reason"])
 
     def test_a_pin_needs_a_recorded_commit(self):
-        engine = self.fake(self.ENGINE, {"version": "0.4.0", "commit": None, "editable": False})
+        engine = self.fake(self.ENGINE, {"version": "0.4.0", "direct_url": None})
         _, res = run_test(self.SAMPLE, "--live-engine", engine, "--engine-commit", "05185b0")
         self.assertIsNone(res["passed"])
         _, res = run_test(self.SAMPLE, "--live-engine", engine)
         self.assertEqual((res["passed"], res["rows"][0]["decided_by"]["version"]), (True, "0.4.0"), res)
 
-    def test_an_editable_install_is_not_used(self):
-        engine = self.fake(self.ENGINE, {"version": "0.3.0", "commit": None, "editable": True})
-        _, res = run_test(self.SAMPLE, "--live-engine", engine)
-        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
-        self.assertIn("editable", res["rows"][0]["reason"])
+    def test_an_install_from_a_directory_an_archive_or_a_wheel_is_not_used(self):
+        for record in ({"url": "file:///x", "dir_info": {"editable": True}}, {"url": "file:///x", "dir_info": {}},
+                       {"url": "file:///x.whl", "archive_info": {"hash": "sha256=1"}}, {"url": "file:///x", "vcs_info": {}}):
+            with self.subTest(record=record):
+                _, res = run_test(self.SAMPLE, "--live-engine", self.fake(self.ENGINE, {"version": "0.3.0", "direct_url": record}))
+                self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+                self.assertIn("directory or an archive", res["rows"][0]["reason"])
+
+    def test_the_engine_runs_isolated_under_the_identified_interpreter(self):
+        # A PYTHONPATH that shadows the installed package must not reach the engine that decides.
+        engine = self.fake("if not sys.flags.isolated:\n    sys.exit(3)\n" + self.ENGINE)
+        with unittest.mock.patch.dict("os.environ", {"PYTHONPATH": "/nonexistent"}):
+            _, res = run_test(self.SAMPLE, "--live-engine", engine)
+        self.assertEqual(res["passed"], True, res)
+        self.assertEqual(res["rows"][0]["decided_by"]["python"], sys.executable)
 
     def test_a_refusing_engine_leaves_the_rows_unrun(self):
         engine = self.fake("sys.stderr.write('pack failed to load'); sys.exit(2)")
@@ -677,6 +691,10 @@ print(json.dumps({"engine": {"name": "capsule-engine", "version": "0.3.0"}, "pac
         f = pathlib.Path(d.name) / "capsule-engine"
         f.write_bytes(b"\x7fELF binary")
         f.chmod(0o755)
+        _, res = run_test(self.SAMPLE, "--live-engine", str(f))
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+        self.assertIn("shebang", res["rows"][0]["reason"])
+        f.write_text("#!/bin/sh\nexec python \"$@\"\n")
         _, res = run_test(self.SAMPLE, "--live-engine", str(f))
         self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
         self.assertIn("shebang", res["rows"][0]["reason"])

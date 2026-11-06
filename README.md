@@ -82,9 +82,10 @@ way.
   evaluator's digest). A live pack's cases are decided by the Python capsule-engine CLI's
   `packs evaluate` (`--live-engine PATH` or `$CAPSULE_LIVE_ENGINE`; `--engine-commit` pins it
   too). Its version number does not tell a source install from the release before it, so a git
-  install is named by the commit its install record holds, next to the version; an editable
-  install is not used. A judged pack's cases wait for its pinned judge, a model key and the
-  owner's go. An engine whose build revision is unknown is not used. A case
+  install is named by the commit its install record holds, next to the version, and an install
+  from an index by its version alone; one from a directory (editable or not), an archive or a
+  wheel file names no engine and is not used. A judged pack's cases wait for its pinned judge,
+  a model key and the owner's go. An admission binary whose build revision is unknown is not used. A case
   that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun
   is ever reported passed.
   A `conduct` pack is private: it is judged only for its owner and nobody else receives
