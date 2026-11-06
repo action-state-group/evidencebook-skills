@@ -60,7 +60,7 @@ jobs:
     # commit (`packs evaluate` is on main, in no release yet).
     runs-on: ubuntu-latest
     env:
-      CAPSULE_ENGINE_PY_REF: 05185b02f121227d1e0cd30274396f7e826ec2d4
+      CAPSULE_ENGINE_PY_REF: ef03127fef07c002187bd28999a6c09bd63c3f97
     steps:
       - uses: actions/checkout@v4
         with:
