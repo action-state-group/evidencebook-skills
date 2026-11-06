@@ -35,7 +35,8 @@ reads are only read. With no --workspace or $TERMS_WORKSPACE, a SRC inside a pac
 `init` made names its own workspace.
 
 A Result is Evidence Result v0 (scripts/result_v0.py), one claim per sale per
-row, plus two document members: `x-pack` (the pack's id, version, definition
+row, `plan_ref` and `dataset_ref` (section 7.3: the digests of plan.json and dataset.json,
+written beside result.json; scripts/studio/dataset_plan.py), plus two document members: `x-pack` (the pack's id, version, definition
 digest and each row's digest) and, on a rehearsal, `x-rehearsal: true`. The page
 carries result.json's exact bytes in a <script type="application/json">, and
 states their SHA-256 beside them; `terms verify` checks the page against itself
@@ -65,6 +66,7 @@ import yaml  # noqa: E402
 import admission_pack  # noqa: E402
 import case_eval  # noqa: E402
 import deal_pack  # noqa: E402
+import dataset_plan  # noqa: E402
 import deal_store  # noqa: E402
 import pack_compile  # noqa: E402
 import pack_schema  # noqa: E402
@@ -197,6 +199,9 @@ def build_result(source, deals, generated_at, rehearsal):
         "rows": [{"id": r["id"], "statement": r["statement"], "row_digest": r["row_digest"]} for r in rows],
         "sales": {d["deal_id"]: hashlib.sha256(rfc8785.dumps(d)).hexdigest() for d in deals},
     }
+    plan, dataset = dataset_plan.build(deals)
+    merged["plan_ref"] = dataset_plan.digest_ref(dataset_plan.digest_of(plan))
+    merged["dataset_ref"] = dataset_plan.digest_ref(dataset_plan.digest_of(dataset))
     if rehearsal:
         merged["x-rehearsal"] = True
     return merged
@@ -465,6 +470,9 @@ def cmd_run(args):
     run = next_run_dir(ws, source["pack_id"])
     (run / "result.json").write_bytes(raw)
     (run / "report.html").write_text(page_html(result, raw), encoding="utf-8")
+    plan, dataset = dataset_plan.build(deals)  # the documents plan_ref and dataset_ref name
+    (run / "plan.json").write_bytes(dataset_plan.canonical_bytes(plan))
+    (run / "dataset.json").write_bytes(dataset_plan.canonical_bytes(dataset))
     met, total = came_through(result)
     folder = inside(ws, ws / "packs" / source["pack_id"])
     folder.mkdir(parents=True, exist_ok=True)
@@ -488,6 +496,29 @@ def cmd_run(args):
 
 _SCRIPT = re.compile(r'<script type="application/json" id="terms-result" data-sha256="([0-9a-f]{64})" '
                      r'data-rehearsal="(true|false)" data-pack-digest="([0-9a-f]{64})">(.*?)</script>', re.S)
+
+
+def cited_documents(result, folder):
+    """Issues with plan.json and dataset.json beside the page, which are optional: a document
+    that is there must be the one the Result's plan_ref / dataset_ref names, and the dataset
+    must cite that plan."""
+    found = {}
+    for name, member in (("plan.json", "plan_ref"), ("dataset.json", "dataset_ref")):
+        path = folder / name
+        if not path.exists():
+            continue
+        try:
+            document = json.loads(path.read_bytes())
+        except ValueError:
+            return [f"{name} beside the page is not JSON"]
+        ref = result.get(member)
+        if not isinstance(ref, dict) or dataset_plan.digest_of(document) != ref.get("digest"):
+            return [f"{name} beside the page is not the document the Result's {member} names"]
+        found[name] = document
+    dataset = found.get("dataset.json")
+    if dataset is not None and "plan.json" in found and dataset.get("plan_ref", {}).get("digest") != result["plan_ref"]["digest"]:
+        return ["dataset.json does not cite the plan the Result's plan_ref names"]
+    return []
 
 
 def cmd_verify(args):
@@ -518,6 +549,7 @@ def cmd_verify(args):
     sibling = page.with_name("result.json")
     if sibling.exists() and sibling.read_bytes() != raw:
         issues.append("result.json beside the page is not the same bytes")
+    issues += cited_documents(result, page.parent)
     return out({"verified": not issues, "issues": issues, "came_through": met, "sales": total,
                 "rehearsal": bool(result.get("x-rehearsal")), "pack_digest": pack_digest,
                 "result_sha256": declared}, 1 if issues else 0)

@@ -121,8 +121,8 @@
       ]
     },
     "ClaimType": {
-      "description": "Discriminator (spec section 4.1): `requirement` and `reconcile` are normative, `close` is PROPOSED. Encodes the 2026-09-25 ruling: 'close + reconcile as claim types in result v0, so they feed the same result.' Absent means `requirement` -- the pre-existing one-requirement-evaluated-once claim (spec section 1) -- so every Result that validated before this field existed validates unchanged. Closed-world: a value outside this enum fails validation here. A viewer that meets a type it does not recognize MUST render the row labelled 'unrecognized' with the raw type and the claim's contract_ref, never drop it (ruled 2026-09-25); that behaviour and its fixture are owned by capsule-viewer, not by this schema.",
-      "enum": ["requirement", "reconcile", "close"]
+      "description": "Discriminator (spec section 4.1): `requirement`, `reconcile`, `close` and `calibration` are normative. Encodes the 2026-09-25 ruling: 'close + reconcile as claim types in result v0, so they feed the same result.' A `calibration` claim carries no body; that its evidence[] cites exactly one calibration-summary/v1 record and otherwise only human-rating/v1 records is a checker rule, since this schema cannot see the cited records. Absent means `requirement` -- the pre-existing one-requirement-evaluated-once claim (spec section 1) -- so every Result that validated before this field existed validates unchanged. Closed-world: a value outside this enum fails validation here. A viewer that meets a type it does not recognize MUST render the row labelled 'unrecognized' with the raw type and the claim's contract_ref, never drop it (ruled 2026-09-25); that behaviour and its fixture are owned by capsule-viewer, not by this schema.",
+      "enum": ["requirement", "reconcile", "close", "calibration"]
     },
     "Period": {
       "description": "The concrete half-open window [start, end), RFC 3339, that a reconcile or close claim covers. The contract's `close.period` token (day / week / month) names a cadence; a Result names the actual window, so a monthly Result can carry each day's Close as its own claim without ambiguity.",
@@ -257,7 +257,7 @@
           "else": { "properties": { "verdict": { "const": "not_evaluable" } } }
         },
         {
-          "description": "spec section 4.2: an out_of_scope claim's requirement allows it (out_of_scope_allowed), it is a requirement claim (type absent or requirement, never reconcile or close), and its carrier status is never NOT_APPLICABLE, so it never reads as the population exclusion.",
+          "description": "spec section 4.2: an out_of_scope claim's requirement allows it (out_of_scope_allowed), it is a requirement claim (type absent or requirement, never reconcile, close or calibration), and its carrier status is never NOT_APPLICABLE, so it never reads as the population exclusion.",
           "if": { "properties": { "verdict": { "const": "out_of_scope" } }, "required": ["verdict"] },
           "then": {
             "required": ["out_of_scope_allowed"],
@@ -268,7 +268,7 @@
           }
         },
         {
-          "description": "Type <-> body binding: a reconcile claim carries exactly `reconcile`, a close claim exactly `close`, and a requirement claim (type absent or `requirement`) carries neither.",
+          "description": "Type <-> body binding: a reconcile claim carries exactly `reconcile`, a close claim exactly `close`, and a requirement claim (type absent or `requirement`) or a calibration claim carries neither.",
           "if": { "properties": { "type": { "const": "reconcile" } }, "required": ["type"] },
           "then": { "required": ["reconcile"], "not": { "required": ["close"] } },
           "else": {
@@ -513,7 +513,19 @@
         },
         "aggregate": { "$ref": "#/$defs/Aggregate" },
         "view": { "$ref": "#/$defs/View" },
-        "coverage_report": { "$ref": "#/$defs/CoverageReport" }
+        "coverage_report": { "$ref": "#/$defs/CoverageReport" },
+        "plan_ref": {
+          "description": "spec section 7.3: the digest of the dataset plan (spec/evidence-plan-ir-v0.md section 5.1) this Result's population was selected by. A digest only, never the plan.",
+          "$ref": "#/$defs/DigestRef"
+        },
+        "dataset_ref": {
+          "description": "spec section 7.3: the digest of the dataset document (spec/evidence-plan-ir-v0.md section 6.2) the plan produced. A digest only, never the rows.",
+          "$ref": "#/$defs/DigestRef"
+        }
+      },
+      "dependentRequired": {
+        "plan_ref": ["dataset_ref"],
+        "dataset_ref": ["plan_ref"]
       },
       "allOf": [
         {

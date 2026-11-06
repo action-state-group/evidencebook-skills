@@ -21,7 +21,7 @@ from result_v0 import build_result_v0  # noqa: E402
 from rollup import all_criteria_from_clauses  # noqa: E402
 
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "fixtures" / "evidence-result-v0.json"
-SCHEMA_SHA256 = "2776a4441b3ee2e3a9c30fe63c008efdebc5bf6450cdaf0a422ec6b5586352e4"
+SCHEMA_SHA256 = "46599d231759a3354392f6e596cab0b58467a3ee8681466721263d811fe76da2"
 GENERATED_AT = "2026-10-26T00:00:00Z"
 PIN = {"model_id": "example-judge-1", "model_hosting": "hosted", "input_refs": ["amount_minor"],
        "prompt_template_hash": "bf" * 32, "schema_hash": "df" * 32}
