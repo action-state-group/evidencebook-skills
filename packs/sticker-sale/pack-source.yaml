@@ -14,7 +14,7 @@ statement: >-
 evaluator: transaction
 rows:
   - id: paid_before_delivered
-    statement: By the seller's own report, the buyer paid before the sticker was delivered.
+    statement: The buyer paid before the sticker was delivered, by the delivery time the seller reports.
     tier: recomputed
     check: paid_before_delivered
     proves: [paid_at, delivered_at]

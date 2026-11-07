@@ -35,7 +35,7 @@ STATUSES = ("checkable now", "needs examples", "needs a field", "needs the other
 
 # Proposed for every dataset: the deal evaluator's three checks (scripts/evaluators/transaction.py).
 PROPOSED_ROWS = (
-    {"id": "paid_before_delivered", "statement": "By the seller's own report, the buyer paid before the goods were delivered.",
+    {"id": "paid_before_delivered", "statement": "The buyer paid before the goods were delivered, by the delivery time the seller reports.",
      "tier": "recomputed", "check": "paid_before_delivered", "proves": ["paid_at", "delivered_at"]},
     {"id": "delivered_within_days", "statement": "By the seller's own report, the goods were delivered within 2 days of payment.",
      "tier": "recomputed", "check": "delivered_within_days(2)", "proves": ["paid_at", "delivered_at"]},

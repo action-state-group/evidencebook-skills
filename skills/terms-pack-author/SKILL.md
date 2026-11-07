@@ -83,7 +83,7 @@ statement: >-
 evaluator: transaction
 rows:
   - id: paid_before_delivered
-    statement: By the seller's own report, the buyer paid before the sticker was delivered.
+    statement: The buyer paid before the sticker was delivered, by the delivery time the seller reports.
     tier: recomputed
     check: paid_before_delivered
     proves: [paid_at, delivered_at]
@@ -112,7 +112,8 @@ whole number of days, written inside the row) and `price_as_offered`. When the s
 changes the number, change it in both places: the `statement` and the `check`. Bump
 `pack_version` (0.1.1 to 0.1.2) whenever a row changes, so the two versions can be told apart.
 `delivered_at` is the delivery time the seller reports, not one the buyer confirmed, so keep
-"by the seller's own report" in the `delivered_within_days` statement.
+that in the `paid_before_delivered` and `delivered_within_days` statements ("by the delivery time the seller
+reports", "by the seller's own report").
 
 If the seller asks for a term none of the three can say (a rating, "the sticker looked
 like the photo", a refund window), say plainly that these terms cannot check that yet.

@@ -8,14 +8,14 @@
   "rows": [
     {
       "id": "paid_before_delivered",
-      "statement": "By the seller's own report, the buyer paid before the sticker was delivered.",
+      "statement": "The buyer paid before the sticker was delivered, by the delivery time the seller reports.",
       "tier": "recomputed",
       "check": "paid_before_delivered",
       "proves": [
         "paid_at",
         "delivered_at"
       ],
-      "row_digest": "328e419137de540f4e82585f58ff20c1d1cc9aeff51d130207c1f3f00e992408"
+      "row_digest": "7ce81b794c619e309785720c83589018c4b9b058ef4b7e749eb1380fc09642b8"
     },
     {
       "id": "delivered_within_days",
@@ -40,5 +40,5 @@
       "row_digest": "7a8a5b15a02995a5006fa37a7a0ab6f2765d19b7f380e1ffc60d812ff9b0fbdf"
     }
   ],
-  "definition_digest": "a9c5a3edf03de91b3efd985d83a0495ee2b8e679d920510caff8342d6f3fc5bc"
+  "definition_digest": "b863e5e4898fc328acc2d997371aff651ec53bd5d4032a26aeac0b21d047d0a7"
 }

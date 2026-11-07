@@ -642,7 +642,7 @@ class OtherGoods(unittest.TestCase):
         # this digest is 0.1.1's, where the delivery rows say they rest on the seller's report (#156)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "a9c5a3edf03de91b3efd985d83a0495ee2b8e679d920510caff8342d6f3fc5bc")
+                         "b863e5e4898fc328acc2d997371aff651ec53bd5d4032a26aeac0b21d047d0a7")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)
