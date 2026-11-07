@@ -3,7 +3,7 @@
   "contract_ref": "sticker-sale@0.1.1",
   "scope": "deal",
   "title": "Sticker sale terms",
-  "statement": "A sticker sale came through when the buyer paid before delivery, the sticker was reported delivered within a day of payment, and the price was the price offered.",
+  "statement": "A sticker sale came through when the buyer paid before delivery, the seller reported the sticker delivered within a day of payment, and the price was the price offered.",
   "evaluator": "transaction",
   "rows": [
     {
