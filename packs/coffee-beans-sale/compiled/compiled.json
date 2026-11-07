@@ -3,19 +3,19 @@
   "contract_ref": "coffee-beans-sale@0.1.1",
   "scope": "deal",
   "title": "Coffee beans sale terms",
-  "statement": "A coffee beans sale came through when the buyer paid before delivery, the seller reported the beans delivered within 3 days of payment, and the price was the price offered.",
+  "statement": "A coffee beans sale came through when the buyer paid before delivery and delivery came within 3 days of payment, both by the delivery time the seller reports, and the price was the price offered.",
   "evaluator": "transaction",
   "rows": [
     {
       "id": "paid_before_delivered",
-      "statement": "The buyer paid before the beans were delivered.",
+      "statement": "By the seller's own report, the buyer paid before the beans were delivered.",
       "tier": "recomputed",
       "check": "paid_before_delivered",
       "proves": [
         "paid_at",
         "delivered_at"
       ],
-      "row_digest": "3192844c98de5df9662ea9245a9a4a9397b36c1770a6183eca7a4a493b71a5b8"
+      "row_digest": "95d4928cd3c923df9e882e9fc56eda35092a664d2b9e70f73d5140b9c0ce9328"
     },
     {
       "id": "delivered_within_days",
@@ -40,5 +40,5 @@
       "row_digest": "7a8a5b15a02995a5006fa37a7a0ab6f2765d19b7f380e1ffc60d812ff9b0fbdf"
     }
   ],
-  "definition_digest": "6e756969410afceeec0b86214eb3fd6efa100727f7046e222e8034f4358915ea"
+  "definition_digest": "bdef986713d501a53c4fe88e818418b005185ac306503eff066f9eaa5269fc06"
 }

@@ -637,12 +637,12 @@ class OtherGoods(unittest.TestCase):
         self.assertNotIn("sticker", transaction.__doc__.split("\n\n")[0].lower())  # its summary names no good
         self.assertNotIn("sticker", pathlib.Path(transaction.__file__).name)
 
-    def test_the_renamed_evaluator_leaves_the_sticker_sale_digest_unchanged(self):
+    def test_the_sticker_sale_definition_digest_pin(self):
         # the evaluator name is not part of definition_digest, so a rename changes no pin;
-        # this digest is 0.1.1's, where the delivery row says whose clock it uses (#156)
+        # this digest is 0.1.1's, where the delivery rows say they rest on the seller's report (#156)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "957b013afa27d5146da7b376e98068eb94473131b6faf42619026e3391904845")
+                         "a9c5a3edf03de91b3efd985d83a0495ee2b8e679d920510caff8342d6f3fc5bc")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)

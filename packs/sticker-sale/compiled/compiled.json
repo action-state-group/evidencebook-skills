@@ -3,19 +3,19 @@
   "contract_ref": "sticker-sale@0.1.1",
   "scope": "deal",
   "title": "Sticker sale terms",
-  "statement": "A sticker sale came through when the buyer paid before delivery, the seller reported the sticker delivered within a day of payment, and the price was the price offered.",
+  "statement": "A sticker sale came through when the buyer paid before delivery and delivery came within a day of payment, both by the delivery time the seller reports, and the price was the price offered.",
   "evaluator": "transaction",
   "rows": [
     {
       "id": "paid_before_delivered",
-      "statement": "The buyer paid before the sticker was delivered.",
+      "statement": "By the seller's own report, the buyer paid before the sticker was delivered.",
       "tier": "recomputed",
       "check": "paid_before_delivered",
       "proves": [
         "paid_at",
         "delivered_at"
       ],
-      "row_digest": "6fa3c237074dce80af3043892f44750be8fd57b2d31fce1751879001bb682735"
+      "row_digest": "328e419137de540f4e82585f58ff20c1d1cc9aeff51d130207c1f3f00e992408"
     },
     {
       "id": "delivered_within_days",
@@ -40,5 +40,5 @@
       "row_digest": "7a8a5b15a02995a5006fa37a7a0ab6f2765d19b7f380e1ffc60d812ff9b0fbdf"
     }
   ],
-  "definition_digest": "957b013afa27d5146da7b376e98068eb94473131b6faf42619026e3391904845"
+  "definition_digest": "a9c5a3edf03de91b3efd985d83a0495ee2b8e679d920510caff8342d6f3fc5bc"
 }
