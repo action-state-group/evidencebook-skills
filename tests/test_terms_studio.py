@@ -629,6 +629,16 @@ class OtherGoods(unittest.TestCase):
     BEANS = ROOT / "packs" / "coffee-beans-sale" / "pack-source.yaml"
     BEAN_TRADES = ROOT / "tests" / "fixtures" / "coffee-beans-sale" / "trades.json"
 
+    def test_every_row_that_reads_delivered_at_says_it_is_the_sellers_report(self):
+        # delivered_at is the seller's report, not buyer-checked (evidencebook-skills#156)
+        import readiness
+        rows = [r for src in (SOURCE, self.BEANS) for r in terms.load_pack(src)["rows"]]
+        rows += list(readiness.PROPOSED_ROWS)
+        reading = [r for r in rows if "delivered_at" in r["proves"]]
+        self.assertEqual(len(reading), 6)
+        for r in reading:
+            self.assertIn("seller", r["statement"], r["id"])
+
     def test_both_example_packs_name_the_one_transaction_evaluator(self):
         import deal_pack
         for src in (SOURCE, self.BEANS):
