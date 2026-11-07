@@ -5,11 +5,12 @@
 scope:
   kind: deal
 pack_id: sticker-sale
-pack_version: 0.1.0
+pack_version: 0.1.1
 title: Sticker sale terms
 statement: >-
   A sticker sale came through when the buyer paid before delivery, the sticker
-  was delivered within a day of payment, and the price was the price offered.
+  was reported delivered within a day of payment, and the price was the price
+  offered.
 evaluator: transaction
 rows:
   - id: paid_before_delivered
@@ -18,7 +19,7 @@ rows:
     check: paid_before_delivered
     proves: [paid_at, delivered_at]
   - id: delivered_within_days
-    statement: The sticker was delivered within 1 day of payment.
+    statement: By the seller's own report, the sticker was delivered within 1 day of payment.
     tier: recomputed
     check: delivered_within_days(1)
     proves: [paid_at, delivered_at]

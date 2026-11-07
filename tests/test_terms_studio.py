@@ -456,7 +456,7 @@ class RulesChecker(unittest.TestCase):
         ok = self.run_checker(check_input("deal-a", 150, 150))
         self.assertEqual((ok["verdict"], ok["definition_digest"]), ("allow", self.pin["definition_digest"]))
         # capsulectl's sealer reads name@version as an email address and refuses the answer
-        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.0")
+        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.1")
         self.assertNotIn("@", ok["ruleset_id"])
         by = {f["id"]: f["verdict"] for f in ok["findings"]}
         self.assertEqual(by, {"paid_before_delivered": "not_applicable", "delivered_within_days": "not_applicable",
@@ -638,10 +638,11 @@ class OtherGoods(unittest.TestCase):
         self.assertNotIn("sticker", pathlib.Path(transaction.__file__).name)
 
     def test_the_renamed_evaluator_leaves_the_sticker_sale_digest_unchanged(self):
-        # the evaluator name is not part of definition_digest, so existing pins hold
+        # the evaluator name is not part of definition_digest, so a rename changes no pin;
+        # this digest is 0.1.1's, where the delivery row says whose clock it uses (#156)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "a1831156589ca58cdb7a7fcd22e2378dd2130ea7c288d22b8ceeaa8a0b75c6e7")
+                         "957b013afa27d5146da7b376e98068eb94473131b6faf42619026e3391904845")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)

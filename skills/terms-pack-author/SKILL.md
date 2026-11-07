@@ -78,7 +78,8 @@ pack_version: 0.1.0
 title: Sticker sale terms
 statement: >-
   A sticker sale came through when the buyer paid before delivery, the sticker
-  was delivered within a day of payment, and the price was the price offered.
+  was reported delivered within a day of payment, and the price was the price
+  offered.
 evaluator: transaction
 rows:
   - id: paid_before_delivered
@@ -87,7 +88,7 @@ rows:
     check: paid_before_delivered
     proves: [paid_at, delivered_at]
   - id: delivered_within_days
-    statement: The sticker was delivered within 1 day of payment.
+    statement: By the seller's own report, the sticker was delivered within 1 day of payment.
     tier: recomputed
     check: delivered_within_days(1)
     proves: [paid_at, delivered_at]
@@ -110,6 +111,8 @@ The three checks are all there is: `paid_before_delivered`, `delivered_within_da
 whole number of days, written inside the row) and `price_as_offered`. When the seller
 changes the number, change it in both places: the `statement` and the `check`. Bump
 `pack_version` (0.1.0 to 0.1.1) whenever a row changes, so the two versions can be told apart.
+`delivered_at` is the delivery time the seller reports, not one the buyer confirmed, so keep
+"by the seller's own report" in the `delivered_within_days` statement.
 
 If the seller asks for a term none of the three can say (a rating, "the sticker looked
 like the photo", a refund window), say plainly that these terms cannot check that yet.

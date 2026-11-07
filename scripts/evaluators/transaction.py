@@ -15,7 +15,7 @@ read (the field names are the replay fixture's, evidencebook-deal#136):
     offered_price    the asking price the goods were offered at (minor units)
     accepted_price   the price the buyer accepted and the seller committed to
     paid_at          when the payment was received (RFC 3339 UTC)
-    delivered_at     when the goods were delivered (RFC 3339 UTC)
+    delivered_at     when the seller reports the goods were delivered (RFC 3339 UTC)
 
 The folds, each met / not_met / not_evaluable. A fold that lacks a field it
 needs is not_evaluable, never not_met: a transaction that is not delivered yet has not

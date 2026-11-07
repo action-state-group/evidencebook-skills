@@ -5,12 +5,12 @@
 scope:
   kind: deal
 pack_id: coffee-beans-sale
-pack_version: 0.1.0
+pack_version: 0.1.1
 title: Coffee beans sale terms
 statement: >-
   A coffee beans sale came through when the buyer paid before delivery, the
-  beans were delivered within 3 days of payment, and the price was the price
-  offered.
+  seller reported the beans delivered within 3 days of payment, and the price
+  was the price offered.
 evaluator: transaction
 rows:
   - id: paid_before_delivered
@@ -19,7 +19,7 @@ rows:
     check: paid_before_delivered
     proves: [paid_at, delivered_at]
   - id: delivered_within_days
-    statement: The beans were delivered within 3 days of payment.
+    statement: By the seller's own report, the beans were delivered within 3 days of payment.
     tier: recomputed
     check: delivered_within_days(3)
     proves: [paid_at, delivered_at]

@@ -37,7 +37,7 @@ STATUSES = ("checkable now", "needs examples", "needs a field", "needs the other
 PROPOSED_ROWS = (
     {"id": "paid_before_delivered", "statement": "The buyer paid before the goods were delivered.",
      "tier": "recomputed", "check": "paid_before_delivered", "proves": ["paid_at", "delivered_at"]},
-    {"id": "delivered_within_days", "statement": "The goods were delivered within 2 days of payment.",
+    {"id": "delivered_within_days", "statement": "By the seller's own report, the goods were delivered within 2 days of payment.",
      "tier": "recomputed", "check": "delivered_within_days(2)", "proves": ["paid_at", "delivered_at"]},
     {"id": "price_as_offered", "statement": "The price was the price offered.",
      "tier": "recomputed", "check": "price_as_offered", "proves": ["offered_price", "accepted_price"]},
