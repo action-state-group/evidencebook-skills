@@ -16,8 +16,9 @@ passed: the caller sets `passed` to null while any row is unrun.
                --engine-commit. Its version is a release number that a source install
                shares with the release before it, so a git install is identified by the
                commit its install record names
-    judged     the pinned judge needs a model key, and a real judged run waits for
-               the owner's go: not evaluated
+    judged     the pinned judge (scripts/judges/jev_judge.py), one paid model call per
+               case, so only with --judge live and a key (TYPESAFE_API_KEY, or
+               OPENROUTER_API_KEY for TypeSafe's jev-1.13 via OpenRouter); otherwise not evaluated
 """
 import datetime
 import hashlib
@@ -26,6 +27,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 
 import admission_pack
@@ -257,7 +259,78 @@ def run_live(source, cases, engine, engine_commit, src):
     return rows
 
 
-def run(kind, source, cases, engine=None, engine_commit=None, environ=None, live_engine=None, src=None):
+def judge_messages(conversation):
+    """A report case's conversation ([{role, text}]) as the judge's transcript messages."""
+    return [{"role": {"agent": "assistant"}.get(m["role"], m["role"]), "content": m["text"]} for m in conversation]
+
+
+def run_judged(kind, source, cases, environ):
+    """Each case of each row judged by the pinned judge: two paid model calls per row, each made once
+    (a refused or failed case is not asked again, and its row stops there). Needs a key; the judge
+    model id is the pack's own `judge.model_id`, which must be the pinned one."""
+    if not (environ.get("TYPESAFE_API_KEY") or environ.get("OPENROUTER_API_KEY")):
+        return not_run(source, "the pinned judge needs TYPESAFE_API_KEY, or OPENROUTER_API_KEY for TypeSafe's jev-1.13 via OpenRouter, "
+                               "and neither is set")
+    import pack_compile
+    judges = pathlib.Path(__file__).resolve().parents[1] / "judges"
+    sys.path.insert(0, str(judges))
+    try:
+        import jev_judge
+    finally:
+        sys.path.remove(str(judges))
+    model_id = (source.get("judge") or {}).get("model_id")
+    if model_id != jev_judge.PINNED_MODEL:
+        return not_run(source, f"the pack's judge.model_id {model_id!r} is not the pinned {jev_judge.PINNED_MODEL}")
+    clauses = {c["id"]: c for c in pack_compile.build_clauses(source)}
+    allow_oos = bool((source.get("switches") or {}).get("out_of_scope_verdict"))
+    try:
+        backend = jev_judge.resolve_backend()
+    except jev_judge.JudgeError as e:
+        return not_run(source, f"the judge backend was refused: {e}")
+    if jev_judge.backend_kind(backend) != "jev":  # JEV_JUDGE_BACKEND=mock hashes the request; no model reads the case
+        return not_run(source, f"the judge backend is {jev_judge.backend_kind(backend)}, not the real pinned judge")
+    min_confidence = (source.get("judge") or {}).get("min_confidence")
+    route = "openrouter:" + jev_judge.OPENROUTER_MODEL if isinstance(backend, jev_judge.OpenRouterBackend) else "typesafe"
+    # OpenRouter serves a dated build of jev-1.13 and nothing maps it to jev-1.13.0, so that route
+    # does not claim the pinned patch version.
+    model = (jev_judge.OPENROUTER_MODEL + " (patch build not pinned)"
+             if isinstance(backend, jev_judge.OpenRouterBackend) else jev_judge.PINNED_MODEL)
+    decided_by = {"name": "jev", "model": model, "route": route,
+                  "instruction_template_digest": jev_judge.instruction_template_digest("transcript")}
+    rows = []
+    for row, pair in by_row(cases).items():
+        got, why, calls_before, said, asked = [], None, len(getattr(backend, "calls", [])), {}, 0
+        for name in two_case.CASES:
+            clause = clauses.get(row)
+            try:
+                if clause is None or clause.get("tier") != "judged":
+                    raise ValueError("the row is not a judged criterion")
+                request = {"clause": clause, "judge_model_id": model_id, "allow_out_of_scope": allow_oos,
+                           "agent_interaction": {"messages": judge_messages(pair[name]["conversation"])}}
+                if min_confidence is not None:
+                    request["min_confidence"] = min_confidence  # below it the judge answers not_evaluable
+                asked += 1
+                answer = jev_judge.judge(request, backend)
+                said[name] = answer["verdict"]
+                if answer["verdict"] not in ROW_RESULTS.values():
+                    raise ValueError(f"the judge answered {answer['verdict']!r}: {answer.get('rationale', '')}")
+            except (jev_judge.JudgeError, KeyError, TypeError, ValueError) as e:
+                why = f"the judge could not decide the {name} case: {type(e).__name__}: {e}"
+                break
+            got.append(answer["verdict"])
+        spent = [c["cost_usd"] for c in getattr(backend, "calls", [])[calls_before:]]
+        usage = {"judge_calls": asked}  # judge() calls made, each charged whether or not it answered
+        if spent and len(spent) == asked and all(x is not None for x in spent):
+            usage["judge_cost_usd"] = round(sum(spent), 6)
+        if why:
+            rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated", "evaluated": False,
+                         "reason": why, "judge_said": said, **usage})
+        else:
+            rows.append(row_report(row, tuple(got), {"decided_by": decided_by, **usage}))
+    return rows
+
+
+def run(kind, source, cases, engine=None, engine_commit=None, environ=None, live_engine=None, src=None, judge=None):
     environ = os.environ if environ is None else environ
     if kind == "admission":
         return run_admission(source, cases, engine or environ.get("CAPSULE_ENGINE"), engine_commit)
@@ -268,5 +341,7 @@ def run(kind, source, cases, engine=None, engine_commit=None, environ=None, live
         if runner is None:
             return not_run(source, f"no case runner for the {source['evaluator']} evaluator")
         return runner(source, cases)
-    return not_run(source, f"a {kind} pack's cases are judged by its pinned judge, which needs a model key; a judged run "
-                           "costs money and waits for the owner's go, so terms test does not run it yet")
+    if judge == "live":
+        return run_judged(kind, source, cases, environ)
+    return not_run(source, f"a {kind} pack's cases are judged by its pinned judge, one paid model call per case "
+                           "(two per row); pass --judge live to spend it")
