@@ -81,8 +81,7 @@ Backend selection:
   (or unset)               "jev" backend spec. Any other value is refused: a
                            misspelled backend name never selects the real backend. Requires TYPESAFE_API_KEY, or
                            else OPENROUTER_API_KEY (the same model, "typesafe/jev-1.13", through
-                           OpenRouter, strict about the reply: OpenRouterBackend refuses an empty or
-                           unusable answer rather than letting jevals read it as "met"; an
+                           OpenRouter's /v1/systemone, as OpenRouterBackend; an
                            OPENROUTER_DECISION_MODEL naming another model is refused). On the
                            TypeSafe key this script
                            force-sets TYPESAFE_MODEL to "jev-1.13.0" regardless of any
@@ -143,8 +142,10 @@ import sys
 
 import jevals
 from jevals import ChoiceEval, Sample
-from jevals.backends import BackendError
-from jevals.backends.llm import LLMBackend, _parse_json
+from jevals._types import BackendResponse, Usage
+from jevals.backends._base import http_error
+from jevals.backends._wire import answers_from_typesafe, questions_to_typesafe
+from jevals.backends.typesafe import TypeSafeBackend
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from airline_facts import policy_current_time, reservation_timestamps  # noqa: E402
@@ -485,29 +486,33 @@ def sealed_model_id(model_id, backend=None):
     return f"{model_id} ({kind} backend, no model read the evidence)"
 
 
-class OpenRouterBackend(LLMBackend):
-    """jevals' chat-completions backend, strict about what the model answered. LLMBackend turns a
-    missing, empty or unparseable answer into uniform probabilities, and a choice question's first
-    option wins a uniform tie -- here "met" -- so a reply that said nothing would seal as a verdict.
-    This refuses any reply that does not carry, for every question, a bare option label or an
-    object putting positive weight on the options. `calls` keeps each call's usage and cost."""
+class OpenRouterBackend(TypeSafeBackend):
+    """The pinned decision model on OpenRouter: the TypeSafe System One wire (the same request and
+    answers as the "jev" backend, so the same refusals of an empty answer apply) sent to OpenRouter's
+    /v1/systemone with an OpenRouter key and the model named. It is not jevals' "openrouter:<model>"
+    spec, which asks a chat LLM to emulate a decision model; OpenRouter refuses this model on
+    chat/completions. `calls` keeps each call's usage and the cost OpenRouter charged. jevals 0.1.4
+    has no such backend (it is on jevals main, unreleased), so this is that wire, written here."""
 
     def __init__(self):
-        super().__init__(model=OPENROUTER_MODEL, provider="openrouter")
+        super().__init__(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api",
+                         model=OPENROUTER_MODEL, name=f"decisions:{OPENROUTER_MODEL}", zero_data_retention=False)
         self.calls = []
 
     async def evaluate(self, state, questions):
-        resp = await super().evaluate(state, questions)
-        try:
-            parsed = _parse_json(resp.raw["choices"][0]["message"]["content"] or "")
-        except (KeyError, IndexError, TypeError, AttributeError):
-            parsed = {}
-        for qid, q in questions.items():
-            v, options = parsed.get(qid), list(q.criteria)
-            weights = [x for x in (v.get(o) for o in options) if isinstance(x, (int, float)) and not isinstance(x, bool)
-                       and x > 0] if isinstance(v, dict) else []
-            if not (v in options if isinstance(v, str) else weights):
-                raise BackendError(f"{self.name}: the reply gave no usable answer for {qid!r}")
+        body = {"model": self.model, "state": state, "questions": questions_to_typesafe(questions)}
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        r = await self._client().post(f"{self.base_url}/v1/systemone", json=body, headers=headers)
+        if r.status_code >= 400:
+            raise http_error(self.name, r)
+        data = r.json()
+        usage = data.get("usage") or {}
+        cost = usage.get("cost")
+        resp = BackendResponse(
+            answers=answers_from_typesafe(data.get("answers") or {}, questions),
+            usage=Usage(input_tokens=int(usage.get("input_tokens") or 0), output_tokens=int(usage.get("output_tokens") or 0),
+                        cost_usd=float(cost) if cost is not None else None, backend=self.name),
+            raw=data)
         self.calls.append({"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens,
                            "cost_usd": resp.usage.cost_usd})
         return resp
@@ -521,8 +526,7 @@ def resolve_backend():
         os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
         return "jev"
     if os.environ.get("OPENROUTER_API_KEY"):
-        # The same model served by OpenRouter: jevals' "openrouter:<model>" spec (its chat-completions
-        # backend, which also reports the cost of each call). The model is this one constant; a
+        # The same model served by OpenRouter (OpenRouterBackend). The model is this one constant; a
         # different OPENROUTER_DECISION_MODEL is refused, not followed.
         asked = os.environ.get("OPENROUTER_DECISION_MODEL", OPENROUTER_MODEL)
         if asked != OPENROUTER_MODEL:
