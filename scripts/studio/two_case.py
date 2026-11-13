@@ -16,8 +16,9 @@ file against the pack: every row has exactly one case of each name, and no case
 names a row the pack does not have. It evaluates a case through scripts/studio/case_eval.py: an admission pack's by a
 capsule-engine binary, a live pack's by the Python capsule-engine CLI
 (`packs evaluate`, capsule-engine#286), an evaluator pack's by that evaluator over the
-records the case's `input` carries. Judged rows (a pinned judge and a model key) are
-not run, so those cases are reported `evaluated: false` and never as passed.
+records the case's `input` carries. A judged row's cases are decided by its pinned judge only
+with `--judge live` and a key (each case is one paid call); otherwise they are reported
+`evaluated: false`, and a case that cannot run is never reported passed.
 The two cases of a row must differ, or the pair says nothing.
 """
 import json

@@ -18,7 +18,7 @@ import unittest
 import unittest.mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-for sub in ("scripts", "scripts/evaluators", "scripts/studio"):
+for sub in ("scripts", "scripts/evaluators", "scripts/judges", "scripts/studio"):
     sys.path.insert(0, str(ROOT / sub))
 
 import yaml  # noqa: E402
@@ -308,13 +308,13 @@ class TestOnEveryKind(unittest.TestCase):
                 self.assertEqual((res["evaluated"], res["not_evaluated"]), (0, res["cases"]))
                 self.assertTrue(all(not r["evaluated"] and r["reason"] for r in res["rows"]))
 
-    def test_a_judged_pack_is_not_run_with_or_without_a_key(self):
+    def test_a_judged_pack_is_not_run_without_judge_live_key_or_not(self):
         for name in ("report", "conduct"):
-            for env in ({}, {"TYPESAFE_API_KEY": "x"}):
+            for env in ({}, {"TYPESAFE_API_KEY": "x", "OPENROUTER_API_KEY": "y"}):
                 with self.subTest(kind=name, key=bool(env)), unittest.mock.patch.dict("os.environ", env, clear=True):
                     code, res = run_test(self.SAMPLES[name])
                     self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0))
-                    self.assertIn("waits for the owner's go", res["rows"][0]["reason"])
+                    self.assertIn("--judge live", res["rows"][0]["reason"])
 
     def test_live_without_an_engine_says_how_to_name_one(self):
         with unittest.mock.patch.dict("os.environ", clear=True):
@@ -764,6 +764,93 @@ class RealLiveEngine(unittest.TestCase):
             self.assertEqual(res["passed"], True, res)
             _, res = run_test(LiveEngine.SAMPLE, "--engine-commit", "deadbee")
             self.assertIsNone(res["passed"])
+
+
+class JudgedLive(unittest.TestCase):
+    """`terms test --judge live` on a judged pack: the pinned judge decides each case, over canned
+    OpenRouter replies (no network). A case the judge cannot answer is not asked again."""
+    SAMPLE = ROOT / "tests/fixtures/terms-samples/report/pack-source.yaml"
+    QID = "promise.kept.q"
+    KEY = {"OPENROUTER_API_KEY": "unit-test-placeholder-never-sent-anywhere"}
+
+    def backend(self, reply):
+        import httpx
+        import jev_judge
+        with unittest.mock.patch.dict("os.environ", self.KEY):
+            be = jev_judge.OpenRouterBackend()
+        self.sent = []
+
+        def handler(request):
+            self.sent.append(json.loads(request.content))
+            return httpx.Response(200, json={"choices": [{"message": {"content": reply(len(self.sent))}}],
+                                             "usage": {"prompt_tokens": 100, "completion_tokens": 10, "cost": 0.002}})
+        be._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        patch = unittest.mock.patch.object(jev_judge, "resolve_backend", return_value=be)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def run_live(self, **env):
+        with unittest.mock.patch.dict("os.environ", env or self.KEY, clear=True):
+            return run_test(self.SAMPLE, "--judge", "live")
+
+    def verdicts(self, *names):
+        return lambda n: json.dumps({self.QID: {names[n - 1]: 1.0}})
+
+    def test_both_cases_are_judged_and_the_cost_reported(self):
+        self.backend(self.verdicts("met", "not_met"))
+        code, res = self.run_live()
+        self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, True, 2, 0), res)
+        row = res["rows"][0]
+        self.assertEqual((row["met_case"], row["miss_case"], row["judge_calls"], row["judge_cost_usd"]), ("met", "not_met", 2, 0.004))
+        self.assertEqual((row["decided_by"]["model"], row["decided_by"]["route"]), ("jev-1.13.0", "openrouter:typesafe/jev-1.13"))
+        self.assertEqual(len(self.sent), 2)
+        sent = json.dumps(self.sent[0])
+        self.assertIn("I will refund you today", sent)
+        self.assertIn("typesafe/jev-1.13", sent)
+
+    def test_a_case_the_judge_decides_otherwise_fails(self):
+        self.backend(self.verdicts("met", "met"))
+        code, res = self.run_live()
+        self.assertEqual((code, res["passed"]), (1, False), res)
+
+    def test_an_unusable_reply_leaves_the_row_unrun_and_is_not_asked_again(self):
+        self.backend(lambda n: "")
+        code, res = self.run_live()
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertEqual(len(self.sent), 1)
+        self.assertFalse(res["rows"][0]["evaluated"])
+
+    def test_an_out_of_scope_answer_is_not_a_pass(self):
+        self.backend(self.verdicts("out_of_scope", "not_met"))
+        code, res = self.run_live()
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+
+    def test_no_key_means_no_call(self):
+        self.backend(self.verdicts("met", "not_met"))
+        code, res = self.run_live(PATH="/usr/bin")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertEqual(self.sent, [])
+
+    def test_a_pack_pinning_another_judge_is_not_run(self):
+        import shutil
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        dst = pathlib.Path(d.name) / "pack"
+        shutil.copytree(self.SAMPLE.parent, dst)
+        f = dst / "pack-source.yaml"
+        f.write_text(f.read_text().replace("jev-1.13.0", "jev-9.9.9"))
+        self.backend(self.verdicts("met", "not_met"))
+        with unittest.mock.patch.dict("os.environ", self.KEY, clear=True):
+            code, res = run_test(f, "--judge", "live")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertEqual(self.sent, [])
+
+    def test_a_pack_whose_cases_hold_no_conversation_makes_no_call(self):
+        self.backend(self.verdicts("met", "not_met"))
+        with unittest.mock.patch.dict("os.environ", self.KEY, clear=True):
+            code, res = run_test(TestOnEveryKind.SAMPLES["conduct"], "--judge", "live")
+        self.assertEqual((res["passed"], res["evaluated"]), (None, 0), res)
+        self.assertEqual(self.sent, [])
 
 
 if __name__ == "__main__":

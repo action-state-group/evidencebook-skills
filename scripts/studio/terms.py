@@ -384,7 +384,7 @@ def cmd_test(args):
     if args.engine_commit is not None and len(args.engine_commit) < MIN_COMMIT_PREFIX:
         return out({"passed": False, "kind": kind, "issues": [
             f"--engine-commit needs at least {MIN_COMMIT_PREFIX} characters of the commit; {args.engine_commit!r} could match any engine"]}, 1)
-    rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit, live_engine=args.live_engine, src=path)
+    rows = case_eval.run(kind, source, cases, args.engine, args.engine_commit, live_engine=args.live_engine, src=path, judge=args.judge)
     failed = any(r["evaluated"] and not r["passed"] for r in rows)
     unrun = sum(r["evaluated"] is False for r in rows)
     # `passed` is true only when every row ran and passed; a row that was not run is not a pass, so
@@ -810,6 +810,8 @@ def main(argv):
         if name == "test":
             p.add_argument("--engine", help="a capsule-engine binary, to decide admission cases (default: $CAPSULE_ENGINE)")
             p.add_argument("--live-engine", help="the Python capsule-engine CLI, to decide live cases (default: $CAPSULE_LIVE_ENGINE)")
+            p.add_argument("--judge", choices=["live"], help="run a judged pack's cases through its pinned judge: one paid model call per case, "
+                           "two per row (default: not run)")
             p.add_argument("--engine-commit", help=f"refuse an engine not built from this commit (at least {MIN_COMMIT_PREFIX} characters of it)")
     p = sub.add_parser("run")
     p.add_argument("src")
