@@ -81,7 +81,7 @@ way.
   each row says what decided it (`decided_by`, with the engine's commit or the
   evaluator's digest). A live pack's cases are decided by the Python capsule-engine CLI's `packs evaluate` (`--live-engine PATH` or `$CAPSULE_LIVE_ENGINE`). That CLI reports the same version number for a release and for later commits on main, so the version alone cannot name a source build. An install from a package index is named by its version. An install from git is named by the commit pip recorded, with the version beside it. An install from a local directory (editable or not), an archive or a wheel file records neither, so it is not used. `--engine-commit` (at least 7 characters of the commit) refuses any engine, admission or live, not built from that commit. A judged pack's cases run only with `--judge live`, which spends
   money: each case is one call to the pinned judge (two per row, each made once), using `TYPESAFE_API_KEY`, or
-  `OPENROUTER_API_KEY` for the same pinned model, and the row reports the judge, its model, route and
+  `OPENROUTER_API_KEY` for TypeSafe's `jev-1.13` via OpenRouter, and the row reports the judge, its model, route and
   instruction digest, and the calls made and their cost when the route reports it. A report case is
   `{"conversation": [{"role": ..., "text": ...}]}`. Without the flag or a key, a judged case is not run. An admission binary whose build revision is unknown is not used. A case
   that cannot run is reported `evaluated: false` and `passed` is `null`; nothing unrun

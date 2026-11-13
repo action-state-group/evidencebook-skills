@@ -803,7 +803,7 @@ class JudgedLive(unittest.TestCase):
         self.assertEqual((code, res["passed"], res["evaluated"], res["not_evaluated"]), (0, True, 2, 0), res)
         row = res["rows"][0]
         self.assertEqual((row["met_case"], row["miss_case"], row["judge_calls"], row["judge_cost_usd"]), ("met", "not_met", 2, 0.004))
-        self.assertEqual((row["decided_by"]["model"], row["decided_by"]["route"]), ("jev-1.13.0", "openrouter:typesafe/jev-1.13"))
+        self.assertEqual((row["decided_by"]["model"], row["decided_by"]["route"]), ("typesafe/jev-1.13 (patch build not pinned)", "openrouter:typesafe/jev-1.13"))
         self.assertEqual(len(self.sent), 2)
         sent = json.dumps(self.sent[0])
         self.assertIn("I will refund you today", sent)

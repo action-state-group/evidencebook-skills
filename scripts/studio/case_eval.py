@@ -18,7 +18,7 @@ passed: the caller sets `passed` to null while any row is unrun.
                commit its install record names
     judged     the pinned judge (scripts/judges/jev_judge.py), one paid model call per
                case, so only with --judge live and a key (TYPESAFE_API_KEY, or
-               OPENROUTER_API_KEY for the same pinned model); otherwise not evaluated
+               OPENROUTER_API_KEY for TypeSafe's jev-1.13 via OpenRouter); otherwise not evaluated
 """
 import datetime
 import hashlib
@@ -269,7 +269,7 @@ def run_judged(kind, source, cases, environ):
     (a refused or failed case is not asked again, and its row stops there). Needs a key; the judge
     model id is the pack's own `judge.model_id`, which must be the pinned one."""
     if not (environ.get("TYPESAFE_API_KEY") or environ.get("OPENROUTER_API_KEY")):
-        return not_run(source, "the pinned judge needs TYPESAFE_API_KEY, or OPENROUTER_API_KEY for the same model, "
+        return not_run(source, "the pinned judge needs TYPESAFE_API_KEY, or OPENROUTER_API_KEY for TypeSafe's jev-1.13 via OpenRouter, "
                                "and neither is set")
     import pack_compile
     judges = pathlib.Path(__file__).resolve().parents[1] / "judges"
@@ -291,7 +291,11 @@ def run_judged(kind, source, cases, environ):
         return not_run(source, f"the judge backend is {jev_judge.backend_kind(backend)}, not the real pinned judge")
     min_confidence = (source.get("judge") or {}).get("min_confidence")
     route = "openrouter:" + jev_judge.OPENROUTER_MODEL if isinstance(backend, jev_judge.OpenRouterBackend) else "typesafe"
-    decided_by = {"name": "jev", "model": jev_judge.PINNED_MODEL, "route": route,
+    # OpenRouter serves a dated build of jev-1.13 and nothing maps it to jev-1.13.0, so that route
+    # does not claim the pinned patch version.
+    model = (jev_judge.OPENROUTER_MODEL + " (patch build not pinned)"
+             if isinstance(backend, jev_judge.OpenRouterBackend) else jev_judge.PINNED_MODEL)
+    decided_by = {"name": "jev", "model": model, "route": route,
                   "instruction_template_digest": jev_judge.instruction_template_digest("transcript")}
     rows = []
     for row, pair in by_row(cases).items():
