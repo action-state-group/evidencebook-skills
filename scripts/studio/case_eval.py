@@ -283,13 +283,19 @@ def run_judged(kind, source, cases, environ):
         return not_run(source, f"the pack's judge.model_id {model_id!r} is not the pinned {jev_judge.PINNED_MODEL}")
     clauses = {c["id"]: c for c in pack_compile.build_clauses(source)}
     allow_oos = bool((source.get("switches") or {}).get("out_of_scope_verdict"))
-    backend = jev_judge.resolve_backend()
+    try:
+        backend = jev_judge.resolve_backend()
+    except jev_judge.JudgeError as e:
+        return not_run(source, f"the judge backend was refused: {e}")
+    if jev_judge.backend_kind(backend) != "jev":  # JEV_JUDGE_BACKEND=mock hashes the request; no model reads the case
+        return not_run(source, f"the judge backend is {jev_judge.backend_kind(backend)}, not the real pinned judge")
+    min_confidence = (source.get("judge") or {}).get("min_confidence")
     route = "openrouter:" + jev_judge.OPENROUTER_MODEL if isinstance(backend, jev_judge.OpenRouterBackend) else "typesafe"
     decided_by = {"name": "jev", "model": jev_judge.PINNED_MODEL, "route": route,
                   "instruction_template_digest": jev_judge.instruction_template_digest("transcript")}
     rows = []
     for row, pair in by_row(cases).items():
-        got, why, calls_before, said = [], None, len(getattr(backend, "calls", [])), {}
+        got, why, calls_before, said, asked = [], None, len(getattr(backend, "calls", [])), {}, 0
         for name in two_case.CASES:
             clause = clauses.get(row)
             try:
@@ -297,6 +303,9 @@ def run_judged(kind, source, cases, environ):
                     raise ValueError("the row is not a judged criterion")
                 request = {"clause": clause, "judge_model_id": model_id, "allow_out_of_scope": allow_oos,
                            "agent_interaction": {"messages": judge_messages(pair[name]["conversation"])}}
+                if min_confidence is not None:
+                    request["min_confidence"] = min_confidence  # below it the judge answers not_evaluable
+                asked += 1
                 answer = jev_judge.judge(request, backend)
                 said[name] = answer["verdict"]
                 if answer["verdict"] not in ROW_RESULTS.values():
@@ -306,8 +315,8 @@ def run_judged(kind, source, cases, environ):
                 break
             got.append(answer["verdict"])
         spent = [c["cost_usd"] for c in getattr(backend, "calls", [])[calls_before:]]
-        usage = {"judge_calls": len(spent)}
-        if spent and all(x is not None for x in spent):
+        usage = {"judge_calls": asked}  # judge() calls made, each charged whether or not it answered
+        if spent and len(spent) == asked and all(x is not None for x in spent):
             usage["judge_cost_usd"] = round(sum(spent), 6)
         if why:
             rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated", "evaluated": False,

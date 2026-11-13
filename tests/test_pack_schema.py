@@ -840,6 +840,47 @@ class JudgedLive(unittest.TestCase):
         self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
         self.assertEqual(self.sent, [])
 
+    def test_the_mock_backend_is_never_taken_for_the_pinned_judge(self):
+        self.backend(self.verdicts("met", "not_met"))
+        import jev_judge
+        env = dict(self.KEY, JEV_JUDGE_BACKEND="mock")
+        with unittest.mock.patch.dict("os.environ", env, clear=True), \
+                unittest.mock.patch.object(jev_judge, "resolve_backend", wraps=lambda: jev_judge.jevals.MockBackend()):
+            code, res = run_test(self.SAMPLE, "--judge", "live")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertIn("mock", res["rows"][0]["reason"])
+
+    def test_a_refused_backend_configuration_is_a_not_run_row_not_a_crash(self):
+        import jev_judge
+        with unittest.mock.patch.dict("os.environ", dict(self.KEY, OPENROUTER_DECISION_MODEL="openai/gpt-4.1-mini"), clear=True):
+            code, res = run_test(self.SAMPLE, "--judge", "live")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertIn("refused", res["rows"][0]["reason"])
+
+    def test_the_packs_minimum_confidence_is_passed_to_the_judge(self):
+        import shutil
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        dst = pathlib.Path(d.name) / "pack"
+        shutil.copytree(self.SAMPLE.parent, dst)
+        f = dst / "pack-source.yaml"
+        f.write_text(f.read_text().replace("judge:\n  model_id: jev-1.13.0", "judge:\n  model_id: jev-1.13.0\n  min_confidence: 0.95"))
+        self.backend(self.verdicts("met", "not_met"))  # both answered at confidence 0.9
+        with unittest.mock.patch.dict("os.environ", self.KEY, clear=True):
+            code, res = run_test(f, "--judge", "live")
+        self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
+        self.assertEqual(res["rows"][0]["judge_said"], {"met": "not_evaluable"})
+
+    def test_calls_are_counted_on_the_typesafe_route_too(self):
+        import jev_judge
+        answers = iter([{"verdict": "met", "rationale": ""}, {"verdict": "not_met", "rationale": ""}])
+        with unittest.mock.patch.dict("os.environ", {"TYPESAFE_API_KEY": "unit-test-placeholder"}, clear=True), \
+                unittest.mock.patch.object(jev_judge, "judge", side_effect=lambda r, b: next(answers)):
+            code, res = run_test(self.SAMPLE, "--judge", "live")
+        row = res["rows"][0]
+        self.assertEqual((code, res["passed"], row["judge_calls"], row["decided_by"]["route"]), (0, True, 2, "typesafe"), res)
+        self.assertNotIn("judge_cost_usd", row)
+
     def test_a_pack_pinning_another_judge_is_not_run(self):
         import shutil
         d = tempfile.TemporaryDirectory()
