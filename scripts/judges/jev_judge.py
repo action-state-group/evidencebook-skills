@@ -81,7 +81,10 @@ Backend selection:
   (or unset)               "jev" backend spec. Any other value is refused: a
                            misspelled backend name never selects the real backend. Requires TYPESAFE_API_KEY, or
                            else OPENROUTER_API_KEY (the same model, "typesafe/jev-1.13", through
-                           OpenRouter; an OPENROUTER_DECISION_MODEL naming another is refused). This script
+                           OpenRouter, strict about the reply: OpenRouterBackend refuses an empty or
+                           unusable answer rather than letting jevals read it as "met"; an
+                           OPENROUTER_DECISION_MODEL naming another model is refused). On the
+                           TypeSafe key this script
                            force-sets TYPESAFE_MODEL to "jev-1.13.0" regardless of any
                            existing value before resolving the backend: jevals 0.1.4's
                            TypeSafeBackend sends no `model` field when none is given,
@@ -140,6 +143,8 @@ import sys
 
 import jevals
 from jevals import ChoiceEval, Sample
+from jevals.backends import BackendError
+from jevals.backends.llm import LLMBackend, _parse_json
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from airline_facts import policy_current_time, reservation_timestamps  # noqa: E402
@@ -169,9 +174,8 @@ DISCLOSED_FACTS_OUT_OF_SCOPE_OPTION = {
                      "so it does not apply"
 }
 MODES = ("transcript", "disclosed_facts")
-# The pinned model as OpenRouter names it, and the jevals backend spec that reaches it.
+# The pinned model as OpenRouter names it.
 OPENROUTER_MODEL = "typesafe/jev-1.13"
-OPENROUTER_SPEC = f"openrouter:{OPENROUTER_MODEL}"
 PINNED_MODEL_NAME = "jev"
 PINNED_MODEL_VERSION = "1.13.0"
 PINNED_MODEL = f"{PINNED_MODEL_NAME}-{PINNED_MODEL_VERSION}"
@@ -458,7 +462,9 @@ def backend_kind(backend=None):
     if backend is None:
         return _env_backend()
     if isinstance(backend, str):
-        return "jev" if backend == OPENROUTER_SPEC else backend
+        return backend
+    if isinstance(backend, OpenRouterBackend):
+        return "jev"
     if isinstance(backend, jevals.MockBackend):
         return "mock"
     return type(backend).__name__
@@ -479,6 +485,34 @@ def sealed_model_id(model_id, backend=None):
     return f"{model_id} ({kind} backend, no model read the evidence)"
 
 
+class OpenRouterBackend(LLMBackend):
+    """jevals' chat-completions backend, strict about what the model answered. LLMBackend turns a
+    missing, empty or unparseable answer into uniform probabilities, and a choice question's first
+    option wins a uniform tie -- here "met" -- so a reply that said nothing would seal as a verdict.
+    This refuses any reply that does not carry, for every question, a bare option label or an
+    object putting positive weight on the options. `calls` keeps each call's usage and cost."""
+
+    def __init__(self):
+        super().__init__(model=OPENROUTER_MODEL, provider="openrouter")
+        self.calls = []
+
+    async def evaluate(self, state, questions):
+        resp = await super().evaluate(state, questions)
+        try:
+            parsed = _parse_json(resp.raw["choices"][0]["message"]["content"] or "")
+        except (KeyError, IndexError, TypeError, AttributeError):
+            parsed = {}
+        for qid, q in questions.items():
+            v, options = parsed.get(qid), list(q.criteria)
+            weights = [x for x in (v.get(o) for o in options) if isinstance(x, (int, float)) and not isinstance(x, bool)
+                       and x > 0] if isinstance(v, dict) else []
+            if not (v in options if isinstance(v, str) else weights):
+                raise BackendError(f"{self.name}: the reply gave no usable answer for {qid!r}")
+        self.calls.append({"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens,
+                           "cost_usd": resp.usage.cost_usd})
+        return resp
+
+
 def resolve_backend():
     mode = _env_backend()
     if mode == "mock":
@@ -494,7 +528,7 @@ def resolve_backend():
         if asked != OPENROUTER_MODEL:
             raise JudgeError(f"OPENROUTER_DECISION_MODEL={asked!r} is not the model this script pins "
                              f"({OPENROUTER_MODEL!r}, {PINNED_MODEL}); refusing rather than judging with another")
-        return OPENROUTER_SPEC
+        return OpenRouterBackend()
     raise JudgeError("neither TYPESAFE_API_KEY nor OPENROUTER_API_KEY is set (the real Jev backend requires one)")
 
 
@@ -532,7 +566,7 @@ def _transcript_sample(request):
 
 
 def _check_model_pin(request, be):
-    if isinstance(be, str):  # the real Jev backend, about to be resolved by jevals itself
+    if isinstance(be, (str, OpenRouterBackend)):  # the real Jev backend (itself, or the same model through OpenRouter)
         wanted = request.get("judge_model_id")
         if wanted != PINNED_MODEL:
             raise JudgeError(

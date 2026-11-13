@@ -17,6 +17,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "judges"))
 import jevals  # noqa: E402
 import jev_judge  # noqa: E402
 
+QID = "policy_compliance.confirmed_before_acting.q"  # the question id jevals gives the clause
+
 SAMPLE_REQUEST = {
     "clause": {
         "id": "policy_compliance.confirmed_before_acting",
@@ -156,7 +158,8 @@ class JudgeFunction(unittest.TestCase):
     def test_openrouter_serves_the_same_pinned_model_without_a_typesafe_key(self):
         self.with_env(OPENROUTER_API_KEY="unit-test-placeholder-never-sent-anywhere")
         spec = jev_judge.resolve_backend()
-        self.assertEqual(spec, "openrouter:typesafe/jev-1.13")
+        self.assertIsInstance(spec, jev_judge.OpenRouterBackend)
+        self.assertEqual(spec.model, "typesafe/jev-1.13")
         self.assertEqual(jev_judge.backend_kind(spec), "jev")
         self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", spec), "jev-1.13.0")
         self.assertNotIn("TYPESAFE_MODEL", os.environ)
@@ -169,7 +172,31 @@ class JudgeFunction(unittest.TestCase):
         with self.assertRaisesRegex(jev_judge.JudgeError, "refusing rather than judging with another"):
             jev_judge.resolve_backend()
         os.environ["OPENROUTER_DECISION_MODEL"] = "typesafe/jev-1.13"
-        self.assertEqual(jev_judge.resolve_backend(), "openrouter:typesafe/jev-1.13")
+        self.assertIsInstance(jev_judge.resolve_backend(), jev_judge.OpenRouterBackend)
+
+    def reply(self, content, **kw):
+        """The OpenRouter route over a canned chat-completions reply: no network."""
+        import httpx
+        self.with_env(OPENROUTER_API_KEY="unit-test-placeholder-never-sent-anywhere")
+        be = jev_judge.resolve_backend()
+        body = {"choices": [{"message": {"content": content}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.001}}
+        be._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=body)))
+        return be
+
+    def test_a_model_reply_with_a_verdict_is_taken_and_its_cost_kept(self):
+        be = self.reply(json.dumps({QID: {"met": 0.9, "not_met": 0.1}}))
+        out = jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id="jev-1.13.0"), backend=be)
+        self.assertEqual(out["verdict"], "met")
+        self.assertEqual(be.calls, [{"input_tokens": 10, "output_tokens": 5, "cost_usd": 0.001}])
+
+    def test_an_empty_or_unusable_model_reply_is_refused_not_sealed_as_met(self):
+        for content in ("", "not json", "{}", json.dumps({QID: {}}), json.dumps({QID: {"met": 0, "not_met": 0}}),
+                        json.dumps({QID: "banana"}), json.dumps({"other": {"met": 1}})):
+            with self.subTest(content=content):
+                be = self.reply(content)
+                with self.assertRaisesRegex(jev_judge.JudgeError, "judge backend error"):
+                    jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id="jev-1.13.0"), backend=be)
+                self.assertEqual(be.calls, [])
 
     def test_the_typesafe_key_wins_when_both_are_set(self):
         self.with_env(OPENROUTER_API_KEY="x", TYPESAFE_API_KEY="y")
