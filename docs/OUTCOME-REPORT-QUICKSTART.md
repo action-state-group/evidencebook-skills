@@ -99,7 +99,8 @@ from Jev onboarding, and never commit it:
 $ export TYPESAFE_API_KEY=<your-jev-api-key>
 ```
 
-and add `--judge-backend live` to the `report.sh` call in step 6.
+and add `--judge-backend live` to the `report.sh` call in step 6. Without a Jev key, an
+`OPENROUTER_API_KEY` reaches the same pinned model (`typesafe/jev-1.13`) through OpenRouter.
 
 ## 4. Set up a book
 

@@ -118,7 +118,7 @@ done
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
 if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
-  [[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY set" >&2; exit 2; }
+  [[ -n "${TYPESAFE_API_KEY:-}" || -n "${OPENROUTER_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set" >&2; exit 2; }
 fi
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

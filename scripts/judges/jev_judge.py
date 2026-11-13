@@ -79,7 +79,9 @@ Backend selection:
                            about the conversation; the only backend the tests use.
   JEV_JUDGE_BACKEND=jev    the real Jev backend (TypeSafe System One), via jevals'
   (or unset)               "jev" backend spec. Any other value is refused: a
-                           misspelled backend name never selects the real backend. Requires TYPESAFE_API_KEY. This script
+                           misspelled backend name never selects the real backend. Requires TYPESAFE_API_KEY, or
+                           else OPENROUTER_API_KEY (the same model, "typesafe/jev-1.13", through
+                           OpenRouter; an OPENROUTER_DECISION_MODEL naming another is refused). This script
                            force-sets TYPESAFE_MODEL to "jev-1.13.0" regardless of any
                            existing value before resolving the backend: jevals 0.1.4's
                            TypeSafeBackend sends no `model` field when none is given,
@@ -167,6 +169,9 @@ DISCLOSED_FACTS_OUT_OF_SCOPE_OPTION = {
                      "so it does not apply"
 }
 MODES = ("transcript", "disclosed_facts")
+# The pinned model as OpenRouter names it, and the jevals backend spec that reaches it.
+OPENROUTER_MODEL = "typesafe/jev-1.13"
+OPENROUTER_SPEC = f"openrouter:{OPENROUTER_MODEL}"
 PINNED_MODEL_NAME = "jev"
 PINNED_MODEL_VERSION = "1.13.0"
 PINNED_MODEL = f"{PINNED_MODEL_NAME}-{PINNED_MODEL_VERSION}"
@@ -453,7 +458,7 @@ def backend_kind(backend=None):
     if backend is None:
         return _env_backend()
     if isinstance(backend, str):
-        return backend
+        return "jev" if backend == OPENROUTER_SPEC else backend
     if isinstance(backend, jevals.MockBackend):
         return "mock"
     return type(backend).__name__
@@ -478,10 +483,19 @@ def resolve_backend():
     mode = _env_backend()
     if mode == "mock":
         return jevals.MockBackend(fn=_mock_fn)
-    os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
-    if not os.environ.get("TYPESAFE_API_KEY"):
-        raise JudgeError("TYPESAFE_API_KEY is not set (the real Jev backend requires it)")
-    return "jev"
+    if os.environ.get("TYPESAFE_API_KEY"):
+        os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
+        return "jev"
+    if os.environ.get("OPENROUTER_API_KEY"):
+        # The same model served by OpenRouter: jevals' "openrouter:<model>" spec (its chat-completions
+        # backend, which also reports the cost of each call). The model is this one constant; a
+        # different OPENROUTER_DECISION_MODEL is refused, not followed.
+        asked = os.environ.get("OPENROUTER_DECISION_MODEL", OPENROUTER_MODEL)
+        if asked != OPENROUTER_MODEL:
+            raise JudgeError(f"OPENROUTER_DECISION_MODEL={asked!r} is not the model this script pins "
+                             f"({OPENROUTER_MODEL!r}, {PINNED_MODEL}); refusing rather than judging with another")
+        return OPENROUTER_SPEC
+    raise JudgeError("neither TYPESAFE_API_KEY nor OPENROUTER_API_KEY is set (the real Jev backend requires one)")
 
 
 def _mode_from_request(request):

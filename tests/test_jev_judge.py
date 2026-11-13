@@ -139,11 +139,41 @@ class JudgeFunction(unittest.TestCase):
         try:
             os.environ.pop("JEV_JUDGE_BACKEND", None)
             os.environ.pop("TYPESAFE_API_KEY", None)
+            os.environ.pop("OPENROUTER_API_KEY", None)
             with self.assertRaisesRegex(jev_judge.JudgeError, "TYPESAFE_API_KEY"):
                 jev_judge.resolve_backend()
         finally:
             os.environ.clear()
             os.environ.update(env_backup)
+
+    def with_env(self, **env):
+        backup = dict(os.environ)
+        self.addCleanup(lambda: (os.environ.clear(), os.environ.update(backup)))
+        for k in ("JEV_JUDGE_BACKEND", "TYPESAFE_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_DECISION_MODEL", "TYPESAFE_MODEL"):
+            os.environ.pop(k, None)
+        os.environ.update(env)
+
+    def test_openrouter_serves_the_same_pinned_model_without_a_typesafe_key(self):
+        self.with_env(OPENROUTER_API_KEY="unit-test-placeholder-never-sent-anywhere")
+        spec = jev_judge.resolve_backend()
+        self.assertEqual(spec, "openrouter:typesafe/jev-1.13")
+        self.assertEqual(jev_judge.backend_kind(spec), "jev")
+        self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", spec), "jev-1.13.0")
+        self.assertNotIn("TYPESAFE_MODEL", os.environ)
+        # the sealed model id must still be the pinned one
+        with self.assertRaisesRegex(jev_judge.JudgeError, "does not match the model"):
+            jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id="some-other-model"), backend=spec)
+
+    def test_a_different_openrouter_model_is_refused(self):
+        self.with_env(OPENROUTER_API_KEY="x", OPENROUTER_DECISION_MODEL="openai/gpt-4.1-mini")
+        with self.assertRaisesRegex(jev_judge.JudgeError, "refusing rather than judging with another"):
+            jev_judge.resolve_backend()
+        os.environ["OPENROUTER_DECISION_MODEL"] = "typesafe/jev-1.13"
+        self.assertEqual(jev_judge.resolve_backend(), "openrouter:typesafe/jev-1.13")
+
+    def test_the_typesafe_key_wins_when_both_are_set(self):
+        self.with_env(OPENROUTER_API_KEY="x", TYPESAFE_API_KEY="y")
+        self.assertEqual(jev_judge.resolve_backend(), "jev")
 
 
 class MockBackendNeverPassesAsARealModel(unittest.TestCase):
