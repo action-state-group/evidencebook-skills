@@ -97,7 +97,7 @@ Steps, in order; each one's output is the next one's input. For the airline supp
 EU AI Act packs, one command runs steps 1 to 5:
 `scripts/report.sh --spec SPEC --profile NAME --date FROM --to TO --out report.html --seal --judge-backend live`
 with the spec `packs.py` names. `--judge-backend live` runs the pack's real judge (it
-needs `TYPESAFE_API_KEY` and makes model calls); the default `mock` backend is for demos
+needs `TYPESAFE_API_KEY`, or `OPENROUTER_API_KEY` for TypeSafe's `jev-1.13` via OpenRouter, and makes model calls); the default `mock` backend is for demos
 and tests, and its page says no model read the conversations, so it is never handed over
 as a report. The command stops at the first refusal, and it leaves no page at `--out`
 unless `report check` says `match` with the embedded evidence `VALID`.

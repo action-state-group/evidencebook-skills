@@ -48,8 +48,8 @@
 # ("obligation" for eu-ai-act-compliance/v1, "outcome" for outcome-report/v1,
 # "outcome" when the pack has no presentation.json); --judge-backend defaults
 # to mock (scripts/judges/jev_judge.py's mock backend, no key, no network
-# call) -- pass --judge-backend live with TYPESAFE_API_KEY set in the
-# environment for a real Jev run (the key is required only for the default
+# call) -- pass --judge-backend live with TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set in
+# the environment for a real Jev run (the key is required only for the default
 # judge command; a --judge-cmd of your own brings its own credentials).
 # --judge-cmd/--judge-model-id are read from the compiled pack by default (its
 # own judge.model_id) and almost never need to be given explicitly.
@@ -118,7 +118,7 @@ done
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
 if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
-  [[ -n "${TYPESAFE_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY set" >&2; exit 2; }
+  [[ -n "${TYPESAFE_API_KEY:-}" || -n "${OPENROUTER_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set" >&2; exit 2; }
 fi
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
