@@ -155,13 +155,16 @@ class JudgeFunction(unittest.TestCase):
             os.environ.pop(k, None)
         os.environ.update(env)
 
-    def test_openrouter_serves_the_same_pinned_model_without_a_typesafe_key(self):
+    def test_openrouter_serves_jev_1_13_without_a_typesafe_key(self):
         self.with_env(OPENROUTER_API_KEY="unit-test-placeholder-never-sent-anywhere")
         spec = jev_judge.resolve_backend()
         self.assertIsInstance(spec, jev_judge.OpenRouterBackend)
         self.assertEqual(spec.model, "typesafe/jev-1.13")
         self.assertEqual(jev_judge.backend_kind(spec), "jev")
-        self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", spec), "jev-1.13.0")
+        stamped = "jev-1.13.0 (openrouter: typesafe/jev-1.13, patch build not pinned)"
+        self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", spec), stamped)
+        self.assertEqual(jev_judge.sealed_model_id(stamped, spec), stamped)  # not stamped twice
+        self.assertEqual(jev_judge.sealed_model_id("jev-1.13.0", "jev"), "jev-1.13.0")  # TypeSafe route unchanged
         self.assertNotIn("TYPESAFE_MODEL", os.environ)
         # the sealed model id must still be the pinned one
         with self.assertRaisesRegex(jev_judge.JudgeError, "does not match the model"):

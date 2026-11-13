@@ -80,7 +80,7 @@ Backend selection:
   JEV_JUDGE_BACKEND=jev    the real Jev backend (TypeSafe System One), via jevals'
   (or unset)               "jev" backend spec. Any other value is refused: a
                            misspelled backend name never selects the real backend. Requires TYPESAFE_API_KEY, or
-                           else OPENROUTER_API_KEY (the same model, "typesafe/jev-1.13", through
+                           else OPENROUTER_API_KEY (TypeSafe's "typesafe/jev-1.13", whose patch build OpenRouter does not pin, through
                            OpenRouter's /v1/systemone, as OpenRouterBackend; an
                            OPENROUTER_DECISION_MODEL naming another model is refused). On the
                            TypeSafe key this script
@@ -177,6 +177,7 @@ DISCLOSED_FACTS_OUT_OF_SCOPE_OPTION = {
 MODES = ("transcript", "disclosed_facts")
 # The pinned model as OpenRouter names it.
 OPENROUTER_MODEL = "typesafe/jev-1.13"
+OPENROUTER_ROUTE_STAMP = f"(openrouter: {OPENROUTER_MODEL}, patch build not pinned)"
 PINNED_MODEL_NAME = "jev"
 PINNED_MODEL_VERSION = "1.13.0"
 PINNED_MODEL = f"{PINNED_MODEL_NAME}-{PINNED_MODEL_VERSION}"
@@ -479,6 +480,12 @@ def sealed_model_id(model_id, backend=None):
     answer never passes as a named real model. An id that merely contains the
     backend's name ("hammock-judge-1") is not stamped."""
     kind = backend_kind(backend)
+    if isinstance(backend, OpenRouterBackend):
+        # OpenRouter serves a dated build of jev-1.13 that nothing maps to jev-1.13.0, so the pin
+        # names the route and says the patch build is not pinned.
+        if OPENROUTER_ROUTE_STAMP in (model_id or ""):
+            return model_id
+        return f"{model_id} {OPENROUTER_ROUTE_STAMP}"
     if kind == "jev":
         return model_id
     if f"({kind} backend".lower() in (model_id or "").lower():
@@ -526,7 +533,7 @@ def resolve_backend():
         os.environ["TYPESAFE_MODEL"] = PINNED_MODEL
         return "jev"
     if os.environ.get("OPENROUTER_API_KEY"):
-        # The same model served by OpenRouter (OpenRouterBackend). The model is this one constant; a
+        # TypeSafe's jev-1.13 served by OpenRouter (OpenRouterBackend), patch build not pinned. The model is this one constant; a
         # different OPENROUTER_DECISION_MODEL is refused, not followed.
         asked = os.environ.get("OPENROUTER_DECISION_MODEL", OPENROUTER_MODEL)
         if asked != OPENROUTER_MODEL:
@@ -570,7 +577,7 @@ def _transcript_sample(request):
 
 
 def _check_model_pin(request, be):
-    if isinstance(be, (str, OpenRouterBackend)):  # the real Jev backend (itself, or the same model through OpenRouter)
+    if isinstance(be, (str, OpenRouterBackend)):  # the real Jev backend (itself, or TypeSafe's jev-1.13 through OpenRouter)
         wanted = request.get("judge_model_id")
         if wanted != PINNED_MODEL:
             raise JudgeError(
