@@ -289,7 +289,7 @@ def run_judged(kind, source, cases, environ):
                   "instruction_template_digest": jev_judge.instruction_template_digest("transcript")}
     rows = []
     for row, pair in by_row(cases).items():
-        got, why, calls_before = [], None, len(getattr(backend, "calls", []))
+        got, why, calls_before, said = [], None, len(getattr(backend, "calls", [])), {}
         for name in two_case.CASES:
             clause = clauses.get(row)
             try:
@@ -298,6 +298,7 @@ def run_judged(kind, source, cases, environ):
                 request = {"clause": clause, "judge_model_id": model_id, "allow_out_of_scope": allow_oos,
                            "agent_interaction": {"messages": judge_messages(pair[name]["conversation"])}}
                 answer = jev_judge.judge(request, backend)
+                said[name] = answer["verdict"]
                 if answer["verdict"] not in ROW_RESULTS.values():
                     raise ValueError(f"the judge answered {answer['verdict']!r}: {answer.get('rationale', '')}")
             except (jev_judge.JudgeError, KeyError, TypeError, ValueError) as e:
@@ -310,7 +311,7 @@ def run_judged(kind, source, cases, environ):
             usage["judge_cost_usd"] = round(sum(spent), 6)
         if why:
             rows.append({"row": row, "met_case": "not_evaluated", "miss_case": "not_evaluated", "evaluated": False,
-                         "reason": why, **usage})
+                         "reason": why, "judge_said": said, **usage})
         else:
             rows.append(row_report(row, tuple(got), {"decided_by": decided_by, **usage}))
     return rows

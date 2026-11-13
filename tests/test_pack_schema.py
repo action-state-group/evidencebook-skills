@@ -778,12 +778,13 @@ class JudgedLive(unittest.TestCase):
         import jev_judge
         with unittest.mock.patch.dict("os.environ", self.KEY):
             be = jev_judge.OpenRouterBackend()
-        self.sent = []
+        self.sent, self.urls = [], []
 
         def handler(request):
             self.sent.append(json.loads(request.content))
-            return httpx.Response(200, json={"choices": [{"message": {"content": reply(len(self.sent))}}],
-                                             "usage": {"prompt_tokens": 100, "completion_tokens": 10, "cost": 0.002}})
+            self.urls.append(str(request.url))
+            return httpx.Response(200, json={"answers": reply(len(self.sent)),
+                                             "usage": {"input_tokens": 100, "output_tokens": 0, "cost": 0.002}})
         be._client = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler))
         patch = unittest.mock.patch.object(jev_judge, "resolve_backend", return_value=be)
         patch.start()
@@ -794,7 +795,7 @@ class JudgedLive(unittest.TestCase):
             return run_test(self.SAMPLE, "--judge", "live")
 
     def verdicts(self, *names):
-        return lambda n: json.dumps({self.QID: {names[n - 1]: 1.0}})
+        return lambda n: {self.QID: {"choice": names[n - 1], "probabilities": {names[n - 1]: 1.0}, "confidence": 0.9}}
 
     def test_both_cases_are_judged_and_the_cost_reported(self):
         self.backend(self.verdicts("met", "not_met"))
@@ -807,6 +808,7 @@ class JudgedLive(unittest.TestCase):
         sent = json.dumps(self.sent[0])
         self.assertIn("I will refund you today", sent)
         self.assertIn("typesafe/jev-1.13", sent)
+        self.assertIn("systemone", self.urls[0])
 
     def test_a_case_the_judge_decides_otherwise_fails(self):
         self.backend(self.verdicts("met", "met"))
@@ -814,11 +816,18 @@ class JudgedLive(unittest.TestCase):
         self.assertEqual((code, res["passed"]), (1, False), res)
 
     def test_an_unusable_reply_leaves_the_row_unrun_and_is_not_asked_again(self):
-        self.backend(lambda n: "")
+        self.backend(lambda n: {})
         code, res = self.run_live()
         self.assertEqual((code, res["passed"], res["evaluated"]), (3, None, 0), res)
         self.assertEqual(len(self.sent), 1)
         self.assertFalse(res["rows"][0]["evaluated"])
+
+    def test_what_the_judge_said_is_kept_when_the_row_is_unrun(self):
+        self.backend(self.verdicts("met", "not_evaluable"))
+        code, res = self.run_live()
+        row = res["rows"][0]
+        self.assertEqual((code, res["passed"], row["evaluated"], row["judge_said"], row["judge_calls"]),
+                         (3, None, False, {"met": "met", "not_met": "not_evaluable"}, 2), res)
 
     def test_an_out_of_scope_answer_is_not_a_pass(self):
         self.backend(self.verdicts("out_of_scope", "not_met"))
