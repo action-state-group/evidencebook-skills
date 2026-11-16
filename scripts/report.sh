@@ -206,6 +206,20 @@ else
   else
     export JEV_JUDGE_BACKEND=jev
     EFFECTIVE_MODEL_ID="$JUDGE_MODEL_ID"
+    # The default judge command answers on the route its keys select; on OpenRouter the
+    # pin must name that route (a patch build nothing pins), so seal the backend-stamped id
+    # jev_judge.sealed_model_id() returns, which jev_judge.py's pin check accepts.
+    if [[ "$JUDGE_CMD" == "python3 $REPO/scripts/judges/jev_judge.py" ]]; then
+      EFFECTIVE_MODEL_ID=$(python3 -c "
+import sys
+sys.path.insert(0, sys.argv[1])
+import jev_judge
+try:
+    print(jev_judge.sealed_model_id(sys.argv[2], jev_judge.resolve_backend()))
+except jev_judge.JudgeError as e:
+    sys.exit(f\"report.sh: {e}\")" "$REPO/scripts/judges" "$JUDGE_MODEL_ID") \
+        || fail "could not resolve the judge route for the sealed model id (its output above says why)"
+    fi
   fi
   for day in "${DATES[@]}"; do
     step "daily-judge-and-close: $day (JEV_JUDGE_BACKEND=$JEV_JUDGE_BACKEND)"

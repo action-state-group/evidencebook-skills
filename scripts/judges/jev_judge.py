@@ -94,7 +94,9 @@ Backend selection:
                            this path also refuses (JudgeError, before any backend
                            call) unless request["judge_model_id"] -- the operator's
                            own --judge-model-id, sealed verbatim into
-                           judge_pin_digest by run_daily.py -- equals PINNED_MODEL:
+                           judge_pin_digest by run_daily.py -- equals PINNED_MODEL
+                           (on the OpenRouter route also its route-stamped form,
+                           sealed_model_id(), which report.sh seals):
                            TYPESAFE_MODEL alone only protects what reaches the API,
                            not what gets sealed as "which model judged", and those are
                            two different strings with nothing else cross-checking them.
@@ -579,12 +581,13 @@ def _transcript_sample(request):
 def _check_model_pin(request, be):
     if isinstance(be, (str, OpenRouterBackend)):  # the real Jev backend (itself, or TypeSafe's jev-1.13 through OpenRouter)
         wanted = request.get("judge_model_id")
-        if wanted != PINNED_MODEL:
+        # The bare id, or the id the backend stamps (OpenRouter's route stamp): report.sh seals the latter.
+        if wanted not in (PINNED_MODEL, sealed_model_id(PINNED_MODEL, be)):
             raise JudgeError(
                 f"--judge-model-id {wanted!r} does not match the model this script "
                 f"actually pins ({PINNED_MODEL!r}); sealing a report under this "
                 "judge_pin_digest would misstate which model judged. Pass "
-                f"--judge-model-id {PINNED_MODEL!r} exactly."
+                f"--judge-model-id {sealed_model_id(PINNED_MODEL, be)!r} exactly."
             )
 
 

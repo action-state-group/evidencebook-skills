@@ -170,6 +170,21 @@ class JudgeFunction(unittest.TestCase):
         with self.assertRaisesRegex(jev_judge.JudgeError, "does not match the model"):
             jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id="some-other-model"), backend=spec)
 
+    def test_the_stamped_openrouter_id_is_accepted_beside_the_bare_one_and_nothing_else(self):
+        stamped = "jev-1.13.0 (openrouter: typesafe/jev-1.13, patch build not pinned)"
+        for wanted in ("jev-1.13.0", stamped):
+            with self.subTest(wanted=wanted):
+                be = self.reply(self.GOOD)
+                out = jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id=wanted), backend=be)
+                self.assertEqual(out["verdict"], "met")
+        be = self.reply(self.GOOD)
+        with self.assertRaisesRegex(jev_judge.JudgeError, "does not match the model"):
+            jev_judge.judge(dict(SAMPLE_REQUEST, judge_model_id="jev-1.13.0 (mock backend, no model read the evidence)"),
+                            backend=be)
+        # the TypeSafe route still takes only the bare id
+        with self.assertRaisesRegex(jev_judge.JudgeError, "does not match the model"):
+            jev_judge._check_model_pin(dict(SAMPLE_REQUEST, judge_model_id=stamped), "jev")
+
     def test_a_different_openrouter_model_is_refused(self):
         self.with_env(OPENROUTER_API_KEY="x", OPENROUTER_DECISION_MODEL="openai/gpt-4.1-mini")
         with self.assertRaisesRegex(jev_judge.JudgeError, "refusing rather than judging with another"):
