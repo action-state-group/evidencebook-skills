@@ -48,7 +48,8 @@ argv = sys.argv[1:]
 out = pathlib.Path(argv[argv.index("--out") + 1])
 out.mkdir(parents=True, exist_ok=True)
 with open(os.environ["STUB_LOG"], "a") as f:
-    f.write(json.dumps({"script": "rollup_day", "JEV_JUDGE_BACKEND": os.environ.get("JEV_JUDGE_BACKEND")}) + "\n")
+    f.write(json.dumps({"script": "rollup_day", "JEV_JUDGE_BACKEND": os.environ.get("JEV_JUDGE_BACKEND"),
+                        "argv": argv}) + "\n")
 for day in filter(None, os.environ.get("STUB_DAYS", "").split(",")):
     doc = build_result_v0_for_day(f"day:{day}", [(f"case-{day}", {"c1": "met"}, {"c1": ["ab" * 32]},
                                                   {"c1": "judged"})],
@@ -192,6 +193,39 @@ class ReportShJudgedPath(unittest.TestCase):
             self.assertEqual({c["JEV_JUDGE_BACKEND"] for c in self.calls(script)}, {"jev"}, script)
         argv = self.calls("run_daily")[0]["argv"]
         self.assertEqual(argv[argv.index("--judge-model-id") + 1], "jev-1.13.0")
+
+    def sealed_model_id_and_pin(self, env_extra):
+        """What run_daily.py / rollup_day.py are handed as --judge-model-id on the live route, and
+        the judge pin input a pin over it would seal (scripts/judge_pin.py, the same function
+        run_daily.py calls)."""
+        proc = self.run_report("--date", "2026-10-01", "--judge-backend", "live", env_extra=env_extra)
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        ids = set()
+        for script in ("run_daily", "rollup_day"):
+            argv = self.calls(script)[-1]["argv"]
+            ids.add(argv[argv.index("--judge-model-id") + 1])
+        self.assertEqual(len(ids), 1, ids)
+        model_id = ids.pop()
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from judge_pin import pin_input
+        finally:
+            sys.path.pop(0)
+        spec = {"pack_source_digest": "a" * 64,
+                "judge": {"prompt": "demo/airline-support-outcomes/judge-prompt.md",
+                          "axes": "demo/airline-support-outcomes/axes.json", "sampling_params": {"temperature": 0}}}
+        return model_id, pin_input(spec, ROOT, model_id, "d" * 64)
+
+    def test_live_on_openrouter_seals_the_route_in_the_judge_pin(self):
+        env = {"OPENROUTER_API_KEY": "unit-test-placeholder-never-sent-anywhere"}
+        env.update({"TYPESAFE_API_KEY": ""})
+        model_id, pin = self.sealed_model_id_and_pin(env)
+        self.assertEqual(model_id, "jev-1.13.0 (openrouter: typesafe/jev-1.13, patch build not pinned)")
+        self.assertEqual(pin["model_id"], model_id)
+        self.assertIn("openrouter", pin["model_id"])
+        bare = self.sealed_model_id_and_pin({"TYPESAFE_API_KEY": "test-key"})
+        self.assertEqual(bare[0], "jev-1.13.0")  # the TypeSafe route is unchanged
+        self.assertNotEqual(bare[1], pin)
 
     def test_mock_sets_the_mock_backend_and_marks_the_model_id(self):
         proc = self.run_report("--date", "2026-10-01", env_extra={"JEV_JUDGE_BACKEND": "jev"})
