@@ -214,7 +214,10 @@ else
 import sys
 sys.path.insert(0, sys.argv[1])
 import jev_judge
-print(jev_judge.sealed_model_id(sys.argv[2], jev_judge.resolve_backend()))" "$REPO/scripts/judges" "$JUDGE_MODEL_ID") \
+try:
+    print(jev_judge.sealed_model_id(sys.argv[2], jev_judge.resolve_backend()))
+except jev_judge.JudgeError as e:
+    sys.exit(f\"report.sh: {e}\")" "$REPO/scripts/judges" "$JUDGE_MODEL_ID") \
         || fail "could not resolve the judge route for the sealed model id (its output above says why)"
     fi
   fi

@@ -94,7 +94,9 @@ Backend selection:
                            this path also refuses (JudgeError, before any backend
                            call) unless request["judge_model_id"] -- the operator's
                            own --judge-model-id, sealed verbatim into
-                           judge_pin_digest by run_daily.py -- equals PINNED_MODEL:
+                           judge_pin_digest by run_daily.py -- equals PINNED_MODEL
+                           (on the OpenRouter route also its route-stamped form,
+                           sealed_model_id(), which report.sh seals):
                            TYPESAFE_MODEL alone only protects what reaches the API,
                            not what gets sealed as "which model judged", and those are
                            two different strings with nothing else cross-checking them.
