@@ -7,6 +7,10 @@
       "input": {
         "conversation": [
           {
+            "role": "customer",
+            "text": "Please refund my order."
+          },
+          {
             "role": "agent",
             "text": "I will refund you today."
           },
@@ -23,12 +27,20 @@
       "input": {
         "conversation": [
           {
+            "role": "customer",
+            "text": "Please refund my order."
+          },
+          {
             "role": "agent",
             "text": "I will refund you today."
           },
           {
+            "role": "tool",
+            "text": "refund failed: payment processor error, nothing was refunded"
+          },
+          {
             "role": "agent",
-            "text": "Goodbye."
+            "text": "Thanks for contacting us. Goodbye."
           }
         ]
       }
