@@ -140,8 +140,9 @@ source compiles to.
   or a unit in `accept` that no tier names.
 - A `lift` on any row but an `own.settled` row whose `on_fail` is `"record"`; one whose
   `tier` is not a tier at or above the row's `from`; one whose `unless_fail` is empty,
-  repeats a row, names the lifting row itself, names no row, or names a row that is not
-  an `own_history` row.
+  repeats a row, names the lifting row itself, names no row, names a row that is not
+  an `own_history` row, or names a row read only from a tier above `lift.tier`; and a pack with a `lift`
+  but no `card.verified` row from `lift.tier` or below.
 - A field of the wrong type. It is reported, never raised.
 
 ## 2. Predicates
@@ -414,7 +415,8 @@ step 4 for that deal, and only when all of these hold:
 - no row named in `unless_fail` fails. A `not_read` there does not block the lift:
   a book with no verdict yet holds no adverse one;
 - every `card` row from a tier at or below `lift.tier` reads `not_read`: nothing
-  was served. A card that was served and verifies, fails or is stale speaks for
+  was served (the pack must read `card.verified` there, so a served card that fails
+  verification reads `fail`, never `not_read`). A card that was served and verifies, fails or is stale speaks for
   itself, and the lift does not apply.
 
 Then those card rows are treated as passed in step 4: they lower no tier and ask

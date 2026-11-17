@@ -486,6 +486,144 @@
     "source": "adverse-adjudication",
     "tier": "T0"
    }
+  },
+  {
+   "case": "t1-sat-deal-under-the-bound-lifts",
+   "why": "5,000 sat is under 10,000 sat, the pack's T1 bound: the lift applies as in USD.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "5000",
+    "currency": "sat",
+    "platform": {},
+    "card": {},
+    "selection": {},
+    "own": {
+     "exchanges": 3,
+     "settled": 3,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-msat-deal-under-the-bound-lifts",
+   "why": "5,000,000 msat is 5,000 sat: msat converts to sat before the tier.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "5000000",
+    "currency": "msat",
+    "platform": {},
+    "card": {},
+    "selection": {},
+    "own": {
+     "exchanges": 3,
+     "settled": 3,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "above-t1-sat-deal-the-lift-does-not-apply",
+   "why": "20,000 sat is above the pack's T1 bound, which sat 3 holds to about $10: the rows stand, the card is asked for.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {},
+    "card": {},
+    "selection": {},
+    "own": {
+     "exchanges": 3,
+     "settled": 3,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "ASK",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-future-checkpoint-is-not-fresh",
+   "why": "A checkpoint after now is not fresh (profile section 2): the card is asked for again.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "5",
+    "currency": "USD",
+    "platform": {},
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-31T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 3,
+     "settled": 3,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "ASK",
+    "source": "rows",
+    "tier": "T0"
+   }
   }
  ]
 }

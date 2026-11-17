@@ -359,7 +359,7 @@ def validate_admission(source):
 
 
 def _lift_issues(r, ids, tier_ids, issues):
-    """A row's `lift` (profile section 4a): the person's own settled deals lift
+    """A row's `lift` (profile section 4.1): the person's own settled deals lift
     a counterparty that served no card. Only an own.settled row that decides
     nothing carries it, so the lift rests on our own book and never on the
     counterparty's word, and `unless_fail` names own-book rows only."""
@@ -388,6 +388,17 @@ def _lift_issues(r, ids, tier_ids, issues):
             issues.append(f"{where}.unless_fail names {x!r}, which is no row")
         elif ids[x].get("source") != "own_history":
             issues.append(f"{where}.unless_fail {x!r} must be an own_history row: the lift rests on our own book")
+        elif ids[x].get("from") in tier_ids and lift["tier"] in tier_ids \
+                and tier_ids.index(ids[x]["from"]) > tier_ids.index(lift["tier"]):
+            issues.append(f"{where}.unless_fail {x!r} is read from {ids[x]['from']}, above the lift tier "
+                          f"{lift['tier']}: it is never read where the lift applies")
+    # The lift needs the card's verification read, so that a card that was served and
+    # fails verification speaks (a `fail`, never `not_read`) and is not lifted over.
+    if isinstance(lift["tier"], str) and lift["tier"] in tier_ids and not any(
+            x.get("check") == "card.verified" and x.get("from") in tier_ids
+            and tier_ids.index(x["from"]) <= tier_ids.index(lift["tier"]) for x in ids.values()):
+        issues.append(f"{where}: a lift needs a card.verified row from the lift tier or below, so a card that "
+                      "fails verification still limits")
 
 
 COMPILED_FORMAT = "admission-pack/v0"

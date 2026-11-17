@@ -270,7 +270,7 @@ def reference_decide(pack, inp):
     band the Muse buyer pack uses, so its fixtures are checked against the
     lift of section 4.1 and not only for shape. capsule-engine is the real
     evaluator; this is the reference the lift is specified by."""
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta
     parse = lambda t: datetime.fromisoformat(t.replace("Z", "+00:00"))
     now, tiers = parse(inp["now"]), [t["id"] for t in pack["tiers"]]
     whole, _, frac = inp["amount"].partition(".")
@@ -278,8 +278,10 @@ def reference_decide(pack, inp):
         decade = len(whole.lstrip("0")) - 1
     else:
         decade = -(len(frac) - len(frac.lstrip("0")) + 1)
-    deal = next((i for i, t in enumerate(pack["tiers"]) if decade <= t["max_decade"]["USD"]), None)
-    assert deal is not None, "the reference reads deals up to the top tier only"
+    unit = pack["accept"][inp["currency"]]
+    decade += unit["scale"]
+    deal = next((i for i, t in enumerate(pack["tiers"]) if unit["band"] in t["max_decade"]
+                 and decade <= t["max_decade"][unit["band"]]), len(tiers))  # len(tiers): above the top tier
     own, card, op = inp["own"], inp["card"], inp["operator"]
     roots = pack["trust_roots"]
     MISSING = "missing"
@@ -298,7 +300,7 @@ def reference_decide(pack, inp):
         if c == "own.no_adverse_adjudication":
             if not own["verdicts"]:
                 return "not_read"
-            recent = [v for v in own["verdicts"] if (now - parse(v["at"])).days <= p["window_days"]]
+            recent = [v for v in own["verdicts"] if now - parse(v["at"]) <= timedelta(days=p["window_days"])]
             return "fail" if any(v["adverse"] for v in recent) else "pass"
         if c == "operator.not_deny_listed":
             return "fail" if op["deny_listed"] else "pass"
@@ -312,7 +314,8 @@ def reference_decide(pack, inp):
             if card["state"] != "verified":
                 return "not_read"
             if c == "card.fresh":
-                return "pass" if (now - parse(card["latest_checkpoint_at"])).total_seconds() <= p["max_age_s"] else "fail"
+                age = (now - parse(card["latest_checkpoint_at"])).total_seconds()
+                return "pass" if 0 <= age <= p["max_age_s"] else "fail"  # not after now (profile section 2)
             if c == "card.witnessed":
                 return "pass" if card.get("witness") in roots["witnesses"] else "fail"
             if c == "card.claims_held":
@@ -321,7 +324,7 @@ def reference_decide(pack, inp):
                 return "pass" if card.get("controller") else "fail"
         return "not_read"  # selection, vouch, stake, judged rows: none are in these cases
 
-    used = [r for r in pack["rows"] if tiers.index(r["from"]) <= deal]
+    used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, len(tiers) - 1)]
     res = {r["id"]: read(r) for r in used}
     for r in used:
         if r["on_fail"] == "NO" and res[r["id"]] == "fail":
@@ -341,13 +344,15 @@ def reference_decide(pack, inp):
         cards = [x for x in pack["rows"] if x["source"] == "card" and tiers.index(x["from"]) <= tiers.index(lift["tier"])]
         if all(res.get(x["id"], "not_read") == "not_read" for x in cards):
             lifted |= {x["id"] for x in cards}
-    admitted, unmet = deal, []
+    admitted, unmet = min(deal, len(tiers) - 1), []
     for r in used:
         if r["on_fail"] == "LIMIT" and res[r["id"]] != "pass" and r["id"] not in lifted:
             admitted = min(admitted, tiers.index(r["from"]) - 1)
             unmet.append(r)
     if admitted >= deal:
         return "GO", "rows", tiers[admitted]
+    if deal == len(tiers) and admitted == len(tiers) - 1:
+        return pack["missing"], "above_tier", tiers[admitted]
     asked = set(inp["asks"])
     if any(r.get("ask") and r["ask"]["derivation"] not in asked for r in unmet) \
             and inp["asks_made"] < pack["budget"]["max_asks"]:
@@ -424,6 +429,29 @@ class MuseBuyer(unittest.TestCase):
                            "unless_fail: []", "non-empty list")
         self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
                            "unless_fail: [own-settled]", "the lifting row itself")
+
+    def test_lift_needs_a_card_verified_row(self):
+        text = muse_text()
+        a = text.index("  - id: card-verified")
+        b = text.index("  - id: card-fresh")
+        issues = pack_compile.validate_source(load(text[:a] + text[b:]))
+        self.assertTrue(any("needs a card.verified row" in i for i in issues), issues)
+
+    def test_unless_fail_row_above_the_lift_tier(self):
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: [adverse-adjudication, no-conflicting-deal, late]", "which is no row")
+        text = muse_text().replace("  - id: selection\n", "  - id: late\n    statement: Late.\n    source: own_history\n"
+                                   "    check: own.no_conflicting\n    from: T2\n    on_fail: \"record\"\n  - id: selection\n", 1)
+        text = text.replace("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                            "unless_fail: [adverse-adjudication, no-conflicting-deal, late]", 1)
+        issues = pack_compile.validate_source(load(text))
+        self.assertTrue(any("above the lift tier" in i for i in issues), issues)
+
+    def test_sat_ceilings_hold_the_lift_under_ten_dollars(self):
+        # Sherlock2 on #168: the baseline's sat ceilings (T1 up to 99,999 sat) would reach about $60-100.
+        ceilings = {t["id"]: t["max_decade"] for t in self.pack["tiers"]}
+        self.assertEqual(ceilings["T1"]["sat"], 3)
+        self.assertEqual(ceilings["T0"]["sat"], 2)
 
     def test_lift_tier_must_be_a_tier(self):
         self.assertRefused("lift: {tier: T1,", "lift: {tier: T9,", "is not a tier")

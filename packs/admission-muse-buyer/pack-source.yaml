@@ -16,7 +16,9 @@
 #      last 180 days. A card that was served and fails verification, or is
 #      stale, still limits; above T1 every row stands as in the baseline.
 #
-# The count of 3 is Steven's; the other numbers are the baseline's placeholders.
+# The count of 3 and the 180-day window are Steven's; the other numbers are the
+# baseline's placeholders, except the sat ceilings below, which keep the lift under
+# $10 for a Lightning deal as for a USD one (Sherlock2, on #168).
 # A merchant that refuses the card ask is read as serving no card (its card
 # rows read not_read), so the lift applies to it as to one that never answered.
 #
@@ -47,9 +49,9 @@ accept:
 # a row lowers the tier.
 tiers:
   - id: T0                      # micro
-    max_decade: {sat: 3, USD: -1}  # placeholder
+    max_decade: {sat: 2, USD: -1}  # placeholder; sat 2 is under 1,000 sat, about $1
   - id: T1                      # small
-    max_decade: {sat: 4, USD: 0}   # placeholder
+    max_decade: {sat: 3, USD: 0}   # placeholder; sat 3 is under 10,000 sat, about $10, the bound of Steven's lift
   - id: T2                      # standard
     max_decade: {USD: 2}           # placeholder
 
@@ -83,7 +85,7 @@ rows:
     statement: No adjudication this party holds went against the counterparty in the last 180 days.
     source: own_history
     check: own.no_adverse_adjudication
-    params: {window_days: 180}  # placeholder
+    params: {window_days: 180}  # Steven's window (2026-11-17)
     from: T0
     on_fail: "NO"
   # Our own book, recorded at every tier and gating none.
@@ -91,7 +93,7 @@ rows:
     statement: This party's own book holds at least 3 settled deals with the counterparty, which lifts a counterparty that served no card to GO for a deal up to T1.
     source: own_history
     check: own.settled
-    params: {min: 3}            # placeholder
+    params: {min: 3}            # Steven's count (2026-11-17)
     from: T0
     on_fail: "record"
     lift: {tier: T1, unless_fail: [adverse-adjudication, no-conflicting-deal]}
@@ -175,7 +177,7 @@ rows:
     statement: Vouches from distinct controllers, not the counterparty's own, are counted.
     source: vouch
     check: vouch.distinct_controllers
-    params: {min: 3}            # placeholder
+    params: {min: 3}            # Steven's count (2026-11-17)
     from: T2
     on_fail: "record"
   - id: adjacent-domain
