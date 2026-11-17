@@ -412,12 +412,21 @@ step 4 for that deal, and only when all of these hold:
   under $10; above it the rows stand as written);
 - the lifting row passes: `own.settled` at or above its `min` (the Muse buyer pack
   asks for 3);
-- no row named in `unless_fail` fails. A `not_read` there does not block the lift:
-  a book with no verdict yet holds no adverse one;
+- no row named in `unless_fail` fails. A `not_read` on the adverse-ruling row does
+  not block the lift: a book that holds no verdict yet holds no adverse one. A book
+  that was not read at all is a missing input and never reaches the lift (§4 step 3),
+  and the lifting row itself must pass, which needs the book read;
 - every `card` row from a tier at or below `lift.tier` reads `not_read`: nothing
   was served (the pack must read `card.verified` there, so a served card that fails
   verification reads `fail`, never `not_read`). A card that was served and verifies, fails or is stale speaks for
-  itself, and the lift does not apply.
+  itself, and the lift does not apply. The cost is named: a merchant that serves a
+  valid card with too few claims held, or one with no witness, is limited by the
+  rows as written, while one that serves none is lifted. A card that was refused is
+  read as served none (a refusal and silence both read `not_read`; Sherlock2,
+  buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=84a0b5acffe67d368b869be55470d61a1b070c260112871373d77efbf57e362f).
+  The own-settled lift is for a person's agent only once its evaluator implements
+  this section: an evaluator that predates it refuses a pack with `lift`, so a
+  client must not fall back to GO on a refused pack.
 
 Then those card rows are treated as passed in step 4: they lower no tier and ask
 for nothing. Every other row is read as written, so a `LIMIT` row on our own

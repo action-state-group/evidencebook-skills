@@ -108,7 +108,8 @@ rows:
   # T1: the card is required, fresh and witnessed, with claims held shown
   # with their denominator and a controller declared. A missing or stale card
   # is asked for (one ask answers every row that needs it); a refused or
-  # unanswered ask limits to T0.
+  # unanswered ask limits to T0, except for a merchant the own-settled lift covers
+  # (own-settled below): that one is not limited by these card rows.
   - id: card-verified
     statement: The counterparty's card verifies under the key that presents it.
     source: card
