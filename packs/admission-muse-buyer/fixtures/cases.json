@@ -624,6 +624,48 @@
     "source": "rows",
     "tier": "T0"
    }
+  },
+  {
+   "case": "above-t1-sat-deal-with-a-good-card-limits-at-t1",
+   "why": "20,000 sat is above the unit's top tier (T1): nothing is offered above it, so LIMIT at T1 with source above_tier, even with a good card.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {},
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "above_tier",
+    "tier": "T1"
+   }
   }
  ]
 }

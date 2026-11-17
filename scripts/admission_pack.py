@@ -392,13 +392,14 @@ def _lift_issues(r, ids, tier_ids, issues):
                 and tier_ids.index(ids[x]["from"]) > tier_ids.index(lift["tier"]):
             issues.append(f"{where}.unless_fail {x!r} is read from {ids[x]['from']}, above the lift tier "
                           f"{lift['tier']}: it is never read where the lift applies")
-    # The lift needs the card's verification read, so that a card that was served and
-    # fails verification speaks (a `fail`, never `not_read`) and is not lifted over.
-    if isinstance(lift["tier"], str) and lift["tier"] in tier_ids and not any(
-            x.get("check") == "card.verified" and x.get("from") in tier_ids
-            and tier_ids.index(x["from"]) <= tier_ids.index(lift["tier"]) for x in ids.values()):
-        issues.append(f"{where}: a lift needs a card.verified row from the lift tier or below, so a card that "
-                      "fails verification still limits")
+    # The lift needs the card's verification read wherever any card row is read, so a
+    # card that was served and fails verification speaks (a `fail`, never `not_read`).
+    card_rows = [x for x in ids.values() if x.get("source") == "card" and x.get("from") in tier_ids]
+    verified = [x for x in card_rows if x.get("check") == "card.verified"]
+    if card_rows and not any(tier_ids.index(v["from"]) <= min(tier_ids.index(x["from"]) for x in card_rows)
+                             for v in verified):
+        issues.append(f"{where}: a lift needs a card.verified row read from the lowest tier any card row is read "
+                      "from, so a card that fails verification still limits")
 
 
 COMPILED_FORMAT = "admission-pack/v0"

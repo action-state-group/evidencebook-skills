@@ -177,7 +177,7 @@ rows:
     statement: Vouches from distinct controllers, not the counterparty's own, are counted.
     source: vouch
     check: vouch.distinct_controllers
-    params: {min: 3}            # Steven's count (2026-11-17)
+    params: {min: 3}            # placeholder
     from: T2
     on_fail: "record"
   - id: adjacent-domain

@@ -281,7 +281,8 @@ def reference_decide(pack, inp):
     unit = pack["accept"][inp["currency"]]
     decade += unit["scale"]
     deal = next((i for i, t in enumerate(pack["tiers"]) if unit["band"] in t["max_decade"]
-                 and decade <= t["max_decade"][unit["band"]]), len(tiers))  # len(tiers): above the top tier
+                 and decade <= t["max_decade"][unit["band"]]), len(tiers))  # len(tiers): above the unit's top tier
+    top = max(i for i, t in enumerate(pack["tiers"]) if unit["band"] in t["max_decade"])
     own, card, op = inp["own"], inp["card"], inp["operator"]
     roots = pack["trust_roots"]
     MISSING = "missing"
@@ -324,7 +325,7 @@ def reference_decide(pack, inp):
                 return "pass" if card.get("controller") else "fail"
         return "not_read"  # selection, vouch, stake, judged rows: none are in these cases
 
-    used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, len(tiers) - 1)]
+    used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, top)]
     res = {r["id"]: read(r) for r in used}
     for r in used:
         if r["on_fail"] == "NO" and res[r["id"]] == "fail":
@@ -344,14 +345,14 @@ def reference_decide(pack, inp):
         cards = [x for x in pack["rows"] if x["source"] == "card" and tiers.index(x["from"]) <= tiers.index(lift["tier"])]
         if all(res.get(x["id"], "not_read") == "not_read" for x in cards):
             lifted |= {x["id"] for x in cards}
-    admitted, unmet = min(deal, len(tiers) - 1), []
+    admitted, unmet = min(deal, top), []
     for r in used:
         if r["on_fail"] == "LIMIT" and res[r["id"]] != "pass" and r["id"] not in lifted:
             admitted = min(admitted, tiers.index(r["from"]) - 1)
             unmet.append(r)
     if admitted >= deal:
         return "GO", "rows", tiers[admitted]
-    if deal == len(tiers) and admitted == len(tiers) - 1:
+    if deal == len(tiers) and admitted == top:
         return pack["missing"], "above_tier", tiers[admitted]
     asked = set(inp["asks"])
     if any(r.get("ask") and r["ask"]["derivation"] not in asked for r in unmet) \
@@ -435,6 +436,15 @@ class MuseBuyer(unittest.TestCase):
         a = text.index("  - id: card-verified")
         b = text.index("  - id: card-fresh")
         issues = pack_compile.validate_source(load(text[:a] + text[b:]))
+        self.assertTrue(any("needs a card.verified row" in i for i in issues), issues)
+
+    def test_the_card_verified_row_is_read_wherever_a_card_row_is(self):
+        # Moving card.verified above card-fresh's tier leaves T1 reading a card row with no verification.
+        text = muse_text()
+        a = text.index("  - id: card-verified")
+        b = text.index("  - id: card-fresh")
+        row = text[a:b].replace("from: T1", "from: T2")
+        issues = pack_compile.validate_source(load(text[:a] + text[b:] + "\n" + row.rstrip("\n") + "\n"))
         self.assertTrue(any("needs a card.verified row" in i for i in issues), issues)
 
     def test_unless_fail_row_above_the_lift_tier(self):
