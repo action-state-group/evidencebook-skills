@@ -258,6 +258,218 @@ class NodeBaseline(unittest.TestCase):
         self.assertEqual((self.NODE / "compiled/contract.json").read_bytes(), ec.to_bytes(admission_pack.from_admission(source)))
 
 
+MUSE = REPO_ROOT / "packs/admission-muse-buyer"
+
+
+def muse_text():
+    return (MUSE / "pack-source.yaml").read_text()
+
+
+def reference_decide(pack, inp):
+    """A small reading of profile section 4, for the predicates and the USD
+    band the Muse buyer pack uses, so its fixtures are checked against the
+    lift of section 4.1 and not only for shape. capsule-engine is the real
+    evaluator; this is the reference the lift is specified by."""
+    from datetime import datetime, timedelta
+    parse = lambda t: datetime.fromisoformat(t.replace("Z", "+00:00"))
+    now, tiers = parse(inp["now"]), [t["id"] for t in pack["tiers"]]
+    whole, _, frac = inp["amount"].partition(".")
+    if whole.strip("0"):
+        decade = len(whole.lstrip("0")) - 1
+    else:
+        decade = -(len(frac) - len(frac.lstrip("0")) + 1)
+    unit = pack["accept"][inp["currency"]]
+    decade += unit["scale"]
+    deal = next((i for i, t in enumerate(pack["tiers"]) if unit["band"] in t["max_decade"]
+                 and decade <= t["max_decade"][unit["band"]]), len(tiers))  # len(tiers): above the unit's top tier
+    top = max(i for i, t in enumerate(pack["tiers"]) if unit["band"] in t["max_decade"])
+    own, card, op = inp["own"], inp["card"], inp["operator"]
+    roots = pack["trust_roots"]
+    MISSING = "missing"
+
+    def read(r):
+        p = r.get("params") or {}
+        c = r["check"]
+        if c.startswith("own.") and own is None:
+            return MISSING
+        if c == "own.settled":
+            return "pass" if own["settled"] >= p["min"] else "fail"
+        if c == "own.held_halves":
+            return "pass" if own["held_halves"] >= p["min"] else "fail"
+        if c == "own.no_conflicting":
+            return "pass" if own["conflicting"] == 0 else "fail"
+        if c == "own.no_adverse_adjudication":
+            if not own["verdicts"]:
+                return "not_read"
+            recent = [v for v in own["verdicts"] if now - parse(v["at"]) <= timedelta(days=p["window_days"])]
+            return "fail" if any(v["adverse"] for v in recent) else "pass"
+        if c == "operator.not_deny_listed":
+            return "fail" if op["deny_listed"] else "pass"
+        if c == "operator.allow_listed":
+            return "fail" if op.get("allow_listed") is False else "pass"
+        if c.startswith("card."):
+            if card.get("state") != "verified" and card.get("state") != "unverifiable":
+                return "not_read"
+            if c == "card.verified":
+                return "pass" if card["state"] == "verified" else "fail"
+            if card["state"] != "verified":
+                return "not_read"
+            if c == "card.fresh":
+                age = (now - parse(card["latest_checkpoint_at"])).total_seconds()
+                return "pass" if 0 <= age <= p["max_age_s"] else "fail"  # not after now (profile section 2)
+            if c == "card.witnessed":
+                return "pass" if card.get("witness") in roots["witnesses"] else "fail"
+            if c == "card.claims_held":
+                return "pass" if card["claims"]["held"] >= p["min"] else "fail"
+            if c == "card.controller_declared":
+                return "pass" if card.get("controller") else "fail"
+        return "not_read"  # selection, vouch, stake, judged rows: none are in these cases
+
+    used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, top)]
+    res = {r["id"]: read(r) for r in used}
+    for r in used:
+        if r["on_fail"] == "NO" and res[r["id"]] == "fail":
+            return "NO", r["id"], None
+    for r in used:
+        if r["on_fail"] == "NO" and res[r["id"]] == MISSING:
+            return pack["missing"], r["id"], "T0"
+    res = {k: ("not_read" if v == MISSING else v) for k, v in res.items()}
+    # Section 4.1: nothing served, and a lifting row passes with no unless_fail row failing.
+    lifted = set()
+    for r in used:
+        lift = r.get("lift")
+        if not lift or res[r["id"]] != "pass" or deal > tiers.index(lift["tier"]):
+            continue
+        if any(res.get(x) == "fail" for x in lift["unless_fail"]):
+            continue
+        cards = [x for x in pack["rows"] if x["source"] == "card" and tiers.index(x["from"]) <= tiers.index(lift["tier"])]
+        if all(res.get(x["id"], "not_read") == "not_read" for x in cards):
+            lifted |= {x["id"] for x in cards}
+    admitted, unmet = min(deal, top), []
+    for r in used:
+        if r["on_fail"] == "LIMIT" and res[r["id"]] != "pass" and r["id"] not in lifted:
+            admitted = min(admitted, tiers.index(r["from"]) - 1)
+            unmet.append(r)
+    if admitted >= deal:
+        return "GO", "rows", tiers[admitted]
+    if deal == len(tiers) and admitted == top:
+        return pack["missing"], "above_tier", tiers[admitted]
+    asked = set(inp["asks"])
+    if any(r.get("ask") and r["ask"]["derivation"] not in asked for r in unmet) \
+            and inp["asks_made"] < pack["budget"]["max_asks"]:
+        return "ASK", "rows", tiers[admitted]
+    return "LIMIT", "rows", tiers[admitted]
+
+
+class MuseBuyer(unittest.TestCase):
+    """admission-muse-buyer@1 (#154): the baseline without platform rows, plus
+    Steven's narrow own-settled lift (profile section 4.1)."""
+
+    def setUp(self):
+        self.pack = load(muse_text())
+
+    def test_validates(self):
+        self.assertEqual(pack_compile.validate_source(self.pack), [])
+
+    def test_the_committed_artifact_is_the_compiled_source(self):
+        self.assertEqual((MUSE / "compiled/pack-definition.json").read_bytes(), admission_pack.compiled_bytes(self.pack))
+        self.assertEqual((MUSE / "compiled/contract.json").read_bytes(), ec.to_bytes(admission_pack.from_admission(self.pack)))
+
+    def test_no_platform_rows(self):
+        # Muse reads no release attestation: a platform row there would LIMIT every offer.
+        self.assertNotIn("platform", {r["source"] for r in self.pack["rows"]})
+
+    def test_the_lift_is_steven_ruling_narrow(self):
+        row = next(r for r in self.pack["rows"] if "lift" in r)
+        self.assertEqual(row["check"], "own.settled")
+        self.assertEqual(row["params"], {"min": 3})
+        self.assertEqual(row["lift"]["tier"], "T1")
+        self.assertEqual(set(row["lift"]["unless_fail"]), {"adverse-adjudication", "no-conflicting-deal"})
+        # T1 is the tier under $10.
+        t1 = next(t for t in self.pack["tiers"] if t["id"] == "T1")
+        self.assertEqual(t1["max_decade"]["USD"], 0)
+
+    def test_the_baseline_bytes_are_unchanged_by_the_lift_field(self):
+        base = load(baseline_text())
+        self.assertNotIn(b'"lift"', admission_pack.compiled_bytes(base))
+        self.assertIn(b'"lift"', admission_pack.compiled_bytes(self.pack))
+
+    def test_fixtures_match_the_reference_reading(self):
+        doc = json.loads((MUSE / "fixtures/cases.json").read_text())
+        self.assertEqual(doc["pack"], self.pack["pack_id"])
+        for c in doc["cases"]:
+            verdict, source, tier = reference_decide(self.pack, c["input"])
+            e = c["expected"]
+            self.assertEqual((verdict, source, tier), (e["verdict"], e["source"], e["tier"]), c["case"])
+
+    def test_every_case_input_is_well_formed(self):
+        doc = json.loads((MUSE / "fixtures/cases.json").read_text())
+        names = [c["case"] for c in doc["cases"]]
+        self.assertEqual(len(names), len(set(names)))
+        for c in doc["cases"]:
+            self.assertLessEqual(set(c["input"]), INPUT_KEYS, c["case"])
+
+    def assertRefused(self, old, new, want):
+        issues = pack_compile.validate_source(load(muse_text().replace(old, new, 1)))
+        self.assertTrue(any(want in i for i in issues), issues)
+
+    def test_lift_on_a_row_that_is_not_own_settled(self):
+        self.assertRefused("    check: own.held_halves\n", "    check: own.held_halves\n    lift: {tier: T1, unless_fail: [deny-list]}\n",
+                           "only an own.settled row may lift")
+
+    def test_lift_on_a_deciding_row(self):
+        text = muse_text().replace('    on_fail: "record"\n    lift:', '    on_fail: "LIMIT"\n    lift:', 1)
+        self.assertTrue(any("must be \"record\"" in i for i in pack_compile.validate_source(load(text))))
+
+    def test_lift_unless_fail_must_name_own_history_rows(self):
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: [deny-list]", "must be an own_history row")
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: [nope]", "which is no row")
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: []", "non-empty list")
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: [own-settled]", "the lifting row itself")
+
+    def test_lift_needs_a_card_verified_row(self):
+        text = muse_text()
+        a = text.index("  - id: card-verified")
+        b = text.index("  - id: card-fresh")
+        issues = pack_compile.validate_source(load(text[:a] + text[b:]))
+        self.assertTrue(any("needs a card.verified row" in i for i in issues), issues)
+
+    def test_the_card_verified_row_is_read_wherever_a_card_row_is(self):
+        # Moving card.verified above card-fresh's tier leaves T1 reading a card row with no verification.
+        text = muse_text()
+        a = text.index("  - id: card-verified")
+        b = text.index("  - id: card-fresh")
+        row = text[a:b].replace("from: T1", "from: T2")
+        issues = pack_compile.validate_source(load(text[:a] + text[b:] + "\n" + row.rstrip("\n") + "\n"))
+        self.assertTrue(any("needs a card.verified row" in i for i in issues), issues)
+
+    def test_unless_fail_row_above_the_lift_tier(self):
+        self.assertRefused("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                           "unless_fail: [adverse-adjudication, no-conflicting-deal, late]", "which is no row")
+        text = muse_text().replace("  - id: selection\n", "  - id: late\n    statement: Late.\n    source: own_history\n"
+                                   "    check: own.no_conflicting\n    from: T2\n    on_fail: \"record\"\n  - id: selection\n", 1)
+        text = text.replace("unless_fail: [adverse-adjudication, no-conflicting-deal]",
+                            "unless_fail: [adverse-adjudication, no-conflicting-deal, late]", 1)
+        issues = pack_compile.validate_source(load(text))
+        self.assertTrue(any("above the lift tier" in i for i in issues), issues)
+
+    def test_sat_ceilings_hold_the_lift_under_ten_dollars(self):
+        # Sherlock2 on #168: the baseline's sat ceilings (T1 up to 99,999 sat) would reach about $60-100.
+        ceilings = {t["id"]: t["max_decade"] for t in self.pack["tiers"]}
+        self.assertEqual(ceilings["T1"]["sat"], 3)
+        self.assertEqual(ceilings["T0"]["sat"], 2)
+
+    def test_lift_tier_must_be_a_tier(self):
+        self.assertRefused("lift: {tier: T1,", "lift: {tier: T9,", "is not a tier")
+
+    def test_lift_has_exactly_its_two_fields(self):
+        self.assertRefused("lift: {tier: T1, unless_fail", "lift: {tier: T1, also: [x], unless_fail", "must be exactly")
+
+
 class Fixtures(unittest.TestCase):
     def setUp(self):
         self.doc = json.loads((BASELINE / "fixtures/cases.json").read_text())
