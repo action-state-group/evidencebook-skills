@@ -72,7 +72,8 @@ TRUST_ROOT_KEYS = ("controllers", "witnesses", "judges")
 # (AAC#406), rather than naming it.
 RAIL_KEYS = {"id", "digest"}
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
-ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask"}
+ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask", "lift"}
+LIFT_KEYS = {"tier", "unless_fail"}
 
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
 ROW_ID_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -349,7 +350,44 @@ def validate_admission(source):
                 issues.append(f"{where}.ask must be exactly {{derivation: <name>}}")
             if "ASK" not in outcomes:
                 issues.append(f"{where} carries an ask, but ASK is not in outcomes")
+
+    ids = {r["id"]: r for r in rows if isinstance(r, dict) and isinstance(r.get("id"), str)}
+    for r in rows:
+        if isinstance(r, dict) and "lift" in r:
+            _lift_issues(r, ids, tier_ids, issues)
     return issues
+
+
+def _lift_issues(r, ids, tier_ids, issues):
+    """A row's `lift` (profile section 4a): the person's own settled deals lift
+    a counterparty that served no card. Only an own.settled row that decides
+    nothing carries it, so the lift rests on our own book and never on the
+    counterparty's word, and `unless_fail` names own-book rows only."""
+    where = f"rows[{r.get('id')!r}].lift"
+    lift = r["lift"]
+    if not isinstance(lift, dict) or set(lift) != LIFT_KEYS:
+        issues.append(f"{where} must be exactly {{tier: <tier>, unless_fail: [<row id>]}}")
+        return
+    if r.get("check") != "own.settled":
+        issues.append(f"{where}: only an own.settled row may lift")
+    if r.get("on_fail") != "record":
+        issues.append(f"{where}: a lifting row decides nothing itself, so its on_fail must be \"record\"")
+    if not isinstance(lift["tier"], str) or lift["tier"] not in tier_ids:
+        issues.append(f"{where}.tier {lift['tier']!r} is not a tier")
+    elif r.get("from") in tier_ids and tier_ids.index(lift["tier"]) < tier_ids.index(r["from"]):
+        issues.append(f"{where}.tier {lift['tier']} is below the row's from {r['from']}")
+    unless = lift["unless_fail"]
+    if not isinstance(unless, list) or not unless or not all(isinstance(x, str) for x in unless) \
+            or len(set(unless)) != len(unless):
+        issues.append(f"{where}.unless_fail must be a non-empty list of distinct row ids")
+        return
+    for x in unless:
+        if x == r.get("id"):
+            issues.append(f"{where}.unless_fail names the lifting row itself")
+        elif x not in ids:
+            issues.append(f"{where}.unless_fail names {x!r}, which is no row")
+        elif ids[x].get("source") != "own_history":
+            issues.append(f"{where}.unless_fail {x!r} must be an own_history row: the lift rests on our own book")
 
 
 COMPILED_FORMAT = "admission-pack/v0"
@@ -388,6 +426,9 @@ def compile_pack(source):
                "on_fail": dict(r["on_fail"]) if isinstance(r["on_fail"], dict) else r["on_fail"]}
         if r.get("ask") is not None:
             row["ask"] = {"derivation": r["ask"]["derivation"]}
+        if r.get("lift") is not None:
+            # Written only on a lifting row, so a pack without one keeps its bytes.
+            row["lift"] = {"tier": r["lift"]["tier"], "unless_fail": list(r["lift"]["unless_fail"])}
         doc["rows"].append(row)
     return doc
 
@@ -419,6 +460,10 @@ def _evidence_rule(r):
         rule += "; recorded, deciding nothing"
     else:
         rule += f"; a failure gives {on_fail}"
+    if r.get("lift"):
+        lift = r["lift"]
+        rule += (f"; when it passes and none of {', '.join(lift['unless_fail'])} fails, a counterparty that served "
+                 f"no card is not limited by its card rows for a deal up to tier {lift['tier']}")
     if r.get("ask"):
         rule += f"; asks for {r['ask']['derivation']}"
     return rule

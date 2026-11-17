@@ -106,6 +106,7 @@ source compiles to.
 | `from` | the lowest tier the row applies to |
 | `on_fail` | `"NO"`, `"LIMIT"` or `"record"`. A judged row's is `{cap: <tier>}` |
 | `ask` | optional `{derivation}`, on a `LIMIT` row only: the Evidence Request it makes when it does not pass |
+| `lift` | optional `{tier, unless_fail}`, on an `own.settled` row that is `record` only: the lift of §4.1 |
 
 `record` means the row is read and sealed with the decision but decides nothing.
 
@@ -137,6 +138,10 @@ source compiles to.
 - A ladder whose `k` is 0: a band is earned by at least one subject.
 - A ceiling in a unit `accept` does not name, a ceiling that does not rise,
   or a unit in `accept` that no tier names.
+- A `lift` on any row but an `own.settled` row whose `on_fail` is `"record"`; one whose
+  `tier` is not a tier at or above the row's `from`; one whose `unless_fail` is empty,
+  repeats a row, names the lifting row itself, names no row, or names a row that is not
+  an `own_history` row.
 - A field of the wrong type. It is reported, never raised.
 
 ## 2. Predicates
@@ -395,6 +400,29 @@ is NO.
 
 No step sums, weights or ranks rows. There is no score.
 
+### 4.1 The own-settled lift
+
+Steven's ruling of 2026-11-17 (evidencebook-skills#154): a person's own settled
+deals with a counterparty may lift it to GO when it served no card, and only
+narrowly. A pack that carries a row with `lift: {tier, unless_fail}` changes
+step 4 for that deal, and only when all of these hold:
+
+- the deal's tier is at or below `lift.tier` (the Muse buyer pack lifts at T1,
+  under $10; above it the rows stand as written);
+- the lifting row passes: `own.settled` at or above its `min` (the Muse buyer pack
+  asks for 3);
+- no row named in `unless_fail` fails. A `not_read` there does not block the lift:
+  a book with no verdict yet holds no adverse one;
+- every `card` row from a tier at or below `lift.tier` reads `not_read`: nothing
+  was served. A card that was served and verifies, fails or is stale speaks for
+  itself, and the lift does not apply.
+
+Then those card rows are treated as passed in step 4: they lower no tier and ask
+for nothing. Every other row is read as written, so a `LIMIT` row on our own
+book (`own.no_conflicting`) still limits, and a `NO` row still decides NO. The
+lift's row reports effect `lift` and the decision's `rows` still list each card
+row as `not_read`.
+
 ## 5. Inputs and the decision
 
 The evaluator's input is the deal and what was received:
@@ -435,7 +463,7 @@ The new members are additive:
 - `band`, `{currency, decade}`, null for a free deal or a band that does not
   read;
 - `asks`, each `{row, derivation, deadline_s}`;
-- each row's `effect` (`none`, `NO`, `LIMIT`, `ASK` or `cap`), with `count` and
+- each row's `effect` (`none`, `NO`, `LIMIT`, `ASK`, `cap` or `lift`), with `count` and
   `denominator` where it counts.
 - on a `card.self_reported_served_periods` row, `label` (`self_reported`)
   and `not_counted`, `{below_floor, complementary, not_listed}`;
@@ -472,6 +500,7 @@ Added after the first v0 compile (#79, #87, capsule-engine#273):
 - **Self-reported served periods** (§3.4), from an `inference-service-history/0`
   card, for a personal agent admitting a Mesh node (capsule-engine#273).
 - **A stapled card decides T0 only** (§3.6), `card.not_stapled` (capsule-engine#277).
+- **The own-settled lift** (§4.1), the row field `lift` (evidencebook-skills#154).
 
 All are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails

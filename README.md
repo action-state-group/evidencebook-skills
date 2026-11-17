@@ -94,7 +94,9 @@ way.
   counterparty, giving GO, ASK, LIMIT or NO. It compiles to its Evidence
   Contract and `pack-definition.json`, the JCS artifact capsule-engine's
   evaluator pins and reads (committed in `compiled/`). Its `fixtures/cases.json`
-  are run there. It is not a report pack.
+  are run there. It is not a report pack. `admission-muse-buyer` is the same
+  profile for a Muse buyer: no platform rows, and the person's own settled deals
+  lift a merchant that served no card to GO in T1 only (profile §4.1).
 - [`contracts/`](contracts/) — published Evidence Contracts, one file per
   version at `contracts/<id>/<version>.json`. A pack source or a report spec
   stays the authoring form; `scripts/evidence_contract.py` compiles it to an

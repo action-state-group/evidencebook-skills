@@ -458,6 +458,9 @@
               },
               "ask": {
                 "type": "object"
+              },
+              "lift": {
+                "type": "object"
               }
             },
             "additionalProperties": false,
