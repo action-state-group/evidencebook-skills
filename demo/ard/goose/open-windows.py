@@ -40,8 +40,8 @@ PARTIES = {
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
         "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 300 msat. "
-                 "Your admission pack is the demo's, packs/ard-demo-buyer.",
-        "prompt": "Reply in English only. I am Maya. I need 200 conference badges by Friday, under 300 msat (a msat is a thousandth of a satoshi: a token amount for this demo). Find sellers for me.",
+                 "Your admission pack is packs/ard-demo-buyer.",
+        "prompt": "Reply in English only. I am Maya. I need 200 conference badges by Friday, under 300 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.",
     },
 }
 
@@ -68,7 +68,7 @@ def instructions(role: str, rail: str) -> str:
     body, commit = skill_text(p["skill"])
     facts = p["facts"]
     if p["skill"] == "buy-with-evidence":  # the skill's required input: it has no default registry
-        facts += f" The ARD registry to search is {registry_url()} (a demo stand-in run by the demo operator); referrals stay off."
+        facts += f" The ARD registry to search is {registry_url()} (a local stand-in registry, run by the operator); referrals stay off."
     pays = ("This run pays over real Lightning: real money moves." if rail in ("lightning", "local")
             else "This run's payment rail is simulated: no money moves.")
     at = f" at evidencebook-skills {commit}" if commit else ""
@@ -86,9 +86,9 @@ def link(role: str, rail: str) -> str:
             if os.environ.get(var):
                 env.append(f"{var}={os.environ[var]}")
     p = PARTIES[role]
-    recipe = {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller demo: {role}, following the {p['skill']} skill.",
+    recipe = {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller deal: {role}, following the {p['skill']} skill.",
               "instructions": instructions(role, rail), "prompt": p["prompt"],
-              "extensions": [{"type": "stdio", "name": f"ard_{role}", "description": f"The {role} side of the ARD demo",
+              "extensions": [{"type": "stdio", "name": f"ard_{role}", "description": f"The {role} side of the ARD two-seller deal",
                               "cmd": "/usr/bin/env", "args": [*env, sys.executable, str(SERVER)], "timeout": 300}]}
     # No base64 padding: Goose Desktop 1.59.2 opens a blank window for a recipe link whose config ends in "="
     # (percent-encoding it does not help), so a recipe whose JSON length is not a multiple of 3 never loaded.

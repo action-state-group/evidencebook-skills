@@ -108,7 +108,7 @@ def test_a_port_taken_by_something_else_is_not_taken_for_the_stage(disc, monkeyp
         port = old.server_address[1]
         monkeypatch.setattr(parties, "HTTP_PORT", port)
         monkeypatch.setattr(parties, "REGISTRY_URL", f"http://127.0.0.1:{port}/search")
-        with pytest.raises(RuntimeError, match=f"port {port} is taken by something that is not this demo's stage"):
+        with pytest.raises(RuntimeError, match=f"port {port} is taken by something that is not this run's stage.py"):
             parties.stage_up()
     finally:
         old.shutdown()

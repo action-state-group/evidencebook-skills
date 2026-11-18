@@ -73,7 +73,7 @@ def _lock(role: str) -> object:
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        raise RuntimeError(f"another Goose chat already runs the {role} side of the ard demo on this demo home: "
+        raise RuntimeError(f"another Goose chat already runs the {role} side on this home: "
                            "use that chat, or close it first") from None
     return handle
 
@@ -125,7 +125,7 @@ def approve_payment(summary: str) -> bool:
     import subprocess
 
     text = summary.replace("\\", " ").replace('"', "'")
-    script = (f'display dialog "{text}" with title "ARD demo: approve this payment" buttons {{"Cancel", "Pay"}} '
+    script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
               'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
@@ -219,8 +219,8 @@ def ard_show_history() -> None:
 
 @_tool("maya")
 def ard_assess(max_adverse_permille: int = DEFAULT_PERMILLE) -> None:
-    """Step 4: assess each seller under the demo pack, first as written, then with the rule tightened to at most
-    ``max_adverse_permille`` deals in every 1,000 not holding (placeholder thresholds, for this demo only).
+    """Step 4: assess each seller under the admission pack, first as written, then with the rule tightened to at most
+    ``max_adverse_permille`` deals in every 1,000 not holding (the pack's thresholds are placeholders).
     Call after ard_show_history."""
     s = session()
     if not s.run.evidence:
@@ -289,9 +289,9 @@ def ard_pay(seller: str) -> None:
         rail_name = os.environ.get("ARD_RAIL", "fake")
         real = rail_name in ("lightning", "local")
         label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
-        summary = (f"Pay {label} {amount} on the "
-                   + ("REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet."
-                      if real else "simulated rail: no money moves."))
+        shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
+        summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
+                   else f"Pay {label} {amount} on the simulated rail: no money moves.")
         if key in s.declined:
             # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
             # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
@@ -300,8 +300,8 @@ def ard_pay(seller: str) -> None:
             s.declined.discard(key)
             raise RuntimeError(
                 f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
-                f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} on the '
-                + ("REAL Lightning rail, which moves real money?" if real else "simulated rail, where no money moves?")
+                f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
+                + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
                 + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
                 "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
         try:
