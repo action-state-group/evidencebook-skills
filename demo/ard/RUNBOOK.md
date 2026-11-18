@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills 4ba5f53 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills fba0173 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at 4ba5f53, on either rail; the real-payment steps have not been run at these pins at all. The demo's automated tests pass at these pins in CI.
+Status: not yet run by hand at fba0173, on either rail; the real-payment steps have not been run at these pins at all. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -114,7 +114,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q 4ba5f535c91a0f01dba4477333dd9d7bbfdf9344
+   git -C evidencebook-skills checkout -q fba017333fe97b42bf37430bff083a5efd9679a8
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/evidencebook-deal
@@ -133,7 +133,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 6. Already cloned? Move the checkout to this pin instead.
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 4ba5f535c91a0f01dba4477333dd9d7bbfdf9344
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach fba017333fe97b42bf37430bff083a5efd9679a8
    ```
 
 ## Real rail, once
@@ -225,7 +225,7 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
    .venv/bin/python demo/ard/goose/open-windows.py --rail local
    ```
 
-   **Expect:** three windows, each with a Trust prompt. If it prints "could not tile", allow the access it names, click Maya's window and run the osascript line it prints below that.
+   **Expect:** three windows, each with a Trust prompt. If tiling fails while macOS asks, the script tries again every 10 s, twice.
 
 5. [Simulated] Or, simulated: the same, and no money moves.
 
@@ -233,7 +233,15 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
    .venv/bin/python demo/ard/goose/open-windows.py --rail fake
    ```
 
-6. Optional: see what each agent is given. Write `local` or `fake` for the rail you opened. It prints each recipe's facts and first message and checks that it carries the skill file from this checkout word for word.
+6. If the windows are still not tiled: allow the access, click Maya's window, then run this (it tiles the open windows, no new ones). The script prints the same line.
+
+   ```
+   osascript -e 'tell application "Goose" to activate' -e 'tell application "System Events" to tell process "Goose" to click menu item "Left & Quarters" of menu "Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1'
+   ```
+
+   **Expect:** Maya on the left half, the sellers on the right quarters. By hand: Window, Move & Resize, Left & Quarters.
+
+7. Optional: see what each agent is given. Write `local` or `fake` for the rail you opened. It prints each recipe's facts and first message and checks that it carries the skill file from this checkout word for word.
 
    ```
    .venv/bin/python demo/ard/goose/open-windows.py --rail local --print | .venv/bin/python -c '
@@ -254,14 +262,14 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 4ba5f53.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at fba0173.
 
-7. Click Trust and Execute in all three windows, in any order.
+8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
 
-8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on. Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools.
+9. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on. Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools.
 
-9. Keep the screen awake and unlocked: the payment dialog appears on it.
+10. Keep the screen awake and unlocked: the payment dialog appears on it.
 
 ## The run
 
