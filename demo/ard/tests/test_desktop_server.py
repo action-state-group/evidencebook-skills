@@ -15,15 +15,11 @@ pytestmark = engine_only
 
 
 @pytest.fixture(scope="module")
-def tools(tmp_path_factory):
+def tools(tmp_path_factory, seeded_home):
     import os
 
-    import seed
-    from world import World
 
-    home = tmp_path_factory.mktemp("desktop-home")
-    with World(home) as world:
-        seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
+    home = seeded_home(tmp_path_factory.mktemp("desktop-home"))
     os.environ["ARD_HOME"], os.environ["ARD_RAIL"] = str(home), "fake"
     import desktop_server as ds
 

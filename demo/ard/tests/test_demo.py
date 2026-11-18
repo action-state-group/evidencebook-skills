@@ -18,17 +18,15 @@ pytestmark = engine_only
 
 
 @pytest.fixture(scope="module")
-def run(tmp_path_factory):
+def run(tmp_path_factory, seeded_home):
     import ard
     import pack as packs
     import pay
-    import seed
     from demo import Run
     from server import Server
     from world import SELLERS, World
 
-    world = World(tmp_path_factory.mktemp("home")).open()
-    seed.seed(world, say=lambda *_: None)
+    world = World(seeded_home(tmp_path_factory.mktemp("home"), "sample")).open()
     server = Server()
     for name in SELLERS:
         world.advertise(name)

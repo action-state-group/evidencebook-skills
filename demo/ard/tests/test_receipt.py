@@ -48,16 +48,14 @@ def _reads(world, deal_id: str) -> dict:
 
 
 @pytest.fixture(scope="module")
-def seeded(tmp_path_factory):
+def seeded(tmp_path_factory, seeded_home):
     import deals
-    import seed
     from world import CURRENCY, ITEM, SELLERS, World, terms
 
-    home = tmp_path_factory.mktemp("receipt")
+    home = seeded_home(tmp_path_factory.mktemp("receipt"))
     with pytest.MonkeyPatch.context() as mp, World(home) as world:
         mp.setenv("ARD_HOME", str(home))
         mp.setenv("ARD_OPEN_PAGES", "0")
-        seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
         maya, alder = world.nodes["maya"], world.nodes["alder"]
         deals.admit(maya, alder, reason="the buyer's pick (test)")
         deals.admit(alder, maya, reason="buyer who picked this seller (test)")
