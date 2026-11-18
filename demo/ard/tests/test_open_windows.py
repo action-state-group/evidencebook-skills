@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+"""``goose/open-windows.py`` opens the sellers first and Maya last, then tiles the windows with the Move & Resize menu;
+a failed tile prints one line with the permission to grant and the manual fallback, and never fails the open.
+No Goose and no osascript run: ``subprocess.run`` is recorded."""
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import types
+from pathlib import Path
+
+import pytest
+
+HERE = Path(__file__).resolve().parents[1]
+_spec = importlib.util.spec_from_file_location("open_windows_tile", HERE / "goose" / "open-windows.py")
+ow = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(ow)
+
+
+@pytest.fixture
+def calls(monkeypatch):
+    """Every subprocess.run the script makes, with a link per role and no waiting; osascript answers as ``result``."""
+    class Made(list):
+        result: dict
+
+    made = Made()
+    result = {"code": 0, "stderr": "", "raise": None}
+
+    def run(cmd, **kw):
+        made.append(list(cmd))
+        if cmd[0] == "osascript":
+            if result["raise"]:
+                raise result["raise"]
+            return types.SimpleNamespace(returncode=result["code"], stdout="", stderr=result["stderr"])
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(ow.subprocess, "run", run)
+    monkeypatch.setattr(ow.time, "sleep", lambda s: None)
+    monkeypatch.setattr(ow, "link", lambda role, rail: f"goose://recipe?config={role}")
+    monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
+    made.result = result
+    return made
+
+
+def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, capsys):
+    assert ow.main(["--rail", "fake"]) == 0
+    assert [c[1] for c in calls[:3]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
+    assert calls[3] == ow.TILE and len(calls) == 4
+    assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
+    assert capsys.readouterr().err == ""
+
+
+@pytest.mark.parametrize("code,stderr,exc,why", [
+    (1, "execution error: osascript is not allowed assistive access. (-1719)", None, "not allowed assistive access"),
+    (1, "", None, "osascript exit 1"),
+    (0, "", FileNotFoundError("osascript"), "osascript"),
+    (0, "", subprocess.TimeoutExpired("osascript", 30), "timed out"),
+])
+def test_a_failed_tile_prints_the_grant_and_the_manual_fallback_and_the_open_still_succeeds(calls, capsys, code, stderr, exc, why):
+    calls.result.update(code=code, stderr=stderr, **{"raise": exc})
+    assert ow.main(["--rail", "fake"]) == 0
+    err = capsys.readouterr().err.strip().splitlines()
+    assert len(err) == 1 and why in err[0]
+    assert "System Settings, Privacy & Security, Accessibility" in err[0]
+    assert "click Maya's window, then Window, Move & Resize, Left & Quarters" in err[0]
+
+
+@pytest.mark.parametrize("args", [["--print"], ["--only", "maya"]])
+def test_print_and_a_single_window_tile_nothing(calls, args):
+    assert ow.main(["--rail", "fake", *args]) == 0
+    assert all(c[0] != "osascript" for c in calls)
