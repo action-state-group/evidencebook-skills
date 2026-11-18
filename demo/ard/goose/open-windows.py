@@ -167,6 +167,21 @@ def tile(say=lambda line: print(line, file=sys.stderr)) -> str | None:
 GOOSE_ROOT_DEFAULT = "~/.config/ard-commerce-goose"
 
 
+#: The Claude Code ACP adapter the demo's Goose uses, installed under the demo's own prefix and never globally: a
+#: global install replaces the version other ACP clients on the Mac rely on (one broke above 0.94.0). 0.108.0 is the
+#: version Goose 1.59.2 ran with on the Mac the demo was built on.
+ACP_PIN = "0.108.0"
+ACP_PREFIX_DEFAULT = "~/ard-demo/acp"
+
+
+def acp_prefix() -> Path:
+    return Path(os.environ.get("ARD_ACP_PREFIX", ACP_PREFIX_DEFAULT)).expanduser()
+
+
+def acp_install() -> str:
+    return f"npm install --prefix {acp_prefix()} @agentclientprotocol/claude-agent-acp@{ACP_PIN}"
+
+
 def goose_root() -> Path:
     return Path(os.environ.get("ARD_GOOSE_ROOT", GOOSE_ROOT_DEFAULT)).expanduser()
 
@@ -174,9 +189,16 @@ def goose_root() -> Path:
 def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
     """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
     a running Goose would take the recipe links into its own settings."""
+    bin_dir = acp_prefix() / "node_modules" / ".bin"
+    if not (bin_dir / "claude-agent-acp").exists():
+        return (f"the demo's own Claude Code adapter is not installed: {acp_install()} "
+                "(pinned, under the demo's folder; never npm install -g, which changes the adapter other tools use)")
     root.mkdir(parents=True, exist_ok=True)
+    # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
+    # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first.
     try:
-        subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}"], check=True,
+        subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}",
+                        "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(bin_dir)])}"], check=True,
                        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"

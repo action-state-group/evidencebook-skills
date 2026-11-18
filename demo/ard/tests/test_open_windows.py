@@ -44,6 +44,10 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(ow.reset, "goose_running", lambda: any(c[:3] == ["open", "-a", "Goose"] for c in made))
     monkeypatch.setenv("ARD_GOOSE_ROOT", str(tmp_path / "goose-root"))
     monkeypatch.setenv("ARD_HOME", str(tmp_path / "home"))
+    acp = tmp_path / "acp" / "node_modules" / ".bin"
+    acp.mkdir(parents=True)
+    (acp / "claude-agent-acp").write_text("#!/bin/sh\n")
+    monkeypatch.setenv("ARD_ACP_PREFIX", str(tmp_path / "acp"))
     made.result = result
     return made
 
@@ -53,6 +57,9 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert calls[0][0] == "snapshot"  # the trust note comes before any window can be trusted
     assert calls[1][:4] == ["open", "-a", "Goose", "--env"] and calls[1][4].startswith("GOOSE_PATH_ROOT=")
     assert calls[1][4].endswith("goose-root")  # the demo's own Goose root, never the user's ~/.config/goose
+    import json as _json
+    assert calls[1][5] == "--env" and calls[1][6].startswith("GOOSE_SEARCH_PATHS=")
+    assert _json.loads(calls[1][6].split("=", 1)[1]) == [str(ow.acp_prefix() / "node_modules" / ".bin")]  # the demo's adapter
     assert [c[1] for c in calls[2:5]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
     assert calls[5] == ow.TILE and len(calls) == 6
     assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
@@ -120,3 +127,12 @@ def test_a_goose_root_inside_the_demo_home_is_refused(calls, capsys, monkeypatch
 def test_the_default_goose_root_is_outside_the_default_home():
     root, home = Path(ow.GOOSE_ROOT_DEFAULT).expanduser(), Path(ow.reset.DEFAULT_HOME).expanduser()
     assert home not in root.parents and root != home
+
+
+def test_a_missing_demo_adapter_refuses_with_the_pinned_local_install(calls, capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("ARD_ACP_PREFIX", str(tmp_path / "no-acp"))
+    assert ow.main(["--goose-only"]) == 1
+    assert not any(c[:3] == ["open", "-a", "Goose"] for c in calls)
+    err = capsys.readouterr().err
+    assert f"npm install --prefix {tmp_path / 'no-acp'} @agentclientprotocol/claude-agent-acp@{ow.ACP_PIN}" in err
+    assert "never npm install -g" in err and " -g " not in ow.acp_install()
