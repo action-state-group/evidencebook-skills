@@ -30,13 +30,8 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="module")
-def stage_env(tmp_path_factory):
-    import seed
-    from world import World
-
-    home = tmp_path_factory.mktemp("three-windows")
-    with World(home) as world:
-        seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
+def stage_env(tmp_path_factory, seeded_home):
+    home = seeded_home(tmp_path_factory.mktemp("three-windows"))
     env = {**os.environ, "ARD_HOME": str(home), "ARD_RAIL": "fake", "ARD_APPROVAL": "none", "ARD_KESTREL_CARD": "sentinel", "ARD_OPEN_PAGES": "0",
            "ARD_RELAY_PORT": str(_free_port()), "ARD_STAGE_PORT": str(_free_port())}
     stage = subprocess.Popen([sys.executable, str(HERE / "stage.py"), str(home)], env=env, stdout=subprocess.DEVNULL)

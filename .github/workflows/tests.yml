@@ -74,18 +74,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
+      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
+      # The two Go binaries depend only on their pinned refs and the Go toolchain: build them once per pin.
+      - id: bins
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/bin
+          key: ard-bins-${{ runner.os }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.EVIDENCEBOOK_DEAL_REF }}-${{ hashFiles('.deps/capsule-engine/go/go.mod', '.deps/evidencebook-deal/go.mod') }}
       - name: build capsule-engine
+        if: steps.bins.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
       - name: build capsulectl-deal
+        if: steps.bins.outputs.cache-hit != 'true'
         run: |
           (cd .deps/evidencebook-deal && GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
       - name: the demo's tests
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
-            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q demo/ard/tests
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q --durations=40 -n 4 --dist loadfile demo/ard/tests
 
   admission-engine:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
