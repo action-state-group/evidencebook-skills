@@ -21,6 +21,9 @@ def banner(rail: str) -> str:
     return {"lightning": BANNER, "local": BANNER_LOCAL}.get(rail, BANNER_FAKE)
 PACK_NOTE = "demo copy, not published · placeholder thresholds, for this demo only"
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
+#: The demo adapter reads the seller's selection as verified although it carries no inclusion proofs; the screen says so
+#: (design note §3.6 item 6). The buyer skill's own rule is that an unproven selection is never a pass.
+SELECTION_NOTE = "selection: signed answer, no inclusion proofs; the demo pack counts it"
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
 

@@ -111,7 +111,8 @@ class Run:
     def assessments(self, p: packs.Pack, heading: str) -> dict[str, buyer.Assessment]:
         rule(heading)
         print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
-        print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})\n")
+        print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})")
+        print(f"({screens.SELECTION_NOTE})\n")
         return self.assess(p)
 
     # -- 4b the on-stage edit ---------------------------------------------------------------
