@@ -11,6 +11,10 @@ import _paths  # noqa: E402
 
 _paths.setup()
 os.environ.setdefault("CAPSULE_WITNESS", "off")
+# pytest-xdist workers compile the pack at the same time: each compiles into a folder of its own (pack.compile_source),
+# and the servers a test starts inherit it.
+if os.environ.get("PYTEST_XDIST_WORKER"):
+    os.environ["ARD_PACK_WORK"] = os.environ["PYTEST_XDIST_WORKER"]
 
 
 def needs_engine() -> bool:

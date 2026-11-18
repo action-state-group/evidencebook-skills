@@ -79,7 +79,9 @@ def compile_source(text: str, version: str, work: Path | None = None) -> Pack:
     """Compile ``text`` (a pack source) with the skills checkout's compiler. Returns the pack as the
     compiler printed it (id and ``definition_digest``)."""
     root = skills_checkout()
-    out_dir = (work or root / "demo-ard") / f"v{version}"
+    # ARD_PACK_WORK names a subfolder of demo-ard/ for processes that compile at the same time (the test workers);
+    # unset, the work stays at demo-ard/v<version>.
+    out_dir = (work or root / "demo-ard" / os.environ.get("ARD_PACK_WORK", "")) / f"v{version}"
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
