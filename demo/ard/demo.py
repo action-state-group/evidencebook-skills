@@ -24,6 +24,12 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import _paths  # noqa: E402
 
+if __name__ == "__main__" and "reset" in sys.argv[1:]:
+    # reset needs no evidencebook checkout and none of the demo's modules: it runs before the setup that needs them
+    import reset  # noqa: E402
+
+    sys.exit(reset.main([a for a in sys.argv[1:] if a != "reset"]))
+
 _paths.setup()
 
 import ard  # noqa: E402
@@ -249,7 +255,7 @@ def cmd_reset(args) -> int:
     """Stop the demo's processes on the home, delete it, and clear Goose's recipe trust (:mod:`reset`)."""
     import reset
 
-    return reset.reset(Path(os.environ.get("ARD_HOME", args.home)).expanduser())
+    return reset.main(["--home", args.home])
 
 
 def cmd_run(args) -> int:
