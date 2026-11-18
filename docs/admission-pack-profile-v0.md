@@ -174,6 +174,10 @@ records its count, and its denominator where one exists.
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
 | `card.not_stapled` | card | | the card was asked for, not stapled to the holder's own message (§3.6) | card not verified | |
+| `card.witness_label` | card | | the verifier's label for the card's log is `witnessed` (§3.7) | card not verified | |
+| `card.log_key_accepted` | card | | the caller accepts the card's `checkpoint_key` as the log key for this responder (§3.7) | card not verified, or the caller has not decided | |
+| `card.not_behind_pin` | card | | the card's last checkpoint reaches the asker's pin and shows no different digest at the pin's log size (§3.7) | card not verified, no pin held, or the card shows no checkpoint | |
+| `card.no_dropped_stream` | card | | no stream pinned for this `key_id` is missing from the current commitment (§3.7) | card not verified, or no commitment's streams were read | dropped / pinned |
 | `card.self_reported_served_periods` | card | `window`, `min_periods` | at least `min_periods` of the last `window` closed periods have a published served total (§3.4) | card not verified, or it carries no served periods | periods counted / `window` |
 | `card.referee_verdicts` | card | `window`, `min_periods` | at least `min_periods` of the last `window` closed periods have a published corroborated referee verdict count above zero (§3.5) | card not verified, or it carries no referee verdict counts | periods counted / `window` |
 | `card.witness_receipts` | card | `min` | witness receipts the verifier counted on the card's checkpoints ≥ `min` (§3.5) | card not verified, or the verifier counted none | receipts / checkpoints |
@@ -367,6 +371,50 @@ decision is ASK, or LIMIT at T0 when the budget allows no ask. Whether a card
 is a staple is the caller's input, as the card's verification is; the evaluator
 checks neither.
 
+### 3.7 Witness label, log key and first-use pins
+
+These are the judgements of a stapled card that the carrier binding
+(agent-action-capsule, evidence-commitment-carriers) left to the asker's pack
+(capsule-engine#304). Each reads what the caller verified; none fetches or
+verifies anything.
+
+**Label.** `card.witness_label` records `label` on its row and passes only for
+`witnessed`. The verifier derives the label; the responder never sets it. A
+counted receipt, on the latest checkpoint under a witness in
+`trust_roots.witnesses` or on any earlier one the caller counted, is `witnessed`.
+Receipts that were presented, none of which counts (an unconfigured key, a bad
+signature, no `checkpoint_key`) are `unknown_witness`, never `unwitnessed`,
+because a responder can mint receipts of its own. A card with no receipt is
+`unwitnessed`. A label is not a failure by itself; the row's `on_fail` decides.
+
+**Log key.** A label and a key age describe the log signed by `checkpoint_key`,
+which need not be the responder's key: another commitment can staple the same
+public card (the [Interop Profile v0](https://github.com/action-state-group/agent-action-capsule/blob/main/spec/interop-profile-v0.md),
+§6.2.1, requirement P-31). A pack that relies on `card.witness_label`,
+`card.witnessed`, `card.key_age` or `card.witness_receipts` should also carry a
+`card.log_key_accepted` row; the lint does not require it, and the default
+packs (`admission-baseline`, `admission-muse-buyer`, `admission-node-baseline`)
+have none of these rows. Whether the key is right for this responder is the
+caller's input, as the card's verification is.
+
+**First-use pin.** For each (`key_id`, stream) the asker keeps the first
+checkpoint it saw: log size and digest. `card.not_behind_pin` fails for a card
+whose last checkpoint is earlier than the pin, or which shows another digest
+at the pin's log size (a fork); it is not read with no pin, which is a stream
+seen first. A first-seen stream, and every stream under a new key, is then
+limited to the tier below the row's `from` tier until a pin exists. That a later checkpoint is consistent with the pin is the caller's
+check, made before it marks the card verified: a `checkpoints` request under
+`expected_pin` is answered with a checkpoint at or past the card's last one and
+a consistency proof from the pin.
+
+**Dropped and new streams.** `card.no_dropped_stream` counts, for one `key_id`,
+the pinned streams missing from the current commitment, out of the pinned ones.
+A stream with no pin is new and has no pin to fail. A log restarted under a new
+stream name is a dropped stream, never a continuing one. Pins are
+per `key_id`: a new key starts with none.
+
+All four are `card` rows, so they record or limit and never decide NO.
+
 ## 4. Resolution
 
 In order:
@@ -511,6 +559,9 @@ Added after the first v0 compile (#79, #87, capsule-engine#273):
 - **Self-reported served periods** (§3.4), from an `inference-service-history/0`
   card, for a personal agent admitting a Mesh node (capsule-engine#273).
 - **A stapled card decides T0 only** (§3.6), `card.not_stapled` (capsule-engine#277).
+- **Witness label, log key and first-use pins** (§3.7), `card.witness_label`,
+  `card.log_key_accepted`, `card.not_behind_pin` and `card.no_dropped_stream`
+  (capsule-engine#304).
 - **The own-settled lift** (§4.1), the row field `lift` (evidencebook-skills#154).
 
 All are additive within `admission-pack/v0`. An evaluator from before them

@@ -117,6 +117,25 @@ class Ladder(unittest.TestCase):
         self.assertTrue(any("check card.not_stapled takes no params.max" in i for i in issues), issues)
         self.assertTrue(issues, issues)
 
+    def test_pin_and_witness_label_rows(self):
+        # Witness label, log key, first-use pin and dropped streams (capsule-engine#304).
+        for check in ("card.witness_label", "card.log_key_accepted", "card.not_behind_pin",
+                      "card.no_dropped_stream"):
+            row = f"""  - id: r-{check.split('.')[1].replace('_', '-')}
+    statement: A card row.
+    source: card
+    check: {check}
+    from: T1
+    on_fail: "LIMIT"
+"""
+            text = ladder_text().replace("rows:\n", "rows:\n" + row, 1)
+            self.assertEqual(pack_compile.validate_source(load(text)), [], check)
+            issues = pack_compile.validate_source(load(text.replace(
+                f"check: {check}\n", f"check: {check}\n    params: {{max: 1}}\n", 1)))
+            self.assertTrue(any(f"check {check} takes no params.max" in i for i in issues), (check, issues))
+            issues = pack_compile.validate_source(load(text.replace('on_fail: "LIMIT"', 'on_fail: "NO"', 1)))
+            self.assertTrue(any("a card row may not decide NO" in i for i in issues), (check, issues))
+
     def test_self_reported_served_periods(self):
         # A Mesh node's inference-service-history/0 card (capsule-engine#273).
         row = """  - id: served-periods
