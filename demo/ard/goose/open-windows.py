@@ -90,7 +90,9 @@ def link(role: str, rail: str) -> str:
               "instructions": instructions(role, rail), "prompt": p["prompt"],
               "extensions": [{"type": "stdio", "name": f"ard_{role}", "description": f"The {role} side of the ARD demo",
                               "cmd": "/usr/bin/env", "args": [*env, sys.executable, str(SERVER)], "timeout": 300}]}
-    return "goose://recipe?config=" + base64.urlsafe_b64encode(json.dumps(recipe).encode()).decode()
+    # No base64 padding: Goose Desktop 1.59.2 opens a blank window for a recipe link whose config ends in "="
+    # (percent-encoding it does not help), so a recipe whose JSON length is not a multiple of 3 never loaded.
+    return "goose://recipe?config=" + base64.urlsafe_b64encode(json.dumps(recipe).encode()).decode().rstrip("=")
 
 
 def main(argv: list[str] | None = None) -> int:

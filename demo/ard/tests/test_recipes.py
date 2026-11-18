@@ -25,7 +25,17 @@ def env(monkeypatch):
 
 
 def _recipe(link: str) -> dict:
-    return json.loads(base64.urlsafe_b64decode(link.split("config=", 1)[1]))
+    config = link.split("config=", 1)[1]
+    return json.loads(base64.urlsafe_b64decode(config + "=" * (-len(config) % 4)))
+
+
+def test_no_recipe_link_ends_in_base64_padding():
+    # Goose Desktop drops a link whose config ends in "=": every window must open, whatever its recipe's length.
+    for role in ("alder", "kestrel", "maya"):
+        for rail in ("fake", "lightning"):
+            link = ow.link(role, rail)
+            assert not link.endswith("=") and "=" not in link.split("config=", 1)[1]
+            assert _recipe(link)["extensions"][0]["name"] == f"ard_{role}"
 
 
 def _skill_body(name: str) -> str:
