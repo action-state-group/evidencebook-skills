@@ -6,7 +6,7 @@ evidencebook-skills afa24e7 · evidencebook 5d29ccc · evidencebook-deal 2f82b61
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at afa24e7, on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT) with its own adapter (GOOSE_SEARCH_PATHS) is read from Goose's source and not yet run by hand. The demo's automated tests pass at these pins in CI.
+Status: not yet run by hand at afa24e7, on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT), with the adapter found through GOOSE_SEARCH_PATHS, has not been run by hand. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -98,10 +98,10 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
 1. Its setup changed your own Goose: the provider became Claude Code ACP and the extensions were switched off, in `~/.config/goose/config.yaml`. In your normal Goose, set your provider back in Settings, Models, and switch back on the extensions you had on before. The demo now uses its own Goose settings folder and leaves yours alone.
 
-2. It also installed the Claude Code adapter globally, replacing the version you had. If you know which version that was, put it back (npm keeps no history of it). For example, one Buzz agent needed 0.94.0. The demo now uses its own pinned copy under ~/ard-demo/acp.
+2. It also installed the Claude Code adapter globally, replacing the version you had. If you know which version that was, put it back (npm keeps no history of it); one ACP client stopped working above 0.94.0. The demo now uses its own pinned copy under ~/ard-demo/acp.
 
    ```
-   npm install -g @agentclientprotocol/claude-agent-acp@<the version you had>
+   npm install -g @agentclientprotocol/claude-agent-acp@<the version you had (or the version your other tool requires)>
    ```
 
 ## Set up, once
@@ -219,7 +219,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## Before each run
 
-1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's three recipes, and any other recipe you trusted in the meantime. The demo home is `~/.config/ard-commerce-demo`. Reset knows the demo's trust because open-windows.py notes Goose's trust before it first opens the windows.
+1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's three recipes, and any other recipe you trusted in the meantime. Goose keeps recipe trust in one place for both, so this also applies to your own Goose. The demo home is `~/.config/ard-commerce-demo`. Reset knows the demo's trust because open-windows.py notes Goose's trust before it first opens the windows.
 
    ```
    osascript -e 'quit app "Goose"'
@@ -463,6 +463,14 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    **Expect:** nothing printed.
 
 3. [Real] The wallets are not reset: a real payment stays paid, and both balances stay as they are.
+
+4. Opening Goose normally uses your own settings again.
+
+5. Optional: remove the demo entirely.
+
+   ```
+   rm -rf ~/ard-demo ~/.config/ard-commerce-goose
+   ```
 
 ## Troubleshooting
 
