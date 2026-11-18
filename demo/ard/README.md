@@ -56,8 +56,10 @@ test wallets"). Nothing on screen says it for them.
 `run` pauses at each step (Enter) and asks for the new threshold (default 50). The popup opens in the
 browser; click "Pay Alder Print Co. 2,000 msat". `Ctrl-C` ends a run; running again starts over on the
 same sample history. `demo.py reset` puts the Mac back to before the demo
-ran: it refuses while Goose Desktop runs, stops the demo's own `stage.py` and `desktop_server.py` on the home
-(and refuses if anything else holds it), deletes the home (`$ARD_HOME`, default `~/.config/ard-commerce-demo`,
+ran, and needs none of the environment variables above: it refuses while Goose Desktop runs, stops the demo's own
+`stage.py` and `desktop_server.py` on the home, including one started from an older commit that names the home or
+runs from this checkout's `demo/ard` (and refuses if anything else holds the home or listens on the stage's ports),
+deletes the home (`$ARD_HOME`, default `~/.config/ard-commerce-demo`,
 keys and history included), and clears Goose's recipe trust, so each window asks Trust and Execute again. That
 clears the trust of every Goose recipe, not only the demo's three: Goose 1.59.2 names each trust file by a hash of
 the recipe as its own server decodes it, which `reset.py` cannot reproduce.
@@ -114,6 +116,10 @@ else already holds that port (an earlier demo's `stage.py`, say), the windows re
 |---|---|---|
 | Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
 | Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | what that seller's agent did; its own History card; its own receipt for the deal |
+
+`demo.py --help` (or `demo.py` alone) and `goose/open-windows.py --help` list each variable, which command needs
+it and the export line to copy; a command that lacks one names every missing variable with that line and stops,
+before anything runs.
 
 At the start of the show the presenter says, once: "This is sample history, and the payment is simulated: no
 money moves." (on a real rail, say instead that the payment is real). Nothing on screen says it for them: the pages and the tools' output carry no demo banner (Ethan,

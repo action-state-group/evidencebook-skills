@@ -3,11 +3,14 @@
 
 In order, and changing nothing until every check passes: refuse a home that is ``/``, your user folder or a folder
 above it, or a symlink; refuse while Goose Desktop runs (its windows hold servers on the home and would trust the
-recipes again); find who holds files under the home (``lsof``; refuse if that cannot be checked). The demo's own
-processes are the ones holding the home's own lock files: a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a
-``stage.py`` holds ``stage/.stage.lock`` (:data:`parties.STAGE_LOCK`), however either was started. Anything else
-holding the home stops the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each
-signal), check the home again, delete it, and clear Goose's recipe trust, so each window asks Trust and Execute again.
+recipes again); find who holds files under the home or listens on the stage's ports (``lsof``; refuse if that cannot
+be checked). The demo's own processes are Python running ``stage.py`` or ``desktop_server.py`` that either hold one of
+the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a ``stage.py`` holds
+``stage/.stage.lock``, :data:`parties.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
+under the home or listen on the stage's ports and either name this home in their arguments or run from this
+checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
+the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
+the home, and clear Goose's recipe trust, so each window asks Trust and Execute again.
 
 Goose Desktop 1.59.2 keeps one file per trusted recipe, ``<userData>/recipe_hashes/<sha256>.hash``, the sha256 of the
 recipe as its own server decodes the ``goose://`` link (``ui/desktop/src/utils/recipeHash.ts``). That hash could not be
@@ -15,6 +18,7 @@ reproduced from our recipe's JSON (checked against real files on 2026-11-18), so
 recipe, and says so."""
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import signal
@@ -23,6 +27,8 @@ import time
 from pathlib import Path
 
 SAVED_RECIPE = "maya-buys-conference-badges.yaml"
+DEFAULT_HOME = "~/.config/ard-commerce-demo"  # demo.DEFAULT_HOME, kept here so reset needs no evidencebook checkout
+HERE = Path(__file__).resolve().parent  # this checkout's demo/ard: a stage or server run from here is ours
 STAGE_LOCK = ".stage.lock"  # parties.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
 
 
@@ -102,21 +108,75 @@ def _argv(pid: int) -> list[str] | None:
         return None
 
 
-#: Python's options that take the next word as their value.
-_VALUE_OPTIONS = {"-W", "-X", "--check-hash-based-pycs"}
+#: Python's long options that take the next word as their value.
+_VALUE_OPTIONS = {"--check-hash-based-pycs"}
+
+
+def _script_at(argv: list[str] | None) -> int | None:
+    """Where in ``argv`` Python's script is, when ``argv`` is Python running one of :data:`SCRIPTS` (not ``-c`` or
+    ``-m``)."""
+    if not argv or "python" not in Path(argv[0]).name.lower():
+        return None
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):
+        arg = argv[i]
+        i += 1
+        if arg == "--":
+            break
+        if arg == "-":  # the program comes from stdin
+            return None
+        if arg.startswith("--"):
+            i += 1 if arg in _VALUE_OPTIONS else 0
+            continue
+        # Short options group (-Bu) and the last may take its value attached (-Wignore, -ccode) or as the next word.
+        for k, flag in enumerate(arg[1:], start=1):
+            if flag in "cm":  # -c, -m and their grouped or attached forms (-Ic, -c'…'): not a script
+                return None
+            if flag in "WX":
+                i += 0 if arg[k + 1:] else 1
+                break
+    return i if i < len(argv) and Path(argv[i]).name in SCRIPTS else None
 
 
 def _runs_our_script(pid: int) -> bool:
-    """Whether ``pid`` is Python running one of :data:`SCRIPTS` as its script (not ``-c`` or ``-m``)."""
+    """Whether ``pid`` is Python running one of :data:`SCRIPTS` as its script."""
+    return _script_at(_argv(pid)) is not None
+
+
+def _cwd(pid: int) -> Path | None:
+    """The process's working directory, to read the relative paths in its arguments."""
+    for _, fd, name in _lsof("-a", "-p", str(pid), "-d", "cwd"):
+        if fd == "cwd":
+            return Path(name)
+    return None
+
+
+def _started_for(pid: int, home: Path) -> bool:
+    """Whether ``pid`` is our script for this home with no lock to show it (a stage started before stages held one):
+    its arguments name this home, or its script is this checkout's own, whatever commit started it."""
     argv = _argv(pid)
-    if not argv or "python" not in Path(argv[0]).name.lower():
+    i = _script_at(argv)
+    if i is None:
         return False
-    i = 1
-    while i < len(argv) and argv[i].startswith("-"):
-        if argv[i] in ("-c", "-m"):
-            return False
-        i += 2 if argv[i] in _VALUE_OPTIONS else 1
-    return i < len(argv) and Path(argv[i]).name in SCRIPTS
+    base = None
+
+    def path(arg: str) -> Path | None:
+        nonlocal base
+        try:  # a stranger's argument (~nosuchuser, a symlink loop) is no match, never a traceback
+            p = Path(arg).expanduser()
+            if not p.is_absolute():
+                base = base or _cwd(pid)
+                if base is None:
+                    return None
+                p = base / p
+            return p.resolve()
+        except (RuntimeError, OSError):
+            return None
+
+    if (script := path(argv[i])) is not None and script.parent == HERE:
+        return True
+    target = home.resolve()
+    return any(path(a) == target for a in argv[i + 1:] if not a.startswith("-"))
 
 
 def _lock_holders(home: Path) -> set[int]:
@@ -125,19 +185,21 @@ def _lock_holders(home: Path) -> set[int]:
 
 
 def _ours(home: Path) -> set[int]:
-    """The demo's own processes on this home: holding one of its lock files and running one of our scripts."""
-    return {pid for pid in _lock_holders(home) if _runs_our_script(pid)}
+    """The demo's own processes on this home (see the module's docstring)."""
+    return holders(home)[0]
 
 
 def holders(home: Path) -> tuple[set[int], dict[int, str], set[int]]:
     """``(ours, others, inside)`` for this home: the demo's own processes, any other process holding a file under it
-    (pid: file), and processes whose working directory is in it (a shell, say)."""
-    if not home.exists():
-        return set(), {}, set()
-    holding_locks = _lock_holders(home)
+    (pid: file), and processes whose working directory is in it (a shell, say). Listeners on the stage's ports that
+    are ours count in ``ours``; :func:`_listeners` names the rest."""
+    holding_locks = _lock_holders(home) if home.exists() else set()
     ours = {pid for pid in holding_locks if _runs_our_script(pid)}
     others, inside = {pid: "a lock file of this home" for pid in holding_locks - ours}, set()
-    for pid, fd, name in _lsof("+D", str(home)):
+    found = _lsof("+D", str(home)) if home.exists() else []
+    near = {pid for pid, _, _ in found} | set(_listeners())
+    ours |= {pid for pid in near - ours - holding_locks - {os.getpid()} if _started_for(pid, home)}
+    for pid, fd, name in found:
         if pid == os.getpid() or pid in ours:
             continue
         if fd == "cwd":
@@ -153,8 +215,8 @@ def _command(pid: int) -> str:
 
 
 def _signal_ours(home: Path, pids: set[int], sig: int) -> set[int]:
-    """Send ``sig`` to each pid that still holds one of the home's lock files right now (a pid that let go may have
-    been reused); return the ones signalled."""
+    """Send ``sig`` to each pid that is still ours right now (a pid that let go may have been reused); return the
+    ones signalled."""
     still = _ours(home) & pids
     for pid in still:
         try:
@@ -216,7 +278,7 @@ def demo_ports() -> list[int]:
 
 
 def _listeners() -> dict[int, int]:
-    """``{pid: port}`` for whatever listens on the demo's ports."""
+    """``{pid: port}`` for whatever listens on the demo's ports, ours or not."""
     out = {}
     for port in demo_ports():
         for pid, _, _ in _lsof("-iTCP:%d" % port, "-sTCP:LISTEN"):
@@ -224,7 +286,12 @@ def _listeners() -> dict[int, int]:
     return out
 
 
-def _refuse_on(others: dict[int, str], inside: set[int], home: Path) -> None:
+def _refuse_on(others: dict[int, str], inside: set[int], home: Path, ours: set[int]) -> None:
+    listening = {pid: port for pid, port in _listeners().items() if pid not in ours}
+    if listening:
+        listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) on port {port}" for pid, port in sorted(listening.items()))
+        raise ResetRefused(f"something that is not this demo's stage listens on the stage's ports: {listed}. It neither "
+                           f"names {home} nor runs from {HERE}, so reset leaves it alone: stop it, then reset again.")
     if others:
         listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) holds {name}" for pid, name in sorted(others.items()))
         raise ResetRefused(f"other processes hold files under {home}: {listed}. Close them, then reset again.")
@@ -241,7 +308,7 @@ def reset(home: Path, say=print) -> int:
         if goose_running():
             raise ResetRefused("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then reset again.")
         ours, others, inside = holders(home)
-        _refuse_on(others, inside, home)
+        _refuse_on(others, inside, home, ours)
     except ResetRefused as e:
         raise ResetRefused(f"{e} Nothing was changed.") from None
     try:
@@ -251,12 +318,7 @@ def reset(home: Path, say=print) -> int:
         again, others, inside = holders(home)  # again: nothing may have taken the home meanwhile
         if again:
             raise ResetRefused(f"stage.py or desktop_server.py {sorted(again)} did not stop. Stop them (kill -9 <pid>), then reset again.")
-        _refuse_on(others, inside, home)
-        listening = _listeners()
-        if listening:  # a stage from before stages held a lock (or another program) still on the demo's ports
-            listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) on port {port}" for pid, port in sorted(listening.items()))
-            raise ResetRefused(f"something still listens on the stage's ports: {listed}. An older stage.py? Stop it (kill <pid>), "
-                               "then reset again.")
+        _refuse_on(others, inside, home, again)
     except ResetRefused as e:
         done = "stage.py and desktop_server.py on this home were stopped; the home was kept." if ours else "Nothing was changed."
         raise ResetRefused(f"{e} {done}") from None
@@ -267,3 +329,11 @@ def reset(home: Path, say=print) -> int:
     say(f"cleared Goose's trust in all {gone} recipes it had trusted, not only the three ARD recipes (each asks Trust and Execute "
         "again), and the saved Maya recipe")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``demo.py reset [--home DIR]``; ``ARD_HOME`` wins over ``--home``, as for the demo's other commands."""
+    ap = argparse.ArgumentParser(prog="demo.py reset", description=__doc__.splitlines()[0])
+    ap.add_argument("--home", default=DEFAULT_HOME)
+    args = ap.parse_args(argv)
+    return reset(Path(os.environ.get("ARD_HOME", args.home)).expanduser())

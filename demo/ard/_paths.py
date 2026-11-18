@@ -20,10 +20,15 @@ class SetupError(RuntimeError):
     pass
 
 
+def is_checkout(path: str | Path) -> bool:
+    """Whether ``path`` is an evidencebook checkout the demo can use (it holds the Goose reference)."""
+    return (Path(path) / "python" / "examples" / "goose" / "goose_node.py").is_file()
+
+
 def evidencebook() -> Path:
     """The pinned evidencebook checkout (``ARD_EVIDENCEBOOK``)."""
     path = os.environ.get("ARD_EVIDENCEBOOK")
-    if not path or not (Path(path) / "python" / "examples" / "goose" / "goose_node.py").is_file():
+    if not path or not is_checkout(path):
         raise SetupError("set ARD_EVIDENCEBOOK to an evidencebook checkout at the commit the run sheet pins "
                          "(it holds python/examples/goose and dealprofile/x-deal-v0)")
     return Path(path)

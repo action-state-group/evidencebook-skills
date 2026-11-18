@@ -7,9 +7,8 @@
 Each window is a recipe with its own embedded extension (``desktop_server.py`` with ``ARD_ROLE``), so each
 party's Goose has its own keys and data directory. It opens ``goose://recipe?config=...`` links, which
 Goose Desktop answers with one window each (it asks once per recipe: Trust and Execute). Open the sellers
-first. Environment: ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK`` (as for ``demo.py``), ``ARD_HOME`` (optional); for ``--rail local``
-``ARD_WALLET_BUYER`` and ``ARD_WALLET_SELLER`` (wallet directories) and optionally ``ARD_PAY_LOCAL`` (the ln-pay-local binary).
-``--print`` prints the links instead of opening them."""
+first. ``--print`` prints the links instead of opening them. The environment it needs is listed at the end of
+--help."""
 from __future__ import annotations
 
 import argparse
@@ -23,6 +22,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SERVER = HERE.parent / "desktop_server.py"
+sys.path.insert(0, str(HERE.parent))
+import envhelp  # noqa: E402
 
 #: Each window's recipe is a thin wrapper: the party's own facts, then the skill it follows, read from the
 #: this repository at the commit the run sheet pins (#169).
@@ -99,16 +100,15 @@ def link(role: str, rail: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="open-windows.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog=envhelp.help_text({"windows": "open-windows.py"}))
     ap.add_argument("--rail", choices=["fake", "lightning", "local"], default="fake")
     ap.add_argument("--print", action="store_true", dest="show")
     ap.add_argument("--only", choices=["alder", "kestrel", "maya"], help="open one window only")
     args = ap.parse_args(argv)
-    needed = ["CAPSULE_ENGINE", "ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL"] + (["ARD_WALLET_BUYER", "ARD_WALLET_SELLER"] if args.rail == "local" else [])
-    for var in needed:
-        if not os.environ.get(var):
-            print(f"set {var} (see README.md)", file=sys.stderr)
-            return 2
+    if gap := envhelp.message("open-windows.py", args.rail, as_command="windows"):
+        print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
+        return 2
     for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):
         if args.show:
             print(link(role, args.rail))
