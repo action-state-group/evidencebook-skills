@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills fba0173 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills 7fd4b48 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at fba0173, on either rail; the real-payment steps have not been run at these pins at all. The demo's automated tests pass at these pins in CI.
+Status: not yet run by hand at 7fd4b48, on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT) has not been run by hand. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -94,27 +94,18 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    brew install rust
    ```
 
+## If you used this guide before 2026-11-19
+
+1. Its setup changed your own Goose: the provider became Claude Code ACP and the extensions were switched off, in `~/.config/goose/config.yaml`. In your normal Goose, set your provider back in Settings, Models, and switch your extensions back on (by default Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind). The demo now uses its own Goose settings folder and leaves yours alone.
+
 ## Set up, once
 
-1. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
-
-2. Install the adapter that lets Goose use Claude Code (ACP).
-
-   ```
-   npm install -g @agentclientprotocol/claude-agent-acp
-   ```
-
-3. Open Goose. On the welcome screen choose Other Providers, then Claude Code ACP, Configure, Submit. Later this lives in Settings, Models.
-   **Expect:** a chat opens and answers a short message.
-
-4. **Required:** in Goose, Settings, Extensions, turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. Apps and Skills also leave Goose's sidebar. The shutdown section turns them back on. The payment dialog holds only for agents limited to the demo's own tools; an agent with screen control could click it itself. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own.
-
-5. Clone and build everything under ~/ard-demo (about 5 minutes). Everything goes under `~/ard-demo`. Another folder works if you change the paths in the next section to match.
+1. Clone and build everything under ~/ard-demo (about 5 minutes). Everything goes under `~/ard-demo`. Another folder works if you change the paths in the next section to match.
 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q fba017333fe97b42bf37430bff083a5efd9679a8
+   git -C evidencebook-skills checkout -q 7fd4b4873aa42516a1be1cb8cd53662fa6ee4941
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/evidencebook-deal
@@ -130,15 +121,43 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
    **Expect:** pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
 
-6. Already cloned? Move the checkout to this pin instead.
+2. Already cloned? Move the checkout to this pin instead.
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach fba017333fe97b42bf37430bff083a5efd9679a8
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 7fd4b4873aa42516a1be1cb8cd53662fa6ee4941
+   ```
+
+3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
+
+4. Install the adapter that lets Goose use Claude Code (ACP), only if it is not there yet. A global npm install replaces any version you already have, so this installs only when the command is missing.
+
+   ```
+   command -v claude-agent-acp || npm install -g @agentclientprotocol/claude-agent-acp
+   ```
+
+5. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
+
+   ```
+   osascript -e 'quit app "Goose"'
+   .venv/bin/python demo/ard/goose/open-windows.py --goose-only
+   ```
+
+   **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
+
+6. In that Goose: on the welcome screen choose Other Providers, then Claude Code ACP, Configure, Submit. Later this lives in Settings, Models.
+   **Expect:** a chat opens and answers a short message.
+
+7. **Required:** in that Goose, Settings, Extensions, turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The payment dialog holds only for agents limited to the demo's own tools; an agent with screen control could click it itself. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own.
+
+8. Quit that Goose.
+
+   ```
+   osascript -e 'quit app "Goose"'
    ```
 
 ## Real rail, once
 
-This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts. Not yet run at these pins. Lexe's fees, from [docs.lexe.tech/pricing](https://docs.lexe.tech/pricing) (read 2026-11-18; the page says rates may change): receiving payments 0.5%, sending to other Lexe users 0.5% of the payment amount, and "Lightning sends and receives have a minimum fee of ₿0.1 (100 msat …). It only applies to payments under ₿20." At 2,000 msat, 0.5% is 10 msat, so the 100 msat minimum applies on both sides: the buyer needs 2,100 msat and the seller should receive about 1,900.
+Do a full run on the simulated rail first, then the real rail. This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts. Not yet run at these pins. Lexe's fees, from [docs.lexe.tech/pricing](https://docs.lexe.tech/pricing) (read 2026-11-18; the page says rates may change): receiving payments 0.5%, sending to other Lexe users 0.5% of the payment amount, and "Lightning sends and receives have a minimum fee of ₿0.1 (100 msat …). It only applies to payments under ₿20." At 2,000 msat, 0.5% is 10 msat, so the 100 msat minimum applies on both sides: the buyer needs 2,100 msat and the seller should receive about 1,900.
 
 1. [Real] Install ln-pay-local. ln-pay-local is a small command-line wallet on Lexe's Lightning SDK.
 
@@ -194,14 +213,14 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
 
 ## Before each run
 
-1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears the recipe trust the demo's windows were given. The demo home is `~/.config/ard-commerce-demo`. Reset knows the demo's trust because open-windows.py notes Goose's trust before it first opens the windows.
+1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's three recipes, and any other recipe you trusted in the meantime. The demo home is `~/.config/ard-commerce-demo`. Reset knows the demo's trust because open-windows.py notes Goose's trust before it first opens the windows.
 
    ```
    osascript -e 'quit app "Goose"'
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before keep their trust. If it refuses, it says what to stop.
+   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo first opened its windows keep their trust; a home with no note keeps all trust, and reset says so. If it refuses, it says what to stop.
 
 2. Make the sample history (about 20 s).
 
@@ -219,7 +238,7 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
 
    **Expect:** buyer `spendable_msat` at least 2,100 (2,000 plus Lexe's 100 msat minimum send fee).
 
-4. [Real] Open the three windows: the sellers, then Maya, tiled with Maya on the left half. The first time, macOS asks to let your terminal control System Events and to turn it on under Accessibility: allow both. Each window is a Goose recipe that starts its own copy of the demo's tool server for one party.
+4. [Real] Open the three windows (it refuses while Goose runs, then starts the demo's own Goose): the sellers, then Maya, tiled with Maya on the left half. The first time, macOS asks to let your terminal control System Events and to turn it on under Accessibility: allow both. Each window is a Goose recipe that starts its own copy of the demo's tool server for one party.
 
    ```
    .venv/bin/python demo/ard/goose/open-windows.py --rail local
@@ -262,7 +281,7 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at fba0173.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 7fd4b48.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
@@ -427,7 +446,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before keep their trust.
+   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo first opened its windows keep their trust; a home with no note keeps all trust, and reset says so.
 
 2. Check that nothing of the demo is left running.
 
@@ -437,10 +456,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
 
    **Expect:** nothing printed.
 
-3. Turn the extensions back on: Settings, Extensions, switch on Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind.
-   **Expect:** Apps and Skills are back in the sidebar.
-
-4. [Real] The wallets are not reset: a real payment stays paid, and both balances stay as they are.
+3. [Real] The wallets are not reset: a real payment stays paid, and both balances stay as they are.
 
 ## Troubleshooting
 
@@ -454,4 +470,4 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
 
 5. **Maya finds only one seller.** A seller publishes its entry with its first message. Wait until both seller windows have answered, then ask again.
 
-6. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust the demo's windows were given.
+6. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust given since the demo's windows first opened.
