@@ -60,6 +60,13 @@ def test_maya_is_given_the_registry_the_stage_serves(monkeypatch):
     assert "http://127.0.0.1:48000/search" in r["instructions"] and "ARD_STAGE_PORT=48000" in r["extensions"][0]["args"]
 
 
+def test_every_window_is_given_the_receipt_verifier(monkeypatch):
+    # Without it ard_open_receipt_page refuses in every window (Codex, #173).
+    monkeypatch.setenv("CAPSULECTL_DEAL", "/opt/capsulectl-deal")
+    for role in ("alder", "kestrel", "maya"):
+        assert "CAPSULECTL_DEAL=/opt/capsulectl-deal" in _recipe(ow.link(role, "fake"))["extensions"][0]["args"]
+
+
 def test_a_real_rail_says_real_money_moves():
     assert "real money moves" in _recipe(ow.link("maya", "lightning"))["instructions"]
 

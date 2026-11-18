@@ -36,11 +36,15 @@ jobs:
   ard-demo:
     # The ARD two-seller demo (demo/ard): its tests, end to end on a simulated rail, against the
     # Goose reference and the x-deal-v0 checker in a pinned evidencebook checkout, and a
-    # capsule-engine built from a pinned tag (the run sheet's pins).
+    # capsule-engine built from a pinned tag, and capsulectl-deal built from a pinned
+    # evidencebook-deal commit for the receipt pages' verify (the run sheet's pins).
     runs-on: ubuntu-latest
     env:
-      EVIDENCEBOOK_REF: 2c1cc9083b1cc0c263c3399fce09d1d8f409e2eb
+      EVIDENCEBOOK_REF: 733aed4055e1e53a8d33e16e8c2ce6408624605d  # #514: the Goose reference seals demo: true
       CAPSULE_ENGINE_TAG: go/v0.4.0
+      # evidencebook-deal#220 (merged): cll/go v0.4.0, so verify --bundle accepts the Goose reference's checkpoints.
+      EVIDENCEBOOK_DEAL_REF: 2f82b61e6410e70d9ca88712d72b0a3f5faeb31d
+      CAPSULE_VIEWER_REF: 613a8a95144e5851bbb61df72df8cc76b7500381
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,6 +61,12 @@ jobs:
           ref: ${{ env.CAPSULE_ENGINE_TAG }}
           path: .deps/capsule-engine
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/evidencebook-deal
+          ref: ${{ env.EVIDENCEBOOK_DEAL_REF }}
+          path: .deps/evidencebook-deal
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: .deps/capsule-engine/go/go.mod
@@ -64,15 +74,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest
+      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
       - name: build capsule-engine
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
+      - name: build capsulectl-deal
+        run: |
+          (cd .deps/evidencebook-deal && GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
       - name: the demo's tests
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
-            python -m pytest -q demo/ard/tests
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q demo/ard/tests
 
   admission-engine:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.

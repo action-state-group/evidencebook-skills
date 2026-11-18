@@ -16,8 +16,8 @@ banner, the label on a "did not hold" counted from the party's own note, and, wh
 answers buyers with a sample card, the sample card label. A row that did not hold says it rests on this
 party's own note, not verified.
 
-The receipt is not drawn here: capsule-viewer's receipt modules read the copy's sealed ``deal_report``
-named by the bundle's ``x-deal-v0`` extension, and the Goose reference's bundles carry none."""
+The receipt page is ``receipt.py``'s: it seals the party's report, has the copy verified and draws it with
+capsule-viewer's receipt module, writing and opening the page through this module's ``write`` and ``open_page``."""
 from __future__ import annotations
 
 import hashlib

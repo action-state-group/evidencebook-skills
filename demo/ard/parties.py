@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -43,6 +44,7 @@ import responder  # noqa: E402
 import screens  # noqa: E402
 from demo_node import RECONCILED, DemoNode  # noqa: E402
 from world import RELAY_NAME, SAMPLE_COUNTS, SELLERS, World  # noqa: E402
+from world import terms as world_terms  # noqa: E402
 
 RELAY_PORT = int(os.environ.get("ARD_RELAY_PORT", "47480"))
 HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))  # the stand-in registry's POST /search
@@ -82,11 +84,24 @@ class Stage:
 
 
 def stage_up() -> bool:
+    """Whether this demo's stage listens. A listener that does not answer ``POST /search`` as the stand-in
+    registry does (an old demo's stage, say) is refused rather than taken for this one."""
     try:
         with socket.create_connection(("127.0.0.1", HTTP_PORT), timeout=0.5):
-            return True
+            pass
     except OSError:
         return False
+    # A search with no query.text: the stand-in registry answers it at once with its own error, without
+    # fetching any seller's entry, so a slow seller never makes the probe time out.
+    req = urllib.request.Request(REGISTRY_URL, data=b"{}", headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:  # the demo's own localhost stage
+            if "query.text" in json.loads(r.read()).get("error", ""):
+                return True
+    except Exception:
+        pass
+    raise RuntimeError(f"port {HTTP_PORT} is taken by something that is not this demo's stage (an earlier demo's "
+                       "stage.py, say): stop it, or set ARD_STAGE_PORT to a free port")
 
 
 def ensure_stage(home: Path) -> None:
@@ -272,8 +287,8 @@ class Seller:
         outbox, inbox = self.dir / "wire" / "maya", self.dir / "wire" / self.name
         maya = SimpleNamespace(key_id=m1["steps"][0]["capsule"]["key_id"], checkpoint_key_id=m1["checkpoint"]["key_id"])
         terms_in = m1["steps"][0]["payload"]["body"]
-        terms = dr.Terms(terms_in["terms"]["item"], terms_in["terms"]["price_minor"], terms_in["terms"]["currency"],
-                         terms_in["recourse"]["rail"], terms_in["recourse"]["refundable"])
+        terms = world_terms(terms_in["terms"]["item"], terms_in["terms"]["price_minor"], terms_in["terms"]["currency"],
+                            terms_in["recourse"]["rail"], terms_in["recourse"]["refundable"])
         listed = SELLERS[self.name]["price_msat"]
         if terms.price_minor != listed:
             raise gn.Refused(f"asked {terms.price_minor} msat, not the listed {listed}: no deal")
@@ -339,11 +354,15 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
     payloads = [json.loads(p) for p in node.deal_payloads(deal_id)]
     first = payloads[0]["body"]
     t = first["terms"]
+    simulated = "" if real else " (simulated rail: no money moved)"
+    # The terms name the rail the deal was agreed on; on a simulated run say so on that line too, so the receipt
+    # never reads as a real Lightning payment (rehearsal, 2026-11-17).
+    rail = first["recourse"]["rail"]
+    on_rail = ": no money moves" if rail == "simulated" else "" if real else "; this run's rail is simulated: no money moves"
     lines = [f"{label}: its receipt for {deal_id}, from its own sealed deal book ({len(payloads)} records)",
-             f"  terms: {t['item']} at {t['price_minor']} msat, rail {first['recourse']['rail']}"]
+             f"  terms: {t['item']} at {t['price_minor']} msat, rail {rail}{on_rail}"]
     if seller and real:
         lines.append("  " + screens.seller_credit_note(t["price_minor"]))
-    simulated = "" if real else " (simulated rail: no money moved)"
     for d in payloads:
         body = d.get("body", {})
         meta = d.get("x-deal-v0")

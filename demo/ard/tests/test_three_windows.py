@@ -37,7 +37,7 @@ def stage_env(tmp_path_factory):
     home = tmp_path_factory.mktemp("three-windows")
     with World(home) as world:
         seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
-    env = {**os.environ, "ARD_HOME": str(home), "ARD_RAIL": "fake", "ARD_APPROVAL": "none", "ARD_KESTREL_CARD": "sentinel",
+    env = {**os.environ, "ARD_HOME": str(home), "ARD_RAIL": "fake", "ARD_APPROVAL": "none", "ARD_KESTREL_CARD": "sentinel", "ARD_OPEN_PAGES": "0",
            "ARD_RELAY_PORT": str(_free_port()), "ARD_STAGE_PORT": str(_free_port())}
     stage = subprocess.Popen([sys.executable, str(HERE / "stage.py"), str(home)], env=env, stdout=subprocess.DEVNULL)
     yield env
@@ -65,8 +65,8 @@ def test_three_windows_run_the_story(stage_env):
                 await s.initialize()
                 sessions[role] = s
             tools = {r: sorted(t.name for t in (await s.list_tools()).tools) for r, s in sessions.items()}
-            assert tools["alder"] == tools["kestrel"] == ["ard_open_card_page", "ard_seller_activity", "ard_show_card", "ard_show_receipt"]
-            assert "ard_pay" in tools["maya"] and "ard_show_card" in tools["maya"] and "ard_open_card_page" in tools["maya"] and "ard_seller_activity" not in tools["maya"]
+            assert tools["alder"] == tools["kestrel"] == ["ard_open_card_page", "ard_open_receipt_page", "ard_seller_activity", "ard_show_card", "ard_show_receipt"]
+            assert "ard_pay" in tools["maya"] and "ard_show_card" in tools["maya"] and "ard_open_card_page" in tools["maya"] and "ard_open_receipt_page" in tools["maya"] and "ard_seller_activity" not in tools["maya"]
             maya = sessions["maya"]
             for role in ("maya", "alder", "kestrel"):  # before the deal: each party's own card, from its own records
                 out[f"card0_{role}"] = await _call(sessions[role], "ard_show_card")
@@ -82,6 +82,8 @@ def test_three_windows_run_the_story(stage_env):
             for role in ("maya", "alder"):
                 out[f"receipt_{role}"] = await _call(sessions[role], "ard_show_receipt")
             out["receipt_kestrel"] = await _call(sessions["kestrel"], "ard_show_receipt")
+            for role in ("maya", "alder", "kestrel"):
+                out[f"receipt_page_{role}"] = await _call(sessions[role], "ard_open_receipt_page")
             # After the deal: each party's card counts the sale after its next checkpoint (a minute here).
             out["card1_maya_at_once"] = await _call(sessions["maya"], "ard_show_card")  # ard_pay took her checkpoint
             for role, want in (("alder", "deals counted 25"), ("maya", "deals counted 1")):
@@ -107,8 +109,14 @@ def test_three_windows_run_the_story(stage_env):
     assert "deals counted 25" in out["card1_alder"] and "deals counted 1: held 1" in out["card1_maya"]
     for who in ("maya", "alder"):
         r = out[f"receipt_{who}"]
-        assert "at 289 msat, rail lightning" in r and "close: outcome completed" in r
+        assert "at 289 msat, rail simulated" in r and "close: outcome completed" in r
         # The payment is the buyer's act: only Maya's own book holds it, and the seller's receipt says what it sealed.
         assert ("payment of 289 msat sent" in r) == (who == "maya")
         assert "both parties' closing records state 289 msat: match" in r
-    assert "no deal yet" in out["receipt_kestrel"]
+    assert "no deal yet" in out["receipt_kestrel"] and "no deal yet, so no receipt page" in out["receipt_page_kestrel"]
+    for who in ("maya", "alder"):  # the page needs the verifier; without it the tool says so and writes nothing
+        page = out[f"receipt_page_{who}"]
+        if os.environ.get("CAPSULECTL_DEAL"):
+            assert "its receipt page written (not opened)" in page, page
+        else:
+            assert "no receipt page yet: set CAPSULECTL_DEAL" in page, page

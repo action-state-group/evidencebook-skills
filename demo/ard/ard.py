@@ -81,7 +81,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         domain = _publisher_of(ident)
         item: dict[str, Any] = {"identifier": ident, "id": ident.rsplit(":", 1)[-1], "name": result.get("displayName", ident),
                                 "publisher": domain,
-                                "checks": [f"registry result: {ident} (score {result.get('score')}, a pointer only)"]}
+                                "checks": [f"registry result: {ident} (relevance {result.get('score')}, a pointer only)"]}
         found.append(item)
         origin = origins.get(domain)
         if not origin:

@@ -7,6 +7,7 @@ keys and book. The sellers answer Maya's evidence requests through the one priva
 (:mod:`relay`) the way the Goose reference answers over a Nostr mailbox."""
 from __future__ import annotations
 
+import dataclasses
 import sys
 import threading
 import time
@@ -36,6 +37,8 @@ from relay import FakeRelay  # noqa: E402
 RELAY_NAME = "wss://ard-demo.relay.local"
 ITEM = "200 conference badges, delivered by Friday"
 CURRENCY = "BTC"  # amount_minor counts msat (x-deal-v0 PROFILE section 3)
+#: The rail the sample deals seal (``recourse.rail``). Maya's live deal seals its rail's own token
+#: (``pay.Rail.SEALED``): ``simulated`` on the fake rail, so no record of it reads as a Lightning payment.
 RAIL = "lightning"
 
 SELLERS = {
@@ -43,6 +46,13 @@ SELLERS = {
     "kestrel": {"label": "Kestrel Print", "price_msat": 268, "item": ITEM},
 }
 DEALS_EACH = 24
+
+
+def terms(item: str, price_minor: int, currency: str, rail: str, refundable: bool = False) -> dr.Terms:
+    """A deal's terms. A Goose reference whose ``Terms`` seals the demo flag gets ``demo=True``, so its opening
+    record says the deal is a demonstration (capsule-viewer shows its DEMO badge); an older one does not take it."""
+    flag = {"demo": True} if "demo" in {f.name for f in dataclasses.fields(dr.Terms)} else {}
+    return dr.Terms(item, price_minor, currency, rail, refundable, **flag)
 
 
 @dataclass

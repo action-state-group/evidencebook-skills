@@ -5,6 +5,8 @@ refusal out of order, the LIMIT pick that pays nothing, and the pay step only af
 Needs ``CAPSULE_ENGINE`` and ``ARD_EVIDENCEBOOK`` like test_demo.py; the 48 sample deals take about 20 seconds."""
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from conftest import engine_only
@@ -76,6 +78,12 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     monkeypatch.setenv("ARD_OPEN_PAGES", "0")
     page = tools.ard_open_card_page()
     assert "Maya: its History card page written (not opened)" in page and "/pages/maya-history-" in page
+    # Her receipt as a page: the copy is verified by the capsulectl-deal binary CAPSULECTL_DEAL names.
+    receipt_page = tools.ard_open_receipt_page()
+    if os.environ.get("CAPSULECTL_DEAL"):
+        assert "Maya: its receipt page written (not opened)" in receipt_page and "/pages/maya-receipt-" in receipt_page
+    else:
+        assert "Maya: no receipt page yet: set CAPSULECTL_DEAL" in receipt_page
 
 
 def test_an_unknown_seller_is_refused(tools):

@@ -89,3 +89,50 @@ def test_a_search_without_text_gets_an_error(disc):
     req = urllib.request.Request(disc.registry.url, data=b'{"query": {}}', headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req) as r:
         assert "query.text" in json.loads(r.read())["error"]
+
+
+def test_a_port_taken_by_something_else_is_not_taken_for_the_stage(disc, monkeypatch):
+    """An earlier demo's stage on the port (it answers POST with 501) is refused, not used: rehearsal, 2026-11-17."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import parties
+
+    class Old(BaseHTTPRequestHandler):
+        def log_message(self, *_):
+            pass
+
+    old = ThreadingHTTPServer(("127.0.0.1", 0), Old)  # answers every POST 501, as the old stage did
+    threading.Thread(target=old.serve_forever, daemon=True).start()
+    try:
+        port = old.server_address[1]
+        monkeypatch.setattr(parties, "HTTP_PORT", port)
+        monkeypatch.setattr(parties, "REGISTRY_URL", f"http://127.0.0.1:{port}/search")
+        with pytest.raises(RuntimeError, match=f"port {port} is taken by something that is not this demo's stage"):
+            parties.stage_up()
+    finally:
+        old.shutdown()
+        old.server_close()
+    port = int(disc.registry.url.split(":")[2].split("/")[0])  # the demo's own stand-in registry
+    monkeypatch.setattr(parties, "HTTP_PORT", port)
+    monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
+    assert parties.stage_up()
+
+
+def test_the_stage_probe_fetches_no_seller(disc, monkeypatch):
+    """The probe is a search with no query.text, answered before any seller is fetched: a slow seller never
+    makes the demo's own stage look foreign (Codex, #173)."""
+    import parties
+    fetched = []
+    import discovery
+    orig = discovery.urllib.request.urlopen
+
+    def spy(url, *a, **k):
+        fetched.append(getattr(url, "full_url", url))
+        return orig(url, *a, **k)
+
+    monkeypatch.setattr(discovery.urllib.request, "urlopen", spy)
+    port = int(disc.registry.url.split(":")[2].split("/")[0])
+    monkeypatch.setattr(parties, "HTTP_PORT", port)
+    monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
+    assert parties.stage_up() and not [u for u in fetched if "ard.json" in str(u)]

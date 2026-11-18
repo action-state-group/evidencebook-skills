@@ -28,7 +28,8 @@ import mailbox_exchange as mx
 import nostr_mailbox as mb
 import responder
 from pack import Pack, engine
-from world import CURRENCY, ITEM, RAIL, World
+from world import CURRENCY, ITEM, World
+from world import terms as terms_of
 
 ASSESSED = "ard_assessment"
 PICKED = "ard_pick"
@@ -244,17 +245,18 @@ def seal_pick(maya: gn.Node, seller: gn.Node, chosen: Assessment, others: list[A
     return rec.record_id
 
 
-def open_deal(maya: gn.Node, seller: gn.Node, pick_record: str, chosen: Assessment, asked: str) -> dr.DealChain:
+def open_deal(maya: gn.Node, seller: gn.Node, pick_record: str, chosen: Assessment, asked: str, rail: str) -> dr.DealChain:
     """Open Maya's side of the deal from the sealed pick: the deal's first step cites the pick (which cites
-    both assessments). Refused unless the pick exists and names this seller at this price. A seller whose
-    assessment is not GO can be picked and no deal opens (nothing is paid above its limit)."""
+    both assessments); ``rail`` is the rail token its terms seal (``pay.Rail.SEALED``). Refused unless the pick
+    exists and names this seller at this price. A seller whose assessment is not GO can be picked and no deal
+    opens (nothing is paid above its limit)."""
     picks = [s for r, s in maya.notes(PICKED) if r.record_id == pick_record]
     if not picks or picks[0]["price_msat"] != chosen.price_msat or picks[0]["seller"] != seller.key_id:
         raise gn.Refused("no sealed pick names this seller at this price")
     if chosen.verdict != "GO":
         raise gn.Refused(f"the assessment is {chosen.verdict}"
                          + (f": deals under {chosen.cap_msat} msat" if chosen.cap_msat else "") + "; no deal opens and nothing is paid")
-    terms = dr.Terms(ITEM, chosen.price_msat, CURRENCY, RAIL, False)
+    terms = terms_of(ITEM, chosen.price_msat, CURRENCY, rail)
     chain = maya.new_deal(f"deal-{os.urandom(8).hex()}", dr.ROLE_BUYER, seller.key_id, terms)
     maya.seal(chain, chain.open(datetime.now(timezone.utc), asked), admission=pick_record)
     return chain

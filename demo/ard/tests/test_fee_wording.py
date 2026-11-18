@@ -37,4 +37,26 @@ def test_a_sellers_receipt_on_a_real_rail_says_the_credited_amount_is_not_in_its
 def test_the_buyers_receipt_and_the_simulated_rail_carry_no_credit_line():
     assert "credited" not in parties.receipt_view(_node(289), "Maya", "deal-x", real=True)
     out = parties.receipt_view(_node(289), "Alder Print Co.", "deal-x", seller=True, real=False)
-    assert "credited" not in out and "simulated rail" not in out  # no payment step in this stub
+    assert "credited" not in out
+
+
+def test_a_simulated_receipt_says_so_on_its_terms_line_and_a_real_one_does_not():
+    # The terms name the agreed rail (lightning); a simulated run's receipt must not read as a real payment, nor
+    # claim a payment (this stub has none, as a deal whose seller half never came would not).
+    for who, seller in (("Maya", False), ("Alder Print Co.", True)):
+        terms = next(l for l in parties.receipt_view(_node(289), who, "deal-x", seller=seller, real=False).splitlines()
+                     if "terms:" in l)
+        assert terms.endswith("rail lightning; this run's rail is simulated: no money moves"), terms
+        real = next(l for l in parties.receipt_view(_node(289), who, "deal-x", seller=seller, real=True).splitlines()
+                    if "terms:" in l)
+        assert real.endswith("rail lightning"), real
+
+
+def test_a_deal_sealed_on_the_simulated_rail_says_so_once():
+    # Sherlock2, #173: "rail simulated" alone, then ": no money moves", with no second suffix.
+    node = _node(289)
+    first = json.loads(node.deal_payloads("deal-x")[0])
+    first["body"]["recourse"]["rail"] = "simulated"
+    node.deal_payloads = lambda deal_id: [json.dumps(first).encode()]
+    terms = next(l for l in parties.receipt_view(node, "Maya", "deal-x", real=False).splitlines() if "terms:" in l)
+    assert terms.endswith("rail simulated: no money moves") and terms.count("simulated") == 1, terms

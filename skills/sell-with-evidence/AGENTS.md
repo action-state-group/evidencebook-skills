@@ -53,8 +53,8 @@ sale in those records.
 | 2 Answer evidence requests | done by the demo's seller process | `respond` over the mailbox (capsule-cli#573) |
 | 3 Take and record the sale | done by the demo's seller process | `deal sale new`, `deal open --sale --deal-id`, `deal check` with `"action":"commit"` |
 | Show what happened | `ard_seller_activity` | `deal` and `book` views |
-| Show the History card | `ard_show_card` | `book` card |
-| Show the receipt | `ard_show_receipt` | `deal` receipt |
+| Show the History card | `ard_show_card`, `ard_open_card_page` (as a page) | `book` card |
+| Show the receipt | `ard_show_receipt`, `ard_open_receipt_page` (as a page) | `deal` receipt |
 
 ## On the demo host
 
@@ -67,5 +67,9 @@ sale in those records.
   listing in advance, without a yes from the seller, and the demo seller shares by default with no
   setup notice or opt-out.
 - The demo's tools do not report whether a commitment is witnessed; do not say either way.
+- To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
+  presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
+- To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
+  page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
 - On the demo, a seller's "did not hold" deals are counted from its own note (a temporary record), set
   up by the demo operator: say so, and never present them as confirmed by the buyer or a ruling.

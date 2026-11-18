@@ -68,6 +68,9 @@ class Payment:
 
 
 class Rail:
+    #: The rail token a deal paid on this rail seals as ``recourse.rail`` (an x-deal-v0 ns_token).
+    SEALED = "lightning"
+
     def balances(self) -> dict[str, dict]:
         raise NotImplementedError
 
@@ -185,6 +188,9 @@ def _find_invoice(doc: Any) -> str | None:
 
 class FakeRail(Rail):
     """No money: an invoice of the right amount and a payment that always settles."""
+
+    #: Nothing moves, so no record says Lightning.
+    SEALED = "simulated"
 
     def __init__(self) -> None:
         self.paid: list[int] = []

@@ -1,0 +1,283 @@
+# SPDX-License-Identifier: Apache-2.0
+"""A party's own deal receipt as a page: capsule-viewer's receipt module drawing this party's own copy of the deal
+(audience ``keep``), with the demo labels, offline.
+
+The copy is an ``evidence-bundle/v2`` of the party's own deal book: every step disclosed, and the party's sealed
+report in the ``x-deal-report/v0`` extension, which the ``x-deal-v0`` extension names (capsule-cli#294, the
+standalone form). The report is on no log, so sealing it changes nothing the deal book holds: the halves, the History
+card and a seller's re-entry read the same records after it as before. It binds the deal checkpoint the copy is made
+at, so a book that grew since (an outcome note, say) gets a new report.
+
+The report's lines are this demo's own words, read from the party's own records: a seller's payment line says what
+its own outcome record states, and on a simulated rail nothing says money moved. ``capsulectl verify --bundle`` (the
+binary ``CAPSULECTL_DEAL`` names) checks the copy, and capsule-viewer's receipt module renders it from that report."""
+from __future__ import annotations
+
+import base64
+import hashlib
+import html
+import json
+import os
+import secrets
+import subprocess
+import warnings
+from datetime import datetime, timezone
+from pathlib import Path
+
+import goose_node as gn
+from capsule_emit import produce
+from evidencebook import deal
+from evidencebook.deal import report as rp
+from evidencebook.deal.names import REPORT_EXTENSION, REPORT_POINTER
+
+import pages
+import screens
+from deals import OUTCOME_NOTE
+
+AUDIENCE = "keep"
+#: The step kinds the typed records (a seller's chain) stand for.
+_TYPED = {"proposed-action/v0": "check", "action-evaluation/v0": "verdict", "action-approval/v0": "approval",
+          "action-record/v0": "action", "task-authority/v0": "task_authority", "action-outcome/v0": "outcome"}
+#: The report's step kind for each record kind (capsule-viewer places a step by it).
+_KIND = {"baseline": "open", "check": "check", "verdict": "check", "approval": "approval", "action": "act",
+         "task_authority": "open", "outcome": "outcome", "close": "close", OUTCOME_NOTE: "outcome"}
+#: The demo's banner style, allowed in the receipt page's CSP by its hash.
+_CSS = (".ard-demo{font:15px/1.4 system-ui,sans-serif;margin:0;padding:12px 16px;background:#5a1d1d;color:#fff}"
+        ".ard-demo p{margin:0 0 4px}.ard-demo .banner{font-weight:700}")
+_CSP_STYLE = "style-src &#x27;sha256-"
+
+
+class ReceiptError(RuntimeError):
+    """No receipt page: the deal is not closed yet, or the copy did not verify or render."""
+
+
+def _kind(payload: dict) -> str:
+    return payload.get("x-deal-v0", {}).get("record_type") or _TYPED.get(payload.get("type", ""), payload.get("type", "record"))
+
+
+def _at(payload: dict) -> str:
+    return payload.get("x-deal-v0", {}).get("at") or payload.get("at", "")
+
+
+def ready(node: gn.Node, deal_id: str) -> None:
+    """Refuse unless the deal is closed on this party's book and this party holds the other party's closing half."""
+    if not node.has_deal(deal_id):
+        raise ReceiptError(f"this party holds no deal {deal_id}")
+    if not any(_kind(json.loads(p)) == "close" for p in node.deal_payloads(deal_id)):
+        raise ReceiptError(f"deal {deal_id} is not closed yet: its receipt page is made after the close")
+    if not any(s.get("deal_id") == deal_id and s.get("close_half_digest") for _, s in node.notes(gn.HALF_RECEIVED)):
+        raise ReceiptError(f"deal {deal_id} is closed here, but the other party's closing half has not arrived yet: "
+                           "the receipt page is made once both halves are exchanged")
+
+
+def _line(kind: str, body: dict, simulated: bool) -> str:
+    amount = body.get("amount_minor")
+    action = body.get("action")
+    if kind == "baseline":
+        return f"Opened: {body['terms']['item']} at {screens.msat(body['terms']['price_minor'])}"
+    if kind == "task_authority":
+        return "Authorised the sale"
+    if kind == "check":
+        return {"pay": f"About to pay {screens.msat(amount)}", "offer": f"About to offer {screens.msat(amount)}",
+                "commit": f"About to commit to the sale at {screens.msat(amount)}"}.get(action, f"Proposed: {action}")
+    if kind == "verdict":
+        result = body.get("result") or body.get("disposition")
+        return f"Checked: {result}, {len(body.get('differences') or body.get('findings') or [])} difference(s)"
+    if kind == "approval":
+        if body.get("kind") == "counterparty-acceptance-observation":
+            return "The buyer accepted the offer"
+        return f"Went ahead: {body.get('approver', 'approved')}"
+    if kind == "action":
+        if action == "pay":
+            return (f"Simulated payment of {screens.msat(amount)}: no money moved" if simulated
+                    else f"Paid {screens.msat(amount)} over {body.get('rail')}")
+        return {"offer": f"Offered {screens.msat(amount)}",
+                "commit": f"Committed to the sale at {screens.msat(amount)}"}.get(action, f"Did: {action}")
+    if kind == "outcome":
+        return f"Outcome: {body.get('status') or body.get('outcome')}"
+    if kind == "close":
+        return f"Closed: {body.get('outcome')}"
+    return kind
+
+
+def seller_payment(payloads: list[dict], real: bool) -> str:
+    """A seller's payment line, from its own records: the outcome its own outcome record states (a seller's book
+    holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved."""
+    first = payloads[0]["body"]
+    price, item = first["terms"]["price_minor"], first["terms"]["item"]
+    status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None) or "not recorded"
+    line = (f"Agreed {screens.msat(price)} for {item}. Payment: the buyer's payment, as this seller's own outcome "
+            f"record states it: {status}")
+    if not real:
+        return line + " (simulated rail: no money moved)."
+    return f"{line} (rail {first['recourse']['rail']}). {screens.seller_credit_note(price)}"
+
+
+def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of: str) -> dict:
+    """The keep copy's report, in this demo's own words, from this party's own deal book."""
+    book = node.shelf.open(f"deal/{deal_id}")
+    records = list(book.records())
+    payloads = [json.loads(p) for p in node.deal_payloads(deal_id)]
+    simulated = not real
+    first = payloads[0]["body"]
+    item = first["terms"]["item"]
+    steps = [{"capsule_id": r.record_id, "kind": _KIND.get(_kind(p), "other"), "n": i + 1, "at": _at(p),
+              "line": _line(_kind(p), p.get("body", {}), simulated)}
+             for i, (r, p) in enumerate(zip(records, payloads))]
+    acts = [(r, p) for r, p in zip(records, payloads) if _kind(p) == "action"]
+    close = next(p for p in reversed(payloads) if _kind(p) == "close")
+    did = [{"kind": "act", "at": _at(p), "steps": [r.record_id], "text": _line("action", p["body"], simulated)} for r, p in acts]
+    rail_note = "simulated rail: no money moved" if simulated else f"rail {first['recourse']['rail']}"
+    if seller:
+        money = seller_payment(payloads, real)
+    else:
+        paid = next((p["body"]["amount_minor"] for _, p in acts if p["body"].get("action") == "pay"), None)
+        money = (f"Simulated payment of {screens.msat(paid)} for {item}: no money moved." if simulated and paid is not None
+                 else f"Paid {screens.msat(paid)} for {item} ({rail_note})." if paid is not None else "No payment is recorded.")
+    body = {
+        "audience": AUDIENCE, "deal_id": deal_id, "steps": steps, "did": did,
+        "money": {"currency": first["terms"]["currency"], "text": money},
+        "lifecycle": {"state": "closed", "as_of": as_of, "later": [], "text": f"Closed: {close['body'].get('outcome')}.",
+                      "may_change": "Records sealed on this deal after this receipt was made are not in it; open the page "
+                                    "again to see them."},
+        "scope": "This receipt covers this one deal, from this party's own records. It is not a record of everything "
+                 "the agent did.",
+        "told": [], "representations": [], "anomalies": [], "merchant": [], "withheld": [],
+        "asked_step": records[0].record_id,
+    }
+    opening = json.loads(book.opening(records[0].record_id, deal.LOCAL_FIELD).text)
+    asked, nonce = opening.get("open", {}).get("asked"), opening.get("nonces", {}).get("verbatim")
+    if isinstance(asked, str) and isinstance(nonce, str):
+        body["asked"], body["asked_opening"] = asked, {"nonce": nonce, "text": asked}
+    return body
+
+
+def _bundle(node: gn.Node, deal_id: str, extensions: dict | None) -> dict:
+    """The deal book as an ``evidence-bundle/v2``, every step disclosed, under the book's newest checkpoint."""
+    from agent_action_capsule import bundle as aac
+
+    book = node.shelf.open(f"deal/{deal_id}")
+    records = list(book.records())
+    disclosures = {r.record_id: {"agent_input": json.loads(p)} for r, p in zip(records, node.deal_payloads(deal_id))}
+    try:
+        built = aac.build_evidence_bundle(aac.proof_source_from_cll(book._substrate.backend, gn._BookRecords(book)),
+                                          root=records[-1].record_id, interval_from=1, disclosures=disclosures,
+                                          extensions=extensions)
+    except aac.BundleBuildError as exc:
+        raise ReceiptError(f"no copy of deal {deal_id}: {exc}") from None
+    return built
+
+
+def _stored(node: gn.Node, deal_id: str) -> Path:
+    return node.home / "receipts" / f"{deal_id}.{AUDIENCE}.json"
+
+
+def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool) -> dict:
+    """The party's keep copy of a closed deal: its deal book's bundle carrying its sealed report. The report is sealed
+    once per deal checkpoint and kept under the party's home (``receipts/``); a copy at a newer checkpoint seals a new
+    one."""
+    ready(node, deal_id)
+    with node._lock:
+        node.shelf.open(f"deal/{deal_id}").checkpoint()  # a checkpoint over every record, as Node.half takes
+        plain = _bundle(node, deal_id, None)
+        cp = plain["checkpoint"]
+        bound = {"log_id": cp["log_id"], "mmr_size": cp["mmr_size"], "root": cp["root"]}
+        path = _stored(node, deal_id)
+        block = json.loads(path.read_text()) if path.exists() else None
+        # The verifier holds the report to this checkpoint and its signed time (capsule-cli#294).
+        if (block is None or block["agent_input"].get("deal_checkpoint") != bound
+                or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]):
+            body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+            payload = rp.report_payload(rp.Report(deal_id, AUDIENCE, secrets.token_hex(32), body,
+                                                  checkpoint=rp.Checkpoint(**bound)))
+            at = datetime.now(timezone.utc).replace(microsecond=0)
+            sealed = produce.seal(produce.SealInput(capsule=deal.emit_input(rp.report_capsule(node.operator, node.developer, at)),
+                                                    identity=node._identity, payload=json.loads(payload)))
+            record = {**json.loads(sealed.payload), "signature": bytes(sealed.envelope).hex(), "key_id": node.key_id}
+            block = {"record": record, "agent_input": json.loads(payload)}
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_text(json.dumps(block, sort_keys=True))
+        extensions = {"x-deal-v0": {REPORT_POINTER: block["record"]["capsule_id"]}, REPORT_EXTENSION: block}
+        if seller:
+            extensions["x-deal-seller/v0"] = {}
+        return _bundle(node, deal_id, extensions)
+
+
+def verify(bundle_path: Path) -> dict:
+    """What ``capsulectl verify --bundle`` reports for the file (``CAPSULECTL_DEAL``, the binary's path)."""
+    binary = os.environ.get("CAPSULECTL_DEAL")
+    if not binary:
+        raise ReceiptError("set CAPSULECTL_DEAL to the capsulectl-deal binary the run sheet pins: it verifies the copy")
+    try:
+        run = subprocess.run([binary, "verify", "--bundle", str(bundle_path)], capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, timeout=120)
+        output = json.loads(run.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise ReceiptError(f"capsulectl verify --bundle gave no report: {exc}") from None
+    if output.get("verdict") != "VALID":
+        failed = {k: v.get("findings") for k, v in output.items() if isinstance(v, dict) and v.get("status") == "fail"}
+        raise ReceiptError(f"capsulectl verify --bundle says {output.get('verdict')}: {failed}")
+    return output
+
+
+def render(bundle: dict, output: dict) -> str:
+    """capsule-viewer's receipt page for the keep copy, from what the verifier reported for it."""
+    with warnings.catch_warnings():
+        # The Python receipt modules are deprecated in favour of the TypeScript build (capsule-viewer#71); this demo
+        # uses them until the page is drawn there.
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from capsule_viewer.composed import composition_from_capsulectl
+        from capsule_viewer.receipt import example_wording_pack, receipt_page
+        from capsule_viewer.verifier_report import VerifierReportError, context_from_capsulectl
+
+    try:
+        context, assurance = context_from_capsulectl(bundle, output)
+        composition = composition_from_capsulectl(bundle, output)
+    except VerifierReportError as exc:
+        raise ReceiptError(f"the verifier's report does not fit this copy: {exc}") from None
+    pack = example_wording_pack()
+    page = receipt_page(context, assurance, pack, hashlib.sha256(pack).hexdigest(), audience=AUDIENCE,
+                        composition=composition)
+    if 'data-level="L0"' not in page:
+        raise ReceiptError("capsule-viewer's receipt module declined this copy")
+    return page
+
+
+def label(page: str, notes: list[str]) -> str:
+    """The page with the demo's labels on top, the banner first; the banner's style is allowed by its hash."""
+    digest = base64.b64encode(hashlib.sha256(_CSS.encode()).digest()).decode()
+    if page.count(_CSP_STYLE) != 1 or page.count("</head>") != 1 or page.count('<body class="cv-kit">') != 1:
+        raise ReceiptError("the receipt page's head is not the shape the labels are added to")
+    page = page.replace(_CSP_STYLE, f"style-src &#x27;sha256-{digest}&#x27; &#x27;sha256-", 1)
+    page = page.replace("</head>", f"<style>{_CSS}</style></head>", 1)
+    text = "".join(f'<p class="{"banner" if i == 0 else "label"}">{html.escape(t)}</p>' for i, t in enumerate(notes))
+    return page.replace('<body class="cv-kit">', f'<body class="cv-kit"><div class="ard-demo" role="note">{text}</div>', 1)
+
+
+def sealed_real(node: gn.Node, deal_id: str) -> bool:
+    """Whether the deal was paid on a real rail, read from its own sealed terms (``pay.Rail.SEALED``): a deal
+    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173)."""
+    first = json.loads(node.deal_payloads(deal_id)[0])["body"]
+    return first["recourse"]["rail"] != "simulated"
+
+
+def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: str, seller: bool) -> Path:
+    """Write the party's receipt page for a closed deal, and return its path. Whether money moved is the
+    deal's own sealed rail, not this run's ``rail`` (``ARD_RAIL``), which only names the banner's real rail."""
+    real = sealed_real(node, deal_id)
+    if not real:
+        rail = "fake"
+    elif rail not in ("lightning", "local"):
+        rail = "lightning"
+    bundle = keep_copy(node, deal_id, seller=seller, real=real)
+    bundle_path = pages.home() / "pages" / f"{name}-receipt-{deal_id}.bundle.json"
+    bundle_path.parent.mkdir(parents=True, exist_ok=True)
+    bundle_path.write_text(json.dumps(bundle, sort_keys=True))
+    page = render(bundle, verify(bundle_path))
+    notes = [screens.banner(rail), f"{party}: its own receipt for {deal_id}, drawn from its own sealed records"]
+    if not real:
+        notes.append("simulated rail: no money moved in this deal")
+    # No payment line of ours on a seller's page: capsule-viewer's seller view says "Payment: Not recorded in this
+    # copy", which is true (no deal record kind carries a payment the seller received), and a second line from the
+    # seller's own outcome record would contradict it on the same page (Sherlock2, #173). The buyer's page shows the payment.
+    return pages.write(name, "receipt", label(page, notes))

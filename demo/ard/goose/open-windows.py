@@ -78,7 +78,7 @@ def instructions(role: str, rail: str) -> str:
 def link(role: str, rail: str) -> str:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", "CAPSULE_WITNESS=off",
            f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}", f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}"]
-    for var in ("ARD_HOME", "ARD_STAGE_PORT"):
+    for var in ("ARD_HOME", "ARD_STAGE_PORT", "CAPSULECTL_DEAL"):  # CAPSULECTL_DEAL: the receipt pages' verifier
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--print", action="store_true", dest="show")
     ap.add_argument("--only", choices=["alder", "kestrel", "maya"], help="open one window only")
     args = ap.parse_args(argv)
-    needed = ["CAPSULE_ENGINE", "ARD_EVIDENCEBOOK"] + (["ARD_WALLET_BUYER", "ARD_WALLET_SELLER"] if args.rail == "local" else [])
+    needed = ["CAPSULE_ENGINE", "ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL"] + (["ARD_WALLET_BUYER", "ARD_WALLET_SELLER"] if args.rail == "local" else [])
     for var in needed:
         if not os.environ.get(var):
             print(f"set {var} (see README.md)", file=sys.stderr)

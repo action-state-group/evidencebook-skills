@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import deal_records as dr
 import deals
 from world import CURRENCY, DEALS_EACH, ITEM, RAIL, SAMPLE_COUNTS, SELLERS, World
+from world import terms as world_terms
 
 
 #: Kestrel deals that carry the owner's outcome_note: the same count as its hand-written sample card.
@@ -31,7 +31,7 @@ def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
             if have == 0:
                 deals.admit(buyer, node, reason="sample buyer, run by the demo operator")
                 deals.admit(node, buyer, reason="sample buyer, run by the demo operator")
-            terms = dr.Terms(ITEM, seller["price_msat"], CURRENCY, RAIL, False)
+            terms = world_terms(ITEM, seller["price_msat"], CURRENCY, RAIL)
             for i in range(have, DEALS_EACH):
                 deals.run_deal(buyer, node, terms, "sample deal", deals.SAMPLE_PAYMENT)
                 if (i + 1) % 12 == 0:
