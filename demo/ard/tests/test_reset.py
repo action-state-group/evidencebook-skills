@@ -255,11 +255,39 @@ def test_a_stranger_on_the_stage_port_refuses_before_anything_is_stopped(mac, tm
 
 
 @needs_lsof
+def test_an_inline_program_named_like_our_script_on_the_port_is_refused_not_killed(mac, tmp_path):
+    home, hashes, _ = mac
+    port = int(reset.demo_ports()[1])
+    code = f"import socket, time; s = socket.socket(); s.bind(('127.0.0.1', {port})); s.listen(); print('up', flush=True); time.sleep(60)"
+    inline = subprocess.Popen([sys.executable, f"-c{code}", "stage.py", str(home)], stdout=subprocess.PIPE,
+                              stdin=subprocess.DEVNULL, text=True)
+    assert inline.stdout.readline().strip() == "up"
+    try:
+        with pytest.raises(reset.ResetRefused, match=f"pid {inline.pid} .*Nothing was changed"):
+            reset.reset(home, say=lambda *_: None)
+        assert inline.poll() is None
+    finally:
+        _done(inline)
+    assert home.exists() and len(list(hashes.glob("*.hash"))) == 3
+
+
+def test_an_argument_that_cannot_be_read_as_a_path_is_no_match(monkeypatch, tmp_path):
+    monkeypatch.setattr(reset, "_argv", lambda pid: ["/usr/bin/python3", "/elsewhere/stage.py", "~nosuchuser-ard/x"])
+    assert reset._started_for(1, tmp_path) is False
+
+
+@needs_lsof
 def test_reset_runs_with_no_evidencebook_or_engine_set(mac, tmp_path):
-    # reset needs no evidencebook checkout: demo.py must not stop at its setup first
+    # reset needs no evidencebook checkout: demo.py must not stop at its setup first. The child runs its own pgrep,
+    # so a stub on the PATH stands in for "Goose is not running" on a Mac where Goose is open.
     home, hashes, saved = mac
+    stub = tmp_path / "stub-bin"
+    stub.mkdir()
+    (stub / "pgrep").write_text("#!/bin/sh\nexit 1\n")
+    (stub / "pgrep").chmod(0o755)
     env = {k: v for k, v in __import__("os").environ.items()
            if k not in ("ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL", "ARD_HOME")}
+    env["PATH"] = f"{stub}:{env.get('PATH', '')}"
     run = subprocess.run([sys.executable, str(Path(reset.__file__).with_name("demo.py")), "reset", "--home", str(home)],
                          env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
     assert run.returncode == 0, run.stderr
@@ -304,9 +332,15 @@ def test_ours_is_found_with_a_space_in_the_script_path_and_a_python_option(mac, 
 
 def test_python_c_and_m_are_never_our_script(monkeypatch):
     for argv in (["/usr/bin/python3", "-c", "print()", "stage.py"], ["/usr/bin/python3", "-m", "stage.py"],
-                 ["/usr/bin/vim", "stage.py"], ["/usr/bin/python3", "-W", "ignore", "tail.py", "stage.py"]):
+                 ["/usr/bin/vim", "stage.py"], ["/usr/bin/python3", "-W", "ignore", "tail.py", "stage.py"],
+                 ["/usr/bin/python3", "-cprint()", "stage.py"], ["/usr/bin/python3", "-Ic", "print()", "stage.py"],
+                 ["/usr/bin/python3", "-um", "stage"], ["/usr/bin/python3", "-", "stage.py"]):
         monkeypatch.setattr(reset, "_argv", lambda pid, a=argv: a)
         assert not reset._runs_our_script(1), argv
+    for argv in (["/usr/bin/python3", "-Wignore", "stage.py"], ["/usr/bin/python3", "-uW", "ignore", "stage.py"],
+                 ["/usr/bin/python3", "-X", "dev", "--", "stage.py"], ["/usr/bin/python3", "-B", "/a/stage.py"]):
+        monkeypatch.setattr(reset, "_argv", lambda pid, a=argv: a)
+        assert reset._runs_our_script(1), argv
     monkeypatch.setattr(reset, "_argv", lambda pid: ["/x/Python.app/Contents/MacOS/Python", "-u", "/a b/desktop_server.py"])
     assert reset._runs_our_script(1)
     monkeypatch.setattr(reset, "_argv", lambda pid: None)  # unreadable: not ours, so the reset refuses

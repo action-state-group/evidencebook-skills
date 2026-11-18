@@ -108,8 +108,8 @@ def _argv(pid: int) -> list[str] | None:
         return None
 
 
-#: Python's options that take the next word as their value.
-_VALUE_OPTIONS = {"-W", "-X", "--check-hash-based-pycs"}
+#: Python's long options that take the next word as their value.
+_VALUE_OPTIONS = {"--check-hash-based-pycs"}
 
 
 def _script_at(argv: list[str] | None) -> int | None:
@@ -119,9 +119,22 @@ def _script_at(argv: list[str] | None) -> int | None:
         return None
     i = 1
     while i < len(argv) and argv[i].startswith("-"):
-        if argv[i] in ("-c", "-m"):
+        arg = argv[i]
+        i += 1
+        if arg == "--":
+            break
+        if arg == "-":  # the program comes from stdin
             return None
-        i += 2 if argv[i] in _VALUE_OPTIONS else 1
+        if arg.startswith("--"):
+            i += 1 if arg in _VALUE_OPTIONS else 0
+            continue
+        # Short options group (-Bu) and the last may take its value attached (-Wignore, -ccode) or as the next word.
+        for k, flag in enumerate(arg[1:], start=1):
+            if flag in "cm":  # -c, -m and their grouped or attached forms (-Ic, -c'…'): not a script
+                return None
+            if flag in "WX":
+                i += 0 if arg[k + 1:] else 1
+                break
     return i if i < len(argv) and Path(argv[i]).name in SCRIPTS else None
 
 
@@ -149,13 +162,16 @@ def _started_for(pid: int, home: Path) -> bool:
 
     def path(arg: str) -> Path | None:
         nonlocal base
-        p = Path(arg).expanduser()
-        if not p.is_absolute():
-            base = base or _cwd(pid)
-            if base is None:
-                return None
-            p = base / p
-        return p.resolve()
+        try:  # a stranger's argument (~nosuchuser, a symlink loop) is no match, never a traceback
+            p = Path(arg).expanduser()
+            if not p.is_absolute():
+                base = base or _cwd(pid)
+                if base is None:
+                    return None
+                p = base / p
+            return p.resolve()
+        except (RuntimeError, OSError):
+            return None
 
     if (script := path(argv[i])) is not None and script.parent == HERE:
         return True
