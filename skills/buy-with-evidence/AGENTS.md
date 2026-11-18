@@ -62,7 +62,8 @@ seller's history is shown, never scored.
 
 - Never pick for the person. Never pay without their yes to that payment, in a message after
   your question.
-- If a step answers REFUSED, say so in one sentence and do not retry it on your own. If the person
+- If a step answers REFUSED or fails with an error, say so in one sentence and stop: do not retry it on
+  your own, and never look for configuration, files or other tools to work around it. If the person
   asks again, even with "yes, pay", that message is not yet the yes to pay: ask your question before
   paying again (the seller, the amount, whether real money moves), and pay only on their yes to it.
 - Never write the outcome note. A card's did-not-hold count may come from the seller's own note: say so,
@@ -79,7 +80,7 @@ seller's history is shown, never scored.
 | 4 Assess | `ard_assess` (and the threshold edit it takes) | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
 | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
-| 7 Receipt and card | `ard_show_receipt`, `ard_show_card` | `deal` receipt, `book` card |
+| 7 Receipt and card | `ard_show_receipt`, `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
 
 `deal check` and `approval_text` belong to the capsule-host column only: the demo host's check
 before paying is its own approval dialog.
@@ -100,6 +101,8 @@ before paying is its own approval dialog.
 - The demo's assessment fills some facts in for the demo operator (the platform, the allow-list,
   the card's witness and controller; no witness runs) and counts the seller's selection although it
   carries no inclusion proofs; the screen says so. Do not present those as checked.
+- To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
+  presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
 - `ard_pick` seals the pick. Never call `ard_pay` in the same message as `ard_pick`.
 - Before `ard_pay`, stop and ask the person to confirm in one sentence that names the seller and
   the amount and says whether real money moves (the recipe says which rail this run uses).

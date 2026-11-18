@@ -117,3 +117,22 @@ def test_a_port_taken_by_something_else_is_not_taken_for_the_stage(disc, monkeyp
     monkeypatch.setattr(parties, "HTTP_PORT", port)
     monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
     assert parties.stage_up()
+
+
+def test_the_stage_probe_fetches_no_seller(disc, monkeypatch):
+    """The probe is a search with no query.text, answered before any seller is fetched: a slow seller never
+    makes the demo's own stage look foreign (Codex, #173)."""
+    import parties
+    fetched = []
+    import discovery
+    orig = discovery.urllib.request.urlopen
+
+    def spy(url, *a, **k):
+        fetched.append(getattr(url, "full_url", url))
+        return orig(url, *a, **k)
+
+    monkeypatch.setattr(discovery.urllib.request, "urlopen", spy)
+    port = int(disc.registry.url.split(":")[2].split("/")[0])
+    monkeypatch.setattr(parties, "HTTP_PORT", port)
+    monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
+    assert parties.stage_up() and not [u for u in fetched if "ard.json" in str(u)]

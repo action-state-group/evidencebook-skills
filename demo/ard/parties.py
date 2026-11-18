@@ -90,10 +90,12 @@ def stage_up() -> bool:
             pass
     except OSError:
         return False
-    req = urllib.request.Request(REGISTRY_URL, data=b'{"query": {"text": "stage"}}', headers={"Content-Type": "application/json"})
+    # A search with no query.text: the stand-in registry answers it at once with its own error, without
+    # fetching any seller's entry, so a slow seller never makes the probe time out.
+    req = urllib.request.Request(REGISTRY_URL, data=b"{}", headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=2) as r:  # the demo's own localhost stage
-            if "results" in json.loads(r.read()):
+        with urllib.request.urlopen(req, timeout=5) as r:  # the demo's own localhost stage
+            if "query.text" in json.loads(r.read()).get("error", ""):
                 return True
     except Exception:
         pass
@@ -356,7 +358,7 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
     # never reads as a real Lightning payment (rehearsal, 2026-11-17).
     lines = [f"{label}: its receipt for {deal_id}, from its own sealed deal book ({len(payloads)} records)",
              f"  terms: {t['item']} at {t['price_minor']} msat, rail {first['recourse']['rail']}"
-             + ("" if real else "; this run paid on the simulated rail: no money moved")]
+             + ("" if real else "; this run's rail is simulated: no money moves")]
     if seller and real:
         lines.append("  " + screens.seller_credit_note(t["price_minor"]))
     for d in payloads:

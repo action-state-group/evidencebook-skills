@@ -376,7 +376,9 @@ def ard_open_card_page() -> None:
     path = pages.card_page(node, name, label, rail=os.environ.get("ARD_RAIL", "fake"), seller=name in SELLERS,
                            sample_card=sample)
     opened = pages.open_page(path)
-    print(f"{label}: its History card page {'opened' if opened else 'written (not opened)'}: {path}")
+    shown = ("opened in the browser on the presenter's screen; nothing else is needed (do not copy or link the file)"
+             if opened else "written (not opened)")
+    print(f"{label}: its History card page {shown}: {path}")
 
 
 def main() -> None:
