@@ -9,6 +9,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+import _paths
+
 
 @dataclass(frozen=True)
 class Var:
@@ -25,14 +27,18 @@ VARS = (
     Var("CAPSULE_ENGINE", "the capsule-engine binary (go build ./cmd/capsule-engine in capsule-engine/go)",
         "/path/to/capsule-engine", ("run", "windows"), "program"),
     Var("CAPSULECTL_DEAL", "the capsulectl-deal binary: it verifies each receipt page's copy",
-        "/path/to/capsulectl-deal", ("run", "windows"), "program"),
+        "/path/to/capsulectl-deal", ("windows",), "program"),
     Var("ARD_WALLET_BUYER", "the buyer's wallet directory (ln-pay-local init --wallet <dir>; fund it)",
         "/path/to/buyer-wallet", ("local",), "dir"),
     Var("ARD_WALLET_SELLER", "the sellers' wallet directory (ln-pay-local init --wallet <dir>)",
         "/path/to/seller-wallet", ("local",), "dir"),
-    Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", ()),
+    Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
 )
+
+
+#: What the help of a script that does not run a command calls that command.
+ELSEWHERE = {"seed": "demo.py seed", "run": "demo.py run", "windows": "goose/open-windows.py (the Goose windows)"}
 
 
 def _needs(var: Var, command: str, rail: str) -> bool:
@@ -42,9 +48,10 @@ def _needs(var: Var, command: str, rail: str) -> bool:
 
 
 def _bad(var: Var, value: str) -> str | None:
-    """Why a set value cannot work, or None."""
-    path = Path(value).expanduser()
-    if var.check == "checkout" and not (path / "python" / "examples" / "goose" / "goose_node.py").is_file():
+    """Why a set value cannot work, or None. The value is read as the demo reads it, with no ``~`` expansion (a quoted
+    ``~`` reaches the demo as it is)."""
+    path = Path(value)
+    if var.check == "checkout" and not _paths.is_checkout(path):
         return f"{var.name}={value} is not an evidencebook checkout (no python/examples/goose/goose_node.py)"
     if var.check == "program" and not (path.is_file() and os.access(path, os.X_OK)):
         return f"{var.name}={value} is not an executable file"
@@ -57,17 +64,23 @@ def problems(command: str | None, rail: str = "fake") -> tuple[list[Var], list[s
     """``(missing, wrong)`` for ``command`` (``seed``, ``run``, ``reset`` or ``windows``) on ``rail``."""
     missing, wrong = [], []
     for var in VARS:
-        if command is None or not _needs(var, command, rail):
-            continue
         value = os.environ.get(var.name)
+        if command is None:
+            continue
+        if var.name == "ARD_PAY_LOCAL":  # optional, but a set one must be a program on the local rail
+            if rail == "local" and command in ("run", "windows") and value and (why := _bad(var, value)):
+                wrong.append(why)
+            continue
+        if not _needs(var, command, rail):
+            continue
         if not value:
             missing.append(var)
         elif why := _bad(var, value):
             wrong.append(why)
     if rail == "local" and command in ("run", "windows") and not os.environ.get("ARD_PAY_LOCAL") \
             and not shutil.which("ln-pay-local"):
-        wrong.append("ln-pay-local is not on the PATH: cargo install --locked --path <ln-pay-local checkout>, "
-                     "or set ARD_PAY_LOCAL to the binary")
+        wrong.append("ln-pay-local is not on the PATH: cargo install --locked --git "
+                     "https://github.com/action-state-group/ln-pay-local, or set ARD_PAY_LOCAL to the binary")
     return missing, wrong
 
 
@@ -96,8 +109,10 @@ def help_text(commands: dict[str, str]) -> str:
             need = "optional"
         elif "local" in var.needed_by:
             need = "needed by " + " and ".join(commands[c] for c in ("run", "windows") if c in commands) + " with --rail local"
+        elif here := [commands[c] for c in var.needed_by if c in commands]:
+            need = "needed by " + ", ".join(here)
         else:
-            need = "needed by " + ", ".join(commands[c] for c in var.needed_by if c in commands)
+            need = "not needed here; needed by " + ", ".join(ELSEWHERE[c] for c in var.needed_by)
         out.append(f"  {var.name:<17} {var.what}; {need}")
     core = [v for v in VARS if v.needed_by and "local" not in v.needed_by and any(c in commands for c in v.needed_by)]
     local = [v for v in VARS if "local" in v.needed_by]
