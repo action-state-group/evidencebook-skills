@@ -13,8 +13,8 @@ node ran, and the page inlines the script and the model, so it opens offline and
 
 The page carries no demo banner (Ethan, 2026-11-17: the presenter says "sample history, simulated
 payment" once at the start). It keeps only the labels a count needs: the label on a "did not hold"
-counted from the party's own note (u597: such a count travels only with its label) and, when this run's
-Kestrel answers buyers with a sample card, the sample card label, as one plain line above the view. A row that did not hold says it rests on this
+counted from the party's own note (u597: such a count travels only with its label), as one plain line
+above the view. A row that did not hold says it rests on this
 party's own note, not verified.
 
 The receipt page is ``receipt.py``'s: it seals the party's report, has the copy verified and draws it with
@@ -39,7 +39,6 @@ VIEWER_SCRIPT = VIEWER_DIR / "history-view.iife.js"
 VIEWER_SHA256 = "63c0bdaedbc29ddd9e1377ccf63ac662fbcee291f0cd39382b68d6b39cb32148"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
-SAMPLE_LABEL = "sample card, written for this demo; not recomputed from records"
 OWN_NOTE = "this party's own note, not verified"
 
 
@@ -112,8 +111,8 @@ def labels(card: dict, rail: str, seller: bool, sample_card: bool, party: str) -
                    + ("the seller's own note, not confirmed by the buyer or a ruling" if seller
                       else "this party's own note, not confirmed by the other party or a ruling")
                    + f" ({OWN_NOTE})")
-    if sample_card:
-        out.append(f"In this run, buyers who ask this seller get a {SAMPLE_LABEL}. This page draws this seller's own records.")
+    # No sample-card notice here: this page draws the seller's own records, not the sample card buyers may get in
+    # sample mode, and the chat's ard_show_history line labels that card where it is shown (Ethan, 2026-11-17).
     return out
 
 
@@ -184,7 +183,7 @@ def card_page(node, name: str, label: str, *, rail: str, seller: bool, sample_ca
     view = history_input(sh, name=label, seller=seller, last_at=_deal_times(node, [d["deal"] for d in sh["deals"]]),
                          seconds=_seconds(node, half_received),
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(name, "history", history_page(view, labels(card, rail, seller, sample_card, label), f"History · {label} (DEMO)"))
+    return write(name, "history", history_page(view, labels(card, rail, seller, sample_card, label), f"History · {label}"))
 
 
 def open_page(path: Path) -> bool:

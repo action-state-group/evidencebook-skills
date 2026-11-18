@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The receipt page (receipt.py): each party's own copy of a closed deal, drawn by capsule-viewer's receipt module
-after capsulectl verify --bundle checks it, with the demo labels. One seeded home and one deal of Maya's with Alder on
+after capsulectl verify --bundle checks it, with nothing of the demo's added. One seeded home and one deal of Maya's with Alder on
 the simulated rail. The pages need ``CAPSULECTL_DEAL`` (the capsulectl-deal binary) and the capsule-viewer package;
 the refusal and the unchanged reads need neither."""
 from __future__ import annotations

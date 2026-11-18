@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """A party's own deal receipt as a page: capsule-viewer's receipt module drawing this party's own copy of the deal
-(audience ``keep``), with the demo labels, offline.
+(audience ``keep``), with nothing added, offline.
 
 The copy is an ``evidence-bundle/v2`` of the party's own deal book: every step disclosed, and the party's sealed
 report in the ``x-deal-report/v0`` extension, which the ``x-deal-v0`` extension names (capsule-cli#294, the

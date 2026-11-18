@@ -55,11 +55,12 @@ def test_the_page_carries_only_the_labels_its_count_needs():
     sh = standard_history()
     card = json.loads(sh["card"])
     for rail in ("fake", "lightning", "local"):
-        page = pages.history_page(model(sh), pages.labels(card, rail, True, True, "Kestrel Print"), "History · Kestrel Print (DEMO)")
+        page = pages.history_page(model(sh), pages.labels(card, rail, True, True, "Kestrel Print"), "History · Kestrel Print")
         for banner in (screens.BANNER_FAKE, screens.BANNER, screens.BANNER_LOCAL):
             assert pages.html.escape(banner) not in page
         assert "did not hold counted from the seller&#x27;s own note, not confirmed by the buyer or a ruling" in page
-        assert pages.SAMPLE_LABEL in page and "ard-demo" not in page
+        # no scaffolding of ours on what the product draws: no sample-card notice, no (DEMO) title (Ethan, 2026-11-17)
+        assert "sample card" not in page and "ard-demo" not in page and "(DEMO)" not in page
     quiet = pages.labels({"outcomes": {"of": 3, "did_not_hold": 0}}, "fake", True, False, "Alder Print Co.")
     assert quiet == []
     assert 'class="ard-labels"' not in pages.history_page(model(sh), quiet, "t")
@@ -136,7 +137,7 @@ def test_card_page_writes_under_the_demo_home_and_opens_only_when_asked(tmp_path
     path = pages.card_page(node, "kestrel", "Kestrel Print", rail="fake", seller=True, sample_card=False)
     assert path.parent == tmp_path / "pages" and path.name.startswith("kestrel-history-")
     page = path.read_text()
-    assert pages.html.escape(screens.BANNER_FAKE) not in page and pages.SAMPLE_LABEL not in page
+    assert pages.html.escape(screens.BANNER_FAKE) not in page and "sample card" not in page
     assert pages.open_page(path) is False
     monkeypatch.setenv("ARD_OPEN_PAGES", "1")
     calls = []
