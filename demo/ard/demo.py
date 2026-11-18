@@ -6,8 +6,7 @@
     python demo.py run [--rail lightning]
     python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 
-See README.md for the run sheet. Environment: ``CAPSULE_ENGINE`` (a capsule-engine binary) and
-``ARD_EVIDENCEBOOK`` (the pinned evidencebook checkout, see ``_paths.py``), ``ARD_HOME`` (the demo home)."""
+See README.md for the run sheet. The environment each command needs is listed at the end of --help."""
 from __future__ import annotations
 
 import argparse
@@ -23,12 +22,41 @@ os.environ.setdefault("CAPSULE_WITNESS", "off")  # the demo runs no witness: the
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import _paths  # noqa: E402
+import envhelp  # noqa: E402
 
-if __name__ == "__main__" and "reset" in sys.argv[1:]:
-    # reset needs no evidencebook checkout and none of the demo's modules: it runs before the setup that needs them
-    import reset  # noqa: E402
+DEFAULT_HOME = "~/.config/ard-commerce-demo"
+DEFAULT_PERMILLE = 50
 
-    sys.exit(reset.main([a for a in sys.argv[1:] if a != "reset"]))
+
+def parser() -> argparse.ArgumentParser:
+    """The command line; its help ends with the environment each command needs. It needs none of the demo's modules."""
+    ap = argparse.ArgumentParser(prog="demo.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog=envhelp.help_text({"seed": "seed", "run": "run", "reset": "reset"}))
+    ap.add_argument("command", nargs="?", choices=["seed", "run", "reset"])
+    ap.add_argument("--home", default=DEFAULT_HOME)
+    ap.add_argument("--rail", choices=["fake", "lightning", "local"], default="fake")
+    ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--auto", action="store_true", help="no pauses and the default edit (tests)")
+    ap.add_argument("--no-browser", action="store_true", help="print the popup URL, do not open it")
+    ap.add_argument("--permille", type=int, default=None, help="the on-stage threshold (default: asked)")
+    ap.add_argument("--kestrel-card", choices=["sample", "sentinel"], default="sentinel",
+                    help="sentinel: Kestrel's card from its own book (the owner's outcome_note); sample: the hand-written fallback")
+    return ap
+
+
+if __name__ == "__main__":
+    # Before the setup below, which needs ARD_EVIDENCEBOOK: no command prints the help, a missing variable one
+    # message with the export line (no traceback), and reset, which needs none of them, runs here.
+    _args = parser().parse_args()
+    if _args.command is None:
+        parser().print_help()
+        sys.exit(2)
+    if _gap := envhelp.message(_args.command, _args.rail):
+        sys.exit(_gap + "\n(demo.py --help lists every variable.)")
+    if _args.command == "reset":
+        import reset  # noqa: E402
+
+        sys.exit(reset.main(["--home", _args.home]))
 
 _paths.setup()
 
@@ -42,11 +70,7 @@ import seed as seeding  # noqa: E402
 from server import Server  # noqa: E402
 from world import DEALS_EACH, ITEM, SELLERS, World  # noqa: E402
 
-DEFAULT_HOME = "~/.config/ard-commerce-demo"
 ASK = f"Maya: I need 200 conference badges by Friday, under 3,000 msat. ({ITEM})"
-DEFAULT_PERMILLE = 50
-
-
 def rule(title: str) -> None:
     print(f"\n── {title} " + "─" * max(4, 70 - len(title)))
 
@@ -293,18 +317,12 @@ def cmd_run(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["seed", "run", "reset"])
-    ap.add_argument("--home", default=DEFAULT_HOME)
-    ap.add_argument("--rail", choices=["fake", "lightning", "local"], default="fake")
-    ap.add_argument("--port", type=int, default=0)
-    ap.add_argument("--auto", action="store_true", help="no pauses and the default edit (tests)")
-    ap.add_argument("--no-browser", action="store_true", help="print the popup URL, do not open it")
-    ap.add_argument("--permille", type=int, default=None, help="the on-stage threshold (default: asked)")
-    ap.add_argument("--kestrel-card", choices=["sample", "sentinel"], default="sentinel",
-                    help="sentinel: Kestrel's card from its own book (the owner's outcome_note); sample: the hand-written fallback")
+    ap = parser()
     sys.stdout.reconfigure(line_buffering=True)
     args = ap.parse_args(argv)
+    if args.command is None:
+        ap.print_help()
+        return 2
     return {"seed": cmd_seed, "run": cmd_run, "reset": cmd_reset}[args.command](args)
 
 
