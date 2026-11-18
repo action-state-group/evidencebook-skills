@@ -43,8 +43,8 @@ PARTIES = {
                  "Your admission pack is packs/ard-demo-buyer.",
         # The first message searches nothing: the presenter types the ask, so all three windows can start together and
         # Maya never searches before the sellers have published their entries (Ethan, 2026-11-18).
-        "prompt": "Reply in English only. In one short sentence, say you are Maya's buying agent and ready. Do not search "
-                  "or call any tool until Maya asks.",
+        "prompt": "Reply in English only. I am Maya. In one short sentence, say you are my buying agent and ready. Do not "
+                  "search or call any tool until I ask.",
     },
 }
 

@@ -10,7 +10,7 @@ tool returns the text that run prints, so the screen says what the script demo s
     ard_find_sellers   ->  Maya's ask and ARD discovery
     ard_show_history   ->  each seller's signed answers, checked, and the History cards
     ard_assess         ->  the assessment (the on-stage edit is its ``max_adverse_permille``)
-    ard_pick           ->  the pick (a seller over its limit ends here: no deal opens, nothing is paid)
+    ard_pick           ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
     ard_pay            ->  the deal and the payment; the one tool that moves money (the presenter approves in a dialog)
 ``alder`` / ``kestrel``     a seller's window, its own node and keys:
     ard_seller_activity  ->  what its agent did: requests answered, the deal, the sale, its card

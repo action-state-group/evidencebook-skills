@@ -78,7 +78,7 @@ def decision_line(a: Assessment, ev: Evidence, max_permille: int, ceiling_msat_f
     if a.verdict == "LIMIT" and a.cap_msat is not None:
         why = (f"; the pack lets at most {max_permille} of every 1,000 deals not hold"
                if "band-history" in a.reasons else "")
-        return f"LIMIT: this history supports deals under {msat(a.cap_msat)}; the {msat(a.price_msat)} price is over that{why}"
+        return f"LIMIT: this history supports deals under {msat(a.cap_msat)}; the {msat(a.price_msat)} price is not under that{why}"
     return f"{a.verdict}: see the assessment rows"
 
 
@@ -86,7 +86,7 @@ def limit_outcome(a: Assessment) -> str:
     """What a tap on a seller that is not GO shows: nothing opens and nothing is paid."""
     if a.verdict == "LIMIT" and a.cap_msat:
         why = "; more of its deals did not hold than the pack allows" if "band-history" in a.reasons else ""
-        return (f"LIMIT: {msat(a.price_msat)} is over this seller's limit (deals under {msat(a.cap_msat)}){why}; "
+        return (f"LIMIT: {msat(a.price_msat)} is at or over this seller's limit (deals under {msat(a.cap_msat)}){why}; "
                 "no deal opens and nothing is paid")
     return f"{a.verdict}: no deal opens and nothing is paid"
 
@@ -96,7 +96,7 @@ def button(name: str, a: Assessment) -> str:
     if a.verdict == "GO":
         return f"Pay {name} {msat(a.price_msat)}"
     if a.verdict == "LIMIT":
-        return f"Pick {name} (over its limit: nothing is paid)"
+        return f"Pick {name} (outside its limit: nothing is paid)"
     return f"Pick {name} ({a.verdict}: nothing is paid)"
 
 

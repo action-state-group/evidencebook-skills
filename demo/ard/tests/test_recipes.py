@@ -109,4 +109,4 @@ def test_what_each_window_shows_names_no_demo():
 def test_mayas_first_message_searches_nothing():
     # The presenter types the ask; a first message that searched could run before the sellers publish their entries.
     prompt = _recipe(ow.link("maya", "fake"))["prompt"]
-    assert "Do not search or call any tool until Maya asks" in prompt and "Find sellers" not in prompt
+    assert "I am Maya." in prompt and "Do not search or call any tool until I ask" in prompt and "Find sellers" not in prompt

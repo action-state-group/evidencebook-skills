@@ -51,7 +51,7 @@ def test_screen_lines_say_assessment_and_never_score_or_blame():
     go = screens.decision_line(assessment("GO", "T2", 289), card(24, 0), 100, 1000)
     limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(22, 2), 50)
     assert go == "GO: 289 msat is within this pack's limit for it (T2, under 1,000 msat)"
-    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold"
+    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is not under that; the pack lets at most 50 of every 1,000 deals not hold"
     assert "demo" not in limit
     text = " ".join([go, limit, screens.card_line(card(22, 2), True), screens.card_line(card(24, 0), False), screens.BANNER,
                     screens.ASSESSMENT_NOTE, screens.PACK_NOTE]).lower()
@@ -143,9 +143,21 @@ def test_an_entry_whose_commitment_failed_is_a_failed_check_not_a_crash():
 
 def test_limit_tap_line_is_english_and_pays_nothing():
     line = screens.limit_outcome(assessment("LIMIT", "T1", 268, 100, ["band-history"]))
-    assert line == ("LIMIT: 268 msat is over this seller's limit (deals under 100 msat); more of its deals did not hold "
+    assert line == ("LIMIT: 268 msat is at or over this seller's limit (deals under 100 msat); more of its deals did not hold "
                     "than the pack allows; no deal opens and nothing is paid")
     assert line.isascii()
+
+
+def test_kestrels_lines_at_a_price_equal_to_its_cap_stay_true():
+    # Kestrel sells at 1,000 msat and its history supports deals under 1,000 msat: the price is at the cap, not over it
+    a = assessment("LIMIT", "T1", 1000, 1000, ["band-history"])
+    assert screens.decision_line(a, card(22, 2), 50) == (
+        "LIMIT: this history supports deals under 1,000 msat; the 1,000 msat price is not under that; "
+        "the pack lets at most 50 of every 1,000 deals not hold")
+    assert screens.limit_outcome(a) == (
+        "LIMIT: 1,000 msat is at or over this seller's limit (deals under 1,000 msat); more of its deals did not hold "
+        "than the pack allows; no deal opens and nothing is paid")
+    assert screens.button("Kestrel", a) == "Pick Kestrel (outside its limit: nothing is paid)"
 
 
 def test_card_line_uses_the_cards_own_total_and_a_stated_check_is_not_a_tick():
@@ -163,7 +175,7 @@ def test_a_non_limit_seller_that_is_not_go_never_prints_a_zero_cap():
 
 def test_popup_buttons_say_what_a_tap_does():
     assert screens.button("Alder", assessment("GO", "T2", 289)) == "Alder".join(["Pay ", " 289 msat"])
-    assert "over its limit: nothing is paid" in screens.button("Kestrel", assessment("LIMIT", "T1", 268, 100))
+    assert "outside its limit: nothing is paid" in screens.button("Kestrel", assessment("LIMIT", "T1", 268, 100))
     assert screens.button("Kestrel", assessment("ASK", "T0", 268)) == "Pick Kestrel (ASK: nothing is paid)"
 
 
