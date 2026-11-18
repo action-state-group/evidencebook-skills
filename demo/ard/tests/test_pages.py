@@ -144,7 +144,7 @@ def test_card_page_writes_under_the_demo_home_and_opens_only_when_asked(tmp_path
 @engine_only
 def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch):
     import seed
-    from world import World
+    from world import DEALS_EACH, World
 
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
     with World(tmp_path / "home") as world:
@@ -154,7 +154,7 @@ def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch):
     page = path.read_text()
     assert "did not hold counted from the seller&#x27;s own note, not confirmed by the buyer or a ruling" in page
     view = json.loads(re.search(r'id="history-input">(.*?)</script>', page, re.S).group(1))
-    assert len(view["rows"]) == len(sh["deals"]) == 48
+    assert len(view["rows"]) == len(sh["deals"]) == DEALS_EACH
     if NODE:
         out = draw(view)
-        assert "48 deals, newest first" in out and pages.OWN_NOTE in out
+        assert f"{DEALS_EACH} deals, newest first" in out and pages.OWN_NOTE in out
