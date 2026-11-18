@@ -72,8 +72,8 @@ shown, never scored.
 
 | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|
-| 2 Search, check entries and commitments | `ard_find_sellers` | an ARD search verb (to come), `capsulectl commitment find` |
-| 3 History cards | `ard_show_history` | `request` / `respond` |
+| 2 Search, check entries and commitments | `ard_find_sellers` | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
+| 3 History cards | `ard_show_history` | `request` / `respond` over the mailbox (capsule-cli#573) |
 | 4 Assess | `ard_assess` (and the threshold edit it takes) | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
 | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |

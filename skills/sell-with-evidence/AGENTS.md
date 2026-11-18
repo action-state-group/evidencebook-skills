@@ -48,8 +48,8 @@ sale in those records.
 
 | Step | On the demo host (step A) | On a capsule host |
 |---|---|---|
-| 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (to come) |
-| 2 Answer evidence requests | done by the demo's seller process | `respond` |
+| 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (capsule-cli#571) |
+| 2 Answer evidence requests | done by the demo's seller process | `respond` over the mailbox (capsule-cli#573) |
 | 3 Take and record the sale | done by the demo's seller process | `deal sale new`, `deal open --sale --deal-id`, `deal check` with `"action":"commit"` |
 | Show what happened | `ard_seller_activity` | `deal` and `book` views |
 | Show the History card | `ard_show_card` | `book` card |
