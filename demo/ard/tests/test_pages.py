@@ -151,6 +151,16 @@ def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch):
         seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
         path = pages.card_page(world.nodes["kestrel"], "kestrel", "Kestrel Print", rail="fake", seller=True, sample_card=False)
         sh = world.nodes["kestrel"].standard_history()
+        import deals
+
+        def notes(node) -> int:  # u597: the owner's own note, never in the other party's books
+            return sum(deals.noted(node, d) for d in deals.deal_ids(node))
+
+        assert notes(world.nodes["kestrel"]) == 2 and notes(world.nodes["sample-buyer"]) == 0 and notes(world.nodes["alder"]) == 0
+        seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")  # a repeat seed notes no deal twice
+        assert notes(world.nodes["kestrel"]) == 2
+        assert sum(k == deals.OUTCOME_NOTE for d in deals.deal_ids(world.nodes["kestrel"])
+                   for _, k, _ in world.nodes["kestrel"].deal(d).records) == 2
     page = path.read_text()
     assert "did not hold counted from the seller&#x27;s own note, not confirmed by the buyer or a ruling" in page
     view = json.loads(re.search(r'id="history-input">(.*?)</script>', page, re.S).group(1))

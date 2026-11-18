@@ -14,12 +14,7 @@ from world import CURRENCY, DEALS_EACH, ITEM, RAIL, SAMPLE_COUNTS, SELLERS, Worl
 SENTINEL_DEALS = SAMPLE_COUNTS["kestrel"]
 
 
-def _deal_ids(node) -> list[str]:
-    return sorted(b[len("deal/"):] for b in node.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
-
-
-def _noted(node, deal_id: str) -> bool:
-    return any(r.header.record_type == deals.OUTCOME_NOTE for r in node.shelf.open(f"deal/{deal_id}").records())
+_deal_ids = deals.deal_ids
 
 
 def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
@@ -44,7 +39,7 @@ def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
         if name == "kestrel" and kestrel_card == "sentinel":
             try:
                 for deal_id in _deal_ids(node)[:SENTINEL_DEALS]:
-                    if not _noted(node, deal_id):
+                    if not deals.noted(node, deal_id):
                         deals.note_did_not_hold(node, deal_id, "other")
             except Exception as exc:
                 raise SystemExit(f"sentinel mode needs an evidencebook with the outcome_note record "

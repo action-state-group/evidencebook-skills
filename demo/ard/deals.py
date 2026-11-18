@@ -101,6 +101,17 @@ OUTCOME_NOTE = "outcome_note"
 REASONS = ("dispute_lost", "settled_against", "not_delivered", "other")
 
 
+def noted(node: gn.Node, deal_id: str) -> bool:
+    """Whether this node's own chain of ``deal_id`` holds an outcome note. The note is a ``deal_step``
+    record in the deal's book, so the book's record types do not show it; the chain's step kinds do."""
+    return any(kind == OUTCOME_NOTE for _, kind, _ in node.deal(deal_id).records)
+
+
+def deal_ids(node: gn.Node) -> list[str]:
+    """The ids of the deals in this node's own books."""
+    return sorted(b[len("deal/"):] for b in node.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
+
+
 def note_did_not_hold(node: gn.Node, deal_id: str, reason: str = "other") -> str:
     """Seal this node's ``outcome_note`` on one of its own closed deals. Needs an evidencebook that has
     the record (#464); an older one refuses it as an unknown record type."""

@@ -135,12 +135,9 @@ def test_the_deal_cites_the_pick_and_mayas_book_holds_no_loop_admission(run):
 
 
 def test_no_buyer_side_book_holds_an_outcome_note(run):
-    """u597: the outcome note is the seller's own, never in a shared copy. Only Kestrel's own books carry it."""
+    """u597: the outcome note is the seller's own, never in a shared copy: Maya's books hold none after her deals.
+    (test_pages checks the sentinel seed, where Kestrel's own books hold the notes.)"""
     import deals
-
-    def notes(node) -> int:
-        return sum(r.header.record_type == deals.OUTCOME_NOTE
-                   for b in node.shelf.books() for r in node.shelf.open(b).records())
-
-    assert notes(run.w.nodes["sample-buyer"]) == 0 and notes(run.maya) == 0 and notes(run.w.nodes["alder"]) == 0
-    assert notes(run.w.nodes["kestrel"]) == 2
+    for node in (run.maya, run.w.nodes["sample-buyer"]):  # Maya's deals are those this module's tests made
+        assert not any(deals.noted(node, d) for d in deals.deal_ids(node))
+    assert deals.deal_ids(run.w.nodes["sample-buyer"])
