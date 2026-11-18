@@ -47,16 +47,16 @@ def test_the_pack_is_a_demo_fork_that_reads_no_claims():
 
 
 def test_screen_lines_say_assessment_and_never_score_or_blame():
-    go = screens.decision_line(assessment("GO", "T2", 289), card(48, 0), 100, 1000)
-    limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(45, 3), 50)
+    go = screens.decision_line(assessment("GO", "T2", 289), card(24, 0), 100, 1000)
+    limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(22, 2), 50)
     assert go == "GO: 289 msat is within this pack's limit for it (T2, under 1,000 msat)"
     assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold (placeholder)"
-    text = " ".join([go, limit, screens.card_line(card(45, 3), True), screens.card_line(card(48, 0), False), screens.BANNER,
+    text = " ".join([go, limit, screens.card_line(card(22, 2), True), screens.card_line(card(24, 0), False), screens.BANNER,
                     screens.ASSESSMENT_NOTE, screens.PACK_NOTE]).lower()
     for word in ("lost", "failed", "dishonest", "usd", "$"):
         assert word not in text
-    assert "3 of 48 deals did not hold (sample card, written for this demo; not recomputed from records)" in text
-    assert "did not hold counted from the seller's own note" in screens.card_line(card(45, 3), False)
+    assert "2 of 24 deals did not hold (sample card, written for this demo; not recomputed from records)" in text
+    assert "did not hold counted from the seller's own note" in screens.card_line(card(22, 2), False)
     assert "sample" in text and "test nodes" in text
 
 
@@ -143,10 +143,10 @@ def test_limit_tap_line_is_english_and_pays_nothing():
 
 
 def test_card_line_uses_the_cards_own_total_and_a_stated_check_is_not_a_tick():
-    ev = card(40, 3)
-    ev.card["bands"][0].update(undecided=5, of=48)
-    ev.card["outcomes"].update(of=48)
-    assert screens.card_line(ev, False).startswith("3 of 48 deals did not hold")
+    ev = card(17, 2)
+    ev.card["bands"][0].update(undecided=5, of=24)
+    ev.card["outcomes"].update(of=24)
+    assert screens.card_line(ev, False).startswith("2 of 24 deals did not hold")
     ev.stated("selection", "the seller states 0 unanswered disputes")
     assert screens.check_lines(ev)[-1].startswith("– selection")
 

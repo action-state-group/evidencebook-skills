@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ARD two-seller demo: Maya buys 200 conference badges from one of two sellers found through ARD.
 
-    python demo.py seed            # once: the sample history (48 + 48 deals), about a minute
+    python demo.py seed            # once: the sample history (24 + 24 deals), about 30 s
     python demo.py run [--rail lightning]
     python demo.py reset           # forget the demo home (keys, books, sample history)
 
@@ -250,7 +250,7 @@ def cmd_run(args) -> int:
     world, server = prepare(args)
     run = None
     try:
-        if any(sum(1 for b in world.nodes[n].shelf.books() if b.startswith("deal/") and b.count("/") == 1) < 48 for n in SELLERS):
+        if any(sum(1 for b in world.nodes[n].shelf.books() if b.startswith("deal/") and b.count("/") == 1) < DEALS_EACH for n in SELLERS):
             print("no sample history yet: run `python demo.py seed` first")
             return 2
         rail: pay.Rail = pay.from_env(args.rail)

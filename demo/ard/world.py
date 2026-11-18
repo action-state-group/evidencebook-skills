@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The demo's four Goose nodes in one process: Maya (the buyer), Alder and Kestrel (the sellers) and
-the sample buyer that ran their 48 sample deals each.
+the sample buyer that ran their 24 sample deals each.
 
 Every node is a :class:`goose_node.Node` on its own shelf under one demo home, so each keeps its own
 keys and book. The sellers answer Maya's evidence requests through the one private relay
@@ -42,7 +42,7 @@ SELLERS = {
     "alder": {"label": "Alder Print Co.", "price_msat": 289, "item": ITEM},
     "kestrel": {"label": "Kestrel Print", "price_msat": 268, "item": ITEM},
 }
-DEALS_EACH = 48
+DEALS_EACH = 24
 
 
 @dataclass
@@ -121,4 +121,4 @@ class World:
 
 #: The hand-written sample card's did_not_hold count per seller. Only a seller named here
 #: is answered with a hand-written card, and only while ``World.sample_card`` says so.
-SAMPLE_COUNTS = {"kestrel": 3}
+SAMPLE_COUNTS = {"kestrel": 2}

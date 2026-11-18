@@ -84,7 +84,7 @@ def test_three_windows_run_the_story(stage_env):
             out["receipt_kestrel"] = await _call(sessions["kestrel"], "ard_show_receipt")
             # After the deal: each party's card counts the sale after its next checkpoint (a minute here).
             out["card1_maya_at_once"] = await _call(sessions["maya"], "ard_show_card")  # ard_pay took her checkpoint
-            for role, want in (("alder", "deals counted 49"), ("maya", "deals counted 1")):
+            for role, want in (("alder", "deals counted 25"), ("maya", "deals counted 1")):
                 for _ in range(30):
                     out[f"card1_{role}"] = await _call(sessions[role], "ard_show_card")
                     if want in out[f"card1_{role}"]:
@@ -94,17 +94,17 @@ def test_three_windows_run_the_story(stage_env):
 
     out = asyncio.run(run())
     assert "Alder Print Co." in out["find"] and "Kestrel Print" in out["find"] and "commitment verified" in out["find"]
-    assert "3 of 48 deals did not hold" in out["history"] and "✗" not in out["history"]
+    assert "2 of 24 deals did not hold" in out["history"] and "✗" not in out["history"]
     assert "Kestrel Print      LIMIT:" in out["assess"].split("4b  Assessment again")[1]
     assert "no deal opens and nothing is paid" in out["kestrel"]
     assert "answered a signed evidence request" in out["kestrel_side"] and "a buyer asks to buy" not in out["kestrel_side"]
     assert "approval gate off" in out["pay"] and "invoice 289 msat" in out["pay"] and "deal closed with Alder Print Co." in out["pay"]
     assert "a buyer asks to buy" in out["alder_side"] and "deal closed: both closes name 289 msat" in out["alder_side"]
     # Each party shows only its own card and receipt, from its own records.
-    assert "deals counted 0" in out["card0_maya"] and "deals counted 48: held 48, did not hold 0" in out["card0_alder"]
-    assert "deals counted 48: held 45, did not hold 3" in out["card0_kestrel"]
+    assert "deals counted 0" in out["card0_maya"] and "deals counted 24: held 24, did not hold 0" in out["card0_alder"]
+    assert "deals counted 24: held 22, did not hold 2" in out["card0_kestrel"]
     assert "deals counted 1: held 1" in out["card1_maya_at_once"] and "checkpoint taken over her records" in out["pay"]
-    assert "deals counted 49" in out["card1_alder"] and "deals counted 1: held 1" in out["card1_maya"]
+    assert "deals counted 25" in out["card1_alder"] and "deals counted 1: held 1" in out["card1_maya"]
     for who in ("maya", "alder"):
         r = out[f"receipt_{who}"]
         assert "at 289 msat, rail lightning" in r and "close: outcome completed" in r

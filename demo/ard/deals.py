@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """One deal between two of the demo's nodes, step by step, as ``scripted_run.py`` runs it over MCP.
 
-The same function runs the 48 + 48 sample deals before the demo and Maya's one live deal; only the
+The same function runs the 24 + 24 sample deals before the demo and Maya's one live deal; only the
 payment reference differs (a sample deal seals a synthetic one, labelled so)."""
 from __future__ import annotations
 

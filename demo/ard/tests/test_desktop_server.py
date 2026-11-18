@@ -2,7 +2,7 @@
 """The Goose Desktop extension (desktop_server.py) on a fake rail: the tools in the story's order, a
 refusal out of order, the LIMIT pick that pays nothing, and the pay step only after a sealed pick.
 
-Needs ``CAPSULE_ENGINE`` and ``ARD_EVIDENCEBOOK`` like test_demo.py; the 96 sample deals take about 40 seconds."""
+Needs ``CAPSULE_ENGINE`` and ``ARD_EVIDENCEBOOK`` like test_demo.py; the 48 sample deals take about 20 seconds."""
 from __future__ import annotations
 
 import pytest
@@ -41,8 +41,8 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     found = tools.ard_find_sellers()
     assert "Alder Print Co." in found and "Kestrel Print" in found and "commitment verified" in found
     history = tools.ard_show_history()
-    assert "48 deals counted" in history and "✗" not in history
-    assert "History cards" in history and "3 of 48 deals did not hold" in history
+    assert "24 deals counted" in history and "✗" not in history
+    assert "History cards" in history and "2 of 24 deals did not hold" in history
     assessed = tools.ard_assess(50)
     assert "Alder Print Co.    GO:" in assessed.split("4b  Assessment again")[1]
     assert "Kestrel Print      LIMIT:" in assessed.split("4b  Assessment again")[1]
@@ -63,7 +63,7 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     monkeypatch.setattr(tools, "approve_payment", lambda summary: asked.append(summary) or True)
     paid = tools.ard_pay("alder")
     assert asked == ["Pay Alder Print Co. 289 msat on the simulated rail: no money moves."]
-    assert "invoice 289 msat" in paid and "Alder Print Co.'s card now counts 49 deals" in paid
+    assert "invoice 289 msat" in paid and "Alder Print Co.'s card now counts 25 deals" in paid
     assert tools._session.run.rail.paid == [289]
     assert "REFUSED: Alder Print Co. was already paid" in tools.ard_pay("alder")
     # An attempt that the rail did not confirm is not "paid": the next try says so and sends the presenter to the wallet.

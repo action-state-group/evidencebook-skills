@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The sample history, run before the demo (design §7): 48 deals between each seller and the sample
+"""The sample history, run before the demo (design §7): 24 deals between each seller and the sample
 buyer, real seals at real times, a synthetic payment reference labelled sample, no money moved."""
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 
 import deal_records as dr
 import deals
-from world import CURRENCY, DEALS_EACH, ITEM, RAIL, SELLERS, World
+from world import CURRENCY, DEALS_EACH, ITEM, RAIL, SAMPLE_COUNTS, SELLERS, World
 
 
-SENTINEL_DEALS = 3
+#: Kestrel deals that carry the owner's outcome_note: the same count as its hand-written sample card.
+SENTINEL_DEALS = SAMPLE_COUNTS["kestrel"]
 
 
 def _deal_ids(node) -> list[str]:
@@ -22,7 +23,7 @@ def _noted(node, deal_id: str) -> bool:
 
 
 def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
-    """Run the sample deals each seller lacks, then (sentinel mode) the owner's note on three of Kestrel's
+    """Run the sample deals each seller lacks, then (sentinel mode) the owner's note on two of Kestrel's
     first deals, then a checkpoint. Each part is checked on its own, so a repeat run finishes an
     interrupted one; a run cut off in the middle of a deal needs ``demo.py reset`` first."""
     buyer = world.nodes["sample-buyer"]

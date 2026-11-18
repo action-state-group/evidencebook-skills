@@ -43,7 +43,7 @@ python -m venv .venv
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
 cd demo/ard
-../../.venv/bin/python demo.py seed                  # once, about 40 s: 48 + 48 sample deals
+../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money
 ```
 
@@ -52,8 +52,8 @@ browser; click "Pay Alder Print Co. 289 msat". `Ctrl-C` ends a run; running agai
 same sample history. `demo.py reset` forgets the demo home (`$ARD_HOME`, default
 `~/.config/ard-commerce-demo`), keys and history included.
 
-After a paid run Alder's card reads 49 deals. Run `reset` and `seed` before the next rehearsal so the
-audience sees 48 again. The card counts the sale after the next checkpoint (one minute here, the
+After a paid run Alder's card reads 25 deals. Run `reset` and `seed` before the next rehearsal so the
+audience sees 24 again. The card counts the sale after the next checkpoint (one minute here, the
 shortest cadence the profile allows), so a run within a minute of the previous tick waits.
 
 ### Real payment
@@ -78,10 +78,10 @@ if the program is not on the PATH) and run `goose/open-windows.py --rail local`;
 
 ### The one switch
 
-`--kestrel-card sentinel` (the default; `seed` writes it) reads Kestrel's card from its own book: three
+`--kestrel-card sentinel` (the default; `seed` writes it) reads Kestrel's card from its own book: two
 deals carry the book owner's `outcome_note` (the temporary record of #462, in evidencebook v0.14.2),
 which the card counts as did not hold. `--kestrel-card sample` is the fallback: Kestrel's hand-written
-sample card (45 held, 3 did not hold), for a package without that record. Use the same value for `seed`
+sample card (22 held, 2 did not hold), for a package without that record. Use the same value for `seed`
 and `run`. The card does not show who wrote the note, and the screen says it is the seller's own
 note, not confirmed by the buyer or a ruling.
 
@@ -116,8 +116,8 @@ process and one window, with Maya's tools.
 
 Cards and receipts. In every window `ard_show_card` prints that party's own `standard_history/1` card and `ard_show_receipt`
 its own receipt for the deal, both computed from that party's own sealed records (Maya's from her book, Alder's from
-his); a window never shows another party's. Before the deal Maya's card counts 0 deals, Alder's 48 and Kestrel's 48 (3 did
-not hold); after it Alder's counts 49 and Maya's 1: `ard_pay` takes Maya's checkpoint over her own records as part of closing (waiting up to a minute if her last one was that recent) and Alder's agent takes its own right after the close, so both cards show the sale within seconds in the demo's story. The seller's
+his); a window never shows another party's. Before the deal Maya's card counts 0 deals, Alder's 24 and Kestrel's 24 (2 did
+not hold); after it Alder's counts 25 and Maya's 1: `ard_pay` takes Maya's checkpoint over her own records as part of closing (waiting up to a minute if her last one was that recent) and Alder's agent takes its own right after the close, so both cards show the sale within seconds in the demo's story. The seller's
 receipt holds no payment step: the payment is the buyer's act, so only Maya's receipt shows it.
 
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on

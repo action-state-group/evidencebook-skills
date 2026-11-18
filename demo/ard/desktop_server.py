@@ -343,7 +343,7 @@ def ard_show_receipt() -> None:
     steps, the payment's commitment, how it closed and its check of the other party's half."""
     node, label = _own_node()
     stored = sorted(b[len("deal/"):] for b in node.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
-    # This run's deals in order. A seller's book also holds its 48 sample deals, so a seller shows only deals made since
+    # This run's deals in order. A seller's book also holds its 24 sample deals, so a seller shows only deals made since
     # its window opened (a restarted window shows none); the buyer's book holds only its own deals.
     ids = seller().deal_ids if ROLE in SELLERS else (session().deal_ids or stored)
     if not ids:
