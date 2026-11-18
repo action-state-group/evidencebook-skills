@@ -4,7 +4,7 @@ Status: consolidated plan (steps A and B together), round 4, for Codex, Kimi, th
 [evidencebook-skills#169](https://github.com/action-state-group/evidencebook-skills/issues/169).
 No code yet.
 
-**The bar.** None in THE_LOOP. The bar is Ethan's ask of 2026-11-17: "要做，顺带就可以把文字更新。先把方案定下来，然后跟 sherlock and it's twin converge，然后修改。" ("Do it, and update the wording along the way. Settle the plan first, converge it with Sherlock and its twin, then change it.") Latest Steven ruling on buyer or seller skills: none found (ops DECISION logs, all eight lanes, read 2026-11-17). When this is done, a person who wants to buy or sell with evidence installs two skills and a pack instead of copying the ARD demo's Python, and the demo runs from them.
+**The bar.** None in THE_LOOP. The bar is Ethan's ask of 2026-11-17: "要做，顺带就可以把文字更新。先把方案定下来，然后跟 sherlock and it's twin converge，然后修改。" ("Do it, and update the wording along the way. Settle the plan first, converge it with Sherlock and its twin, then change it.") Latest Steven ruling on buyer or seller skills: his "yes go" to this note's door (§4), 2026-11-17; none in the ops DECISION logs before it. When this is done, a person who wants to buy or sell with evidence installs two skills and a pack instead of copying the ARD demo's Python, and the demo runs from them.
 
 ## 1. The problem
 
