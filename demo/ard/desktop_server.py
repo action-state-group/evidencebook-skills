@@ -16,11 +16,12 @@ tool returns the text that run prints, so the screen says what the script demo s
     ard_seller_activity  ->  what its agent did: requests answered, the deal, the sale, its card
     ard_show_card / ard_show_receipt  ->  its own History card and its own receipt (every window has these two)
     ard_open_card_page  ->  its own History card as a page in the browser (every window; pages.py)
+    ard_open_receipt_page  ->  its own receipt for its closed deal as a page in the browser (every window; receipt.py)
 ``all`` (default)     the whole story in one process, Maya's tools (one window).
 
 Environment: ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK`` and ``ARD_HOME`` as for ``demo.py``; ``ARD_RAIL``
 (``fake`` or ``lightning``, default ``fake``) and ``ARD_KESTREL_CARD`` (``sentinel`` or ``sample``, the
-same in every window). Seed the home first with ``demo.py seed``. See README.md ("In Goose Desktop")."""
+same in every window); ``CAPSULECTL_DEAL``, the capsulectl-deal binary the receipt page is verified with. Seed the home first with ``demo.py seed``. See README.md ("In Goose Desktop")."""
 from __future__ import annotations
 
 import contextlib
@@ -292,7 +293,7 @@ def ard_pay(seller: str) -> None:
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
-    chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK)
+    chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK, run.rail.SEALED)
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
     payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat,
@@ -348,20 +349,50 @@ def ard_show_card() -> None:
     print(parties.card_view(node, label))
 
 
-@_tool("maya", "alder", "kestrel")
-def ard_show_receipt() -> None:
-    """Show THIS window's own receipt for the deal it took part in, read from its own sealed deal book: terms,
-    steps, the payment's commitment, how it closed and its check of the other party's half."""
+def _own_deal():
+    """This window's node, its label and the latest deal of this run (``None`` before one)."""
     node, label = _own_node()
     stored = sorted(b[len("deal/"):] for b in node.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
     # This run's deals in order. A seller's book also holds its 24 sample deals, so a seller shows only deals made since
     # its window opened (a restarted window shows none); the buyer's book holds only its own deals.
     ids = seller().deal_ids if ROLE in SELLERS else (session().deal_ids or stored)
-    if not ids:
+    return node, label, (ids[-1] if ids else None)
+
+
+@_tool("maya", "alder", "kestrel")
+def ard_show_receipt() -> None:
+    """Show THIS window's own receipt for the deal it took part in, read from its own sealed deal book: terms,
+    steps, the payment's commitment, how it closed and its check of the other party's half."""
+    node, label, deal_id = _own_deal()
+    if deal_id is None:
         print(f"{label}: no deal yet, so no receipt")
         return
-    print(parties.receipt_view(node, label, ids[-1], seller=ROLE in SELLERS,
+    print(parties.receipt_view(node, label, deal_id, seller=ROLE in SELLERS,
                                real=os.environ.get("ARD_RAIL", "fake") in ("lightning", "local")))
+
+
+@_tool("maya", "alder", "kestrel")
+def ard_open_receipt_page() -> None:
+    """Open THIS window's own receipt for its deal as a page in the browser, for the audience: capsule-viewer's receipt
+    view of its own copy of the deal, checked by capsulectl verify --bundle, with the demo labels. Call it after the
+    deal has closed (after ard_pay on Maya's side, after the close on a seller's)."""
+    import pages
+    import receipt
+
+    node, label, deal_id = _own_deal()
+    if deal_id is None:
+        print(f"{label}: no deal yet, so no receipt page")
+        return
+    name = ROLE if ROLE in SELLERS else "maya"
+    try:
+        path = receipt.receipt_page(node, name, label, deal_id, rail=os.environ.get("ARD_RAIL", "fake"), seller=name in SELLERS)
+    except receipt.ReceiptError as exc:
+        print(f"{label}: no receipt page yet: {exc}")
+        return
+    opened = pages.open_page(path)
+    shown = ("opened in the browser on the presenter's screen; nothing else is needed (do not copy or link the file)"
+             if opened else "written (not opened)")
+    print(f"{label}: its receipt page {shown}: {path}")
 
 
 @_tool("maya", "alder", "kestrel")

@@ -81,7 +81,7 @@ def test_a_pick_of_a_limit_seller_opens_no_deal_and_pays_nothing(run):
     pick = buyer.seal_pick(run.maya, kestrel, made["kestrel"], [made["alder"]])
     import goose_node as gn
     with pytest.raises(gn.Refused, match="LIMIT: deals under 100 msat"):
-        buyer.open_deal(run.maya, kestrel, pick, made["kestrel"], "ask")
+        buyer.open_deal(run.maya, kestrel, pick, made["kestrel"], "ask", run.rail.SEALED)
     assert run.rail.paid == []
 
 
@@ -90,7 +90,7 @@ def test_a_deal_needs_a_sealed_pick(run):
     import goose_node as gn
     made = run.assess(run.tight)
     with pytest.raises(gn.Refused, match="no sealed pick"):
-        buyer.open_deal(run.maya, run.w.nodes["alder"], "0" * 64, made["alder"], "ask")
+        buyer.open_deal(run.maya, run.w.nodes["alder"], "0" * 64, made["alder"], "ask", run.rail.SEALED)
 
 
 def test_picking_alder_pays_289_and_alders_card_reads_49_held(run):
@@ -100,7 +100,8 @@ def test_picking_alder_pays_289_and_alders_card_reads_49_held(run):
     alder = run.w.nodes["alder"]
     pick = buyer.seal_pick(run.maya, alder, made["alder"], [made["kestrel"]])
     deals.admit(alder, run.maya)
-    chain = buyer.open_deal(run.maya, alder, pick, made["alder"], "ask")
+    chain = buyer.open_deal(run.maya, alder, pick, made["alder"], "ask", run.rail.SEALED)
+    assert chain.terms.rail == "simulated"  # the fake rail: no record of this deal says Lightning
     deals.run_deal(run.maya, alder, chain.terms, "ask", "", opened=chain, pay=lambda: run.rail.pay(289).reference)
     assert run.rail.paid == [289]
     later = datetime.now(timezone.utc) + timedelta(minutes=2)
@@ -126,7 +127,7 @@ def test_the_deal_cites_the_pick_and_mayas_book_holds_no_loop_admission(run):
     alder = run.w.nodes["alder"]
     pick = buyer.seal_pick(run.maya, alder, made["alder"], [made["kestrel"]])
     deals.admit(alder, run.maya)
-    chain = buyer.open_deal(run.maya, alder, pick, made["alder"], "ask")
+    chain = buyer.open_deal(run.maya, alder, pick, made["alder"], "ask", run.rail.SEALED)
     first = run.maya.shelf.open(f"deal/{chain.deal_id}").records()[0]
     assert pick in first.header.links_to("cites")
     assert run.maya.notes(gn.ADMITTED) == []

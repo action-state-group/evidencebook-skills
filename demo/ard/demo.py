@@ -194,7 +194,7 @@ class Run:
         seller = self.w.nodes[chosen]
         name = SELLERS[chosen]["label"]
         deals.admit(seller, self.maya, reason="buyer Maya, picked by the presenter")
-        chain = buyer.open_deal(self.maya, seller, pick, a, ASK)
+        chain = buyer.open_deal(self.maya, seller, pick, a, ASK, self.rail.SEALED)
         before = self.rail.balances()
         paid: list[pay.Payment] = []
 

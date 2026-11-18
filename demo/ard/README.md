@@ -41,7 +41,9 @@ built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.ym
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
 python3 -m venv .venv
-.venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0"
+.venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0" \
+  "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@24bdfc3054fbda0a28c0761d00221c51ce7bf170"
+export CAPSULECTL_DEAL=/path/to/capsulectl-deal  # verifies each receipt page's copy (capsulectl verify --bundle)
 cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money
@@ -101,8 +103,8 @@ else already holds that port (an earlier demo's `stage.py`, say), the windows re
 
 | Window | Tools | What it shows |
 |---|---|---|
-| Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
-| Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt` | what that seller's agent did; its own History card; its own receipt for the deal |
+| Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
+| Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | what that seller's agent did; its own History card; its own receipt for the deal |
 
 Set up (once): seed the demo home as above, then
 
@@ -126,8 +128,17 @@ The History card as a page. `ard_open_card_page` writes that party's own card as
 opens it in the browser (`ARD_OPEN_PAGES=0` writes it without opening): capsule-viewer's History view (`history-view/v0`),
 drawn by the released `history-view.iife.js` of capsule-viewer 0.18.0 vendored in `vendor/` and pinned by its sha256, from
 a model the party builds from its own card (`pages.py`). The page carries the demo banner and labels and fetches nothing.
-Receipts stay chat text: capsule-viewer's receipt reads a copy's sealed `deal_report`, which the Goose reference's bundles
-do not carry.
+
+The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under
+`$ARD_HOME/pages/` and opens it the same way (`receipt.py`). The page is capsule-viewer's receipt module (the Python
+package at the commit the install line pins) drawing the party's own copy of the deal: its deal book as an Evidence
+Bundle with every step disclosed, and a sealed report in the standalone form (`x-deal-report/v0`, on no log, so no
+other step's reader sees it), whose lines are this demo's words from the party's own records. `capsulectl verify
+--bundle` (the binary `CAPSULECTL_DEAL` names) checks the copy before it is drawn. The tool refuses before the deal is
+closed and the other party's closing half has arrived. The report is kept under the party's home (`receipts/`) and
+sealed again only when the deal book grew. On the simulated rail Maya's live deal seals the rail `simulated` in its
+terms, so neither its records nor its receipt say Lightning (the sample deals keep `lightning`; they carry no payment).
+Every receipt page carries the demo banner.
 
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter

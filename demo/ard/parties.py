@@ -44,6 +44,7 @@ import responder  # noqa: E402
 import screens  # noqa: E402
 from demo_node import RECONCILED, DemoNode  # noqa: E402
 from world import RELAY_NAME, SAMPLE_COUNTS, SELLERS, World  # noqa: E402
+from world import terms as world_terms  # noqa: E402
 
 RELAY_PORT = int(os.environ.get("ARD_RELAY_PORT", "47480"))
 HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))  # the stand-in registry's POST /search
@@ -286,8 +287,8 @@ class Seller:
         outbox, inbox = self.dir / "wire" / "maya", self.dir / "wire" / self.name
         maya = SimpleNamespace(key_id=m1["steps"][0]["capsule"]["key_id"], checkpoint_key_id=m1["checkpoint"]["key_id"])
         terms_in = m1["steps"][0]["payload"]["body"]
-        terms = dr.Terms(terms_in["terms"]["item"], terms_in["terms"]["price_minor"], terms_in["terms"]["currency"],
-                         terms_in["recourse"]["rail"], terms_in["recourse"]["refundable"])
+        terms = world_terms(terms_in["terms"]["item"], terms_in["terms"]["price_minor"], terms_in["terms"]["currency"],
+                            terms_in["recourse"]["rail"], terms_in["recourse"]["refundable"])
         listed = SELLERS[self.name]["price_msat"]
         if terms.price_minor != listed:
             raise gn.Refused(f"asked {terms.price_minor} msat, not the listed {listed}: no deal")

@@ -80,7 +80,7 @@ seller's history is shown, never scored.
 | 4 Assess | `ard_assess` (and the threshold edit it takes) | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
 | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
-| 7 Receipt and card | `ard_show_receipt`, `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
+| 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
 
 `deal check` and `approval_text` belong to the capsule-host column only: the demo host's check
 before paying is its own approval dialog.
@@ -103,6 +103,8 @@ before paying is its own approval dialog.
   carries no inclusion proofs; the screen says so. Do not present those as checked.
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
+- To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
+  page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
 - `ard_pick` seals the pick. Never call `ard_pay` in the same message as `ard_pick`.
 - Before `ard_pay`, stop and ask the person to confirm in one sentence that names the seller and
   the amount and says whether real money moves (the recipe says which rail this run uses).
