@@ -252,8 +252,8 @@ def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: st
     bundle_path = pages.home() / "pages" / f"{name}-receipt-{deal_id}.bundle.json"
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_text(json.dumps(bundle, sort_keys=True))
-    # The page is capsule-viewer's own, with nothing added: its DEMO badge (the baseline's ``demo: true``) marks
-    # the deal, and the presenter says "sample history, simulated payment" once at the start (Ethan, 2026-11-17).
+    # The page is capsule-viewer's own, with nothing added (no banner, and the baseline seals no demo flag, so no
+    # DEMO badge): the presenter says "sample history, simulated payment" once at the start (Ethan, 2026-11-17).
     # Nor a payment line of ours on a seller's page: the viewer's "Payment: Not recorded in this copy" is true
     # (Sherlock2, #173). The buyer's page shows the payment.
     return pages.write(name, "receipt", render(bundle, verify(bundle_path)))

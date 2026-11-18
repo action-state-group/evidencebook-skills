@@ -140,7 +140,7 @@ other step's reader sees it), whose lines are this demo's words from the party's
 closed and the other party's closing half has arrived. The report is kept under the party's home (`receipts/`) and
 sealed again only when the deal book grew. On the simulated rail Maya's live deal seals the rail `simulated` in its
 terms, so neither its records nor its receipt say Lightning (the sample deals keep `lightning`; they carry no payment).
-A receipt page is capsule-viewer's own, with nothing added: its DEMO badge comes from the baseline's `demo: true`.
+A receipt page is capsule-viewer's own, with nothing added: no banner, and no DEMO badge (the baseline seals no `demo` flag).
 
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter
