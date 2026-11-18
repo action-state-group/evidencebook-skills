@@ -65,11 +65,22 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
 def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_still_succeeds(calls, capsys, code, stderr, exc, why, grant):
     calls.result.update(code=code, stderr=stderr, **{"raise": exc})
     assert ow.main(["--rail", "fake"]) == 0
-    err = capsys.readouterr().err.strip().splitlines()
-    assert len(err) == 2 and why in err[0]  # the message on one line even when osascript printed two, then the retry
-    assert ("System Settings, Privacy & Security, Accessibility" in err[0]) is grant  # the grant only for a permission
-    assert err[0].endswith("tile by hand: Window, Move & Resize, Left & Quarters.")
-    assert shlex.split(err[1]) == ow.TILE  # the exact command, ready to paste into a shell
+    assert sum(c[0] == "osascript" for c in calls) == 3  # the first try and two retries, 10 s apart
+    err = capsys.readouterr().err.splitlines()
+    assert len(err) == 5 and all("trying again in 10 s" in line for line in err[:2])
+    assert why in err[2]  # the message on one line even when osascript printed two
+    assert ("System Settings, Privacy & Security, Accessibility" in err[2]) is grant  # the grant only for a permission
+    assert err[2].endswith("tile by hand: Window, Move & Resize, Left & Quarters.")
+    assert err[3] == "" and shlex.split(err[4]) == ow.TILE  # a blank line, then the exact command to paste
+
+
+def test_a_tile_that_works_on_a_retry_prints_only_the_retry_note(calls, capsys, monkeypatch):
+    answers = iter([(False, "not allowed assistive access (-1719)", True), (True, "", False)])
+    monkeypatch.setattr(ow, "_tile_once", lambda: next(answers))
+    assert ow.main(["--rail", "fake"]) == 0
+    err = capsys.readouterr().err.splitlines()
+    assert err == ["could not tile the windows yet (not allowed assistive access (-1719)); trying again in 10 s: "
+                   "allow the access macOS asks for."]
 
 
 @pytest.mark.parametrize("args", [["--print"], ["--only", "maya"]])

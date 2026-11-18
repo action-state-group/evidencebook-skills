@@ -118,23 +118,38 @@ MANUAL = ("Then click Maya's window and run the line below to tile again (no new
           "Window, Move & Resize, Left & Quarters.")
 
 
-def tile() -> str | None:
-    """Tile the three windows with Maya in front; None when it worked, else the one line to print. Never raises.
-    The permission advice comes only when the cause is a permission (or a timeout, which a pending prompt causes)."""
-    grant = True
+#: After a failed tile (the first run, while macOS asks for the permission), try again this often, this many times.
+RETRY_S, RETRIES = 10, 2
+
+
+def _tile_once() -> tuple[bool, str, bool]:
+    """``(tiled, why, grant)``: the cause on one line, and whether it is a permission (or a timeout, which a pending
+    permission prompt causes). Never raises."""
     try:
         run = subprocess.run(TILE, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired as e:
-        why = str(e)
+        return False, " ".join(str(e).split()), True
     except (OSError, subprocess.SubprocessError) as e:
-        why, grant = str(e) or type(e).__name__, False
-    else:
-        if run.returncode == 0:
+        return False, " ".join((str(e) or type(e).__name__).split()), False
+    if run.returncode == 0:
+        return True, "", False
+    why = " ".join((run.stderr.strip() or f"osascript exit {run.returncode}").split())  # one line, whatever it printed
+    return False, why, any(mark in why for mark in _NOT_ALLOWED)
+
+
+def tile(say=lambda line: print(line, file=sys.stderr)) -> str | None:
+    """Tile the three windows with Maya in front, trying again every :data:`RETRY_S` seconds :data:`RETRIES` times
+    (time to allow the permission macOS asks for); None when it worked, else the message to print, which ends with
+    the command after a blank line. Never raises."""
+    for attempt in range(RETRIES + 1):
+        tiled, why, grant = _tile_once()
+        if tiled:
             return None
-        why = run.stderr.strip() or f"osascript exit {run.returncode}"
-        grant = any(mark in why for mark in _NOT_ALLOWED)
-    why = " ".join(why.split())  # one line, whatever osascript printed
-    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL + "\n" + shlex.join(TILE)
+        if attempt < RETRIES:
+            say(f"could not tile the windows yet ({why}); trying again in {RETRY_S} s"
+                + (": allow the access macOS asks for." if grant else "."))
+            time.sleep(RETRY_S)
+    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL + "\n\n" + shlex.join(TILE)
 
 
 def main(argv: list[str] | None = None) -> int:

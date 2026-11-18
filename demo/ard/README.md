@@ -136,7 +136,7 @@ export CAPSULE_ENGINE=... ARD_EVIDENCEBOOK=...
 
 It opens one `goose://recipe?config=…` link per party (sellers first, Maya last) and right after tiles the windows itself
 with Window, Move & Resize, Left & Quarters, Maya on the left; the first time, macOS asks to let your terminal control
-System Events and to turn it on under Accessibility, and until then the script prints how, plus the one osascript line that tiles the open windows again once you have allowed it.
+System Events and to turn it on under Accessibility, and the script tries again every 10 s, twice, while you allow it. If all three tries fail it prints how, then, after a blank line, the one osascript line that tiles the open windows again.
 Goose Desktop asks once per recipe, Trust and Execute. The three can start in any order: each seller's first message publishes its entry, and
 Maya's first message only says she is ready, so nothing is searched until the presenter, once both sellers have answered, types the ask
 ("I am Maya. I need 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me."). Keep the global (Settings) copy of any
