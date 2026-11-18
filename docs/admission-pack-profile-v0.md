@@ -380,7 +380,8 @@ verifies anything.
 
 **Label.** `card.witness_label` records `label` on its row and passes only for
 `witnessed`. The verifier derives the label; the responder never sets it. A
-counted receipt under a witness in `trust_roots.witnesses` is `witnessed`.
+counted receipt, on the latest checkpoint under a witness in
+`trust_roots.witnesses` or on any earlier one the caller counted, is `witnessed`.
 Receipts that were presented and none counts (an unconfigured key, a bad
 signature, no `checkpoint_key`) are `unknown_witness`, never `unwitnessed`,
 because a responder can mint receipts of its own. A card with no receipt is
@@ -389,15 +390,18 @@ because a responder can mint receipts of its own. A card with no receipt is
 **Log key.** A label and a key age describe the log signed by `checkpoint_key`,
 which need not be the responder's key: another commitment can staple the same
 public card (IP §6.2.1, P-31). A pack that relies on `card.witness_label`,
-`card.witnessed`, `card.key_age` or `card.witness_receipts` also carries a
-`card.log_key_accepted` row. Whether the key is right for this responder is the
+`card.witnessed`, `card.key_age` or `card.witness_receipts` should also carry a
+`card.log_key_accepted` row; the lint does not require it, and the default packs
+(`admission-baseline`, `admission-muse-buyer`, `admission-node-baseline`) have
+none, since no default pack changes with these checks. Whether the key is right for this responder is the
 caller's input, as the card's verification is.
 
 **First-use pin.** For each (`key_id`, stream) the asker keeps the first
 checkpoint it saw: log size and digest. `card.not_behind_pin` fails for a card
 whose last checkpoint is earlier than the pin, or which shows another digest
 at the pin's log size (a fork); it is not read with no pin, which is a stream
-seen first. That a later checkpoint is consistent with the pin is the caller's
+seen first. Under a LIMIT row that makes a first-seen stream, and every stream
+under a new key, limited to the row's tier until a pin exists. That a later checkpoint is consistent with the pin is the caller's
 check, made before it marks the card verified: a `checkpoints` request under
 `expected_pin` is answered with a checkpoint at or past the card's last one and
 a consistency proof from the pin.
@@ -405,7 +409,7 @@ a consistency proof from the pin.
 **Dropped and new streams.** `card.no_dropped_stream` counts, for one `key_id`,
 the pinned streams missing from the current commitment, out of the pinned ones.
 A stream with no pin is new and has no pin to fail. A log restarted under a new
-stream name is a dropped stream and a new one, never a continuing one. Pins are
+stream name is a dropped stream, never a continuing one. Pins are
 per `key_id`: a new key starts with none.
 
 All four are `card` rows, so they record or limit and never decide NO.
