@@ -299,7 +299,7 @@ def ard_pay(seller: str) -> None:
             # call opens the dialog again, and the presenter's click stays the gate.
             s.declined.discard(key)
             raise RuntimeError(
-                f"the presenter's dialog did not approve the last payment to {label} (cancelled, timed out or not shown), "
+                f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
                 f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} on the '
                 + ("REAL Lightning rail, which moves real money?" if real else "simulated rail, where no money moves?")
                 + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
