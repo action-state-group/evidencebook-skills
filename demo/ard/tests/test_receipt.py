@@ -17,7 +17,7 @@ import pay
 import receipt
 import screens
 
-ASK = "Maya: I need 200 conference badges by Friday, under 300 msat."
+ASK = "Maya: I need 200 conference badges by Friday, under 3,000 msat."
 
 
 def _viewer() -> bool:

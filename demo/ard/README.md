@@ -62,7 +62,8 @@ keys and history included), and clears Goose's recipe trust, so each window asks
 clears the trust of every Goose recipe, not only the demo's three: Goose 1.59.2 names each trust file by a hash of
 the recipe as its own server decodes it, which `reset.py` cannot reproduce.
 
-After a paid run Alder's card reads 25 deals. Run `reset` and `seed` before the next rehearsal so the
+A home seeded at other prices (before 2026-11-18's move to whole satoshis, say) is refused by `seed`: run
+`reset`, then `seed`. After a paid run Alder's card reads 25 deals. Run `reset` and `seed` before the next rehearsal so the
 audience sees 24 again. The card counts the sale after the next checkpoint (one minute here, the
 shortest cadence the profile allows), so a run within a minute of the previous tick waits.
 

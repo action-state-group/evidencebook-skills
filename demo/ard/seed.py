@@ -25,6 +25,11 @@ def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
     for name, seller in SELLERS.items():
         node = world.nodes[name]
         have = len(_deal_ids(node))
+        if have:  # a home seeded at another price would assess this seller in the wrong band: start over instead
+            made, _ = deals._agreed(node.deal_payloads(_deal_ids(node)[0]))
+            if made != seller["price_msat"]:
+                raise SystemExit(f"{name}'s sample history was made at {made:,} msat, but {name} now sells at "
+                                 f"{seller['price_msat']:,} msat: run `demo.py reset`, then `demo.py seed`")
         if have >= DEALS_EACH:
             say(f"{name}: sample history already there ({have} deals)")
         else:
