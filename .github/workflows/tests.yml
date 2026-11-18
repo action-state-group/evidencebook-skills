@@ -33,6 +33,47 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -p 'test_*.py'
 
+  ard-demo:
+    # The ARD two-seller demo (demo/ard): its tests, end to end on a simulated rail, against the
+    # Goose reference and the x-deal-v0 checker in a pinned evidencebook checkout, and a
+    # capsule-engine built from a pinned tag (the run sheet's pins).
+    runs-on: ubuntu-latest
+    env:
+      EVIDENCEBOOK_REF: 2c1cc9083b1cc0c263c3399fce09d1d8f409e2eb
+      CAPSULE_ENGINE_TAG: go/v0.4.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/evidencebook
+          ref: ${{ env.EVIDENCEBOOK_REF }}
+          path: .deps/evidencebook
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-engine
+          ref: ${{ env.CAPSULE_ENGINE_TAG }}
+          path: .deps/capsule-engine
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .deps/capsule-engine/go/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest
+      - name: build capsule-engine
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
+      - name: the demo's tests
+        run: |
+          ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
+            python -m pytest -q demo/ard/tests
+
   admission-engine:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
     runs-on: ubuntu-latest
