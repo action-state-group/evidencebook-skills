@@ -84,9 +84,21 @@ def test_the_stage_lock_name_is_the_stages_own():
 def test_refuses_while_goose_runs_and_changes_nothing(mac, monkeypatch):
     home, hashes, saved = mac
     monkeypatch.setattr(reset, "goose_running", lambda: True)
-    with pytest.raises(reset.ResetRefused, match="quit it first"):
+    monkeypatch.setattr(reset, "GOOSE_WAIT_S", 0.2)
+    with pytest.raises(reset.ResetRefused, match="still running after 0 s: quit it first"):
         reset.reset(home, say=lambda *_: None)
     assert home.exists() and len(list(hashes.glob("*.hash"))) == 3 and saved.exists()
+
+
+@needs_lsof
+def test_reset_waits_for_a_goose_that_is_still_quitting(mac, monkeypatch):
+    # osascript -e 'quit app "Goose"' returns before Goose exits; the reset right after it must wait, not refuse
+    home, hashes, _ = mac
+    answers = iter([True, True, True])
+    monkeypatch.setattr(reset, "goose_running", lambda: next(answers, False))
+    monkeypatch.setattr(reset.time, "sleep", lambda s: None)
+    assert reset.reset(home, say=lambda *_: None) == 0
+    assert not home.exists() and not list(hashes.glob("*.hash"))
 
 
 def test_a_failed_goose_check_refuses(monkeypatch):

@@ -44,6 +44,20 @@ def goose_running() -> bool:
     return run.returncode == 0
 
 
+#: How long reset waits for Goose to exit: `osascript -e 'quit app "Goose"'` returns before Goose has gone.
+GOOSE_WAIT_S = 15.0
+
+
+def goose_quitting(wait_s: float | None = None) -> bool:
+    """Whether Goose Desktop still runs after waiting up to ``wait_s`` for a quit already asked for to finish."""
+    end = time.monotonic() + (GOOSE_WAIT_S if wait_s is None else wait_s)
+    while goose_running():
+        if time.monotonic() >= end:
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def _lsof(*args: str) -> list[tuple[int, str, str]]:
     """``(pid, fd, name)`` for each open file ``lsof`` reports; refuses if lsof is missing or fails."""
     if not shutil.which("lsof"):
@@ -305,8 +319,9 @@ def reset(home: Path, say=print) -> int:
     processes (and the home kept) after it."""
     try:
         _check_target(home)
-        if goose_running():
-            raise ResetRefused("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then reset again.")
+        if goose_quitting():
+            raise ResetRefused(f"Goose Desktop is still running after {GOOSE_WAIT_S:.0f} s: quit it first "
+                               "(osascript -e 'quit app \"Goose\"'), then reset again.")
         ours, others, inside = holders(home)
         _refuse_on(others, inside, home, ours)
     except ResetRefused as e:
