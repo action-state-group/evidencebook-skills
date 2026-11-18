@@ -42,6 +42,8 @@ def test_out_of_order_calls_are_refused_and_change_nothing(tools):
 def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     found = tools.ard_find_sellers()
     assert "Alder Print Co." in found and "Kestrel Print" in found and "commitment verified" in found
+    import screens
+    assert screens.BANNER_FAKE not in found and "DEMO ·" not in found  # no demo line on the tool's output (Ethan, 2026-11-17)
     history = tools.ard_show_history()
     assert "24 deals counted" in history and "✗" not in history
     assert "History cards" in history and "2 of 24 deals did not hold" in history

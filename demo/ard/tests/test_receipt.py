@@ -75,7 +75,7 @@ def test_a_simulated_deal_seals_the_simulated_rail_and_the_profile_allows_it(see
     for name in ("maya", "alder"):
         payloads = [json.loads(p) for p in world.nodes[name].deal_payloads(deal_id)]
         assert payloads[0]["body"]["recourse"]["rail"] == "simulated"
-        assert payloads[0]["body"]["demo"] is True  # the pinned Goose reference seals it (evidencebook#514)
+        assert "demo" not in payloads[0]["body"]  # no demo flag in the baseline (Ethan, 2026-11-17)
         checker = gn._profile_checker()
         for p in payloads:
             checker.check_record(p)
@@ -152,7 +152,7 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     page = path.read_text()
     for banner in (screens.BANNER_FAKE, screens.BANNER, screens.BANNER_LOCAL):  # no banner of ours (Ethan, 2026-11-17)
         assert html.escape(banner) not in page
-    assert "ard-demo" not in page and ">DEMO<" in page  # the viewer's own DEMO badge, from demo: true
+    assert "ard-demo" not in page and ">DEMO<" not in page  # nothing marks the page: no banner, no demo flag to badge
     assert html.escape(ITEM) in page and "289 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page

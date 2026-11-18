@@ -69,7 +69,6 @@ class Run:
     # -- 1-2 ask and discover -------------------------------------------------------------
 
     def discover(self) -> None:
-        print(self.banner)
         rule("1  Maya asks her agent")
         print(ASK)
         rule("2  ARD discovery")
