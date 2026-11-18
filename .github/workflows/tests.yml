@@ -44,7 +44,7 @@ jobs:
       CAPSULE_ENGINE_TAG: go/v0.4.0
       # evidencebook-deal#220 (merged): cll/go v0.4.0, so verify --bundle accepts the Goose reference's checkpoints.
       EVIDENCEBOOK_DEAL_REF: 2f82b61e6410e70d9ca88712d72b0a3f5faeb31d
-      CAPSULE_VIEWER_REF: 24bdfc3054fbda0a28c0761d00221c51ce7bf170
+      CAPSULE_VIEWER_REF: 613a8a95144e5851bbb61df72df8cc76b7500381
     steps:
       - uses: actions/checkout@v4
         with:
