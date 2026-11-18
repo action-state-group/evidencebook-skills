@@ -30,8 +30,9 @@ def test_edit_changes_threshold_version_and_id_suffix_only():
     out = packs.edited(source, 50, "1.1.0")
     assert packs.threshold(source) == 100 and packs.threshold(out) == 50
     assert "pack_id: demo/ard_admission/1.1.0" in out and "pack_version: 1.1.0" in out
+    assert "at most 50 per thousand did not hold" in out and "at most 100 per thousand" not in out
     changed = [(a, b) for a, b in zip(source.splitlines(), out.splitlines()) if a != b]
-    assert len(changed) == 3, changed
+    assert len(changed) == 4, changed
 
 
 def test_threshold_refuses_a_pack_without_the_row():
@@ -50,7 +51,7 @@ def test_screen_lines_say_assessment_and_never_score_or_blame():
     go = screens.decision_line(assessment("GO", "T2", 289), card(24, 0), 100, 1000)
     limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(22, 2), 50)
     assert go == "GO: 289 msat is within this pack's limit for it (T2, under 1,000 msat)"
-    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold (placeholder)"
+    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold (demo setting)"
     text = " ".join([go, limit, screens.card_line(card(22, 2), True), screens.card_line(card(24, 0), False), screens.BANNER,
                     screens.ASSESSMENT_NOTE, screens.PACK_NOTE]).lower()
     for word in ("lost", "failed", "dishonest", "usd", "$"):
@@ -138,7 +139,8 @@ def test_an_entry_whose_commitment_failed_is_a_failed_check_not_a_crash():
 
 def test_limit_tap_line_is_english_and_pays_nothing():
     line = screens.limit_outcome(assessment("LIMIT", "T1", 268, 100, ["band-history"]))
-    assert line == "LIMIT: 268 msat is over this seller's limit (deals under 100 msat); no deal opens and nothing is paid"
+    assert line == ("LIMIT: 268 msat is over this seller's limit (deals under 100 msat); more of its deals did not hold "
+                    "than the pack allows; no deal opens and nothing is paid")
     assert line.isascii()
 
 
@@ -188,3 +190,14 @@ def test_the_demo_pack_is_this_repositorys():
 
 def test_the_assessment_screen_says_the_selection_has_no_inclusion_proofs():
     assert "no inclusion proofs" in screens.SELECTION_NOTE and "demo pack counts it" in screens.SELECTION_NOTE
+
+
+def test_a_seller_whose_commitment_failed_is_not_asked_or_assessed(capsys):
+    import demo
+    run = object.__new__(demo.Run)
+    run.entries = [{"id": "kestrel", "name": "Kestrel Print", "problem": "the served commitment's digest differs"}]
+    run.evidence, run.info = {}, {}
+    assert run.verified == []
+    run.collect()  # no world is touched: the failed seller is only reported
+    assert "Kestrel Print: not asked, its commitment failed (the served commitment's digest differs)" in capsys.readouterr().out
+    assert run.assess(None) == {} and run.options(None, {}) == []

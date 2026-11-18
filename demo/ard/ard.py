@@ -110,6 +110,10 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         item["uri"] = att["uri"]
         octets = _fetch(att["uri"])
         item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
+        if not item["digest_matches"]:  # the entry points at another document than the one served
+            item["problem"] = "the served commitment's digest differs from the one the seller's entry names"
+            continue
+        item["checks"].append("commitment digest matches the seller's entry")
         try:
             doc_c = json.loads(octets)
             cm.verify(doc_c)

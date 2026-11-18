@@ -63,6 +63,22 @@ def test_an_entry_whose_identity_names_another_domain_is_refused(disc, monkeypat
     assert "does not name its publisher" in found["kestrel"]["problem"] and "commitment" not in found["kestrel"]
 
 
+def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monkeypatch):
+    real = ard.entry
+
+    def tampered(n, s, d, o):
+        e = real(n, s, d, o)
+        if n == "kestrel":
+            tm = e["trustManifest"]
+            e = {**e, "trustManifest": {**tm, "attestations": [{**a, "digest": "sha256:" + "0" * 64} for a in tm["attestations"]]}}
+        return e
+
+    monkeypatch.setattr(ard, "entry", tampered)
+    found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
+    assert "commitment" in found["alder"] and "commitment digest matches the seller's entry" in found["alder"]["checks"]
+    assert "digest differs" in found["kestrel"]["problem"] and "commitment" not in found["kestrel"]
+
+
 def test_an_unreachable_publisher_is_refused(disc):
     found = ard.lookup(disc.registry.url, {"alder.ard-demo.test": disc.origins["alder.ard-demo.test"]}, "badges print")
     by = {f["id"]: f for f in found}

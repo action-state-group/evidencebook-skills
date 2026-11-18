@@ -39,6 +39,17 @@ def test_maya_follows_the_buyer_skill_with_her_facts_and_the_rail():
     assert _skill_body("buy-with-evidence") in text and "name: buy-with-evidence" not in text
 
 
+def test_maya_is_given_the_registry_the_stage_serves(monkeypatch):
+    # parties.py (which needs the Goose reference to import) serves POST /search on the same variable and default
+    assert 'HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))' in (HERE / "parties.py").read_text()
+    text = _recipe(ow.link("maya", "fake"))["instructions"]
+    assert "The ARD registry to search is http://127.0.0.1:47481/search" in text
+    assert "registry to search" not in _recipe(ow.link("alder", "fake"))["instructions"]
+    monkeypatch.setenv("ARD_STAGE_PORT", "48000")
+    r = _recipe(ow.link("maya", "fake"))
+    assert "http://127.0.0.1:48000/search" in r["instructions"] and "ARD_STAGE_PORT=48000" in r["extensions"][0]["args"]
+
+
 def test_a_real_rail_says_real_money_moves():
     assert "real money moves" in _recipe(ow.link("maya", "lightning"))["instructions"]
 

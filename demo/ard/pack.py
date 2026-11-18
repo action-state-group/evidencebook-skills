@@ -69,6 +69,7 @@ def edited(source: str, permille: int, version: str) -> str:
     """The source with its threshold, ``pack_version`` and the ``pack_id`` suffix changed (lint
     requires the id to end in the version)."""
     out = re.sub(r"max_adverse_permille:\s*\d+", f"max_adverse_permille: {permille}", source)
+    out = re.sub(r"at most \d+ per thousand", f"at most {permille} per thousand", out)  # the row's statement says it too
     out = re.sub(r"(?m)^pack_version:.*$", f"pack_version: {version}", out)
     out = re.sub(r"(?m)^pack_id: (\S+)/[^/\s]+$", rf"pack_id: \1/{version}", out)
     return out

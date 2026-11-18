@@ -86,3 +86,31 @@ def test_a_second_server_on_the_same_home_is_refused(tools):
     tools.session()  # the first server holds the home
     with pytest.raises(RuntimeError, match="another Goose chat already runs"):
         tools.Session()
+
+
+def test_the_approval_gate_cannot_be_turned_off_on_a_real_rail(tools, monkeypatch):
+    monkeypatch.setenv("ARD_APPROVAL", "none")
+    for rail in ("lightning", "local"):
+        with pytest.raises(RuntimeError, match=f"ARD_APPROVAL=none is refused on the {rail} rail"):
+            tools.approval_gate(True, rail, "Pay")
+    tools.approval_gate(False, "fake", "Pay")  # the simulated rail may run without the dialog (the tests do)
+
+
+def test_a_seller_server_keeps_its_lock(tools, monkeypatch):
+    from types import SimpleNamespace
+
+    # A stand-in world: this module's own session already holds Alder's shelf.
+    books = [f"deal/d{i}" for i in range(tools.demo.DEALS_EACH)]
+    world = SimpleNamespace(nodes={"alder": SimpleNamespace(shelf=SimpleNamespace(books=lambda: books))}, close=lambda: None)
+    monkeypatch.setattr(tools.parties, "ProcessWorld", lambda home, roles: SimpleNamespace(open=lambda: world))
+    monkeypatch.setattr(tools, "ROLE", "alder")
+    monkeypatch.setattr(tools.parties, "ensure_stage", lambda home: None)
+    monkeypatch.setattr(tools.parties, "Seller", lambda w, role, card: w)
+    try:
+        assert tools.seller() is world
+        import gc
+        gc.collect()  # a dropped handle would be closed here, freeing the lock
+        with pytest.raises(RuntimeError, match="another Goose chat already runs the alder side"):
+            tools._lock("alder")
+    finally:
+        tools._seller, tools._seller_lock = None, None

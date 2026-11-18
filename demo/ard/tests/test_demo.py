@@ -49,6 +49,9 @@ def run(tmp_path_factory):
 def test_catalogue_lists_two_sellers_with_verified_commitments(run):
     assert {e["id"]: e["offer"]["price_msat"] for e in run.entries} == {"alder": 289, "kestrel": 268}
     assert all("commitment" in e and e["digest_matches"] for e in run.entries)
+    for e in run.entries:  # the signed commitment says what the demo's seller process does
+        c = e["commitment"]
+        assert c["human_gated"] is False and {"standard_history/1", "selection/1"} <= set(c["answers"]["derivations"])
 
 
 def test_every_evidence_check_passes_and_kestrels_card_is_the_sample(run):
@@ -129,3 +132,15 @@ def test_the_deal_cites_the_pick_and_mayas_book_holds_no_loop_admission(run):
     assert run.maya.notes(gn.ADMITTED) == []
     assessment = next(r for r, s in run.maya.notes("ard_assessment") if r.record_id == made["alder"].record_id)
     assert assessment.header.links_to("cites"), "the assessment cites the card answer it read"
+
+
+def test_no_buyer_side_book_holds_an_outcome_note(run):
+    """u597: the outcome note is the seller's own, never in a shared copy. Only Kestrel's own books carry it."""
+    import deals
+
+    def notes(node) -> int:
+        return sum(r.header.record_type == deals.OUTCOME_NOTE
+                   for b in node.shelf.books() for r in node.shelf.open(b).records())
+
+    assert notes(run.w.nodes["sample-buyer"]) == 0 and notes(run.maya) == 0 and notes(run.w.nodes["alder"]) == 0
+    assert notes(run.w.nodes["kestrel"]) == 2

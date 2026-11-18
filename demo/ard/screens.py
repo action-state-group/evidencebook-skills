@@ -20,6 +20,9 @@ BANNER_LOCAL = ("DEMO · sample history, run by the demo operator · real Lightn
 def banner(rail: str) -> str:
     return {"lightning": BANNER, "local": BANNER_LOCAL}.get(rail, BANNER_FAKE)
 PACK_NOTE = "demo copy, not published · placeholder thresholds, for this demo only"
+#: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
+OPERATOR_NOTE = ("filled in by the demo operator, not checked: the platform, the allow-list, the card's witness and "
+                 "controller; no witness ran")
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
 #: The demo adapter reads the seller's selection as verified although it carries no inclusion proofs; the screen says so
 #: (design note §3.6 item 6). The buyer skill's own rule is that an unproven selection is never a pass.
@@ -69,7 +72,7 @@ def decision_line(a: Assessment, ev: Evidence, max_permille: int, ceiling_msat_f
         within = f" ({a.tier}, under {msat(ceiling_msat_for_tier)})" if ceiling_msat_for_tier else ""
         return f"GO: {msat(a.price_msat)} is within this pack's limit for it{within}"
     if a.verdict == "LIMIT" and a.cap_msat is not None:
-        why = (f"; the pack lets at most {max_permille} of every 1,000 deals not hold (placeholder)"
+        why = (f"; the pack lets at most {max_permille} of every 1,000 deals not hold (demo setting)"
                if "band-history" in a.reasons else "")
         return f"LIMIT: this history supports deals under {msat(a.cap_msat)}; the {msat(a.price_msat)} price is over that{why}"
     return f"{a.verdict}: see the assessment rows"
@@ -78,7 +81,8 @@ def decision_line(a: Assessment, ev: Evidence, max_permille: int, ceiling_msat_f
 def limit_outcome(a: Assessment) -> str:
     """What a tap on a seller that is not GO shows: nothing opens and nothing is paid."""
     if a.verdict == "LIMIT" and a.cap_msat:
-        return (f"LIMIT: {msat(a.price_msat)} is over this seller's limit (deals under {msat(a.cap_msat)}); "
+        why = "; more of its deals did not hold than the pack allows" if "band-history" in a.reasons else ""
+        return (f"LIMIT: {msat(a.price_msat)} is over this seller's limit (deals under {msat(a.cap_msat)}){why}; "
                 "no deal opens and nothing is paid")
     return f"{a.verdict}: no deal opens and nothing is paid"
 

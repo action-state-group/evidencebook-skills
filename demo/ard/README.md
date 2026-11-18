@@ -33,15 +33,15 @@ edit). All thresholds are placeholders for this demo only.
 
 ## Run sheet
 
-Needs Python 3.10+, an evidencebook checkout at the commit the run sheet pins (its `python/` package
-installed, and the checkout itself for the Goose reference and the x-deal-v0 checker), and a
-`capsule-engine` binary. The skills, the pack and its compiler are this repository's.
+Needs Python 3.10+, an evidencebook checkout at commit 2c1cc90 (its `python/` package installed, and
+the checkout itself for the Goose reference and the x-deal-v0 checker), and a `capsule-engine` binary
+built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0"
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
+python -m venv .venv
+.venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0"
 cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money

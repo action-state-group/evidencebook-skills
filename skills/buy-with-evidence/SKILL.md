@@ -64,7 +64,8 @@ shown, never scored.
   your question.
 - If a step answers REFUSED, say so in one sentence and do not retry it on your own. If the person
   asks again, start again from your question before paying.
-- Never write or rely on a demo's own "outcome note"; it is not the person's evidence.
+- Never write the outcome note. A card's did-not-hold count may come from the seller's own note: say so,
+  and never call it confirmed.
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent
   listing, no tool search except to load your own tools.
 
@@ -92,10 +93,12 @@ before paying is its own approval dialog.
 - The demo's tools do not report whether a commitment is witnessed: the demo runs no witness, so
   do not say either way.
 - The demo gives GO or LIMIT and has no ASK step. On the demo, LIMIT and NO end with nothing paid,
-  and a pick the verdict does not allow opens no deal.
-- The demo's assessment fills some facts in for the demo operator (the platform, the allow-list)
-  and counts the seller's selection although it carries no inclusion proofs; the screen says so.
-  Do not present those as checked.
+  no smaller order is offered, and a pick the verdict does not allow opens no deal.
+- The demo's "did not hold" counts come from the seller's own note (a temporary record): say so, and
+  never present them as confirmed by the buyer or a ruling.
+- The demo's assessment fills some facts in for the demo operator (the platform, the allow-list,
+  the card's witness and controller; no witness runs) and counts the seller's selection although it
+  carries no inclusion proofs; the screen says so. Do not present those as checked.
 - `ard_pick` seals the pick. Never call `ard_pay` in the same message as `ard_pick`.
 - Before `ard_pay`, stop and ask the person to confirm in one sentence that names the seller and
   the amount and says whether real money moves (the recipe says which rail this run uses).

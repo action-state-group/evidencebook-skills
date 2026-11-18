@@ -96,7 +96,10 @@ class World:
     def advertise(self, name: str) -> dict:
         """The seller's signed commitment: it names the mailbox Maya asks on."""
         n = self.nodes[name]
-        settings = cm.Settings(relays=(RELAY_NAME,), endpoint="nostr:mailbox", answers_within="PT1H", poll_interval=1)
+        # What the demo's seller process does: it answers the card, the full history and the selection
+        # (responder.py) on its own, with no person approving each answer.
+        settings = cm.Settings(relays=(RELAY_NAME,), endpoint="nostr:mailbox", answers_within="PT1H", poll_interval=1,
+                               derivations=("history_card/1", "standard_history/1", "selection/1"), human_gated=False)
         doc, _ = cm.build(n, settings=settings)
         self.commitments[name] = doc
         return doc

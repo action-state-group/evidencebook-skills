@@ -57,21 +57,30 @@ def skill_text(name: str) -> str:
     return text.strip(), (run.stdout.strip() if run.returncode == 0 else "")
 
 
+def registry_url() -> str:
+    """The stand-in registry's search URL, the one parties.REGISTRY_URL serves (the same ARD_STAGE_PORT)."""
+    return f"http://127.0.0.1:{os.environ.get('ARD_STAGE_PORT', '47481')}/search"
+
+
 def instructions(role: str, rail: str) -> str:
     """The recipe's instructions: the party's facts, this run's rail, and the skill it follows."""
     p = PARTIES[role]
     body, commit = skill_text(p["skill"])
+    facts = p["facts"]
+    if p["skill"] == "buy-with-evidence":  # the skill's required input: it has no default registry
+        facts += f" The ARD registry to search is {registry_url()} (a demo stand-in run by the demo operator); referrals stay off."
     pays = ("This run pays over real Lightning: real money moves." if rail in ("lightning", "local")
             else "This run's payment rail is simulated: no money moves.")
     at = f" at evidencebook-skills {commit}" if commit else ""
-    return f"{p['facts']}\nWrite in English only. {pays}\nFollow the {p['skill']} skill below{at}.\n\n{body}\n"
+    return f"{facts}\nWrite in English only. {pays}\nFollow the {p['skill']} skill below{at}.\n\n{body}\n"
 
 
 def link(role: str, rail: str) -> str:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", "CAPSULE_WITNESS=off",
            f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}", f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}"]
-    if os.environ.get("ARD_HOME"):
-        env.append(f"ARD_HOME={os.environ['ARD_HOME']}")
+    for var in ("ARD_HOME", "ARD_STAGE_PORT"):
+        if os.environ.get(var):
+            env.append(f"{var}={os.environ[var]}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):

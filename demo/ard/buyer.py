@@ -133,7 +133,7 @@ def gather(world: World, maya: gn.Node, entry: dict, anchor: str, wait: float = 
         return ev
     commitment = entry["commitment"]
     ev.ok("commitment", f"signature verifies under {commitment['key_id'][:8]}…")
-    ev.ok("catalogue digest", "matches the served commitment" if entry["digest_matches"] else "differs (a carrier fact only)")
+    ev.ok("commitment digest", "matches the seller's entry")
     where = mx.route(commitment)
 
     # 1. history_card/1 over checkpoints, through the Goose reference's own ask and poll.

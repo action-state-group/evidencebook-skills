@@ -61,6 +61,11 @@ class Run:
         self.evidence: dict[str, buyer.Evidence] = {}
         self.info: dict[str, dict] = {}
 
+    @property
+    def verified(self) -> list[dict]:
+        """The sellers whose entry and commitment passed discovery: only these are asked and assessed."""
+        return [e for e in self.entries if "commitment" in e]
+
     # -- 1-2 ask and discover -------------------------------------------------------------
 
     def discover(self) -> None:
@@ -82,6 +87,9 @@ class Run:
     def collect(self) -> None:
         rule("3  Evidence: Maya's library asks each seller, and checks each signed answer")
         for e in self.entries:
+            if "commitment" not in e:  # shown as failed at discovery; never asked or assessed
+                print(f"\n{e['name']}: not asked, its commitment failed ({e.get('problem', 'no commitment')})")
+        for e in self.verified:
             node = self.w.nodes[e["id"]]
             anchor = node.cadence.standard_history_anchor(0)
             self.info[e["id"]] = {"first_checkpoint_time": anchor.first_checkpoint_time, "anchor_time": anchor.anchor_time}
@@ -97,7 +105,7 @@ class Run:
 
     def assess(self, p: packs.Pack) -> dict[str, buyer.Assessment]:
         out = {}
-        for e in self.entries:
+        for e in self.verified:
             ev = self.evidence[e["id"]]
             if ev.card is None:
                 raise SystemExit(f"{e['name']}: no verified card, nothing to assess")
@@ -112,14 +120,15 @@ class Run:
         rule(heading)
         print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
         print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})")
-        print(f"({screens.SELECTION_NOTE})\n")
+        print(f"({screens.SELECTION_NOTE})")
+        print(f"({screens.OPERATOR_NOTE})\n")
         return self.assess(p)
 
     # -- 4b the on-stage edit ---------------------------------------------------------------
 
     def edit(self, p: packs.Pack, permille: int | None) -> packs.Pack:
         rule("4b  The presenter tightens the rule (placeholder thresholds, for this demo only)")
-        print(f"The pack allows at most {p.max_adverse_permille} in every 1,000 deals not holding (placeholder), in pack {p.version}.")
+        print(f"The pack allows at most {p.max_adverse_permille} in every 1,000 deals not holding (demo setting), in pack {p.version}.")
         if permille is None:
             raw = input(f"New value [{DEFAULT_PERMILLE}]: ").strip() if not self.auto else ""
             permille = int(raw or DEFAULT_PERMILLE)
@@ -136,7 +145,7 @@ class Run:
 
     def options(self, p: packs.Pack, made: dict[str, buyer.Assessment]) -> list[dict]:
         opts = []
-        for e in self.entries:
+        for e in self.verified:
             a, ev = made[e["id"]], self.evidence[e["id"]]
             ceiling = p.ceiling_msat(a.tier) if a.tier else None
             opts.append({"id": e["id"], "name": e["name"], "price": "Listed price " + screens.msat(a.price_msat), "verdict": a.verdict,

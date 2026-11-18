@@ -40,7 +40,8 @@ sale in those records.
 ## Rules
 
 - Speak for this seller only, from its own records. Never speak for the buyer's records.
-- Never write or rely on a demo's own "outcome note" in anything shared with the buyer.
+- Never put the outcome note record in anything shared with the buyer. A count from it travels only with
+  its label.
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent
   listing, no tool search except to load your own tools.
 
@@ -66,3 +67,5 @@ sale in those records.
   listing in advance, without a yes from the seller, and the demo seller shares by default with no
   setup notice or opt-out.
 - The demo's tools do not report whether a commitment is witnessed; do not say either way.
+- On the demo, a seller's "did not hold" deals are counted from its own note (a temporary record), set
+  up by the demo operator: say so, and never present them as confirmed by the buyer or a ruling.

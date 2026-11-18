@@ -134,6 +134,7 @@ def approve_payment(summary: str) -> bool:
 
 _session: Session | None = None
 _seller: parties.Seller | None = None
+_seller_lock: object | None = None
 
 
 def session() -> Session:
@@ -147,7 +148,8 @@ def seller() -> parties.Seller:
     global _seller
     if _seller is None:
         packs.engine()
-        _lock(ROLE)
+        global _seller_lock
+        _seller_lock = _lock(ROLE)  # kept for the process's life: a dropped handle closes and frees the lock
         world = parties.ProcessWorld(_home(), (ROLE,)).open()
         n = world.nodes[ROLE]
         if sum(1 for b in n.shelf.books() if b.startswith("deal/") and b.count("/") == 1) < demo.DEALS_EACH:
@@ -208,7 +210,7 @@ def ard_show_history() -> None:
         raise RuntimeError("call ard_find_sellers first")
     s.run.collect()
     print("\nHistory cards")
-    for e in s.run.entries:
+    for e in s.run.verified:
         ev = s.run.evidence[e["id"]]
         print(f"  {e['name']:18} {screens.card_line(ev, ev.sample_card)}")
 
@@ -253,6 +255,18 @@ else:
             "or Cancel: do not retry or call it again while it waits. Refused unless ard_pick sealed this seller.")
 
 
+def approval_gate(real: bool, rail_name: str, summary: str) -> None:
+    """Return only when this payment may go ahead: the presenter clicked Pay, or the gate is off on a simulated rail."""
+    if os.environ.get("ARD_APPROVAL") == "none":
+        if real:  # the gate goes off only where no money moves: a leftover test setting never pays for real
+            raise RuntimeError(f"ARD_APPROVAL=none is refused on the {rail_name} rail, which moves real money: "
+                               "unset it so the presenter approves the payment. Nothing was paid.")
+        print("(approval gate off: ARD_APPROVAL=none, simulated rail)")
+    elif not approve_payment(summary):
+        raise RuntimeError("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
+                           "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
+
+
 @_tool("maya", description=_PAY)
 def ard_pay(seller: str) -> None:
     """Step 6-7: open the deal for the picked seller and pay it. Refused unless ard_pick sealed this seller."""
@@ -271,11 +285,7 @@ def ard_pay(seller: str) -> None:
         summary = (f"Pay {SELLERS[key]['label']} {screens.msat(s.assessed[key].price_msat)} on the "
                    + ("REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet."
                       if real else "simulated rail: no money moves."))
-        if os.environ.get("ARD_APPROVAL") == "none":
-            print("(approval gate off: ARD_APPROVAL=none)")
-        elif not approve_payment(summary):
-            raise RuntimeError("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
-                               "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
+        approval_gate(real, rail_name, summary)
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     if ROLE == "all":
         s.run.pay_deal(s.assessed, key, s.picked[key])
