@@ -36,7 +36,7 @@ PICKED = "ard_pick"
 CARD_RECEIVED = "ard_card_received"
 #: Facts the demo operator supplies (the trust roots of the demo pack name them): the platform and
 #: the one party that is witness and controller. They are the operator's, not a registry's.
-OPERATOR_FACTS = {"witness": "demo-witness", "controller": "demo-controller"}
+OPERATOR_FACTS = {"witness": "operator-witness", "controller": "operator-controller"}
 
 
 @dataclass
@@ -193,7 +193,7 @@ def gather(world: World, maya: gn.Node, entry: dict, anchor: str, wait: float = 
             ev.unanswered = body["unanswered_disputes"]
             ev.selection_ok = True
             ev.stated("selection", f"signed answer bound to this request; the seller states {len(body['unanswered_disputes'])} "
-                                   "unanswered disputes (demo form: no inclusion proofs, not checked against its records)")
+                                   "unanswered disputes (no inclusion proofs; not checked against its records)")
         except Exception as exc:
             ev.fail("selection", str(exc))
     return ev

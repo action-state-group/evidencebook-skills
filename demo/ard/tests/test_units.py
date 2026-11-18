@@ -51,12 +51,13 @@ def test_screen_lines_say_assessment_and_never_score_or_blame():
     go = screens.decision_line(assessment("GO", "T2", 289), card(24, 0), 100, 1000)
     limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(22, 2), 50)
     assert go == "GO: 289 msat is within this pack's limit for it (T2, under 1,000 msat)"
-    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold (demo setting)"
+    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is over that; the pack lets at most 50 of every 1,000 deals not hold"
+    assert "demo" not in limit
     text = " ".join([go, limit, screens.card_line(card(22, 2), True), screens.card_line(card(24, 0), False), screens.BANNER,
                     screens.ASSESSMENT_NOTE, screens.PACK_NOTE]).lower()
     for word in ("lost", "failed", "dishonest", "usd", "$"):
         assert word not in text
-    assert "2 of 24 deals did not hold (sample card, written for this demo; not recomputed from records)" in text
+    assert "2 of 24 deals did not hold (sample card, written by hand; not recomputed from records)" in text
     assert "did not hold counted from the seller's own note" in screens.card_line(card(22, 2), False)
     # no "sample history, run by the demo operator" tag on a count (Ethan, 2026-11-17); a clean one needs no label
     assert screens.card_line(card(24, 0), False) == "0 of 24 deals did not hold"
@@ -192,7 +193,7 @@ def test_the_demo_pack_is_this_repositorys():
 
 
 def test_the_assessment_screen_says_the_selection_has_no_inclusion_proofs():
-    assert "no inclusion proofs" in screens.SELECTION_NOTE and "demo pack counts it" in screens.SELECTION_NOTE
+    assert "no inclusion proofs" in screens.SELECTION_NOTE and "this pack counts it" in screens.SELECTION_NOTE
 
 
 def test_a_seller_whose_commitment_failed_is_not_asked_or_assessed(capsys):
@@ -212,3 +213,11 @@ def test_the_script_demos_popup_carries_no_banner():
     page = (Path(__file__).resolve().parents[1] / "popup.html").read_text()
     assert 'id="banner"' not in page and "s.banner" not in page
     assert '"banner"' not in (Path(__file__).resolve().parents[1] / "demo.py").read_text()
+
+
+def test_the_screen_notes_name_no_demo_and_keep_their_facts():
+    # Ethan, 2026-11-18: no "demo" on screen; the facts the labels carried stay
+    for note in (screens.PACK_NOTE, screens.OPERATOR_NOTE, screens.SELECTION_NOTE, screens.ASSESSMENT_NOTE, screens.CLAIMS_NOTE):
+        assert "demo" not in note.lower(), note
+    assert "placeholder thresholds" in screens.PACK_NOTE and "not published" in screens.PACK_NOTE
+    assert "not checked" in screens.OPERATOR_NOTE and "no inclusion proofs" in screens.SELECTION_NOTE

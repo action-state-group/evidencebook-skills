@@ -100,7 +100,7 @@ def stage_up() -> bool:
                 return True
     except Exception:
         pass
-    raise RuntimeError(f"port {HTTP_PORT} is taken by something that is not this demo's stage (an earlier demo's "
+    raise RuntimeError(f"port {HTTP_PORT} is taken by something that is not this run's stage.py (an earlier "
                        "stage.py, say): stop it, or set ARD_STAGE_PORT to a free port")
 
 
@@ -293,7 +293,7 @@ class Seller:
         if terms.price_minor != listed:
             raise gn.Refused(f"asked {terms.price_minor} msat, not the listed {listed}: no deal")
         self.say(f"a buyer asks to buy {terms.item} at {screens.msat(terms.price_minor)}: accepted for this deal")
-        deals.admit(node, maya, reason="buyer who picked this seller (demo)")
+        deals.admit(node, maya, reason="buyer who picked this seller")
         verified = node.verify_peer_half(m1)
         schain = node.new_deal(deal_id, dr.ROLE_SELLER, verified["key_id"], terms)
         self.deal_ids.append(deal_id)
