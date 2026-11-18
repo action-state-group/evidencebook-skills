@@ -103,24 +103,35 @@ def link(role: str, rail: str) -> str:
 #: Goose Desktop 1.59.2 ignores a window position or size set from outside, and every window is titled "Goose", so the
 #: windows are tiled the way a person does it: the Window, Move & Resize, Left & Quarters menu item, which puts the
 #: front window (Maya's, opened last) on the left half and the others on the right quarters.
-TILE = ["osascript", "-e", 'tell application "Goose" to activate', "-e",
+#: Both lines go to System Events, so macOS asks for one permission only (no second "control Goose" prompt).
+TILE = ["osascript", "-e", 'tell application "System Events" to set frontmost of process "Goose" to true', "-e",
         'tell application "System Events" to tell process "Goose" to click menu item "Left & Quarters" of menu '
         '"Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1']
 
-TILE_FAILED = ("could not tile the windows ({why}). To let this script do it next time, turn on your terminal app in "
-               "System Settings, Privacy & Security, Accessibility, and allow it to control System Events when macOS asks. "
-               "For now, tile by hand: click Maya's window, then Window, Move & Resize, Left & Quarters.")
+#: What osascript says when the terminal may not script System Events or use Accessibility yet.
+_NOT_ALLOWED = ("-1719", "-1743", "-25211", "not allowed", "assistive access")
+GRANT = ("To let this script do it next time, turn on your terminal app in System Settings, Privacy & Security, "
+         "Accessibility, and allow it to control System Events when macOS asks. ")
+MANUAL = "For now, tile by hand: click Maya's window, then Window, Move & Resize, Left & Quarters."
 
 
 def tile() -> str | None:
-    """Tile the three windows with Maya in front; None when it worked, else the one line to print. Never raises."""
+    """Tile the three windows with Maya in front; None when it worked, else the one line to print. Never raises.
+    The permission advice comes only when the cause is a permission (or a timeout, which a pending prompt causes)."""
+    grant = True
     try:
         run = subprocess.run(TILE, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        why = str(e)
     except (OSError, subprocess.SubprocessError) as e:
-        return TILE_FAILED.format(why=str(e) or type(e).__name__)
-    if run.returncode == 0:
-        return None
-    return TILE_FAILED.format(why=run.stderr.strip() or f"osascript exit {run.returncode}")
+        why, grant = str(e) or type(e).__name__, False
+    else:
+        if run.returncode == 0:
+            return None
+        why = run.stderr.strip() or f"osascript exit {run.returncode}"
+        grant = any(mark in why for mark in _NOT_ALLOWED)
+    why = " ".join(why.split())  # one line, whatever osascript printed
+    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL
 
 
 def main(argv: list[str] | None = None) -> int:

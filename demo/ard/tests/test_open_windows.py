@@ -47,22 +47,25 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert [c[1] for c in calls[:3]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
     assert calls[3] == ow.TILE and len(calls) == 4
     assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
+    assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
     assert capsys.readouterr().err == ""
 
 
-@pytest.mark.parametrize("code,stderr,exc,why", [
-    (1, "execution error: osascript is not allowed assistive access. (-1719)", None, "not allowed assistive access"),
-    (1, "", None, "osascript exit 1"),
-    (0, "", FileNotFoundError("osascript"), "osascript"),
-    (0, "", subprocess.TimeoutExpired("osascript", 30), "timed out"),
+@pytest.mark.parametrize("code,stderr,exc,why,grant", [
+    (1, "execution error: osascript is not allowed assistive access. (-1719)", None, "not allowed assistive access", True),
+    (1, "execution error: Not authorized to send Apple events to System Events. (-1743)", None, "(-1743)", True),
+    (0, "", subprocess.TimeoutExpired("osascript", 30), "timed out", True),  # a pending permission prompt
+    (1, "execution error: Can't get menu item \"Left & Quarters\".\n(-1728)", None, "Can't get menu item", False),
+    (1, "", None, "osascript exit 1", False),
+    (0, "", FileNotFoundError("osascript"), "osascript", False),
 ])
-def test_a_failed_tile_prints_the_grant_and_the_manual_fallback_and_the_open_still_succeeds(calls, capsys, code, stderr, exc, why):
+def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_still_succeeds(calls, capsys, code, stderr, exc, why, grant):
     calls.result.update(code=code, stderr=stderr, **{"raise": exc})
     assert ow.main(["--rail", "fake"]) == 0
     err = capsys.readouterr().err.strip().splitlines()
-    assert len(err) == 1 and why in err[0]
-    assert "System Settings, Privacy & Security, Accessibility" in err[0]
-    assert "click Maya's window, then Window, Move & Resize, Left & Quarters" in err[0]
+    assert len(err) == 1 and why in err[0]  # one line, even when osascript printed two
+    assert ("System Settings, Privacy & Security, Accessibility" in err[0]) is grant  # the grant only for a permission
+    assert err[0].endswith("click Maya's window, then Window, Move & Resize, Left & Quarters.")
 
 
 @pytest.mark.parametrize("args", [["--print"], ["--only", "maya"]])
