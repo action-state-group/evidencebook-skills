@@ -262,7 +262,7 @@ def approval_gate(real: bool, rail_name: str, summary: str) -> None:
         if real:  # the gate goes off only where no money moves: a leftover test setting never pays for real
             raise RuntimeError(f"ARD_APPROVAL=none is refused on the {rail_name} rail, which moves real money: "
                                "unset it so the presenter approves the payment. Nothing was paid.")
-        print("(approval gate off: ARD_APPROVAL=none, simulated rail)")
+        print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
     elif not approve_payment(summary):
         raise RuntimeError("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
                            "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
