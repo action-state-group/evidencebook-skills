@@ -162,6 +162,16 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
 
 
 @pages_only
+def test_a_simulated_deal_stays_simulated_when_the_window_reopens_on_a_real_rail(seeded):
+    """Money moved or not is the deal's own sealed rail, not the rail the window runs on now (Codex, #173)."""
+    world, deal_id = seeded
+    assert receipt.sealed_real(world.nodes["maya"], deal_id) is False
+    page = receipt.receipt_page(world.nodes["maya"], "maya", "Maya", deal_id, rail="lightning", seller=False).read_text()
+    assert html.escape(screens.BANNER_FAKE) in page and html.escape(screens.BANNER) not in page
+    assert "Simulated payment of 289 msat: no money moved" in page and "Paid 289" not in page
+
+
+@pages_only
 def test_a_copy_that_does_not_verify_draws_no_page(seeded, tmp_path, monkeypatch):
     world, deal_id = seeded
     bad = tmp_path / "bundle.json"

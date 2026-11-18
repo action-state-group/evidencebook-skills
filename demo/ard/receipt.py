@@ -254,10 +254,21 @@ def label(page: str, notes: list[str]) -> str:
     return page.replace('<body class="cv-kit">', f'<body class="cv-kit"><div class="ard-demo" role="note">{text}</div>', 1)
 
 
+def sealed_real(node: gn.Node, deal_id: str) -> bool:
+    """Whether the deal was paid on a real rail, read from its own sealed terms (``pay.Rail.SEALED``): a deal
+    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173)."""
+    first = json.loads(node.deal_payloads(deal_id)[0])["body"]
+    return first["recourse"]["rail"] != "simulated"
+
+
 def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: str, seller: bool) -> Path:
-    """Write the party's receipt page for a closed deal, and return its path. ``rail`` is the run's rail
-    (``ARD_RAIL``): anything but ``lightning`` or ``local`` is simulated."""
-    real = rail in ("lightning", "local")
+    """Write the party's receipt page for a closed deal, and return its path. Whether money moved is the
+    deal's own sealed rail, not this run's ``rail`` (``ARD_RAIL``), which only names the banner's real rail."""
+    real = sealed_real(node, deal_id)
+    if not real:
+        rail = "fake"
+    elif rail not in ("lightning", "local"):
+        rail = "lightning"
     bundle = keep_copy(node, deal_id, seller=seller, real=real)
     bundle_path = pages.home() / "pages" / f"{name}-receipt-{deal_id}.bundle.json"
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
