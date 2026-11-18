@@ -33,7 +33,7 @@ edit). All thresholds are placeholders for this demo only.
 
 ## Run sheet
 
-Needs Python 3.10+, an evidencebook checkout at commit 2c1cc90 (its `python/` package installed, and
+Needs Python 3.10+, an evidencebook checkout at commit 733aed4 (its `python/` package installed, and
 the checkout itself for the Goose reference and the x-deal-v0 checker), and a `capsule-engine` binary
 built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
 

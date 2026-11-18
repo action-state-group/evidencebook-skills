@@ -40,7 +40,7 @@ jobs:
     # evidencebook-deal commit for the receipt pages' verify (the run sheet's pins).
     runs-on: ubuntu-latest
     env:
-      EVIDENCEBOOK_REF: 2c1cc9083b1cc0c263c3399fce09d1d8f409e2eb
+      EVIDENCEBOOK_REF: 733aed4055e1e53a8d33e16e8c2ce6408624605d  # #514: the Goose reference seals demo: true
       CAPSULE_ENGINE_TAG: go/v0.4.0
       # evidencebook-deal#220: cll/go v0.4.0, so verify --bundle accepts the Goose reference's checkpoints.
       EVIDENCEBOOK_DEAL_REF: 33e72e1d8bc4cf03693ac96dd6e8060473163a22

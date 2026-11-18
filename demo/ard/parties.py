@@ -357,9 +357,10 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
     simulated = "" if real else " (simulated rail: no money moved)"
     # The terms name the rail the deal was agreed on; on a simulated run say so on that line too, so the receipt
     # never reads as a real Lightning payment (rehearsal, 2026-11-17).
+    rail = first["recourse"]["rail"]
+    on_rail = ": no money moves" if rail == "simulated" else "" if real else "; this run's rail is simulated: no money moves"
     lines = [f"{label}: its receipt for {deal_id}, from its own sealed deal book ({len(payloads)} records)",
-             f"  terms: {t['item']} at {t['price_minor']} msat, rail {first['recourse']['rail']}"
-             + ("" if real else "; this run's rail is simulated: no money moves")]
+             f"  terms: {t['item']} at {t['price_minor']} msat, rail {rail}{on_rail}"]
     if seller and real:
         lines.append("  " + screens.seller_credit_note(t["price_minor"]))
     for d in payloads:
