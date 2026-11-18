@@ -277,6 +277,7 @@ def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: st
     notes = [screens.banner(rail), f"{party}: its own receipt for {deal_id}, drawn from its own sealed records"]
     if not real:
         notes.append("simulated rail: no money moved in this deal")
-    if seller:  # capsule-viewer's seller view shows no payment line; this is the seller's own, from its records
-        notes.append(seller_payment([json.loads(p) for p in node.deal_payloads(deal_id)], real))
+    # No payment line of ours on a seller's page: capsule-viewer's seller view says "Payment: Not recorded in this
+    # copy", which is true (no deal record kind carries a payment the seller received), and a second line from the
+    # seller's own outcome record would contradict it on the same page (Sherlock2, #173). The buyer's page shows the payment.
     return pages.write(name, "receipt", label(page, notes))

@@ -154,8 +154,8 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     assert html.escape(ITEM) in page and "289 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page
-    if seller:  # the seller's own payment line, from its own outcome record
-        assert "as this seller&#x27;s own outcome record states it: received (simulated rail: no money moved)" in page
+    if seller:  # one payment line only, the viewer's: the copy records no payment the seller received
+        assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
     else:
         assert "Simulated payment of 289 msat: no money moved" in page
     assert receipt._CSS in page and page.count("&#x27;sha256-") == 2  # the banner's style, allowed by its hash
