@@ -45,7 +45,7 @@ def _lsof(*args: str) -> list[tuple[int, str, str]]:
     run = subprocess.run(["lsof", "-F", "pfn", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if run.returncode not in (0, 1) or run.stderr.strip():  # any complaint means the scan may be partial
         raise ResetRefused(f"lsof could not finish ({run.stderr.strip() or run.returncode}). Run reset again; if it keeps failing, "
-                           "stop the demo's processes yourself.")
+                           "stop stage.py and desktop_server.py yourself.")
     out, pid, fd = [], None, ""
     for line in run.stdout.splitlines():
         tag, value = line[:1], line[1:]
@@ -247,23 +247,23 @@ def reset(home: Path, say=print) -> int:
     try:
         if ours:
             _stop(home, ours)
-            say("stopped the demo's own processes on this home: " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
+            say("stopped stage.py and desktop_server.py on this home: " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
         again, others, inside = holders(home)  # again: nothing may have taken the home meanwhile
         if again:
-            raise ResetRefused(f"the demo's processes {sorted(again)} did not stop. Stop them (kill -9 <pid>), then reset again.")
+            raise ResetRefused(f"stage.py or desktop_server.py {sorted(again)} did not stop. Stop them (kill -9 <pid>), then reset again.")
         _refuse_on(others, inside, home)
         listening = _listeners()
         if listening:  # a stage from before stages held a lock (or another program) still on the demo's ports
             listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) on port {port}" for pid, port in sorted(listening.items()))
-            raise ResetRefused(f"something still listens on the demo's ports: {listed}. An older stage.py? Stop it (kill <pid>), "
+            raise ResetRefused(f"something still listens on the stage's ports: {listed}. An older stage.py? Stop it (kill <pid>), "
                                "then reset again.")
     except ResetRefused as e:
-        done = "The demo's own processes were stopped; the home was kept." if ours else "Nothing was changed."
+        done = "stage.py and desktop_server.py on this home were stopped; the home was kept." if ours else "Nothing was changed."
         raise ResetRefused(f"{e} {done}") from None
     if home.exists():
         shutil.rmtree(home)
     say(f"removed {home}")
     gone = clear_recipe_trust()
-    say(f"cleared Goose's trust in all {gone} recipes it had trusted, not only the demo's three (each asks Trust and Execute "
+    say(f"cleared Goose's trust in all {gone} recipes it had trusted, not only the three ARD recipes (each asks Trust and Execute "
         "again), and the saved Maya recipe")
     return 0

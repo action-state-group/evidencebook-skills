@@ -156,8 +156,8 @@ def test_stops_this_homes_stage_and_server_leaves_a_prefix_home_alone_and_clears
     assert not home.exists() and sibling.exists()
     assert list(hashes.glob("*.hash")) == [] and (hashes.parent / "settings.json").exists()  # only the trust files
     assert not saved.exists() and (saved.parent / "other.yaml").exists()
-    assert any("stopped the demo's own processes" in s for s in said)
-    assert any("all 3 recipes" in s and "not only the demo's three" in s for s in said)
+    assert any("stopped stage.py and desktop_server.py on this home" in s for s in said)
+    assert any("all 3 recipes" in s and "not only the three ARD recipes" in s for s in said)
 
 
 @needs_lsof
