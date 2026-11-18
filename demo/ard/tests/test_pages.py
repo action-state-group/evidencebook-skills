@@ -171,3 +171,18 @@ def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch, seeded_home
     if NODE:
         out = draw(view)
         assert f"{DEALS_EACH} deals, newest first" in out and pages.OWN_NOTE in out
+
+
+@engine_only
+def test_a_home_seeded_at_another_price_is_refused_not_reused(tmp_path, monkeypatch, seeded_home):
+    # A home seeded before a price change keeps sample deals in the old band, so the seller would assess wrong.
+    import seed
+    from world import SELLERS, World
+
+    changed = {k: dict(v) for k, v in SELLERS.items()}
+    changed["alder"]["price_msat"] = SELLERS["alder"]["price_msat"] + 1000
+    home = seeded_home(tmp_path / "home")  # seeded at today's prices first: the fixture itself calls seed.seed
+    monkeypatch.setattr(seed, "SELLERS", changed)
+    with World(home) as world:
+        with pytest.raises(SystemExit, match="alder's sample history was made at 2,000 msat, but alder now sells at 3,000 msat: run `demo.py reset`"):
+            seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")

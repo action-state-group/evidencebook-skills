@@ -10,7 +10,7 @@ tool returns the text that run prints, so the screen says what the script demo s
     ard_find_sellers   ->  Maya's ask and ARD discovery
     ard_show_history   ->  each seller's signed answers, checked, and the History cards
     ard_assess         ->  the assessment (the on-stage edit is its ``max_adverse_permille``)
-    ard_pick           ->  the pick (a seller over its limit ends here: no deal opens, nothing is paid)
+    ard_pick           ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
     ard_pay            ->  the deal and the payment; the one tool that moves money (the presenter approves in a dialog)
 ``alder`` / ``kestrel``     a seller's window, its own node and keys:
     ard_seller_activity  ->  what its agent did: requests answered, the deal, the sale, its card
@@ -247,7 +247,7 @@ def ard_pick(seller: str) -> None:
 
 
 if os.environ.get("ARD_RAIL") in ("lightning", "local"):
-    _PAY = ("Step 6-7: open the deal for the picked seller and pay it over the real Lightning rail (289 msat for Alder). "
+    _PAY = ("Step 6-7: open the deal for the picked seller and pay it over the real Lightning rail (2,000 msat for Alder). "
             "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until "
             "the presenter clicks Pay or Cancel: do not retry or call it again while it waits, and tell the presenter to answer the "
             "dialog. Refused unless ard_pick sealed this seller.")

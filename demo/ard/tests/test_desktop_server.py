@@ -62,7 +62,7 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
     reask = tools.ard_pay("alder")
     assert reask.startswith("REFUSED: the presenter did not approve the last payment to Alder Print Co.")
-    assert 'The question is: "Pay Alder Print Co. 289 msat on the simulated rail, where no money moves?"' in reask
+    assert 'The question is: "Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"' in reask
     assert "If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now." in reask
     assert "call ard_pay again only after she says yes" in reask and tools._session.run.rail.paid == []
     # A second refusal sets it again: each Cancel is followed by the question before the next dialog.
@@ -73,16 +73,16 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     asked: list[str] = []
     monkeypatch.setattr(tools, "approve_payment", lambda summary: asked.append(summary) or True)
     paid = tools.ard_pay("alder")
-    assert asked == ["Pay Alder Print Co. 289 msat on the simulated rail: no money moves."]
-    assert "invoice 289 msat" in paid and "Alder Print Co.'s card now counts 25 deals" in paid
-    assert tools._session.run.rail.paid == [289]
+    assert asked == ["Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."]
+    assert "invoice 2,000 msat" in paid and "Alder Print Co.'s card now counts 25 deals" in paid
+    assert tools._session.run.rail.paid == [2000]
     assert "REFUSED: Alder Print Co. was already paid" in tools.ard_pay("alder")
     # An attempt that the rail did not confirm is not "paid": the next try says so and sends the presenter to the wallet.
     sess = tools._session
     sess.paid.discard("alder")
     unconfirmed = tools.ard_pay("alder")
     assert "already attempted in this run and is not confirmed" in unconfirmed and "was already paid" not in unconfirmed
-    assert tools._session.run.rail.paid == [289]
+    assert tools._session.run.rail.paid == [2000]
     # Maya's own History card as a page: written under the demo home, not opened in a test.
     monkeypatch.setenv("ARD_OPEN_PAGES", "0")
     page = tools.ard_open_card_page()

@@ -44,7 +44,7 @@ def _skill_body(name: str) -> str:
 
 def test_maya_follows_the_buyer_skill_with_her_facts_and_the_rail():
     text = _recipe(ow.link("maya", "fake"))["instructions"]
-    assert text.startswith("You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 300 msat.")
+    assert text.startswith("You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 3,000 msat.")
     assert "no money moves" in text and "Follow the buy-with-evidence skill below" in text
     assert _skill_body("buy-with-evidence") in text and "name: buy-with-evidence" not in text
 
@@ -104,3 +104,9 @@ def test_what_each_window_shows_names_no_demo():
             assert "demo" not in own.lower(), own
     maya = _recipe(ow.link("maya", "fake"))["instructions"]
     assert "(a local stand-in registry, run by the operator)" in maya  # u545: the registry is named a stand-in
+
+
+def test_mayas_first_message_searches_nothing():
+    # The presenter types the ask; a first message that searched could run before the sellers publish their entries.
+    prompt = _recipe(ow.link("maya", "fake"))["prompt"]
+    assert "I am Maya." in prompt and "Do not search or call any tool until I ask" in prompt and "Find sellers" not in prompt

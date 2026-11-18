@@ -17,7 +17,7 @@ import pay
 import receipt
 import screens
 
-ASK = "Maya: I need 200 conference badges by Friday, under 300 msat."
+ASK = "Maya: I need 200 conference badges by Friday, under 3,000 msat."
 
 
 def _viewer() -> bool:
@@ -156,13 +156,13 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     for banner in (screens.BANNER_FAKE, screens.BANNER, screens.BANNER_LOCAL):  # no banner of ours (Ethan, 2026-11-17)
         assert html.escape(banner) not in page
     assert "ard-demo" not in page and ">DEMO<" not in page  # nothing marks the page: no banner, no demo flag to badge
-    assert html.escape(ITEM) in page and "289 msat" in page
+    assert html.escape(ITEM) in page and "2,000 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page
     if seller:  # one payment line only, the viewer's: the copy records no payment the seller received
         assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
     else:
-        assert "Simulated payment of 289 msat: no money moved" in page
+        assert "Simulated payment of 2,000 msat: no money moved" in page
     assert _reads(world, deal_id, now) == before
 
 
@@ -173,7 +173,7 @@ def test_a_simulated_deal_stays_simulated_when_the_window_reopens_on_a_real_rail
     assert receipt.sealed_real(world.nodes["maya"], deal_id) is False
     page = receipt.receipt_page(world.nodes["maya"], "maya", "Maya", deal_id, rail="lightning", seller=False).read_text()
     assert html.escape(screens.BANNER) not in page  # nothing on the page says real money moved
-    assert "Simulated payment of 289 msat: no money moved" in page and "Paid 289" not in page
+    assert "Simulated payment of 2,000 msat: no money moved" in page and "Paid 2,000" not in page
 
 
 @pages_only
