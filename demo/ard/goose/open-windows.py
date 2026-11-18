@@ -7,7 +7,8 @@
 Each window is a recipe with its own embedded extension (``desktop_server.py`` with ``ARD_ROLE``), so each
 party's Goose has its own keys and data directory. It opens ``goose://recipe?config=...`` links, which
 Goose Desktop answers with one window each (it asks once per recipe: Trust and Execute). Open the sellers
-first. ``--print`` prints the links instead of opening them. The environment it needs is listed at the end of
+first and Maya last, then tiles them (:func:`tile`): Maya on the left half, the sellers on the right quarters.
+``--print`` prints the links instead of opening them. The environment it needs is listed at the end of
 --help."""
 from __future__ import annotations
 
@@ -99,6 +100,40 @@ def link(role: str, rail: str) -> str:
     return "goose://recipe?config=" + base64.urlsafe_b64encode(json.dumps(recipe).encode()).decode().rstrip("=")
 
 
+#: Goose Desktop 1.59.2 ignores a window position or size set from outside, and every window is titled "Goose", so the
+#: windows are tiled the way a person does it: the Window, Move & Resize, Left & Quarters menu item, which puts the
+#: front window (Maya's, opened last) on the left half and the others on the right quarters.
+#: Both lines go to System Events, so macOS asks for one permission only (no second "control Goose" prompt).
+TILE = ["osascript", "-e", 'tell application "System Events" to set frontmost of process "Goose" to true', "-e",
+        'tell application "System Events" to tell process "Goose" to click menu item "Left & Quarters" of menu '
+        '"Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1']
+
+#: What osascript says when the terminal may not script System Events or use Accessibility yet.
+_NOT_ALLOWED = ("-1719", "-1743", "-25211", "not allowed", "assistive access")
+GRANT = ("To let this script do it next time, turn on your terminal app in System Settings, Privacy & Security, "
+         "Accessibility, and allow it to control System Events when macOS asks. ")
+MANUAL = "For now, tile by hand: click Maya's window, then Window, Move & Resize, Left & Quarters."
+
+
+def tile() -> str | None:
+    """Tile the three windows with Maya in front; None when it worked, else the one line to print. Never raises.
+    The permission advice comes only when the cause is a permission (or a timeout, which a pending prompt causes)."""
+    grant = True
+    try:
+        run = subprocess.run(TILE, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        why = str(e)
+    except (OSError, subprocess.SubprocessError) as e:
+        why, grant = str(e) or type(e).__name__, False
+    else:
+        if run.returncode == 0:
+            return None
+        why = run.stderr.strip() or f"osascript exit {run.returncode}"
+        grant = any(mark in why for mark in _NOT_ALLOWED)
+    why = " ".join(why.split())  # one line, whatever osascript printed
+    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="open-windows.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=envhelp.help_text({"windows": "open-windows.py"}))
@@ -109,12 +144,14 @@ def main(argv: list[str] | None = None) -> int:
     if gap := envhelp.message("open-windows.py", args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
         return 2
-    for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):
+    for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):  # Maya last: hers is the front window
         if args.show:
             print(link(role, args.rail))
         else:
             subprocess.run(["open", link(role, args.rail)], check=True)
             time.sleep(3)
+    if not args.show and not args.only and (failed := tile()):
+        print(failed, file=sys.stderr)  # the windows are open either way: tiling is a convenience
     return 0
 
 
