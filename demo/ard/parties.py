@@ -59,6 +59,9 @@ QUERY = "conference badges print"
 
 # -- the stage ------------------------------------------------------------------------------------
 
+#: The file a stage holds open under ``<home>/stage`` for as long as it runs.
+STAGE_LOCK = ".stage.lock"
+
 class Stage:
     """The relay and the discovery stand-ins (:mod:`discovery`: each seller's own origin and the stand-in registry),
     over files under ``home/stage``: a seller's commitment (``commitments/<name>.json``) and its anchor
@@ -71,6 +74,8 @@ class Stage:
         self.dir = home / "stage"
         for sub in ("commitments", "anchors", "wire"):
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
+        # Kept open for the process's life: `demo.py reset` finds this home's stage by who holds this file (reset.py).
+        self._held = open(self.dir / STAGE_LOCK, "a")
         self.relay = FakeRelay.on(RELAY_PORT)
         self.discovery = Discovery(SELLERS, self.commitment, HTTP_PORT, SELLER_PORTS)
         self.url = self.discovery.registry.url
