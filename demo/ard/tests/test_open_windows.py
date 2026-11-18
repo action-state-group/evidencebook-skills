@@ -5,6 +5,7 @@ No Goose and no osascript run: ``subprocess.run`` is recorded."""
 from __future__ import annotations
 
 import importlib.util
+import shlex
 import subprocess
 import types
 from pathlib import Path
@@ -63,9 +64,10 @@ def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_sti
     calls.result.update(code=code, stderr=stderr, **{"raise": exc})
     assert ow.main(["--rail", "fake"]) == 0
     err = capsys.readouterr().err.strip().splitlines()
-    assert len(err) == 1 and why in err[0]  # one line, even when osascript printed two
+    assert len(err) == 2 and why in err[0]  # the message on one line even when osascript printed two, then the retry
     assert ("System Settings, Privacy & Security, Accessibility" in err[0]) is grant  # the grant only for a permission
-    assert err[0].endswith("click Maya's window, then Window, Move & Resize, Left & Quarters.")
+    assert err[0].endswith("tile by hand: Window, Move & Resize, Left & Quarters.")
+    assert shlex.split(err[1]) == ow.TILE  # the exact command, ready to paste into a shell
 
 
 @pytest.mark.parametrize("args", [["--print"], ["--only", "maya"]])

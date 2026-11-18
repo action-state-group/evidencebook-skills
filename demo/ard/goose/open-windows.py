@@ -16,6 +16,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -110,9 +111,10 @@ TILE = ["osascript", "-e", 'tell application "System Events" to set frontmost of
 
 #: What osascript says when the terminal may not script System Events or use Accessibility yet.
 _NOT_ALLOWED = ("-1719", "-1743", "-25211", "not allowed", "assistive access")
-GRANT = ("To let this script do it next time, turn on your terminal app in System Settings, Privacy & Security, "
+GRANT = ("Turn on your terminal app in System Settings, Privacy & Security, "
          "Accessibility, and allow it to control System Events when macOS asks. ")
-MANUAL = "For now, tile by hand: click Maya's window, then Window, Move & Resize, Left & Quarters."
+MANUAL = ("Then click Maya's window and run the line below to tile again (no new windows), or tile by hand: "
+          "Window, Move & Resize, Left & Quarters.")
 
 
 def tile() -> str | None:
@@ -131,7 +133,7 @@ def tile() -> str | None:
         why = run.stderr.strip() or f"osascript exit {run.returncode}"
         grant = any(mark in why for mark in _NOT_ALLOWED)
     why = " ".join(why.split())  # one line, whatever osascript printed
-    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL
+    return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL + "\n" + shlex.join(TILE)
 
 
 def main(argv: list[str] | None = None) -> int:
