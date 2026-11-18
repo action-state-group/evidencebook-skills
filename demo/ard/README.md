@@ -8,9 +8,9 @@ runs on evidencebook's Goose loop reference (`python/examples/goose`, read from 
 Alder, Kestrel and the sample buyer that ran their history), one private relay on localhost, the discovery stand-ins (`discovery.py`: each seller's own `/.well-known/ard.json` on a port of its own and a stand-in registry answering `POST /search`) and one local web server.
 
 **What it is not.** The sellers' history is *sample history, run by the demo operator*. Kestrel's
-card comes from its own book: three sample deals carry the owner's temporary `outcome_note`
-([#462](https://github.com/action-state-group/evidencebook/issues/462)); a hand-written sample card is the fallback. The screen says "assessment", never "admission": there is no payment gate, and the
-presenter's pick is the one control (a LIMIT seller can be picked, and then nothing is paid). The
+card comes from its own book: two sample deals carry the owner's temporary `outcome_note`
+([#462](https://github.com/action-state-group/evidencebook/issues/462)); a hand-written sample card is the fallback. The screen says "assessment", never "admission": the assessment gates no payment; the
+presenter's pick and the approval dialog (below) are the controls (a LIMIT seller can be picked, and then nothing is paid). The
 deal profile still gives no *did not hold* from records ([#212](https://github.com/action-state-group/evidencebook/issues/212)).
 
 ## What runs
