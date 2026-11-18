@@ -68,7 +68,7 @@ def instructions(role: str, rail: str) -> str:
     body, commit = skill_text(p["skill"])
     facts = p["facts"]
     if p["skill"] == "buy-with-evidence":  # the skill's required input: it has no default registry
-        facts += f" The ARD registry to search is {registry_url()} (a stand-in registry, not the live ARD network); referrals stay off."
+        facts += f" The ARD registry to search is {registry_url()} (a local stand-in registry, run by the operator); referrals stay off."
     pays = ("This run pays over real Lightning: real money moves." if rail in ("lightning", "local")
             else "This run's payment rail is simulated: no money moves.")
     at = f" at evidencebook-skills {commit}" if commit else ""

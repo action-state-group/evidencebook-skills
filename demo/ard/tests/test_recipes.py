@@ -103,4 +103,4 @@ def test_what_each_window_shows_names_no_demo():
             own = " ".join([r["title"], r["description"], r["prompt"], r["extensions"][0]["description"], head])
             assert "demo" not in own.lower(), own
     maya = _recipe(ow.link("maya", "fake"))["instructions"]
-    assert "(a stand-in registry, not the live ARD network)" in maya  # u545: the registry is named a stand-in
+    assert "(a local stand-in registry, run by the operator)" in maya  # u545: the registry is named a stand-in

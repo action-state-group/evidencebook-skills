@@ -74,7 +74,7 @@ class Run:
         print(ASK)
         rule("2  ARD discovery")
         self.entries = ard.lookup(self.srv.registry_url, self.srv.origins, self.srv.query)
-        print(f"  searched a stand-in registry, not the live ARD network: POST {self.srv.registry_url} {{query: {self.srv.query!r}}}")
+        print(f"  searched a local stand-in registry, run by the operator: POST {self.srv.registry_url} {{query: {self.srv.query!r}}}")
         for e in self.entries:
             price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
             print(f"  found: {e['name']:18} {price:>10}   commitment "
