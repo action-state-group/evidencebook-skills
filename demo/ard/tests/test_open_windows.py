@@ -19,7 +19,7 @@ _spec.loader.exec_module(ow)
 
 
 @pytest.fixture
-def calls(monkeypatch):
+def calls(monkeypatch, tmp_path):
     """Every subprocess.run the script makes, with a link per role and no waiting; osascript answers as ``result``."""
     class Made(list):
         result: dict
@@ -40,6 +40,10 @@ def calls(monkeypatch):
     monkeypatch.setattr(ow, "link", lambda role, rail, placeholders=False: f"goose://recipe?config={role}")
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
     monkeypatch.setattr(ow.reset, "snapshot_trust", lambda home: made.append(["snapshot", str(home)]))
+    # Goose is not running until the script starts it with `open -a Goose`
+    monkeypatch.setattr(ow.reset, "goose_running", lambda: any(c[:3] == ["open", "-a", "Goose"] for c in made))
+    monkeypatch.setenv("ARD_GOOSE_ROOT", str(tmp_path / "goose-root"))
+    monkeypatch.setenv("ARD_HOME", str(tmp_path / "home"))
     made.result = result
     return made
 
@@ -47,8 +51,10 @@ def calls(monkeypatch):
 def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, capsys):
     assert ow.main(["--rail", "fake"]) == 0
     assert calls[0][0] == "snapshot"  # the trust note comes before any window can be trusted
-    assert [c[1] for c in calls[1:4]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
-    assert calls[4] == ow.TILE and len(calls) == 5
+    assert calls[1][:4] == ["open", "-a", "Goose", "--env"] and calls[1][4].startswith("GOOSE_PATH_ROOT=")
+    assert calls[1][4].endswith("goose-root")  # the demo's own Goose root, never the user's ~/.config/goose
+    assert [c[1] for c in calls[2:5]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
+    assert calls[5] == ow.TILE and len(calls) == 6
     assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
     assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
     assert capsys.readouterr().err == ""
@@ -88,3 +94,29 @@ def test_print_and_a_single_window_tile_nothing(calls, args):
     assert ow.main(["--rail", "fake", *args]) == 0
     assert all(c[0] != "osascript" for c in calls)
     assert any(c[0] == "snapshot" for c in calls) is (args[0] == "--only")  # --print opens nothing, so it notes nothing
+
+
+def test_a_running_goose_is_refused_and_nothing_opens(calls, capsys, monkeypatch):
+    # a running Goose (the user's own) would take the recipes into its own settings
+    monkeypatch.setattr(ow.reset, "goose_running", lambda: True)
+    assert ow.main(["--rail", "fake"]) == 2
+    assert calls == []
+    assert "Goose Desktop is running: quit it first" in capsys.readouterr().err
+
+
+def test_goose_only_starts_the_demo_goose_and_opens_no_window(calls, capsys):
+    assert ow.main(["--goose-only"]) == 0
+    assert [c[:4] for c in calls] == [["open", "-a", "Goose", "--env"]]
+    assert "started the demo's own Goose on" in capsys.readouterr().out
+
+
+def test_a_goose_root_inside_the_demo_home_is_refused(calls, capsys, monkeypatch, tmp_path):
+    # reset deletes the demo home: the provider setup must not live there
+    monkeypatch.setenv("ARD_GOOSE_ROOT", str(tmp_path / "home" / "goose"))
+    assert ow.main(["--rail", "fake"]) == 2 and calls == []
+    assert "inside the demo home" in capsys.readouterr().err
+
+
+def test_the_default_goose_root_is_outside_the_default_home():
+    root, home = Path(ow.GOOSE_ROOT_DEFAULT).expanduser(), Path(ow.reset.DEFAULT_HOME).expanduser()
+    assert home not in root.parents and root != home

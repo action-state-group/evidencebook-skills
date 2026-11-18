@@ -8,6 +8,8 @@ Each window is a recipe with its own embedded extension (``desktop_server.py`` w
 party's Goose has its own keys and data directory. It opens ``goose://recipe?config=...`` links, which
 Goose Desktop answers with one window each (it asks once per recipe: Trust and Execute). Open the sellers
 first and Maya last, then tiles them (:func:`tile`): Maya on the left half, the sellers on the right quarters.
+It starts Goose itself on the demo's own root (:data:`GOOSE_ROOT_DEFAULT`, or ``ARD_GOOSE_ROOT``), so the demo's
+provider and extension settings never touch your own Goose; ``--goose-only`` starts that Goose and opens no window.
 ``--print`` prints the links instead of opening them. The environment it needs is listed at the end of
 --help."""
 from __future__ import annotations
@@ -158,19 +160,73 @@ def tile(say=lambda line: print(line, file=sys.stderr)) -> str | None:
     return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL + "\n\n" + shlex.join(TILE)
 
 
+#: The demo's own Goose root: Goose 1.59.2 keeps its config (provider, extensions), data and state under
+#: ``GOOSE_PATH_ROOT`` when it is set (crates/goose/src/config/paths.rs), and Goose Desktop reads it from its own
+#: environment at launch (ui/desktop/src/main.ts). So the demo starts Goose itself with this root and never writes the
+#: user's own ~/.config/goose. It lives outside the demo home, so reset keeps it and the provider setup is done once.
+GOOSE_ROOT_DEFAULT = "~/.config/ard-commerce-goose"
+
+
+def goose_root() -> Path:
+    return Path(os.environ.get("ARD_GOOSE_ROOT", GOOSE_ROOT_DEFAULT)).expanduser()
+
+
+def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
+    """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
+    a running Goose would take the recipe links into its own settings."""
+    root.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}"], check=True,
+                       capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"
+    end = time.monotonic() + wait_s
+    while not reset.goose_running():
+        if time.monotonic() >= end:
+            return f"Goose Desktop did not start within {wait_s:.0f} s"
+        time.sleep(0.5)
+    time.sleep(5)  # its server starts after the app: give it a moment before the first link
+    return None
+
+
+RUNNING = ("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then run this again. "
+           "open-windows.py starts its own Goose on {root}, so the demo never changes your own Goose settings.")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="open-windows.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=envhelp.help_text({"windows": "open-windows.py"}))
     ap.add_argument("--rail", choices=["fake", "lightning", "local"], default="fake")
     ap.add_argument("--print", action="store_true", dest="show")
     ap.add_argument("--only", choices=["alder", "kestrel", "maya"], help="open one window only")
+    ap.add_argument("--goose-only", action="store_true",
+                    help="start the demo's own Goose and open no window (for the one-time provider setup)")
     args = ap.parse_args(argv)
+    root = goose_root()
+    home = Path(os.environ.get("ARD_HOME", reset.DEFAULT_HOME)).expanduser()
+    if root.resolve() == home.resolve() or home.resolve() in root.resolve().parents:
+        print(f"ARD_GOOSE_ROOT {root} is inside the demo home {home}, which reset deletes: choose a folder outside it",
+              file=sys.stderr)
+        return 2
+    if args.goose_only:  # only starts Goose: it needs none of the demo's variables
+        if reset.goose_running():
+            print(RUNNING.format(root=root), file=sys.stderr)
+            return 2
+        failed = launch_goose(root)
+        print(failed or f"started the demo's own Goose on {root}", file=sys.stderr if failed else sys.stdout)
+        return 1 if failed else 0
     # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.
     if gap := envhelp.message("open-windows.py", "fake" if args.show else args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
         return 2
+    if not args.show and reset.goose_running():
+        print(RUNNING.format(root=root), file=sys.stderr)
+        return 2
     if not args.show:  # before any window can be trusted: reset then clears only the trust given since
-        reset.snapshot_trust(Path(os.environ.get("ARD_HOME", reset.DEFAULT_HOME)).expanduser())
+        reset.snapshot_trust(home)
+        if failed := launch_goose(root):
+            print(failed, file=sys.stderr)
+            return 1
     for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):  # Maya last: hers is the front window
         if args.show:
             print(link(role, args.rail, placeholders=True))
