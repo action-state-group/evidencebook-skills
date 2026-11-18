@@ -26,7 +26,8 @@ def _free_port() -> int:
 
 
 def _holder(tmp: Path, script: str, *args: str, hold: Path | None = None, cwd: Path | None = None,
-            ignore_term: bool = False, listen: int | None = None) -> subprocess.Popen:
+            ignore_term: bool = False, listen: int | None = None, folder_name: str | None = None,
+            options: tuple[str, ...] = ()) -> subprocess.Popen:
     """Python running a script named ``script`` with ``args``: holding ``hold`` open, working in ``cwd``, ignoring
     SIGTERM or listening on ``listen``, as asked."""
     code = "import signal, socket, sys, time\n"
@@ -37,10 +38,11 @@ def _holder(tmp: Path, script: str, *args: str, hold: Path | None = None, cwd: P
     if listen:
         code += f"s = socket.socket(); s.bind(('127.0.0.1', {listen})); s.listen()\n"
     code += "print('up', flush=True)\ntime.sleep(60)\n"
-    folder = tmp / "scripts" / f"{len(list((tmp / 'scripts').glob('*'))) if (tmp / 'scripts').exists() else 0}"
+    n = len(list((tmp / "scripts").glob("*"))) if (tmp / "scripts").exists() else 0
+    folder = tmp / "scripts" / (folder_name or str(n))
     folder.mkdir(parents=True)
     (folder / script).write_text(code)
-    p = subprocess.Popen([sys.executable, str(folder / script), *args], cwd=cwd, stdout=subprocess.PIPE,
+    p = subprocess.Popen([sys.executable, *options, str(folder / script), *args], cwd=cwd, stdout=subprocess.PIPE,
                          stdin=subprocess.DEVNULL, text=True)
     assert p.stdout.readline().strip() == "up"
     return p
@@ -236,6 +238,49 @@ def test_a_pid_that_holds_no_lock_of_this_home_is_never_signalled(mac, tmp_path)
         _done(stranger)
 
 
+@needs_lsof
+def test_ours_is_found_with_a_space_in_the_script_path_and_a_python_option(mac, tmp_path):
+    home, _, _ = mac
+    stage = _holder(tmp_path, "stage.py", str(home), hold=home / "stage" / reset.STAGE_LOCK,
+                    folder_name="Demo Projects/demo/ard", options=("-W", "ignore"))
+    try:
+        assert reset.holders(home)[0] == {stage.pid}
+        reset.reset(home, say=lambda *_: None)
+        stage.wait(timeout=10)
+    finally:
+        _done(stage)
+    assert not home.exists()
+
+
+def test_python_c_and_m_are_never_our_script(monkeypatch):
+    for argv in (["/usr/bin/python3", "-c", "print()", "stage.py"], ["/usr/bin/python3", "-m", "stage.py"],
+                 ["/usr/bin/vim", "stage.py"], ["/usr/bin/python3", "-W", "ignore", "tail.py", "stage.py"]):
+        monkeypatch.setattr(reset, "_argv", lambda pid, a=argv: a)
+        assert not reset._runs_our_script(1), argv
+    monkeypatch.setattr(reset, "_argv", lambda pid: ["/x/Python.app/Contents/MacOS/Python", "-u", "/a b/desktop_server.py"])
+    assert reset._runs_our_script(1)
+    monkeypatch.setattr(reset, "_argv", lambda pid: None)  # unreadable: not ours, so the reset refuses
+    assert not reset._runs_our_script(1)
+
+
+@needs_lsof
+def test_a_probe_failure_after_the_stop_says_the_processes_were_stopped(mac, tmp_path, monkeypatch):
+    home, _, _ = mac
+    server = _holder(tmp_path, "desktop_server.py", hold=home / ".desktop-maya.lock")
+    def failing():
+        raise reset.ResetRefused("lsof could not finish (boom).")
+    monkeypatch.setattr(reset, "_listeners", failing)
+    try:
+        with pytest.raises(reset.ResetRefused) as e:
+            reset.reset(home, say=lambda *_: None)
+        server.wait(timeout=10)
+    finally:
+        _done(server)
+    assert str(e.value).endswith("were stopped; the home was kept.") and "Nothing was changed" not in str(e.value)
+    assert home.exists()
+
+
+@needs_lsof
 def test_a_missing_home_and_no_goose_folder_still_reset(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "user"))
     monkeypatch.setenv("ARD_STAGE_PORT", str(_free_port()))

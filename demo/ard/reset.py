@@ -34,14 +34,14 @@ def goose_running() -> bool:
     """Whether Goose Desktop runs (its main binary, not the ``goose`` CLI)."""
     run = subprocess.run(["pgrep", "-f", "Goose.app/Contents/MacOS/Goose"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if run.returncode not in (0, 1):
-        raise ResetRefused(f"could not check whether Goose runs (pgrep: {run.stderr.strip() or run.returncode}). Nothing was changed.")
+        raise ResetRefused(f"could not check whether Goose runs (pgrep: {run.stderr.strip() or run.returncode}).")
     return run.returncode == 0
 
 
 def _lsof(*args: str) -> list[tuple[int, str, str]]:
     """``(pid, fd, name)`` for each open file ``lsof`` reports; refuses if lsof is missing or fails."""
     if not shutil.which("lsof"):
-        raise ResetRefused("lsof is needed to see what holds the home, and it is not on PATH. Nothing was changed.")
+        raise ResetRefused("lsof is needed to see what holds the home, and it is not on PATH.")
     run = subprocess.run(["lsof", "-F", "pfn", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if run.returncode not in (0, 1) or run.stderr.strip():  # any complaint means the scan may be partial
         raise ResetRefused(f"lsof could not finish ({run.stderr.strip() or run.returncode}). Run reset again; if it keeps failing, "
@@ -68,18 +68,55 @@ def _locks(home: Path) -> list[Path]:
         found.append(home / "stage" / STAGE_LOCK)
     for lock in found:
         if lock.is_symlink() or not lock.is_file():
-            raise ResetRefused(f"{lock} is not a plain file, so who holds it says nothing about this home. Nothing was changed.")
+            raise ResetRefused(f"{lock} is not a plain file, so who holds it says nothing about this home.")
     return found
 
 
+def _argv(pid: int) -> list[str] | None:
+    """The process's own argument list, word boundaries kept (``ps`` joins them with spaces, so a path with a space
+    in it would split): ``/proc/<pid>/cmdline`` on Linux, ``KERN_PROCARGS2`` on macOS. None if it cannot be read."""
+    proc = Path(f"/proc/{pid}/cmdline")
+    if proc.exists():
+        try:
+            return [a.decode(errors="replace") for a in proc.read_bytes().split(b"\0") if a]
+        except OSError:
+            return None
+    try:
+        import ctypes
+        import ctypes.util
+
+        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+        mib = (ctypes.c_int * 3)(1, 49, pid)  # CTL_KERN, KERN_PROCARGS2
+        size = ctypes.c_size_t(0)
+        if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0:
+            return None
+        buf = ctypes.create_string_buffer(size.value)
+        if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
+            return None
+        raw = buf.raw[: size.value]
+        argc = int.from_bytes(raw[:4], "little")
+        rest = raw[4:]
+        rest = rest[rest.index(b"\0"):].lstrip(b"\0")  # skip the executable path and its padding
+        return [a.decode(errors="replace") for a in rest.split(b"\0")[:argc]]
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+#: Python's options that take the next word as their value.
+_VALUE_OPTIONS = {"-W", "-X", "--check-hash-based-pycs"}
+
+
 def _runs_our_script(pid: int) -> bool:
-    """Whether ``pid`` is a Python process whose script (the first argument after the interpreter that is not an
-    option) is one of :data:`SCRIPTS`."""
-    words = _command(pid).split()
-    if not words or "python" not in Path(words[0]).name.lower():  # macOS shows ".../Python.app/.../Python"
+    """Whether ``pid`` is Python running one of :data:`SCRIPTS` as its script (not ``-c`` or ``-m``)."""
+    argv = _argv(pid)
+    if not argv or "python" not in Path(argv[0]).name.lower():
         return False
-    script = next((w for w in words[1:] if not w.startswith("-")), "")
-    return Path(script).name in SCRIPTS
+    i = 1
+    while i < len(argv) and argv[i].startswith("-"):
+        if argv[i] in ("-c", "-m"):
+            return False
+        i += 2 if argv[i] in _VALUE_OPTIONS else 1
+    return i < len(argv) and Path(argv[i]).name in SCRIPTS
 
 
 def _lock_holders(home: Path) -> set[int]:
@@ -153,10 +190,10 @@ def _reap(pids: set[int]) -> None:
 
 def _check_target(home: Path) -> None:
     if home.is_symlink():
-        raise ResetRefused(f"{home} is a symbolic link: reset deletes only a real folder. Nothing was changed.")
+        raise ResetRefused(f"{home} is a symbolic link: reset deletes only a real folder.")
     target, user = home.resolve(), Path.home().resolve()
     if target == Path(target.anchor) or target == user or target in user.parents:
-        raise ResetRefused(f"refusing to reset {home}: it is / or your user folder or above it. Nothing was changed.")
+        raise ResetRefused(f"refusing to reset {home}: it is / or your user folder or above it.")
 
 
 def clear_recipe_trust(home_dir: Path | None = None) -> int:
@@ -187,39 +224,42 @@ def _listeners() -> dict[int, int]:
     return out
 
 
-def _refuse_on(others: dict[int, str], inside: set[int], home: Path, done: str = "Nothing was changed.") -> None:
+def _refuse_on(others: dict[int, str], inside: set[int], home: Path) -> None:
     if others:
         listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) holds {name}" for pid, name in sorted(others.items()))
-        raise ResetRefused(f"other processes hold files under {home}: {listed}. Close them, then reset again. {done}")
+        raise ResetRefused(f"other processes hold files under {home}: {listed}. Close them, then reset again.")
     if inside:
         listed = ", ".join(f"pid {pid} ({_command(pid) or 'gone'})" for pid in sorted(inside))
-        raise ResetRefused(f"these are working in {home}: {listed}. cd out of it (a terminal: cd ~), then reset again. {done}")
+        raise ResetRefused(f"these are working in {home}: {listed}. cd out of it (a terminal: cd ~), then reset again.")
 
 
 def reset(home: Path, say=print) -> int:
-    _check_target(home)
-    if goose_running():
-        raise ResetRefused("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then reset again. "
-                           "Nothing was changed.")
-    ours, others, inside = holders(home)
-    _refuse_on(others, inside, home)
-    if ours:
-        _stop(home, ours)
-        say("stopped the demo's own processes on this home: " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
-    kept = "The demo's own processes were stopped; the home was kept." if ours else "Nothing was changed."
+    """Each check refuses with its reason; this adds what was changed by then: nothing before the stop, the stopped
+    processes (and the home kept) after it."""
     try:
-        again, others, inside = holders(home)  # again: nothing may have taken the home meanwhile
-        listening = _listeners()
+        _check_target(home)
+        if goose_running():
+            raise ResetRefused("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then reset again.")
+        ours, others, inside = holders(home)
+        _refuse_on(others, inside, home)
     except ResetRefused as e:
-        raise ResetRefused(f"{e} {kept}") from None
-    if again:
-        raise ResetRefused(f"the demo's processes {sorted(again)} did not stop; the home was kept. Stop them (kill -9 <pid>), "
-                           "then reset again.")
-    _refuse_on(others, inside, home, kept)
-    if listening:  # a stage from before stages held a lock (or another program) still on the demo's ports
-        listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) on port {port}" for pid, port in sorted(listening.items()))
-        raise ResetRefused(f"something still listens on the demo's ports: {listed}. An older stage.py? Stop it (kill <pid>), "
-                           f"then reset again. {kept}")
+        raise ResetRefused(f"{e} Nothing was changed.") from None
+    try:
+        if ours:
+            _stop(home, ours)
+            say("stopped the demo's own processes on this home: " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
+        again, others, inside = holders(home)  # again: nothing may have taken the home meanwhile
+        if again:
+            raise ResetRefused(f"the demo's processes {sorted(again)} did not stop. Stop them (kill -9 <pid>), then reset again.")
+        _refuse_on(others, inside, home)
+        listening = _listeners()
+        if listening:  # a stage from before stages held a lock (or another program) still on the demo's ports
+            listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) on port {port}" for pid, port in sorted(listening.items()))
+            raise ResetRefused(f"something still listens on the demo's ports: {listed}. An older stage.py? Stop it (kill <pid>), "
+                               "then reset again.")
+    except ResetRefused as e:
+        done = "The demo's own processes were stopped; the home was kept." if ours else "Nothing was changed."
+        raise ResetRefused(f"{e} {done}") from None
     if home.exists():
         shutil.rmtree(home)
     say(f"removed {home}")
