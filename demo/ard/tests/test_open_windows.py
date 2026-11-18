@@ -136,3 +136,18 @@ def test_a_missing_demo_adapter_refuses_with_the_pinned_local_install(calls, cap
     err = capsys.readouterr().err
     assert f"npm install --prefix {tmp_path / 'no-acp'} @agentclientprotocol/claude-agent-acp@{ow.ACP_PIN}" in err
     assert "never npm install -g" in err and " -g " not in ow.acp_install()
+
+
+def test_the_search_path_env_is_valid_json_with_an_expanded_absolute_path(calls, monkeypatch):
+    # Goose parses GOOSE_SEARCH_PATHS from the environment as JSON; a literal $HOME or ~ would never resolve
+    import json as _json
+
+    monkeypatch.delenv("ARD_ACP_PREFIX")
+    monkeypatch.setattr(ow, "acp_prefix", lambda: Path(ow.ACP_PREFIX_DEFAULT).expanduser())
+    monkeypatch.setattr(ow.Path, "exists", lambda self: True)
+    assert ow.main(["--goose-only"]) == 0
+    value = next(arg for arg in calls[0] if arg.startswith("GOOSE_SEARCH_PATHS="))
+    paths = _json.loads(value.split("=", 1)[1])
+    assert isinstance(paths, list) and len(paths) == 1
+    assert Path(paths[0]).is_absolute() and "$" not in paths[0] and "~" not in paths[0]
+    assert paths[0].endswith("ard-demo/acp/node_modules/.bin")
