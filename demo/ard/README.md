@@ -106,6 +106,10 @@ else already holds that port (an earlier demo's `stage.py`, say), the windows re
 | Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
 | Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | what that seller's agent did; its own History card; its own receipt for the deal |
 
+At the start of the show the presenter says, once: "This is sample history, and the payment is simulated: no
+money moves." Nothing on screen says it for them: the pages and the tools' output carry no demo banner (Ethan,
+2026-11-17), and only the payment dialog repeats "simulated rail: no money moves".
+
 Set up (once): seed the demo home as above, then
 
 ```bash

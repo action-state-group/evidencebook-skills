@@ -58,6 +58,9 @@ def test_screen_lines_say_assessment_and_never_score_or_blame():
         assert word not in text
     assert "2 of 24 deals did not hold (sample card, written for this demo; not recomputed from records)" in text
     assert "did not hold counted from the seller's own note" in screens.card_line(card(22, 2), False)
+    # no "sample history, run by the demo operator" tag on a count (Ethan, 2026-11-17); a clean one needs no label
+    assert screens.card_line(card(24, 0), False) == "0 of 24 deals did not hold"
+    assert "demo operator" not in screens.card_line(card(22, 2), False)
     assert "sample" in text and "test nodes" in text
 
 

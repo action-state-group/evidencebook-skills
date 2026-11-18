@@ -57,12 +57,16 @@ def _totals(ev: Evidence) -> tuple[int, int]:
 
 
 def card_line(ev: Evidence, sample_card: bool) -> str:
-    """The card summary: deals counted and how many did not hold, with its label."""
+    """The card summary: deals counted and how many did not hold, with the label its count needs, if any: a
+    sample card is said to be one, and a did-not-hold from the owner's own note says so (u597). No "sample
+    history" tag of the demo's on the count (Ethan, 2026-11-17)."""
     of, bad = _totals(ev)
-    label = ("sample card, written for this demo; not recomputed from records" if sample_card
-             else "sample history, run by the demo operator")
-    if bad and not sample_card:  # the owner's own outcome_note: not confirmed by the buyer or by a ruling
-        label += "; did not hold counted from the seller's own note, not confirmed by the buyer or a ruling"
+    if sample_card:
+        label = "sample card, written for this demo; not recomputed from records"
+    elif bad:  # the owner's own outcome_note: not confirmed by the buyer or by a ruling
+        label = "did not hold counted from the seller's own note, not confirmed by the buyer or a ruling"
+    else:
+        return f"{bad} of {of} deals did not hold"
     return f"{bad} of {of} deals did not hold ({label})"
 
 
