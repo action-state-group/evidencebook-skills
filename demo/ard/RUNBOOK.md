@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills 7fd4b48 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills 84b0e8c · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at 7fd4b48, on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT) has not been run by hand. The demo's automated tests pass at these pins in CI.
+Status: not yet run by hand at 84b0e8c, on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT) has not been run by hand. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -42,7 +42,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
 
-3. Python 3.10 or later (3.14 tested by hand). Check, and install if missing.
+3. Python 3.10 or later (3.14 tested by hand at an earlier pin). Check, and install if missing.
 
    ```
    python3 --version
@@ -77,10 +77,10 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    brew install node
    ```
 
-8. The `claude` CLI, signed in to a Claude Code subscription. Install, sign in, check. The Goose windows use Claude Code as their model.
+8. The `claude` CLI, signed in to a Claude Code subscription. Install it only if missing, sign in, check. The Goose windows use Claude Code as their model.
 
    ```
-   npm install -g @anthropic-ai/claude-code
+   command -v claude || npm install -g @anthropic-ai/claude-code
    claude auth login
    claude auth status
    ```
@@ -96,7 +96,13 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
 ## If you used this guide before 2026-11-19
 
-1. Its setup changed your own Goose: the provider became Claude Code ACP and the extensions were switched off, in `~/.config/goose/config.yaml`. In your normal Goose, set your provider back in Settings, Models, and switch your extensions back on (by default Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind). The demo now uses its own Goose settings folder and leaves yours alone.
+1. Its setup changed your own Goose: the provider became Claude Code ACP and the extensions were switched off, in `~/.config/goose/config.yaml`. In your normal Goose, set your provider back in Settings, Models, and switch back on the extensions you had on before. The demo now uses its own Goose settings folder and leaves yours alone.
+
+2. It also installed the Claude Code adapter globally, replacing the version you had. Put that version back (one ACP client needs 0.94.0): The demo now uses its own pinned copy under ~/ard-demo/acp.
+
+   ```
+   npm install -g @agentclientprotocol/claude-agent-acp@<the version you had>
+   ```
 
 ## Set up, once
 
@@ -105,7 +111,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q 7fd4b4873aa42516a1be1cb8cd53662fa6ee4941
+   git -C evidencebook-skills checkout -q 84b0e8c7c68954da39e724eeadd03bfc571769c1
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/evidencebook-deal
@@ -124,15 +130,15 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 2. Already cloned? Move the checkout to this pin instead.
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 7fd4b4873aa42516a1be1cb8cd53662fa6ee4941
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 84b0e8c7c68954da39e724eeadd03bfc571769c1
    ```
 
 3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
 
-4. Install the adapter that lets Goose use Claude Code (ACP), only if it is not there yet. A global npm install replaces any version you already have, so this installs only when the command is missing.
+4. Install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
 
    ```
-   command -v claude-agent-acp || npm install -g @agentclientprotocol/claude-agent-acp
+   npm install --prefix $HOME/ard-demo/acp @agentclientprotocol/claude-agent-acp@0.108.0
    ```
 
 5. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
@@ -147,7 +153,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 6. In that Goose: on the welcome screen choose Other Providers, then Claude Code ACP, Configure, Submit. Later this lives in Settings, Models.
    **Expect:** a chat opens and answers a short message.
 
-7. **Required:** in that Goose, Settings, Extensions, turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The payment dialog holds only for agents limited to the demo's own tools; an agent with screen control could click it itself. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own.
+7. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Settings, Extensions, turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own.
 
 8. Quit that Goose.
 
@@ -220,7 +226,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo first opened its windows keep their trust; a home with no note keeps all trust, and reset says so. If it refuses, it says what to stop.
+   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo's windows first opened keep their trust; any recipe trusted since then is cleared too. A home with no note keeps all trust, and reset says so. If it refuses, it says what to stop.
 
 2. Make the sample history (about 20 s).
 
@@ -281,7 +287,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 7fd4b48.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 84b0e8c.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
@@ -446,7 +452,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo first opened its windows keep their trust; a home with no note keeps all trust, and reset says so.
+   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". Recipes you trusted before the demo's windows first opened keep their trust; any recipe trusted since then is cleared too. A home with no note keeps all trust, and reset says so.
 
 2. Check that nothing of the demo is left running.
 
