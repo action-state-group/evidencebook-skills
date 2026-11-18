@@ -4,9 +4,8 @@ Maya asks her agent for 200 conference badges by Friday, under 300 msat. Two sel
 through ARD: **Alder Print Co.** at 289 msat and **Kestrel Print** at 268 msat. Maya's library asks
 each for its evidence, checks each signed answer, assesses each seller with an admission pack, and a
 popup lets the presenter pick for Maya. The deal and a real Lightning payment follow the pick. It
-runs on the [Goose loop reference](../goose/README.md)'s library: four nodes in one process (Maya,
-Alder, Kestrel and the sample buyer that ran their history), one private relay on localhost and one
-local web server.
+runs on evidencebook's Goose loop reference (`python/examples/goose`, read from a pinned evidencebook checkout, `ARD_EVIDENCEBOOK`): four nodes in one process (Maya,
+Alder, Kestrel and the sample buyer that ran their history), one private relay on localhost, the discovery stand-ins (`discovery.py`: each seller's own `/.well-known/ard.json` on a port of its own and a stand-in registry answering `POST /search`) and one local web server.
 
 **What it is not.** The sellers' history is *sample history, run by the demo operator*. Kestrel's
 card comes from its own book: three sample deals carry the owner's temporary `outcome_note`
@@ -18,10 +17,10 @@ deal profile still gives no *did not hold* from records ([#212](https://github.c
 
 | Step | Code |
 |---|---|
-| 2 ARD discovery: `/.well-known/ard.json` with one entry per seller, each pointing at the seller's signed `evidence-commitment/1` | `ard.py`, `server.py` |
+| 2 ARD discovery: Maya's agent searches the stand-in registry (`POST /search`, the item only), then fetches each seller's own `/.well-known/ard.json`, compares the entry, checks the identity names its `.test` publisher, and verifies the signed `evidence-commitment/1` | `ard.py`, `discovery.py` |
 | 3 evidence: `history_card/1` (the Goose reference's ask and poll), `standard_history/1` and the selection, each as a request sealed in Maya's book and answered over the sellers' mailbox | `buyer.gather`, `responder.py`, `relay.py` |
-| 4 assessment: `capsule-engine admission evaluate` under the demo pack, one decision per seller, sealed in Maya's book | `buyer.assess`, `pack.py`; the pack is evidencebook-skills' `packs/ard-demo-buyer`, read from the `ARD_SKILLS` checkout |
-| 4b the on-stage edit: `max_adverse_permille` 100 → 50, version 1.0.0 → 1.1.0, recompiled with evidencebook-skills' `pack_compile.py`, both sellers re-assessed on the saved evidence | `Run.edit` |
+| 4 assessment: `capsule-engine admission evaluate` under the demo pack, one decision per seller, sealed in Maya's book | `buyer.assess`, `pack.py`; the pack is this repository's `packs/ard-demo-buyer` |
+| 4b the on-stage edit: `max_adverse_permille` 100 → 50, version 1.0.0 → 1.1.0, recompiled with this repository's `scripts/pack_compile.py`, both sellers re-assessed on the saved evidence | `Run.edit` |
 | 5 the popup and the pick, sealed before any payment | `popup.html`, `buyer.seal_pick` |
 | 6 deal opened from the pick; Shockley's wallet issues an invoice for the picked price, Brattain's wallet pays it | `buyer.open_deal`, `pay.py` |
 | 7 both parties' records compared, deal closed, Alder's card after the next checkpoint | `deals.py`, `demo_node.py` |
@@ -34,15 +33,16 @@ edit). All thresholds are placeholders for this demo only.
 
 ## Run sheet
 
-Needs Python 3.10+, this package, a `capsule-engine` binary and an
-`evidencebook-skills` checkout (for compiling the pack).
+Needs Python 3.10+, an evidencebook checkout at the commit the run sheet pins (its `python/` package
+installed, and the checkout itself for the Goose reference and the x-deal-v0 checker), and a
+`capsule-engine` binary. The skills, the pack and its compiler are this repository's.
 
 ```bash
-python -m venv python/.venv
-python/.venv/bin/pip install ./python pyyaml rfc8785 websockets
+python -m venv .venv
+.venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0"
+export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
-export ARD_SKILLS=/path/to/evidencebook-skills       # the pack is compiled under $ARD_SKILLS/demo-ard/
-cd python/examples/ard-commerce
+cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 40 s: 48 + 48 sample deals
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money
 ```
@@ -90,10 +90,10 @@ note, not confirmed by the buyer or a ruling.
 The same story, run by each party's own Goose in three Goose Desktop windows side by side: Maya (the
 buyer), Alder and Kestrel (the sellers). Each window is a thin recipe: the party's facts and the rail,
 then the evidencebook-skills skill it follows (`buy-with-evidence` for Maya, `sell-with-evidence` for the
-sellers), read from the `ARD_SKILLS` checkout. Each recipe has its own embedded extension,
+sellers), read from this repository's `skills/`. Each recipe has its own embedded extension,
 `desktop_server.py` with `ARD_ROLE` set, so each party has its own process, keys and book (its own
 directory under the demo home) and sees only its own records. They meet only through the *stage*
-(`stage.py`: one private relay and the ARD catalogue on localhost, started by the first window that needs
+(`stage.py`: one private relay and the discovery stand-ins on localhost, started by the first window that needs
 it) and a wire directory where the parties leave deal halves for each other; the sellers' agents answer
 Maya's evidence requests and deal halves on their own, as the sellers do in the script demo.
 
@@ -105,8 +105,8 @@ Maya's evidence requests and deal halves on their own, as the sellers do in the 
 Set up (once): seed the demo home as above, then
 
 ```bash
-export CAPSULE_ENGINE=... ARD_SKILLS=...
-python/.venv/bin/python python/examples/ard-commerce/goose/open-windows.py --rail fake   # or lightning
+export CAPSULE_ENGINE=... ARD_EVIDENCEBOOK=...
+.venv/bin/python demo/ard/goose/open-windows.py --rail fake   # or lightning
 ```
 
 It opens one `goose://recipe?config=…` link per party (sellers first); Goose Desktop asks once per recipe,
@@ -150,10 +150,9 @@ provider. The script demo above is unchanged and is the fallback.
 ## Tests
 
 ```bash
-cd python/examples/ard-commerce
-../../.venv/bin/python -m pytest -q tests          # the unit tests; the demo tests skip without the two paths
-CAPSULE_ENGINE=… ARD_SKILLS=… ../../.venv/bin/python -m pytest -q tests   # + the demo end to end on a fake rail, about 40 s
+cd demo/ard
+ARD_EVIDENCEBOOK=… ../../.venv/bin/python -m pytest -q tests                      # the unit tests; the demo tests skip without the engine
+ARD_EVIDENCEBOOK=… CAPSULE_ENGINE=… ../../.venv/bin/python -m pytest -q tests     # + the demo end to end on a fake rail, about 4 minutes
 ```
 
-The end-to-end tests are not run in CI (they need a capsule-engine binary and an evidencebook-skills
-checkout): run them with the two paths set before each rehearsal.
+The end-to-end tests need a capsule-engine binary: run them with both paths set before each rehearsal.
