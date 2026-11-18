@@ -54,6 +54,14 @@ def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
 
 
 def test_summary_wording_names_the_rail():
-    # the text the presenter reads: real money on the real rails, none on the simulated one
+    # the text the presenter reads: real money on the real rails, none on the simulated one, and no word of a demo
     src = open(ds.__file__).read()
-    assert "REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet." in src and "simulated rail: no money moves." in src
+    assert '"over Lightning: this moves real money."' in src and '"on the simulated rail: no money moves."' in src
+    assert "settles to the demo" not in src and "ARD demo: approve" not in src
+
+
+def test_the_dialog_title_names_no_demo(monkeypatch):
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
+    ds.approve_payment("Pay Alder Print Co. 289 msat over Lightning: this moves real money.")
+    assert 'with title "Approve this payment"' in seen[0] and "demo" not in seen[0].lower()

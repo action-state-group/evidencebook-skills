@@ -125,7 +125,7 @@ def approve_payment(summary: str) -> bool:
     import subprocess
 
     text = summary.replace("\\", " ").replace('"', "'")
-    script = (f'display dialog "{text}" with title "ARD demo: approve this payment" buttons {{"Cancel", "Pay"}} '
+    script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
               'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
@@ -289,9 +289,7 @@ def ard_pay(seller: str) -> None:
         rail_name = os.environ.get("ARD_RAIL", "fake")
         real = rail_name in ("lightning", "local")
         label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
-        summary = (f"Pay {label} {amount} on the "
-                   + ("REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet."
-                      if real else "simulated rail: no money moves."))
+        summary = f"Pay {label} {amount} " + ("over Lightning: this moves real money." if real else "on the simulated rail: no money moves.")
         if key in s.declined:
             # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
             # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
