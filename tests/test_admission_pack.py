@@ -781,3 +781,36 @@ class TextIssues(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ARD_DEMO = REPO_ROOT / "packs/ard-demo-buyer"
+
+
+class ArdDemoBuyer(unittest.TestCase):
+    """ard-demo-buyer (#169): the ARD two-seller demo's pack, moved here from the demo.
+    It differs from admission-baseline@1 only in its documented demo fields."""
+
+    def setUp(self):
+        self.pack = load((ARD_DEMO / "pack-source.yaml").read_text())
+        self.base = load((BASELINE / "pack-source.yaml").read_text())
+
+    def test_validates(self):
+        self.assertEqual(pack_compile.validate_source(self.pack), [])
+
+    def test_the_committed_artifact_is_the_compiled_source(self):
+        self.assertEqual((ARD_DEMO / "compiled/pack-definition.json").read_bytes(), admission_pack.compiled_bytes(self.pack))
+        self.assertEqual((ARD_DEMO / "compiled/contract.json").read_bytes(), ec.to_bytes(admission_pack.from_admission(self.pack)))
+
+    def test_only_the_documented_demo_fields_differ_from_the_baseline(self):
+        changed = {k for k in self.base if self.pack.get(k) != self.base[k]}
+        self.assertEqual(changed, {"pack_id", "source", "accept", "tiers", "trust_roots", "rows"})
+        self.assertEqual(set(self.pack), set(self.base))
+        base_rows = {r["id"]: r for r in self.base["rows"]}
+        demo_rows = {r["id"]: r for r in self.pack["rows"]}
+        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held"})
+        self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
+        self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]], [])
+
+    def test_it_ships_at_100_per_1000_for_the_presenter_to_tighten(self):
+        params = next(r["params"] for r in self.pack["rows"] if r["id"] == "band-history")
+        self.assertEqual(params["max_adverse_permille"], 100)

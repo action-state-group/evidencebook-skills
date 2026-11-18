@@ -9,3 +9,6 @@ __pycache__/
 
 # skill_action.py keeps each exact seal request here before publishing
 .skill-actions/
+
+# The ARD demo compiles its edited pack here (evidencebook python/examples/ard-commerce pack.py)
+demo-ard/
