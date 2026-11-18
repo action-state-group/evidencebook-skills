@@ -39,14 +39,16 @@ def calls(monkeypatch):
     monkeypatch.setattr(ow.time, "sleep", lambda s: None)
     monkeypatch.setattr(ow, "link", lambda role, rail: f"goose://recipe?config={role}")
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
+    monkeypatch.setattr(ow.reset, "snapshot_trust", lambda home: made.append(["snapshot", str(home)]))
     made.result = result
     return made
 
 
 def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, capsys):
     assert ow.main(["--rail", "fake"]) == 0
-    assert [c[1] for c in calls[:3]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
-    assert calls[3] == ow.TILE and len(calls) == 4
+    assert calls[0][0] == "snapshot"  # the trust note comes before any window can be trusted
+    assert [c[1] for c in calls[1:4]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
+    assert calls[4] == ow.TILE and len(calls) == 5
     assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
     assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
     assert capsys.readouterr().err == ""
@@ -74,3 +76,4 @@ def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_sti
 def test_print_and_a_single_window_tile_nothing(calls, args):
     assert ow.main(["--rail", "fake", *args]) == 0
     assert all(c[0] != "osascript" for c in calls)
+    assert any(c[0] == "snapshot" for c in calls) is (args[0] == "--only")  # --print opens nothing, so it notes nothing

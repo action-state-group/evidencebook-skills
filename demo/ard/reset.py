@@ -10,15 +10,18 @@ the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a
 under the home or listen on the stage's ports and either name this home in their arguments or run from this
 checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
 the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
-the home, and clear Goose's recipe trust, so each window asks Trust and Execute again.
+the home, and clear the Goose recipe trust given since the demo's windows first opened on it, so each window asks Trust
+and Execute again.
 
 Goose Desktop 1.59.2 keeps one file per trusted recipe, ``<userData>/recipe_hashes/<sha256>.hash``, the sha256 of the
 recipe as its own server decodes the ``goose://`` link (``ui/desktop/src/utils/recipeHash.ts``). That hash could not be
-reproduced from our recipe's JSON (checked against real files on 2026-11-18), so this clears the trust of every Goose
-recipe, and says so."""
+reproduced from our recipe's JSON (checked against real files on 2026-11-18). So ``open-windows.py`` notes which trust
+files exist before it first opens the windows on a home (:func:`snapshot_trust`), and reset deletes only the ones made
+since: the demo's three, and any other recipe trusted in between. A home with no note keeps all trust, and reset says so."""
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import signal
@@ -272,16 +275,48 @@ def _check_target(home: Path) -> None:
         raise ResetRefused(f"refusing to reset {home}: it is / or your user folder or above it.")
 
 
-def clear_recipe_trust(home_dir: Path | None = None) -> int:
-    """Delete every Goose recipe-trust file and the saved Maya recipe; return how many trust files went."""
-    base = home_dir or Path.home()
-    hashes = base / "Library" / "Application Support" / "Goose" / "recipe_hashes"
-    gone = 0
+#: In the demo home: the names of Goose's trust files before the demo's windows first opened on it.
+TRUST_BEFORE = "goose-trust-before.json"
+
+
+def _hashes(user: Path | None = None) -> Path:
+    return (user or Path.home()) / "Library" / "Application Support" / "Goose" / "recipe_hashes"
+
+
+def snapshot_trust(home: Path, user: Path | None = None) -> None:
+    """Note which recipes Goose trusts before the demo's windows open on ``home``, once per home (a re-entry keeps
+    the first note), so reset clears only the trust given since: the hash in each file's name cannot be computed
+    from the demo's recipes (see the module docstring)."""
+    note = home / TRUST_BEFORE
+    if note.exists():
+        return
+    home.mkdir(parents=True, exist_ok=True)
+    hashes = _hashes(user)
+    note.write_text(json.dumps(sorted(p.name for p in hashes.glob("*.hash")) if hashes.is_dir() else []))
+
+
+def trust_before(home: Path) -> set[str] | None:
+    """The trust files noted before the demo's windows opened, or None when this home has no readable note."""
+    try:
+        names = json.loads((home / TRUST_BEFORE).read_text())
+    except (OSError, ValueError):
+        return None
+    return set(names) if isinstance(names, list) and all(isinstance(n, str) for n in names) else None
+
+
+def clear_recipe_trust(before: set[str] | None, user: Path | None = None) -> int | None:
+    """Delete the trust files made since ``before`` was noted (the demo's windows, and any recipe trusted meanwhile)
+    and the saved Maya recipe; return how many went, or None (nothing deleted) when there is no note."""
+    base = user or Path.home()
+    (base / ".config" / "goose" / "recipes" / SAVED_RECIPE).unlink(missing_ok=True)
+    if before is None:
+        return None
+    hashes, gone = _hashes(user), 0
     if hashes.is_dir():
         for f in hashes.glob("*.hash"):
-            f.unlink()
-            gone += 1
-    (base / ".config" / "goose" / "recipes" / SAVED_RECIPE).unlink(missing_ok=True)
+            if f.name not in before:
+                f.unlink()
+                gone += 1
     return gone
 
 
@@ -337,12 +372,17 @@ def reset(home: Path, say=print) -> int:
     except ResetRefused as e:
         done = "stage.py and desktop_server.py on this home were stopped; the home was kept." if ours else "Nothing was changed."
         raise ResetRefused(f"{e} {done}") from None
+    before = trust_before(home)  # read before the home goes
     if home.exists():
         shutil.rmtree(home)
     say(f"removed {home}")
-    gone = clear_recipe_trust()
-    say(f"cleared Goose's trust in all {gone} recipes it had trusted, not only the three ARD recipes (each asks Trust and Execute "
-        "again), and the saved Maya recipe")
+    gone = clear_recipe_trust(before)
+    if gone is None:
+        say("kept Goose's recipe trust: this home has no note of the trust before its windows opened (open-windows.py "
+            "writes one), so reset cannot tell the demo's recipes from yours; removed the saved Maya recipe")
+    else:
+        say(f"cleared Goose's trust in the {gone} recipes trusted since this home's windows first opened (each asks Trust "
+            "and Execute again); recipes trusted before keep theirs; removed the saved Maya recipe")
     return 0
 
 

@@ -26,6 +26,7 @@ HERE = Path(__file__).resolve().parent
 SERVER = HERE.parent / "desktop_server.py"
 sys.path.insert(0, str(HERE.parent))
 import envhelp  # noqa: E402
+import reset  # noqa: E402
 
 #: Each window's recipe is a thin wrapper: the party's own facts, then the skill it follows, read from the
 #: this repository at the commit the run sheet pins (#169).
@@ -146,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     if gap := envhelp.message("open-windows.py", args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
         return 2
+    if not args.show:  # before any window can be trusted: reset then clears only the trust given since
+        reset.snapshot_trust(Path(os.environ.get("ARD_HOME", reset.DEFAULT_HOME)).expanduser())
     for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):  # Maya last: hers is the front window
         if args.show:
             print(link(role, args.rail))

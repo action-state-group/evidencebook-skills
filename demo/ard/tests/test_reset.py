@@ -72,6 +72,7 @@ def mac(tmp_path, monkeypatch):
     (saved.parent / "other.yaml").write_text("title: y")
     home = tmp_path / "ard"
     (home / "stage").mkdir(parents=True)
+    (home / reset.TRUST_BEFORE).write_text('["aa.hash"]')  # aa was trusted before the demo's windows opened
     return home, hashes, saved
 
 
@@ -98,7 +99,7 @@ def test_reset_waits_for_a_goose_that_is_still_quitting(mac, monkeypatch):
     monkeypatch.setattr(reset, "goose_running", lambda: next(answers, False))
     monkeypatch.setattr(reset.time, "sleep", lambda s: None)
     assert reset.reset(home, say=lambda *_: None) == 0
-    assert not home.exists() and not list(hashes.glob("*.hash"))
+    assert not home.exists() and _left(hashes) == ["aa.hash"]
 
 
 def test_a_failed_goose_check_refuses(monkeypatch):
@@ -166,10 +167,11 @@ def test_stops_this_homes_stage_and_server_leaves_a_prefix_home_alone_and_clears
     finally:
         _done(stage, server, other)
     assert not home.exists() and sibling.exists()
-    assert list(hashes.glob("*.hash")) == [] and (hashes.parent / "settings.json").exists()  # only the trust files
+    assert _left(hashes) == ["aa.hash"] and (hashes.parent / "settings.json").exists()  # only the demo's trust files
     assert not saved.exists() and (saved.parent / "other.yaml").exists()
     assert any("stopped stage.py and desktop_server.py on this home" in s for s in said)
-    assert any("all 3 recipes" in s and "not only the three ARD recipes" in s for s in said)
+    assert any("cleared Goose's trust in the 2 recipes trusted since this home's windows first opened" in s
+               and "recipes trusted before keep theirs" in s for s in said)
 
 
 @needs_lsof
@@ -226,7 +228,7 @@ def test_an_old_stage_without_a_lock_that_names_this_home_is_stopped(mac, tmp_pa
         old.wait(timeout=10)
     finally:
         _done(server, old)
-    assert not home.exists() and not list(hashes.glob("*.hash"))
+    assert not home.exists() and _left(hashes) == ["aa.hash"]
 
 
 @needs_lsof
@@ -303,7 +305,7 @@ def test_reset_runs_with_no_evidencebook_or_engine_set(mac, tmp_path):
     run = subprocess.run([sys.executable, str(Path(reset.__file__).with_name("demo.py")), "reset", "--home", str(home)],
                          env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
     assert run.returncode == 0, run.stderr
-    assert "removed" in run.stdout and not home.exists() and not saved.exists() and not list(hashes.glob("*.hash"))
+    assert "removed" in run.stdout and not home.exists() and not saved.exists() and _left(hashes) == ["aa.hash"]
 
 
 @needs_lsof
@@ -390,4 +392,24 @@ def test_a_missing_home_and_no_goose_folder_still_reset(tmp_path, monkeypatch):
     monkeypatch.setattr(reset, "goose_running", lambda: False)
     said = []
     assert reset.reset(tmp_path / "never-made", say=said.append) == 0
-    assert any("all 0 recipes" in s for s in said)
+    assert any("kept Goose's recipe trust: this home has no note" in s for s in said)
+
+
+def _left(hashes: Path) -> list[str]:
+    return sorted(p.name for p in hashes.glob("*.hash"))
+
+
+def test_the_trust_note_is_written_once_and_a_home_without_one_keeps_all_trust(tmp_path):
+    user, home = tmp_path / "user", tmp_path / "ard"
+    hashes = reset._hashes(user)
+    hashes.mkdir(parents=True)
+    (hashes / "mine.hash").write_text("t")
+    reset.snapshot_trust(home, user)
+    (hashes / "demo.hash").write_text("t")  # trusted when the demo's windows opened
+    reset.snapshot_trust(home, user)  # a re-entry keeps the first note
+    assert reset.trust_before(home) == {"mine.hash"}
+    assert reset.clear_recipe_trust(reset.trust_before(home), user) == 1 and _left(hashes) == ["mine.hash"]
+    (hashes / "demo.hash").write_text("t")
+    assert reset.clear_recipe_trust(None, user) is None and _left(hashes) == ["demo.hash", "mine.hash"]  # no note: keep all
+    (home / reset.TRUST_BEFORE).write_text("{not json")
+    assert reset.trust_before(home) is None  # an unreadable note counts as none
