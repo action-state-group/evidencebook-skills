@@ -153,7 +153,8 @@ A receipt page is capsule-viewer's own, with nothing added: no banner, and no DE
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter
 clicks Pay. The agent neither sees nor answers that dialog, so it cannot pay in one turn; Cancel, a timeout or no screen
-refuses and pays nothing. Stated limit: it stops the agent, not an agent that has computer-use tools and clicks the dialog
+refuses and pays nothing. After such a refusal the next `ard_pay` for that seller opens no dialog: it returns
+the question to ask Maya (seller, amount, real or simulated), and the call after it opens the dialog again. Stated limit: it stops the agent, not an agent that has computer-use tools and clicks the dialog
 itself; the demo agent is told to use only the `ard_*` tools, but that is a prompt, not enforcement: Goose's extension manager stays on, so before a show confirm in each window that only its own extension is enabled. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off on the simulated rail only (tests only; the tool says so); on a real rail `ard_pay` refuses it and pays nothing.
 
 Things to know. Goose Desktop keeps environment values of a custom extension as secrets it does not pass

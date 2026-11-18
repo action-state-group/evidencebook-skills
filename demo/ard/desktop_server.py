@@ -288,20 +288,22 @@ def ard_pay(seller: str) -> None:
                                "check the wallet before trying again")
         rail_name = os.environ.get("ARD_RAIL", "fake")
         real = rail_name in ("lightning", "local")
-        summary = (f"Pay {SELLERS[key]['label']} {screens.msat(s.assessed[key].price_msat)} on the "
+        label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
+        summary = (f"Pay {label} {amount} on the "
                    + ("REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet."
                       if real else "simulated rail: no money moves."))
-        label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
         if key in s.declined:
             # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
-            # after a refusal opens no dialog and hands the agent the question to ask, so a bare "yes, pay" never goes
-            # straight back to the dialog. The next call opens it again; the presenter's click stays the gate.
+            # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
+            # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
+            # call opens the dialog again, and the presenter's click stays the gate.
             s.declined.discard(key)
             raise RuntimeError(
-                f"the presenter refused the last payment to {label}, so this call opens no dialog and pays nothing. "
-                f'Ask Maya first, in your reply: "Pay {label} {amount} on the '
+                f"the presenter's dialog did not approve the last payment to {label} (cancelled, timed out or not shown), "
+                f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} on the '
                 + ("REAL Lightning rail, which moves real money?" if real else "simulated rail, where no money moves?")
-                + '" Then end your turn, and call ard_pay again only after she says yes to that question.')
+                + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
+                "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
         try:
             approval_gate(real, rail_name, summary)
         except NotApproved:
