@@ -114,7 +114,8 @@ def help_text(commands: dict[str, str]) -> str:
         else:
             need = "not needed here; needed by " + ", ".join(ELSEWHERE[c] for c in var.needed_by)
         out.append(f"  {var.name:<17} {var.what}; {need}")
-    core = [v for v in VARS if v.needed_by and "local" not in v.needed_by and any(c in commands for c in v.needed_by)]
+    # Every variable the table lists as needed, here or by another script, so one export line serves both scripts.
+    core = [v for v in VARS if v.needed_by and "local" not in v.needed_by]
     local = [v for v in VARS if "local" in v.needed_by]
     out.append("")
     out.append("Set them (put your own paths in):")

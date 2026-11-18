@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ARD two-seller demo: Maya buys 200 conference badges from one of two sellers found through ARD.
 
-    python demo.py seed            # once: the sample history (24 + 24 deals), about 30 s
+    python demo.py seed            # once: the sample history (24 + 24 deals), about 20 s
     python demo.py run [--rail lightning]
     python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 

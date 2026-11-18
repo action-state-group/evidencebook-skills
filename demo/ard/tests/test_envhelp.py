@@ -86,6 +86,15 @@ def test_a_set_environment_passes_the_check(tmp_path, monkeypatch):
     assert envhelp.message("reset") is None  # reset needs none
 
 
+@pytest.mark.parametrize("script", ["demo.py", "goose/open-windows.py"])
+def test_the_help_export_line_sets_every_variable_the_table_lists_as_needed(script):
+    out = _run(script, "--help").stdout
+    table = out.split("Environment:", 1)[1].split("Set them", 1)[0]
+    needed = [line.split()[0] for line in table.splitlines() if "needed by" in line and "--rail local" not in line]
+    export = next(line for line in out.splitlines() if line.strip().startswith("export ") and "--rail local" not in line)
+    assert needed and [w.split("=")[0] for w in export.split()[1:]] == needed
+
+
 def test_open_windows_help_and_missing_variables():
     help_run = _run("goose/open-windows.py", "--help")
     assert help_run.returncode == 0 and "Environment:" in help_run.stdout and "needed by open-windows.py" in help_run.stdout
