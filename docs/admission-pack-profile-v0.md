@@ -401,7 +401,8 @@ checkpoint it saw: log size and digest. `card.not_behind_pin` fails for a card
 whose last checkpoint is earlier than the pin, or which shows another digest
 at the pin's log size (a fork); it is not read with no pin, which is a stream
 seen first. Under a LIMIT row that makes a first-seen stream, and every stream
-under a new key, limited to the row's tier until a pin exists. That a later checkpoint is consistent with the pin is the caller's
+under a new key, limited to the tier below the row's `from` tier until a pin
+exists. That a later checkpoint is consistent with the pin is the caller's
 check, made before it marks the card verified: a `checkpoints` request under
 `expected_pin` is answered with a checkpoint at or past the card's last one and
 a consistency proof from the pin.
