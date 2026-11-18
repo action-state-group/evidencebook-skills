@@ -65,8 +65,8 @@ def test_three_windows_run_the_story(stage_env):
                 await s.initialize()
                 sessions[role] = s
             tools = {r: sorted(t.name for t in (await s.list_tools()).tools) for r, s in sessions.items()}
-            assert tools["alder"] == tools["kestrel"] == ["ard_seller_activity", "ard_show_card", "ard_show_receipt"]
-            assert "ard_pay" in tools["maya"] and "ard_show_card" in tools["maya"] and "ard_seller_activity" not in tools["maya"]
+            assert tools["alder"] == tools["kestrel"] == ["ard_open_card_page", "ard_seller_activity", "ard_show_card", "ard_show_receipt"]
+            assert "ard_pay" in tools["maya"] and "ard_show_card" in tools["maya"] and "ard_open_card_page" in tools["maya"] and "ard_seller_activity" not in tools["maya"]
             maya = sessions["maya"]
             for role in ("maya", "alder", "kestrel"):  # before the deal: each party's own card, from its own records
                 out[f"card0_{role}"] = await _call(sessions[role], "ard_show_card")

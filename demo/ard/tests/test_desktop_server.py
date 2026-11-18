@@ -72,6 +72,10 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     unconfirmed = tools.ard_pay("alder")
     assert "already attempted in this run and is not confirmed" in unconfirmed and "was already paid" not in unconfirmed
     assert tools._session.run.rail.paid == [289]
+    # Maya's own History card as a page: written under the demo home, not opened in a test.
+    monkeypatch.setenv("ARD_OPEN_PAGES", "0")
+    page = tools.ard_open_card_page()
+    assert "Maya: its History card page written (not opened)" in page and "/pages/maya-history-" in page
 
 
 def test_an_unknown_seller_is_refused(tools):

@@ -99,8 +99,8 @@ Maya's evidence requests and deal halves on their own, as the sellers do in the 
 
 | Window | Tools | What it shows |
 |---|---|---|
-| Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_show_receipt` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
-| Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_show_receipt` | what that seller's agent did; its own History card; its own receipt for the deal |
+| Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
+| Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt` | what that seller's agent did; its own History card; its own receipt for the deal |
 
 Set up (once): seed the demo home as above, then
 
@@ -119,6 +119,13 @@ its own receipt for the deal, both computed from that party's own sealed records
 his); a window never shows another party's. Before the deal Maya's card counts 0 deals, Alder's 24 and Kestrel's 24 (2 did
 not hold); after it Alder's counts 25 and Maya's 1: `ard_pay` takes Maya's checkpoint over her own records as part of closing (waiting up to a minute if her last one was that recent) and Alder's agent takes its own right after the close, so both cards show the sale within seconds in the demo's story. The seller's
 receipt holds no payment step: the payment is the buyer's act, so only Maya's receipt shows it.
+
+The History card as a page. `ard_open_card_page` writes that party's own card as a page under `$ARD_HOME/pages/` and
+opens it in the browser (`ARD_OPEN_PAGES=0` writes it without opening): capsule-viewer's History view (`history-view/v0`),
+drawn by the released `history-view.iife.js` of capsule-viewer 0.18.0 vendored in `vendor/` and pinned by its sha256, from
+a model the party builds from its own card (`pages.py`). The page carries the demo banner and labels and fetches nothing.
+Receipts stay chat text: capsule-viewer's receipt reads a copy's sealed `deal_report`, which the Goose reference's bundles
+do not carry.
 
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter

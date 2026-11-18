@@ -15,6 +15,7 @@ tool returns the text that run prints, so the screen says what the script demo s
 ``alder`` / ``kestrel``     a seller's window, its own node and keys:
     ard_seller_activity  ->  what its agent did: requests answered, the deal, the sale, its card
     ard_show_card / ard_show_receipt  ->  its own History card and its own receipt (every window has these two)
+    ard_open_card_page  ->  its own History card as a page in the browser (every window; pages.py)
 ``all`` (default)     the whole story in one process, Maya's tools (one window).
 
 Environment: ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK`` and ``ARD_HOME`` as for ``demo.py``; ``ARD_RAIL``
@@ -351,6 +352,21 @@ def ard_show_receipt() -> None:
         return
     print(parties.receipt_view(node, label, ids[-1], seller=ROLE in SELLERS,
                                real=os.environ.get("ARD_RAIL", "fake") in ("lightning", "local")))
+
+
+@_tool("maya", "alder", "kestrel")
+def ard_open_card_page() -> None:
+    """Open THIS window's own History card as a page in the browser, for the audience: capsule-viewer's History
+    view of its own card (standard_history/1), with the demo labels. Call it before the deal and again after it."""
+    import pages
+
+    node, label = _own_node()
+    name = ROLE if ROLE in SELLERS else "maya"
+    sample = name == "kestrel" and os.environ.get("ARD_KESTREL_CARD", "sentinel") == "sample"
+    path = pages.card_page(node, name, label, rail=os.environ.get("ARD_RAIL", "fake"), seller=name in SELLERS,
+                           sample_card=sample)
+    opened = pages.open_page(path)
+    print(f"{label}: its History card page {'opened' if opened else 'written (not opened)'}: {path}")
 
 
 def main() -> None:
