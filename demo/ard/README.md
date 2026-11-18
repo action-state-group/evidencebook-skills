@@ -40,7 +40,7 @@ built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.ym
 ```bash
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
-python -m venv .venv
+python3 -m venv .venv
 .venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0"
 cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
@@ -96,6 +96,8 @@ directory under the demo home) and sees only its own records. They meet only thr
 (`stage.py`: one private relay and the discovery stand-ins on localhost, started by the first window that needs
 it) and a wire directory where the parties leave deal halves for each other; the sellers' agents answer
 Maya's evidence requests and deal halves on their own, as the sellers do in the script demo.
+The stage listens on `ARD_STAGE_PORT` (default 47481) and the two sellers' origins 10 and 11 ports above it (47491, 47492); if something
+else already holds that port (an earlier demo's `stage.py`, say), the windows refuse it and say so: stop it before a show.
 
 | Window | Tools | What it shows |
 |---|---|---|
@@ -131,7 +133,7 @@ The payment gate. `ard_pay` never pays on the agent's word: before it moves anyt
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter
 clicks Pay. The agent neither sees nor answers that dialog, so it cannot pay in one turn; Cancel, a timeout or no screen
 refuses and pays nothing. Stated limit: it stops the agent, not an agent that has computer-use tools and clicks the dialog
-itself; the demo agent is told to use only the `ard_*` tools, but that is a prompt, not enforcement: Goose's extension manager stays on, so before a show confirm in each window that only its own extension is enabled. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off (tests only; the tool says so).
+itself; the demo agent is told to use only the `ard_*` tools, but that is a prompt, not enforcement: Goose's extension manager stays on, so before a show confirm in each window that only its own extension is enabled. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off on the simulated rail only (tests only; the tool says so); on a real rail `ard_pay` refuses it and pays nothing.
 
 Things to know. Goose Desktop keeps environment values of a custom extension as secrets it does not pass
 to the server, so the recipes put them in the command (`/usr/bin/env`). One Goose chat per party and home:

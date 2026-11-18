@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -82,11 +83,22 @@ class Stage:
 
 
 def stage_up() -> bool:
+    """Whether this demo's stage listens. A listener that does not answer ``POST /search`` as the stand-in
+    registry does (an old demo's stage, say) is refused rather than taken for this one."""
     try:
         with socket.create_connection(("127.0.0.1", HTTP_PORT), timeout=0.5):
-            return True
+            pass
     except OSError:
         return False
+    req = urllib.request.Request(REGISTRY_URL, data=b'{"query": {"text": "stage"}}', headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=2) as r:  # the demo's own localhost stage
+            if "results" in json.loads(r.read()):
+                return True
+    except Exception:
+        pass
+    raise RuntimeError(f"port {HTTP_PORT} is taken by something that is not this demo's stage (an earlier demo's "
+                       "stage.py, say): stop it, or set ARD_STAGE_PORT to a free port")
 
 
 def ensure_stage(home: Path) -> None:
@@ -339,11 +351,14 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
     payloads = [json.loads(p) for p in node.deal_payloads(deal_id)]
     first = payloads[0]["body"]
     t = first["terms"]
+    simulated = "" if real else " (simulated rail: no money moved)"
+    # The terms name the rail the deal was agreed on; on a simulated run say so on that line too, so the receipt
+    # never reads as a real Lightning payment (rehearsal, 2026-11-17).
     lines = [f"{label}: its receipt for {deal_id}, from its own sealed deal book ({len(payloads)} records)",
-             f"  terms: {t['item']} at {t['price_minor']} msat, rail {first['recourse']['rail']}"]
+             f"  terms: {t['item']} at {t['price_minor']} msat, rail {first['recourse']['rail']}"
+             + ("" if real else "; this run paid on the simulated rail: no money moved")]
     if seller and real:
         lines.append("  " + screens.seller_credit_note(t["price_minor"]))
-    simulated = "" if real else " (simulated rail: no money moved)"
     for d in payloads:
         body = d.get("body", {})
         meta = d.get("x-deal-v0")

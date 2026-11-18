@@ -37,4 +37,15 @@ def test_a_sellers_receipt_on_a_real_rail_says_the_credited_amount_is_not_in_its
 def test_the_buyers_receipt_and_the_simulated_rail_carry_no_credit_line():
     assert "credited" not in parties.receipt_view(_node(289), "Maya", "deal-x", real=True)
     out = parties.receipt_view(_node(289), "Alder Print Co.", "deal-x", seller=True, real=False)
-    assert "credited" not in out and "simulated rail" not in out  # no payment step in this stub
+    assert "credited" not in out
+
+
+def test_a_simulated_receipt_says_so_on_its_terms_line_and_a_real_one_does_not():
+    # The terms name the agreed rail (lightning); a simulated run's receipt must not read as a real payment.
+    for who, seller in (("Maya", False), ("Alder Print Co.", True)):
+        terms = next(l for l in parties.receipt_view(_node(289), who, "deal-x", seller=seller, real=False).splitlines()
+                     if "terms:" in l)
+        assert terms.endswith("rail lightning; this run paid on the simulated rail: no money moved"), terms
+        real = next(l for l in parties.receipt_view(_node(289), who, "deal-x", seller=seller, real=True).splitlines()
+                    if "terms:" in l)
+        assert real.endswith("rail lightning"), real
