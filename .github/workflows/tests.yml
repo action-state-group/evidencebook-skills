@@ -85,7 +85,7 @@ jobs:
       - name: the demo's tests
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
-            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q demo/ard/tests
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q --durations=40 demo/ard/tests
 
   admission-engine:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
