@@ -138,7 +138,7 @@ class Run:
         version = f"{major}.{int(minor) + 1}.0"
         new = packs.compile_source(packs.edited(p.source, permille, version), version)
         print(f"recompiled: pack {p.version}  digest {p.digest[:12]}…  →  pack {new.version}  digest {new.digest[:12]}…")
-        print("both assessments rerun on the evidence already collected: no new request is sent")
+        print("both sellers assessed again on the evidence already collected: no new request is sent")
         return new
 
     # -- 5 popup and pick -------------------------------------------------------------------

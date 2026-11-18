@@ -91,6 +91,7 @@ class Session:
         self.paid: set[str] = set()       # payments the rail reported succeeded
         self.deal_ids: list[str] = []     # this run's deals, oldest first (the receipt shows the latest)
         self.attempted: set[str] = set()  # payments started: a failure mid-way is not a retry
+        self.declined: set[str] = set()   # the presenter's last dialog for this seller was not approved
         self.pay_lock = threading.Lock()  # one check, approval and payment at a time
         rail: pay.Rail = pay.from_env(os.environ.get("ARD_RAIL", "fake"))
         kestrel_card = os.environ.get("ARD_KESTREL_CARD", "sentinel")
@@ -256,6 +257,10 @@ else:
             "or Cancel: do not retry or call it again while it waits. Refused unless ard_pick sealed this seller.")
 
 
+class NotApproved(RuntimeError):
+    """The presenter's dialog did not approve the payment."""
+
+
 def approval_gate(real: bool, rail_name: str, summary: str) -> None:
     """Return only when this payment may go ahead: the presenter clicked Pay, or the gate is off on a simulated rail."""
     if os.environ.get("ARD_APPROVAL") == "none":
@@ -264,7 +269,7 @@ def approval_gate(real: bool, rail_name: str, summary: str) -> None:
                                "unset it so the presenter approves the payment. Nothing was paid.")
         print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
     elif not approve_payment(summary):
-        raise RuntimeError("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
+        raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
                            "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
 
 
@@ -286,7 +291,22 @@ def ard_pay(seller: str) -> None:
         summary = (f"Pay {SELLERS[key]['label']} {screens.msat(s.assessed[key].price_msat)} on the "
                    + ("REAL Lightning rail: this moves real money, and it settles to the demo's shared test node or wallet."
                       if real else "simulated rail: no money moves."))
-        approval_gate(real, rail_name, summary)
+        label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
+        if key in s.declined:
+            # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
+            # after a refusal opens no dialog and hands the agent the question to ask, so a bare "yes, pay" never goes
+            # straight back to the dialog. The next call opens it again; the presenter's click stays the gate.
+            s.declined.discard(key)
+            raise RuntimeError(
+                f"the presenter refused the last payment to {label}, so this call opens no dialog and pays nothing. "
+                f'Ask Maya first, in your reply: "Pay {label} {amount} on the '
+                + ("REAL Lightning rail, which moves real money?" if real else "simulated rail, where no money moves?")
+                + '" Then end your turn, and call ard_pay again only after she says yes to that question.')
+        try:
+            approval_gate(real, rail_name, summary)
+        except NotApproved:
+            s.declined.add(key)
+            raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     if ROLE == "all":
         s.run.pay_deal(s.assessed, key, s.picked[key])
