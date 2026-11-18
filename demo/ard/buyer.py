@@ -255,7 +255,7 @@ def open_deal(maya: gn.Node, seller: gn.Node, pick_record: str, chosen: Assessme
         raise gn.Refused("no sealed pick names this seller at this price")
     if chosen.verdict != "GO":
         raise gn.Refused(f"the assessment is {chosen.verdict}"
-                         + (f": deals under {chosen.cap_msat} msat" if chosen.cap_msat else "") + "; no deal opens and nothing is paid")
+                         + (f": deals under {chosen.cap_msat:,} msat" if chosen.cap_msat else "") + "; no deal opens and nothing is paid")
     terms = terms_of(ITEM, chosen.price_msat, CURRENCY, rail)
     chain = maya.new_deal(f"deal-{os.urandom(8).hex()}", dr.ROLE_BUYER, seller.key_id, terms)
     maya.seal(chain, chain.open(datetime.now(timezone.utc), asked), admission=pick_record)

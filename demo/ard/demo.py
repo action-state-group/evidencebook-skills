@@ -37,7 +37,7 @@ from server import Server  # noqa: E402
 from world import DEALS_EACH, ITEM, SELLERS, World  # noqa: E402
 
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
-ASK = f"Maya: I need 200 conference badges by Friday, under 300 msat. ({ITEM})"
+ASK = f"Maya: I need 200 conference badges by Friday, under 3,000 msat. ({ITEM})"
 DEFAULT_PERMILLE = 50
 
 
@@ -155,7 +155,7 @@ class Run:
 
     def popup(self, p: packs.Pack, made: dict[str, buyer.Assessment]) -> str:
         rule("5  The popup: the presenter picks for Maya")
-        header = {"title": "Maya: 200 conference badges by Friday, under 300 msat. Pick a seller.",
+        header = {"title": "Maya: 200 conference badges by Friday, under 3,000 msat. Pick a seller.",
                   "pack": f"Assessed under pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}",
                   "note": f"{screens.CLAIMS_NOTE}. {screens.ASSESSMENT_NOTE}."}
         self.srv.popup(self.options(p, made), header)

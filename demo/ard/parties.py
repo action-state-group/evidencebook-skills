@@ -296,7 +296,7 @@ class Seller:
                             terms_in["recourse"]["rail"], terms_in["recourse"]["refundable"])
         listed = SELLERS[self.name]["price_msat"]
         if terms.price_minor != listed:
-            raise gn.Refused(f"asked {terms.price_minor} msat, not the listed {listed}: no deal")
+            raise gn.Refused(f"asked {terms.price_minor:,} msat, not the listed {listed:,}: no deal")
         self.say(f"a buyer asks to buy {terms.item} at {screens.msat(terms.price_minor)}: accepted for this deal")
         deals.admit(node, maya, reason="buyer who picked this seller")
         verified = node.verify_peer_half(m1)
@@ -351,6 +351,11 @@ def card_view(node: gn.Node, label: str) -> str:
 _MILESTONES = {"offer": "offer", "commit": "commit (agreement accepted)", "pay": "payment"}
 
 
+def _amount(v) -> str:
+    """An amount as the screen shows it: with thousands separators, or as it is when not a number."""
+    return f"{v:,}" if isinstance(v, int) else str(v)
+
+
 def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, real: bool = False) -> str:
     """The party's receipt for one deal, read from its own deal book and its own notes: the terms, the steps it
     sealed, the payment's commitment, how it closed and what it checked against the other party's half. On a
@@ -365,7 +370,7 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
     rail = first["recourse"]["rail"]
     on_rail = ": no money moves" if rail == "simulated" else "" if real else "; this run's rail is simulated: no money moves"
     lines = [f"{label}: its receipt for {deal_id}, from its own sealed deal book ({len(payloads)} records)",
-             f"  terms: {t['item']} at {t['price_minor']} msat, rail {rail}{on_rail}"]
+             f"  terms: {t['item']} at {t['price_minor']:,} msat, rail {rail}{on_rail}"]
     if seller and real:
         lines.append("  " + screens.seller_credit_note(t["price_minor"]))
     for d in payloads:
@@ -379,16 +384,16 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
         if kind in ("close",):
             lines.append(f"  {at}  close: outcome {body.get('outcome')}")
         elif action == "pay" and "reference_commitment" in body:  # the act, not the check before it
-            lines.append(f"  {at}  payment of {body['amount_minor']} msat sent{simulated}; the payment reference is kept only as a hash "
+            lines.append(f"  {at}  payment of {body['amount_minor']:,} msat sent{simulated}; the payment reference is kept only as a hash "
                          f"{body['reference_commitment'][:12]}…")
         elif action in _MILESTONES and action != "pay" and meta is None and d.get("type", "").startswith("action"):
-            lines.append(f"  {at}  {_MILESTONES[action]}, {body.get('amount_minor')} msat")
+            lines.append(f"  {at}  {_MILESTONES[action]}, {_amount(body.get('amount_minor'))} msat")
         elif d.get("type") == "action-outcome/v0":
             lines.append(f"  {at}  outcome: {body.get('status')}")
     ok = [s for r, s in node.notes(RECONCILED) if s["deal_id"] == deal_id]
     got = [s for r, s in node.notes(gn.HALF_RECEIVED) if s["deal_id"] == deal_id]
     lines.append(f"  the other party's records checked {len(got)} time(s); both parties' closing records state "
-                 + (f"{ok[-1]['amount_minor']} msat: {'match' if ok[-1]['met'] else 'do NOT match'}" if ok else "no comparison yet"))
+                 + (f"{ok[-1]['amount_minor']:,} msat: {'match' if ok[-1]['met'] else 'do NOT match'}" if ok else "no comparison yet"))
     return "\n".join(lines)
 
 

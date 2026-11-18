@@ -1,7 +1,7 @@
 # ARD two-seller demo
 
-Maya asks her agent for 200 conference badges by Friday, under 300 msat. Two sellers are found
-through ARD: **Alder Print Co.** at 289 msat and **Kestrel Print** at 268 msat. Maya's library asks
+Maya asks her agent for 200 conference badges by Friday, under 3,000 msat. Two sellers are found
+through ARD: **Alder Print Co.** at 2,000 msat (2 sats) and **Kestrel Print** at 1,000 msat (1 sat). Maya's library asks
 each for its evidence, checks each signed answer, assesses each seller with an admission pack, and a
 popup lets the presenter pick for Maya. The deal and a real Lightning payment follow the pick. It
 runs on evidencebook's Goose loop reference (`python/examples/goose`, read from a pinned evidencebook checkout, `ARD_EVIDENCEBOOK`): four nodes in one process (Maya,
@@ -27,7 +27,7 @@ deal profile still gives no *did not hold* from records ([#212](https://github.c
 
 The demo pack is a fork of `admission-baseline`: pack id `demo/ard_admission/<version>` (never
 `asg/`), `claims-held` removed (no card carries claims yet), trust roots naming the demo operator,
-sat-band tiers T0 under 1 msat, T1 under 100 msat, T2 under 1,000 msat, `BTC` accepted, and the row
+sat-band tiers T0 under 10 msat, T1 under 1,000 msat, T2 under 10,000 msat, `BTC` accepted, and the row
 `card.band_history_or_stake` at T2 (`k: 10`, `max_adverse_permille`: 100 at the start, 50 after the
 edit). All thresholds are placeholders for this demo only.
 
@@ -54,7 +54,7 @@ moves" (on a real rail: "This is sample history, and the payment is real: a smal
 test wallets"). Nothing on screen says it for them.
 
 `run` pauses at each step (Enter) and asks for the new threshold (default 50). The popup opens in the
-browser; click "Pay Alder Print Co. 289 msat". `Ctrl-C` ends a run; running again starts over on the
+browser; click "Pay Alder Print Co. 2,000 msat". `Ctrl-C` ends a run; running again starts over on the
 same sample history. `demo.py reset` puts the Mac back to before the demo
 ran: it refuses while Goose Desktop runs, stops the demo's own `stage.py` and `desktop_server.py` on the home
 (and refuses if anything else holds it), deletes the home (`$ARD_HOME`, default `~/.config/ard-commerce-demo`,
@@ -126,7 +126,10 @@ export CAPSULE_ENGINE=... ARD_EVIDENCEBOOK=...
 ```
 
 It opens one `goose://recipe?config=…` link per party (sellers first); Goose Desktop asks once per recipe,
-Trust and Execute. Tile the windows with Window, Move & Resize. Keep the global (Settings) copy of any
+Trust and Execute. The three can start in any order: each seller's first message publishes its entry, and
+Maya's first message only says she is ready, so nothing is searched until the presenter, once both sellers have answered, types the ask
+("I need 200 conference badges by Friday, under 3,000 msat. Find sellers for me."). Tile the windows with Window,
+Move & Resize. Keep the global (Settings) copy of any
 `ard_demo` extension off. `ARD_ROLE=all` (the default of `desktop_server.py`) runs the whole story in one
 process and one window, with Maya's tools.
 

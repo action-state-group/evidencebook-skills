@@ -33,7 +33,7 @@ _HRP = re.compile(r"^ln(?:bc|tb|bcrt)(\d+)([munp]?)1")
 
 
 def invoice_msat(invoice: str) -> int | None:
-    """The amount a BOLT11 invoice states, in msat, read from its human-readable part ("lnbc2890p1…" is 289 msat);
+    """The amount a BOLT11 invoice states, in msat, read from its human-readable part ("lnbc20n1…" is 2,000 msat);
     ``None`` for an invoice with no amount or one that is not a whole number of msat."""
     m = _HRP.match(invoice.lower())
     if not m:

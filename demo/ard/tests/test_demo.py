@@ -45,7 +45,7 @@ def run(tmp_path_factory, seeded_home):
 
 
 def test_catalogue_lists_two_sellers_with_verified_commitments(run):
-    assert {e["id"]: e["offer"]["price_msat"] for e in run.entries} == {"alder": 289, "kestrel": 268}
+    assert {e["id"]: e["offer"]["price_msat"] for e in run.entries} == {"alder": 2000, "kestrel": 1000}
     assert all("commitment" in e and e["digest_matches"] for e in run.entries)
     for e in run.entries:  # the signed commitment says what the demo's seller process does
         c = e["commitment"]
@@ -66,7 +66,7 @@ def test_both_are_go_under_the_starting_pack_and_kestrel_is_limit_after_the_edit
     run.made = run.assess(run.tight)
     assert run.made["alder"].verdict == "GO"
     k = run.made["kestrel"]
-    assert (k.verdict, k.tier, k.cap_msat, k.reasons) == ("LIMIT", "T1", 100, ["band-history"])
+    assert (k.verdict, k.tier, k.cap_msat, k.reasons) == ("LIMIT", "T1", 1000, ["band-history"])
     assert run.start.digest != run.tight.digest and k.pack_digest == run.tight.digest and k.sample_card
 
 
@@ -78,7 +78,7 @@ def test_a_pick_of_a_limit_seller_opens_no_deal_and_pays_nothing(run):
     kestrel = run.w.nodes["kestrel"]
     pick = buyer.seal_pick(run.maya, kestrel, made["kestrel"], [made["alder"]])
     import goose_node as gn
-    with pytest.raises(gn.Refused, match="LIMIT: deals under 100 msat"):
+    with pytest.raises(gn.Refused, match="LIMIT: deals under 1,000 msat"):
         buyer.open_deal(run.maya, kestrel, pick, made["kestrel"], "ask", run.rail.SEALED)
     assert run.rail.paid == []
 
@@ -100,8 +100,8 @@ def test_picking_alder_pays_289_and_alders_card_reads_49_held(run):
     deals.admit(alder, run.maya)
     chain = buyer.open_deal(run.maya, alder, pick, made["alder"], "ask", run.rail.SEALED)
     assert chain.terms.rail == "simulated"  # the fake rail: no record of this deal says Lightning
-    deals.run_deal(run.maya, alder, chain.terms, "ask", "", opened=chain, pay=lambda: run.rail.pay(289).reference)
-    assert run.rail.paid == [289]
+    deals.run_deal(run.maya, alder, chain.terms, "ask", "", opened=chain, pay=lambda: run.rail.pay(2000).reference)
+    assert run.rail.paid == [2000]
     later = datetime.now(timezone.utc) + timedelta(minutes=2)
     assert alder.tick(later).ticked
     card = alder.standard_history()

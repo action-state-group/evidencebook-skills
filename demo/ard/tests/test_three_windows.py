@@ -95,8 +95,8 @@ def test_three_windows_run_the_story(stage_env):
     assert "Kestrel Print      LIMIT:" in out["assess"].split("4b  Assessment again")[1]
     assert "no deal opens and nothing is paid" in out["kestrel"]
     assert "answered a signed evidence request" in out["kestrel_side"] and "a buyer asks to buy" not in out["kestrel_side"]
-    assert "approval gate off" in out["pay"] and "invoice 289 msat" in out["pay"] and "deal closed with Alder Print Co." in out["pay"]
-    assert "a buyer asks to buy" in out["alder_side"] and "deal closed: both closes name 289 msat" in out["alder_side"]
+    assert "approval gate off" in out["pay"] and "invoice 2,000 msat" in out["pay"] and "deal closed with Alder Print Co." in out["pay"]
+    assert "a buyer asks to buy" in out["alder_side"] and "deal closed: both closes name 2,000 msat" in out["alder_side"]
     # Each party shows only its own card and receipt, from its own records.
     assert "deals counted 0" in out["card0_maya"] and "deals counted 24: held 24, did not hold 0" in out["card0_alder"]
     assert "deals counted 24: held 22, did not hold 2" in out["card0_kestrel"]
@@ -104,10 +104,10 @@ def test_three_windows_run_the_story(stage_env):
     assert "deals counted 25" in out["card1_alder"] and "deals counted 1: held 1" in out["card1_maya"]
     for who in ("maya", "alder"):
         r = out[f"receipt_{who}"]
-        assert "at 289 msat, rail simulated" in r and "close: outcome completed" in r
+        assert "at 2,000 msat, rail simulated" in r and "close: outcome completed" in r
         # The payment is the buyer's act: only Maya's own book holds it, and the seller's receipt says what it sealed.
-        assert ("payment of 289 msat sent" in r) == (who == "maya")
-        assert "both parties' closing records state 289 msat: match" in r
+        assert ("payment of 2,000 msat sent" in r) == (who == "maya")
+        assert "both parties' closing records state 2,000 msat: match" in r
     assert "no deal yet" in out["receipt_kestrel"] and "no deal yet, so no receipt page" in out["receipt_page_kestrel"]
     for who in ("maya", "alder"):  # the page needs the verifier; without it the tool says so and writes nothing
         page = out[f"receipt_page_{who}"]

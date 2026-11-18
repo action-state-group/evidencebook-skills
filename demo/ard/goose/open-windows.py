@@ -29,19 +29,22 @@ SERVER = HERE.parent / "desktop_server.py"
 PARTIES = {
     "alder": {
         "title": "Alder Print Co. (seller)", "skill": "sell-with-evidence",
-        "facts": "You are the selling agent of Alder Print Co., which sells 200 conference badges at 289 msat.",
+        "facts": "You are the selling agent of Alder Print Co., which sells 200 conference badges at 2,000 msat.",
         "prompt": "Reply in English only. Call your ard_seller_activity tool now and tell me in two short sentences what it shows.",
     },
     "kestrel": {
         "title": "Kestrel Print (seller)", "skill": "sell-with-evidence",
-        "facts": "You are the selling agent of Kestrel Print, which sells 200 conference badges at 268 msat.",
+        "facts": "You are the selling agent of Kestrel Print, which sells 200 conference badges at 1,000 msat.",
         "prompt": "Reply in English only. Call your ard_seller_activity tool now and tell me in two short sentences what it shows.",
     },
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
-        "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 300 msat. "
+        "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 3,000 msat. "
                  "Your admission pack is packs/ard-demo-buyer.",
-        "prompt": "Reply in English only. I am Maya. I need 200 conference badges by Friday, under 300 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.",
+        # The first message searches nothing: the presenter types the ask, so all three windows can start together and
+        # Maya never searches before the sellers have published their entries (Ethan, 2026-11-18).
+        "prompt": "Reply in English only. In one short sentence, say you are Maya's buying agent and ready. Do not search "
+                  "or call any tool until Maya asks.",
     },
 }
 

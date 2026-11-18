@@ -42,7 +42,7 @@ def fee_note(fee_msat: int | None, real: bool) -> str:
 def seller_credit_note(price_msat: int) -> str:
     """The seller's receipt line on a real rail: the agreed price is in its records, the amount its wallet
     was credited is not (the wallet provider may keep a receiving fee)."""
-    return (f"Agreed price {price_msat} msat. What this seller's wallet was credited is not in these records: "
+    return (f"Agreed price {price_msat:,} msat. What this seller's wallet was credited is not in these records: "
             "its wallet provider may deduct a receiving fee.")
 
 

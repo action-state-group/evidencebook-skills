@@ -41,8 +41,8 @@ CURRENCY = "BTC"  # amount_minor counts msat (x-deal-v0 PROFILE section 3)
 RAIL = "lightning"
 
 SELLERS = {
-    "alder": {"label": "Alder Print Co.", "price_msat": 289, "item": ITEM},
-    "kestrel": {"label": "Kestrel Print", "price_msat": 268, "item": ITEM},
+    "alder": {"label": "Alder Print Co.", "price_msat": 2000, "item": ITEM},
+    "kestrel": {"label": "Kestrel Print", "price_msat": 1000, "item": ITEM},
 }
 DEALS_EACH = 24
 
