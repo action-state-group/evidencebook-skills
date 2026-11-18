@@ -103,3 +103,41 @@ def test_open_windows_help_and_missing_variables():
     assert ("open-windows.py needs these environment variables, which are not set: ARD_EVIDENCEBOOK, CAPSULE_ENGINE, "
             "CAPSULECTL_DEAL, ARD_WALLET_BUYER, ARD_WALLET_SELLER.") in run.stderr
     assert "export ARD_EVIDENCEBOOK=/path/to/evidencebook" in run.stderr
+
+
+def test_the_ln_pay_local_hint_is_the_pinned_install_everywhere(monkeypatch, tmp_path):
+    # never an unpinned `cargo install --git`: the same clone, checkout and install the runbook pins
+    import pay
+
+    assert envhelp.LN_PAY_LOCAL_COMMIT in envhelp.LN_PAY_LOCAL_INSTALL and "--git" not in envhelp.LN_PAY_LOCAL_INSTALL
+    wallet = tmp_path / "w"
+    wallet.mkdir()
+    monkeypatch.setenv("ARD_WALLET_BUYER", str(wallet))
+    monkeypatch.setenv("ARD_WALLET_SELLER", str(wallet))
+    monkeypatch.delenv("ARD_PAY_LOCAL", raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path))  # no ln-pay-local on it
+    with pytest.raises(pay.RailError, match="025d56672d92ea12fda5fe6c3fbb84dd1d40ddf7"):
+        pay.from_env("local")
+    assert any(envhelp.LN_PAY_LOCAL_INSTALL in w for w in envhelp.problems("run", "local")[1])
+
+
+def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
+    goose = tmp_path / "eb" / "python" / "examples" / "goose"
+    goose.mkdir(parents=True)
+    (goose / "goose_node.py").write_text("")
+    exe = tmp_path / "bin"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    run = _run("goose/open-windows.py", "--rail", "local", "--print",
+               ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe))
+    assert run.returncode == 0, run.stderr
+    assert "placeholder paths for ARD_WALLET_BUYER, ARD_WALLET_SELLER" in run.stderr
+    import base64
+    import json
+    maya = run.stdout.strip().splitlines()[2].split("config=", 1)[1]
+    recipe = json.loads(base64.urlsafe_b64decode(maya + "=" * (-len(maya) % 4)))
+    args = recipe["extensions"][0]["args"]
+    assert "ARD_WALLET_BUYER=<buyer wallet dir>" in args and "ARD_WALLET_SELLER=<seller wallet dir>" in args
+    opened = _run("goose/open-windows.py", "--rail", "local",
+                  ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe))
+    assert opened.returncode == 2 and "ARD_WALLET_BUYER" in opened.stderr  # opening still needs them

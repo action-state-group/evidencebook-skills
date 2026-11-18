@@ -82,7 +82,11 @@ def instructions(role: str, rail: str) -> str:
     return f"{facts}\nWrite in English only. {pays}\nFollow the {p['skill']} skill below{at}.\n\n{body}\n"
 
 
-def link(role: str, rail: str) -> str:
+#: What ``--print`` writes for a wallet variable that is not set: it only prints, so it needs no wallet.
+PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<seller wallet dir>"}
+
+
+def link(role: str, rail: str, placeholders: bool = False) -> str:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", "CAPSULE_WITNESS=off",
            f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}", f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}"]
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "CAPSULECTL_DEAL"):  # CAPSULECTL_DEAL: the receipt pages' verifier
@@ -92,6 +96,8 @@ def link(role: str, rail: str) -> str:
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):
                 env.append(f"{var}={os.environ[var]}")
+            elif placeholders and var in PLACEHOLDER:
+                env.append(f"{var}={PLACEHOLDER[var]}")
     p = PARTIES[role]
     recipe = {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller deal: {role}, following the {p['skill']} skill.",
               "instructions": instructions(role, rail), "prompt": p["prompt"],
@@ -159,17 +165,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--print", action="store_true", dest="show")
     ap.add_argument("--only", choices=["alder", "kestrel", "maya"], help="open one window only")
     args = ap.parse_args(argv)
-    if gap := envhelp.message("open-windows.py", args.rail, as_command="windows"):
+    # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.
+    if gap := envhelp.message("open-windows.py", "fake" if args.show else args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
         return 2
     if not args.show:  # before any window can be trusted: reset then clears only the trust given since
         reset.snapshot_trust(Path(os.environ.get("ARD_HOME", reset.DEFAULT_HOME)).expanduser())
     for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):  # Maya last: hers is the front window
         if args.show:
-            print(link(role, args.rail))
+            print(link(role, args.rail, placeholders=True))
         else:
             subprocess.run(["open", link(role, args.rail)], check=True)
             time.sleep(3)
+    unset = [v for v in PLACEHOLDER if not os.environ.get(v)]
+    if args.show and args.rail == "local" and unset:
+        print(f"printed with placeholder paths for {', '.join(unset)}: set them before opening the windows "
+              "(open-windows.py without --print checks them)", file=sys.stderr)
     if not args.show and not args.only and (failed := tile()):
         print(failed, file=sys.stderr)  # the windows are open either way: tiling is a convenience
     return 0

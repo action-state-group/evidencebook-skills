@@ -12,6 +12,13 @@ from pathlib import Path
 import _paths
 
 
+#: How to install ln-pay-local at the commit the runbook pins (its "Real rail, once" step), never an unpinned build.
+LN_PAY_LOCAL_COMMIT = "025d56672d92ea12fda5fe6c3fbb84dd1d40ddf7"
+LN_PAY_LOCAL_INSTALL = ("git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local && "
+                        f"git -C $HOME/ard-demo/ln-pay-local checkout -q {LN_PAY_LOCAL_COMMIT} && "
+                        "cargo install --path $HOME/ard-demo/ln-pay-local --locked")
+
+
 @dataclass(frozen=True)
 class Var:
     name: str
@@ -79,8 +86,8 @@ def problems(command: str | None, rail: str = "fake") -> tuple[list[Var], list[s
             wrong.append(why)
     if rail == "local" and command in ("run", "windows") and not os.environ.get("ARD_PAY_LOCAL") \
             and not shutil.which("ln-pay-local"):
-        wrong.append("ln-pay-local is not on the PATH: cargo install --locked --git "
-                     "https://github.com/action-state-group/ln-pay-local, or set ARD_PAY_LOCAL to the binary")
+        wrong.append(f"ln-pay-local is not on the PATH: install it at the pinned commit ({LN_PAY_LOCAL_INSTALL}), "
+                     "or set ARD_PAY_LOCAL to the binary")
     return missing, wrong
 
 

@@ -175,8 +175,10 @@ def from_env(name: str) -> Rail:
             raise RailError("the local rail needs " + ", ".join(missing))
         program = os.environ.get("ARD_PAY_LOCAL") or shutil.which("ln-pay-local")
         if not program:
-            raise RailError("the local rail needs the ln-pay-local program: cargo install --locked --git "
-                            "https://github.com/action-state-group/ln-pay-local, or set ARD_PAY_LOCAL")
+            from envhelp import LN_PAY_LOCAL_INSTALL
+
+            raise RailError(f"the local rail needs the ln-pay-local program: install it at the pinned commit "
+                            f"({LN_PAY_LOCAL_INSTALL}), or set ARD_PAY_LOCAL")
         return LocalRail(program, wallets["ARD_WALLET_BUYER"], wallets["ARD_WALLET_SELLER"])  # type: ignore[arg-type]
     raise RailError(f"unknown rail {name!r}")
 

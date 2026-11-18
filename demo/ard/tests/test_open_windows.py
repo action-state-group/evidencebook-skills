@@ -37,7 +37,7 @@ def calls(monkeypatch):
 
     monkeypatch.setattr(ow.subprocess, "run", run)
     monkeypatch.setattr(ow.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ow, "link", lambda role, rail: f"goose://recipe?config={role}")
+    monkeypatch.setattr(ow, "link", lambda role, rail, placeholders=False: f"goose://recipe?config={role}")
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
     monkeypatch.setattr(ow.reset, "snapshot_trust", lambda home: made.append(["snapshot", str(home)]))
     made.result = result
