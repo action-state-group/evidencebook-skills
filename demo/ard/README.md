@@ -49,6 +49,10 @@ cd demo/ard
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money
 ```
 
+Step 0, before `run`: the presenter says once, "This is sample history, and the payment is simulated: no money
+moves" (on a real rail: "This is sample history, and the payment is real: a small Lightning payment between our
+test wallets"). Nothing on screen says it for them.
+
 `run` pauses at each step (Enter) and asks for the new threshold (default 50). The popup opens in the
 browser; click "Pay Alder Print Co. 289 msat". `Ctrl-C` ends a run; running again starts over on the
 same sample history. `demo.py reset` forgets the demo home (`$ARD_HOME`, default
@@ -107,7 +111,7 @@ else already holds that port (an earlier demo's `stage.py`, say), the windows re
 | Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | what that seller's agent did; its own History card; its own receipt for the deal |
 
 At the start of the show the presenter says, once: "This is sample history, and the payment is simulated: no
-money moves." Nothing on screen says it for them: the pages and the tools' output carry no demo banner (Ethan,
+money moves." (on a real rail, say instead that the payment is real). Nothing on screen says it for them: the pages and the tools' output carry no demo banner (Ethan,
 2026-11-17), and only the payment dialog repeats "simulated rail: no money moves".
 
 Set up (once): seed the demo home as above, then

@@ -204,3 +204,11 @@ def test_a_seller_whose_commitment_failed_is_not_asked_or_assessed(capsys):
     run.collect()  # no world is touched: the failed seller is only reported
     assert "Kestrel Print: not asked, its commitment failed (the served commitment's digest differs)" in capsys.readouterr().out
     assert run.assess(None) == {} and run.options(None, {}) == []
+
+
+def test_the_script_demos_popup_carries_no_banner():
+    # Ethan, 2026-11-17, and Sherlock2 on #174: no demo banner on what the demo draws, the popup included.
+    from pathlib import Path
+    page = (Path(__file__).resolve().parents[1] / "popup.html").read_text()
+    assert 'id="banner"' not in page and "s.banner" not in page
+    assert '"banner"' not in (Path(__file__).resolve().parents[1] / "demo.py").read_text()
