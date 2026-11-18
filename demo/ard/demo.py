@@ -4,7 +4,7 @@
 
     python demo.py seed            # once: the sample history (24 + 24 deals), about 30 s
     python demo.py run [--rail lightning]
-    python demo.py reset           # forget the demo home (keys, books, sample history)
+    python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 
 See README.md for the run sheet. Environment: ``CAPSULE_ENGINE`` (a capsule-engine binary) and
 ``ARD_EVIDENCEBOOK`` (the pinned evidencebook checkout, see ``_paths.py``), ``ARD_HOME`` (the demo home)."""
@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import sys
 import time
 import webbrowser
@@ -247,11 +246,10 @@ def cmd_seed(args) -> int:
 
 
 def cmd_reset(args) -> int:
-    home = Path(os.environ.get("ARD_HOME", args.home)).expanduser()
-    if home.exists():
-        shutil.rmtree(home)
-    print(f"removed {home}")
-    return 0
+    """Stop the demo's processes on the home, delete it, and clear Goose's recipe trust (:mod:`reset`)."""
+    import reset
+
+    return reset.reset(Path(os.environ.get("ARD_HOME", args.home)).expanduser())
 
 
 def cmd_run(args) -> int:

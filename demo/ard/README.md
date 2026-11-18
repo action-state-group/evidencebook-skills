@@ -55,8 +55,12 @@ test wallets"). Nothing on screen says it for them.
 
 `run` pauses at each step (Enter) and asks for the new threshold (default 50). The popup opens in the
 browser; click "Pay Alder Print Co. 289 msat". `Ctrl-C` ends a run; running again starts over on the
-same sample history. `demo.py reset` forgets the demo home (`$ARD_HOME`, default
-`~/.config/ard-commerce-demo`), keys and history included.
+same sample history. `demo.py reset` puts the Mac back to before the demo
+ran: it refuses while Goose Desktop runs, stops the demo's own `stage.py` and `desktop_server.py` on the home
+(and refuses if anything else holds it), deletes the home (`$ARD_HOME`, default `~/.config/ard-commerce-demo`,
+keys and history included), and clears Goose's recipe trust, so each window asks Trust and Execute again. That
+clears the trust of every Goose recipe, not only the demo's three: Goose 1.59.2 names each trust file by a hash of
+the recipe as its own server decodes it, which `reset.py` cannot reproduce.
 
 After a paid run Alder's card reads 25 deals. Run `reset` and `seed` before the next rehearsal so the
 audience sees 24 again. The card counts the sale after the next checkpoint (one minute here, the

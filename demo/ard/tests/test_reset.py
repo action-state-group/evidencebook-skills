@@ -1,0 +1,291 @@
+# SPDX-License-Identifier: Apache-2.0
+"""``demo.py reset``: it refuses unsafe targets and a running Goose, stops only Python running the demo's own scripts
+while holding the home's own lock files, refuses if anything else holds the home or listens on the demo's ports,
+deletes the home, and clears Goose's recipe trust. Real processes stand in for the stage and the servers; no Goose."""
+from __future__ import annotations
+
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import types
+from pathlib import Path
+
+import pytest
+
+import reset
+
+needs_lsof = pytest.mark.skipif(not shutil.which("lsof"), reason="reset finds the home's holders with lsof")
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _holder(tmp: Path, script: str, *args: str, hold: Path | None = None, cwd: Path | None = None,
+            ignore_term: bool = False, listen: int | None = None, folder_name: str | None = None,
+            options: tuple[str, ...] = ()) -> subprocess.Popen:
+    """Python running a script named ``script`` with ``args``: holding ``hold`` open, working in ``cwd``, ignoring
+    SIGTERM or listening on ``listen``, as asked."""
+    code = "import signal, socket, sys, time\n"
+    if ignore_term:
+        code += "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+    if hold:
+        code += f"f = open({str(hold)!r}, 'a')\n"
+    if listen:
+        code += f"s = socket.socket(); s.bind(('127.0.0.1', {listen})); s.listen()\n"
+    code += "print('up', flush=True)\ntime.sleep(60)\n"
+    n = len(list((tmp / "scripts").glob("*"))) if (tmp / "scripts").exists() else 0
+    folder = tmp / "scripts" / (folder_name or str(n))
+    folder.mkdir(parents=True)
+    (folder / script).write_text(code)
+    p = subprocess.Popen([sys.executable, *options, str(folder / script), *args], cwd=cwd, stdout=subprocess.PIPE,
+                         stdin=subprocess.DEVNULL, text=True)
+    assert p.stdout.readline().strip() == "up"
+    return p
+
+
+def _done(*procs: subprocess.Popen) -> None:
+    for p in procs:
+        p.kill()
+        p.wait()
+
+
+@pytest.fixture
+def mac(tmp_path, monkeypatch):
+    """A home, a user folder with Goose's recipe trust, its settings and two saved recipes, and free demo ports."""
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setenv("ARD_STAGE_PORT", str(_free_port()))
+    monkeypatch.setenv("ARD_RELAY_PORT", str(_free_port()))
+    monkeypatch.setattr(reset, "goose_running", lambda: False)
+    hashes = tmp_path / "user" / "Library" / "Application Support" / "Goose" / "recipe_hashes"
+    hashes.mkdir(parents=True)
+    for h in ("aa", "bb", "cc"):
+        (hashes / f"{h}.hash").write_text("2026-11-18T00:00:00Z")
+    (hashes.parent / "settings.json").write_text("{}")
+    saved = tmp_path / "user" / ".config" / "goose" / "recipes" / reset.SAVED_RECIPE
+    saved.parent.mkdir(parents=True)
+    saved.write_text("title: x")
+    (saved.parent / "other.yaml").write_text("title: y")
+    home = tmp_path / "ard"
+    (home / "stage").mkdir(parents=True)
+    return home, hashes, saved
+
+
+def test_the_stage_lock_name_is_the_stages_own():
+    import parties
+
+    assert reset.STAGE_LOCK == parties.STAGE_LOCK
+
+
+def test_refuses_while_goose_runs_and_changes_nothing(mac, monkeypatch):
+    home, hashes, saved = mac
+    monkeypatch.setattr(reset, "goose_running", lambda: True)
+    with pytest.raises(reset.ResetRefused, match="quit it first"):
+        reset.reset(home, say=lambda *_: None)
+    assert home.exists() and len(list(hashes.glob("*.hash"))) == 3 and saved.exists()
+
+
+def test_a_failed_goose_check_refuses(monkeypatch):
+    monkeypatch.setattr(reset.subprocess, "run", lambda *a, **k: types.SimpleNamespace(returncode=3, stderr="boom", stdout=""))
+    with pytest.raises(reset.ResetRefused, match="could not check whether Goose runs"):
+        reset.goose_running()
+
+
+@pytest.mark.parametrize("target", ["/", "HOME", "HOME_PARENT"])
+def test_refuses_root_and_the_user_folder_before_anything(mac, target):
+    home = {"/": Path("/"), "HOME": Path.home(), "HOME_PARENT": Path.home().parent}[target]
+    with pytest.raises(reset.ResetRefused, match="your user folder or above"):
+        reset.reset(home, say=lambda *_: None)
+
+
+def test_refuses_a_symlinked_home(mac, tmp_path):
+    home, _, _ = mac
+    link = tmp_path / "ard-link"
+    link.symlink_to(home)
+    with pytest.raises(reset.ResetRefused, match="symbolic link"):
+        reset.reset(link, say=lambda *_: None)
+    assert home.exists()
+
+
+def test_refuses_a_symlinked_lock_file(mac, tmp_path):
+    home, _, _ = mac
+    (tmp_path / "elsewhere.lock").write_text("")
+    (home / "stage" / reset.STAGE_LOCK).symlink_to(tmp_path / "elsewhere.lock")
+    with pytest.raises(reset.ResetRefused, match="not a plain file"):
+        reset.reset(home, say=lambda *_: None)
+    assert home.exists()
+
+
+def test_refuses_when_lsof_is_missing(mac, monkeypatch):
+    home, hashes, _ = mac
+    monkeypatch.setattr(reset.shutil, "which", lambda name: None)
+    with pytest.raises(reset.ResetRefused, match="lsof is needed"):
+        reset.reset(home, say=lambda *_: None)
+    assert home.exists() and len(list(hashes.glob("*.hash"))) == 3
+
+
+def test_any_lsof_complaint_refuses(mac, monkeypatch):
+    home, _, _ = mac
+    monkeypatch.setattr(reset.shutil, "which", lambda name: "/usr/sbin/lsof")
+    monkeypatch.setattr(reset.subprocess, "run",
+                        lambda *a, **k: types.SimpleNamespace(returncode=0, stdout="p1\nfcwd\nn/x\n", stderr="lsof: WARNING: can't stat()"))
+    with pytest.raises(reset.ResetRefused, match="lsof could not finish"):
+        reset.reset(home, say=lambda *_: None)
+    assert home.exists()
+
+
+@needs_lsof
+def test_stops_this_homes_stage_and_server_leaves_a_prefix_home_alone_and_clears_the_trust(mac, tmp_path):
+    home, hashes, saved = mac
+    sibling = home.parent / (home.name + "-2")  # a home whose path starts with this one's
+    (sibling / "stage").mkdir(parents=True)
+    stage = _holder(tmp_path, "stage.py", str(home), hold=home / "stage" / reset.STAGE_LOCK)  # as if started by hand
+    server = _holder(tmp_path, "desktop_server.py", hold=home / ".desktop-maya.lock")
+    other = _holder(tmp_path, "stage.py", str(sibling), hold=sibling / "stage" / reset.STAGE_LOCK)
+    said = []
+    try:
+        assert reset.reset(home, say=said.append) == 0
+        stage.wait(timeout=10), server.wait(timeout=10)
+        assert other.poll() is None  # the other home's stage is not this home's
+    finally:
+        _done(stage, server, other)
+    assert not home.exists() and sibling.exists()
+    assert list(hashes.glob("*.hash")) == [] and (hashes.parent / "settings.json").exists()  # only the trust files
+    assert not saved.exists() and (saved.parent / "other.yaml").exists()
+    assert any("stopped stage.py and desktop_server.py on this home" in s for s in said)
+    assert any("all 3 recipes" in s and "not only the three ARD recipes" in s for s in said)
+
+
+@needs_lsof
+def test_a_reader_of_a_lock_file_is_not_ours_and_is_not_killed(mac, tmp_path):
+    home, _, _ = mac
+    (home / "stage" / reset.STAGE_LOCK).write_text("")
+    reader = _holder(tmp_path, "tail.py", "-f", str(home / "stage" / reset.STAGE_LOCK), hold=home / "stage" / reset.STAGE_LOCK)
+    try:
+        with pytest.raises(reset.ResetRefused, match=f"pid {reader.pid} .*a lock file of this home.*Nothing was changed"):
+            reset.reset(home, say=lambda *_: None)
+        assert reader.poll() is None
+    finally:
+        _done(reader)
+    assert home.exists()
+
+
+@needs_lsof
+def test_refuses_a_process_that_only_names_our_script_and_kills_nothing(mac, tmp_path):
+    home, hashes, _ = mac
+    editor = _holder(tmp_path, "vim.py", "/x/demo/ard/desktop_server.py", hold=home / "stage" / "notes.txt")
+    try:
+        with pytest.raises(reset.ResetRefused, match=f"pid {editor.pid} "):
+            reset.reset(home, say=lambda *_: None)
+        assert editor.poll() is None
+    finally:
+        _done(editor)
+    assert home.exists() and len(list(hashes.glob("*.hash"))) == 3
+
+
+@needs_lsof
+def test_a_shell_inside_the_home_is_told_to_cd_out_not_killed(mac, tmp_path):
+    home, _, _ = mac
+    shell = _holder(tmp_path, "zsh.py", cwd=home)
+    try:
+        with pytest.raises(reset.ResetRefused, match="cd out of it"):
+            reset.reset(home, say=lambda *_: None)
+        assert shell.poll() is None
+    finally:
+        _done(shell)
+    assert home.exists()
+
+
+@needs_lsof
+def test_an_old_stage_without_a_lock_still_on_the_port_stops_the_delete(mac, tmp_path, monkeypatch):
+    home, hashes, _ = mac
+    port = int(reset.demo_ports()[1])
+    server = _holder(tmp_path, "desktop_server.py", hold=home / ".desktop-maya.lock")
+    old = _holder(tmp_path, "stage.py", str(home), listen=port)  # a stage from before stages held a lock
+    try:
+        with pytest.raises(reset.ResetRefused, match=f"pid {old.pid} .*on port {port}.*were stopped; the home was kept"):
+            reset.reset(home, say=lambda *_: None)
+        server.wait(timeout=10)  # ours was stopped
+        assert old.poll() is None  # not ours: named, not killed
+    finally:
+        _done(server, old)
+    assert home.exists() and len(list(hashes.glob("*.hash"))) == 3
+
+
+@needs_lsof
+def test_a_process_that_ignores_term_is_killed_after_the_wait(mac, tmp_path):
+    home, _, _ = mac
+    stage = _holder(tmp_path, "stage.py", str(home), hold=home / "stage" / reset.STAGE_LOCK, ignore_term=True)
+    try:
+        reset._stop(home, {stage.pid}, wait_s=0.5)
+        assert stage.wait(timeout=10) == -signal.SIGKILL
+    finally:
+        _done(stage)
+
+
+@needs_lsof
+def test_a_pid_that_holds_no_lock_of_this_home_is_never_signalled(mac, tmp_path):
+    home, _, _ = mac
+    stranger = _holder(tmp_path, "stage.py", "elsewhere")  # our script's name, but no lock of this home: a reused pid, say
+    try:
+        assert reset._signal_ours(home, {stranger.pid}, signal.SIGTERM) == set()
+        assert stranger.poll() is None
+    finally:
+        _done(stranger)
+
+
+@needs_lsof
+def test_ours_is_found_with_a_space_in_the_script_path_and_a_python_option(mac, tmp_path):
+    home, _, _ = mac
+    stage = _holder(tmp_path, "stage.py", str(home), hold=home / "stage" / reset.STAGE_LOCK,
+                    folder_name="Demo Projects/demo/ard", options=("-W", "ignore"))
+    try:
+        assert reset.holders(home)[0] == {stage.pid}
+        reset.reset(home, say=lambda *_: None)
+        stage.wait(timeout=10)
+    finally:
+        _done(stage)
+    assert not home.exists()
+
+
+def test_python_c_and_m_are_never_our_script(monkeypatch):
+    for argv in (["/usr/bin/python3", "-c", "print()", "stage.py"], ["/usr/bin/python3", "-m", "stage.py"],
+                 ["/usr/bin/vim", "stage.py"], ["/usr/bin/python3", "-W", "ignore", "tail.py", "stage.py"]):
+        monkeypatch.setattr(reset, "_argv", lambda pid, a=argv: a)
+        assert not reset._runs_our_script(1), argv
+    monkeypatch.setattr(reset, "_argv", lambda pid: ["/x/Python.app/Contents/MacOS/Python", "-u", "/a b/desktop_server.py"])
+    assert reset._runs_our_script(1)
+    monkeypatch.setattr(reset, "_argv", lambda pid: None)  # unreadable: not ours, so the reset refuses
+    assert not reset._runs_our_script(1)
+
+
+@needs_lsof
+def test_a_probe_failure_after_the_stop_says_the_processes_were_stopped(mac, tmp_path, monkeypatch):
+    home, _, _ = mac
+    server = _holder(tmp_path, "desktop_server.py", hold=home / ".desktop-maya.lock")
+    def failing():
+        raise reset.ResetRefused("lsof could not finish (boom).")
+    monkeypatch.setattr(reset, "_listeners", failing)
+    try:
+        with pytest.raises(reset.ResetRefused) as e:
+            reset.reset(home, say=lambda *_: None)
+        server.wait(timeout=10)
+    finally:
+        _done(server)
+    assert str(e.value).endswith("were stopped; the home was kept.") and "Nothing was changed" not in str(e.value)
+    assert home.exists()
+
+
+@needs_lsof
+def test_a_missing_home_and_no_goose_folder_still_reset(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setenv("ARD_STAGE_PORT", str(_free_port()))
+    monkeypatch.setenv("ARD_RELAY_PORT", str(_free_port()))
+    monkeypatch.setattr(reset, "goose_running", lambda: False)
+    said = []
+    assert reset.reset(tmp_path / "never-made", say=said.append) == 0
+    assert any("all 0 recipes" in s for s in said)
