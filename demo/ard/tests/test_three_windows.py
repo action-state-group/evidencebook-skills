@@ -31,7 +31,6 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="module")
 def stage_env(tmp_path_factory, seeded_home):
-
     home = seeded_home(tmp_path_factory.mktemp("three-windows"))
     env = {**os.environ, "ARD_HOME": str(home), "ARD_RAIL": "fake", "ARD_APPROVAL": "none", "ARD_KESTREL_CARD": "sentinel", "ARD_OPEN_PAGES": "0",
            "ARD_RELAY_PORT": str(_free_port()), "ARD_STAGE_PORT": str(_free_port())}

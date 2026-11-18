@@ -151,8 +151,7 @@ def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch, seeded_home
     from world import DEALS_EACH, World
 
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
-    with World(seeded_home(tmp_path / "home")) as world:
-        seed.seed(world, say=lambda *_: None, kestrel_card="sentinel")
+    with World(seeded_home(tmp_path / "home")) as world:  # a copy of a sentinel-mode seeded home
         path = pages.card_page(world.nodes["kestrel"], "kestrel", "Kestrel Print", rail="fake", seller=True, sample_card=False)
         sh = world.nodes["kestrel"].standard_history()
         import deals

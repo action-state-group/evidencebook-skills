@@ -18,7 +18,6 @@ pytestmark = engine_only
 def tools(tmp_path_factory, seeded_home):
     import os
 
-
     home = seeded_home(tmp_path_factory.mktemp("desktop-home"))
     os.environ["ARD_HOME"], os.environ["ARD_RAIL"] = str(home), "fake"
     import desktop_server as ds
