@@ -50,16 +50,20 @@ def test_the_vendored_script_is_the_pinned_release():
     assert (pages.VIEWER_DIR / "history-view.iife.js.sha256").read_text().split()[0] == pages.VIEWER_SHA256
 
 
-def test_the_page_carries_every_demo_label():
+def test_the_page_carries_only_the_labels_its_count_needs():
+    # No demo banner (Ethan, 2026-11-17); a count from the owner's own note keeps its label (u597).
     sh = standard_history()
     card = json.loads(sh["card"])
-    for rail, banner in (("fake", screens.BANNER_FAKE), ("lightning", screens.BANNER), ("local", screens.BANNER_LOCAL)):
-        page = pages.history_page(model(sh), pages.labels(card, rail, True, True, "Kestrel Print"), "History · Kestrel Print (DEMO)")
-        assert pages.html.escape(banner) in page
+    for rail in ("fake", "lightning", "local"):
+        page = pages.history_page(model(sh), pages.labels(card, rail, True, True, "Kestrel Print"), "History · Kestrel Print")
+        for banner in (screens.BANNER_FAKE, screens.BANNER, screens.BANNER_LOCAL):
+            assert pages.html.escape(banner) not in page
         assert "did not hold counted from the seller&#x27;s own note, not confirmed by the buyer or a ruling" in page
-        assert pages.SAMPLE_LABEL in page
+        # no scaffolding of ours on what the product draws: no sample-card notice, no (DEMO) title (Ethan, 2026-11-17)
+        assert "sample card" not in page and "ard-demo" not in page and "(DEMO)" not in page
     quiet = pages.labels({"outcomes": {"of": 3, "did_not_hold": 0}}, "fake", True, False, "Alder Print Co.")
-    assert quiet == [screens.BANNER_FAKE, "Alder Print Co.: its own History card, drawn from its own sealed records"]
+    assert quiet == []
+    assert 'class="ard-labels"' not in pages.history_page(model(sh), quiet, "t")
 
 
 def test_a_row_resting_on_the_partys_own_note_says_so():
@@ -133,7 +137,7 @@ def test_card_page_writes_under_the_demo_home_and_opens_only_when_asked(tmp_path
     path = pages.card_page(node, "kestrel", "Kestrel Print", rail="fake", seller=True, sample_card=False)
     assert path.parent == tmp_path / "pages" and path.name.startswith("kestrel-history-")
     page = path.read_text()
-    assert pages.html.escape(screens.BANNER_FAKE) in page and pages.SAMPLE_LABEL not in page
+    assert pages.html.escape(screens.BANNER_FAKE) not in page and "sample card" not in page
     assert pages.open_page(path) is False
     monkeypatch.setenv("ARD_OPEN_PAGES", "1")
     calls = []

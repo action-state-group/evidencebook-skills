@@ -5,7 +5,7 @@
 :root{--bg:#f6f4ef;--fg:#1d1d1b;--card:#fff;--line:#d9d4c7;--go:#1f6f3d;--lim:#9a5b00;--mut:#6b675c}
 @media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#eeeae0;--card:#201f1c;--line:#3a3833;--go:#6fcf8f;--lim:#f0b04a;--mut:#a09b8e}}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,sans-serif}
-header{padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
+
 main{max-width:980px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:4px 0 14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
@@ -17,7 +17,6 @@ button{margin-top:auto;font:inherit;font-weight:600;padding:12px;border-radius:8
 button:disabled{opacity:.4;cursor:default}
 #done{margin-top:16px;font-weight:600}
 </style></head><body>
-<header id="banner">DEMO</header>
 <main><h1 id="title">Waiting for the agent's assessments…</h1><div class="grid" id="opts"></div>
 <p class="small" id="pack"></p><p class="small" id="note"></p><p id="done"></p></main>
 <script>
@@ -27,7 +26,6 @@ async function pick(id){document.querySelectorAll("button").forEach(b=>b.disable
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 async function tick(){
   let s;try{s=await (await fetch("/state")).json()}catch(e){return}
-  if(s.banner)document.getElementById("banner").textContent=s.banner;
   if(s.phase==="popup"||s.phase==="done"){
     const key=JSON.stringify(s.options);
     if(key!==shown){shown=key;

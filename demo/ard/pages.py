@@ -11,9 +11,10 @@ view model from its own ``standard_history/1`` card (``Node.standard_history()``
 node ran, and the page inlines the script and the model, so it opens offline and fetches nothing
 (its Content-Security-Policy is ``default-src 'none'``).
 
-The demo labels the chat text carries (:mod:`screens`) are on the page, around the view: the DEMO
-banner, the label on a "did not hold" counted from the party's own note, and, when this run's Kestrel
-answers buyers with a sample card, the sample card label. A row that did not hold says it rests on this
+The page carries no demo banner (Ethan, 2026-11-17: the presenter says "sample history, simulated
+payment" once at the start). It keeps only the labels a count needs: the label on a "did not hold"
+counted from the party's own note (u597: such a count travels only with its label), as one plain line
+above the view. A row that did not hold says it rests on this
 party's own note, not verified.
 
 The receipt page is ``receipt.py``'s: it seals the party's report, has the copy verified and draws it with
@@ -38,7 +39,6 @@ VIEWER_SCRIPT = VIEWER_DIR / "history-view.iife.js"
 VIEWER_SHA256 = "63c0bdaedbc29ddd9e1377ccf63ac662fbcee291f0cd39382b68d6b39cb32148"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
-SAMPLE_LABEL = "sample card, written for this demo; not recomputed from records"
 OWN_NOTE = "this party's own note, not verified"
 
 
@@ -104,15 +104,15 @@ def history_input(sh: dict, *, name: str, seller: bool, last_at: dict[str, str],
 
 
 def labels(card: dict, rail: str, seller: bool, sample_card: bool, party: str) -> list[str]:
-    """The demo labels this party's page carries, the banner first, then whose page it is."""
-    out = [screens.banner(rail), f"{party}: its own History card, drawn from its own sealed records"]
+    """The labels this party's page must carry, none when its count needs none (no banner: Ethan, 2026-11-17)."""
+    out: list[str] = []
     if card["outcomes"]["did_not_hold"]:
         out.append(f"{card['outcomes']['did_not_hold']} of {card['outcomes']['of']} deals did not hold: did not hold counted from "
                    + ("the seller's own note, not confirmed by the buyer or a ruling" if seller
                       else "this party's own note, not confirmed by the other party or a ruling")
                    + f" ({OWN_NOTE})")
-    if sample_card:
-        out.append(f"In this run, buyers who ask this seller get a {SAMPLE_LABEL}. This page draws this seller's own records.")
+    # No sample-card notice here: this page draws the seller's own records, not the sample card buyers may get in
+    # sample mode, and the chat's ard_show_history line labels that card where it is shown (Ethan, 2026-11-17).
     return out
 
 
@@ -121,19 +121,19 @@ def _script_json(value: dict) -> str:
     return json.dumps(value, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
-_HOST_CSS = (".ard-demo{font:15px/1.4 system-ui,sans-serif;margin:0;padding:12px 16px;background:#5a1d1d;color:#fff}"
-             ".ard-demo p{margin:0 0 4px}.ard-demo .banner{font-weight:700}")
+_HOST_CSS = (".ard-labels{font:13px/1.4 system-ui,sans-serif;margin:0;padding:8px 16px;color:#57606a}"
+             ".ard-labels p{margin:0}")
 
 
 def history_page(view_input: dict, page_labels: list[str], title: str) -> str:
     """A self-contained page: the labels, then capsule-viewer's History view drawn by its own script."""
-    notes = "".join(f'<p class="{"banner" if i == 0 else "label"}">{html.escape(t)}</p>' for i, t in enumerate(page_labels))
+    notes = "".join(f"<p>{html.escape(t)}</p>" for t in page_labels)
     return (
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
         "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'\">"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
         f"<title>{html.escape(title)}</title><style>{_HOST_CSS}</style></head><body>"
-        f"<div class=\"ard-demo\" role=\"note\">{notes}</div>"
+        + (f"<div class=\"ard-labels\" role=\"note\">{notes}</div>" if page_labels else "") +
         "<div id=\"history\"></div>"
         "<noscript>This page draws its History with capsule-viewer's script; allow scripts for this file.</noscript>"
         f"<script>{viewer_script()}</script>"
@@ -183,7 +183,7 @@ def card_page(node, name: str, label: str, *, rail: str, seller: bool, sample_ca
     view = history_input(sh, name=label, seller=seller, last_at=_deal_times(node, [d["deal"] for d in sh["deals"]]),
                          seconds=_seconds(node, half_received),
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(name, "history", history_page(view, labels(card, rail, seller, sample_card, label), f"History · {label} (DEMO)"))
+    return write(name, "history", history_page(view, labels(card, rail, seller, sample_card, label), f"History · {label}"))
 
 
 def open_page(path: Path) -> bool:

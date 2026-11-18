@@ -58,6 +58,9 @@ def test_screen_lines_say_assessment_and_never_score_or_blame():
         assert word not in text
     assert "2 of 24 deals did not hold (sample card, written for this demo; not recomputed from records)" in text
     assert "did not hold counted from the seller's own note" in screens.card_line(card(22, 2), False)
+    # no "sample history, run by the demo operator" tag on a count (Ethan, 2026-11-17); a clean one needs no label
+    assert screens.card_line(card(24, 0), False) == "0 of 24 deals did not hold"
+    assert "demo operator" not in screens.card_line(card(22, 2), False)
     assert "sample" in text and "test nodes" in text
 
 
@@ -201,3 +204,11 @@ def test_a_seller_whose_commitment_failed_is_not_asked_or_assessed(capsys):
     run.collect()  # no world is touched: the failed seller is only reported
     assert "Kestrel Print: not asked, its commitment failed (the served commitment's digest differs)" in capsys.readouterr().out
     assert run.assess(None) == {} and run.options(None, {}) == []
+
+
+def test_the_script_demos_popup_carries_no_banner():
+    # Ethan, 2026-11-17, and Sherlock2 on #174: no demo banner on what the demo draws, the popup included.
+    from pathlib import Path
+    page = (Path(__file__).resolve().parents[1] / "popup.html").read_text()
+    assert 'id="banner"' not in page and "s.banner" not in page
+    assert '"banner"' not in (Path(__file__).resolve().parents[1] / "demo.py").read_text()

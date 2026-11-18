@@ -55,6 +55,7 @@ class Run:
     def __init__(self, world: World, server: Server, rail: pay.Rail, auto: bool, open_browser: bool):
         self.w, self.srv, self.rail, self.auto, self.open_browser = world, server, rail, auto, open_browser
         self.maya = world.nodes["maya"]
+        # Only for the real-or-simulated wording of the payment lines: never printed (Ethan, 2026-11-17).
         self.banner = screens.banner("lightning" if isinstance(rail, pay.LightningRail) else "local" if isinstance(rail, pay.LocalRail) else "fake")
         self.started_payment = False
         self.entries: list[dict] = []
@@ -69,7 +70,6 @@ class Run:
     # -- 1-2 ask and discover -------------------------------------------------------------
 
     def discover(self) -> None:
-        print(self.banner)
         rule("1  Maya asks her agent")
         print(ASK)
         rule("2  ARD discovery")
@@ -156,7 +156,7 @@ class Run:
 
     def popup(self, p: packs.Pack, made: dict[str, buyer.Assessment]) -> str:
         rule("5  The popup: the presenter picks for Maya")
-        header = {"banner": self.banner, "title": "Maya: 200 conference badges by Friday, under 300 msat. Pick a seller.",
+        header = {"title": "Maya: 200 conference badges by Friday, under 300 msat. Pick a seller.",
                   "pack": f"Assessed under pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}",
                   "note": f"{screens.CLAIMS_NOTE}. {screens.ASSESSMENT_NOTE}."}
         self.srv.popup(self.options(p, made), header)

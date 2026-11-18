@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The receipt page (receipt.py): each party's own copy of a closed deal, drawn by capsule-viewer's receipt module
-after capsulectl verify --bundle checks it, with the demo labels. One seeded home and one deal of Maya's with Alder on
+after capsulectl verify --bundle checks it, with nothing of the demo's added. One seeded home and one deal of Maya's with Alder on
 the simulated rail. The pages need ``CAPSULECTL_DEAL`` (the capsulectl-deal binary) and the capsule-viewer package;
 the refusal and the unchanged reads need neither."""
 from __future__ import annotations
@@ -75,7 +75,7 @@ def test_a_simulated_deal_seals_the_simulated_rail_and_the_profile_allows_it(see
     for name in ("maya", "alder"):
         payloads = [json.loads(p) for p in world.nodes[name].deal_payloads(deal_id)]
         assert payloads[0]["body"]["recourse"]["rail"] == "simulated"
-        assert payloads[0]["body"]["demo"] is True  # the pinned Goose reference seals it (evidencebook#514)
+        assert "demo" not in payloads[0]["body"]  # no demo flag in the baseline (Ethan, 2026-11-17)
         checker = gn._profile_checker()
         for p in payloads:
             checker.check_record(p)
@@ -150,7 +150,9 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     path = receipt.receipt_page(world.nodes[name], name, party, deal_id, rail="fake", seller=seller)
     assert path.parent == pages.home() / "pages" and path.name.startswith(f"{name}-receipt-")
     page = path.read_text()
-    assert html.escape(screens.BANNER_FAKE) in page and "simulated" in page
+    for banner in (screens.BANNER_FAKE, screens.BANNER, screens.BANNER_LOCAL):  # no banner of ours (Ethan, 2026-11-17)
+        assert html.escape(banner) not in page
+    assert "ard-demo" not in page and ">DEMO<" not in page  # nothing marks the page: no banner, no demo flag to badge
     assert html.escape(ITEM) in page and "289 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page
@@ -158,7 +160,6 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
         assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
     else:
         assert "Simulated payment of 289 msat: no money moved" in page
-    assert receipt._CSS in page and page.count("&#x27;sha256-") == 2  # the banner's style, allowed by its hash
     assert _reads(world, deal_id) == before
 
 
@@ -168,7 +169,7 @@ def test_a_simulated_deal_stays_simulated_when_the_window_reopens_on_a_real_rail
     world, deal_id = seeded
     assert receipt.sealed_real(world.nodes["maya"], deal_id) is False
     page = receipt.receipt_page(world.nodes["maya"], "maya", "Maya", deal_id, rail="lightning", seller=False).read_text()
-    assert html.escape(screens.BANNER_FAKE) in page and html.escape(screens.BANNER) not in page
+    assert html.escape(screens.BANNER) not in page  # nothing on the page says real money moved
     assert "Simulated payment of 289 msat: no money moved" in page and "Paid 289" not in page
 
 

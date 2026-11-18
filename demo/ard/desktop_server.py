@@ -374,7 +374,7 @@ def ard_show_receipt() -> None:
 @_tool("maya", "alder", "kestrel")
 def ard_open_receipt_page() -> None:
     """Open THIS window's own receipt for its deal as a page in the browser, for the audience: capsule-viewer's receipt
-    view of its own copy of the deal, checked by capsulectl verify --bundle, with the demo labels. Call it after the
+    view of its own copy of the deal, checked by capsulectl verify --bundle, with nothing added. Call it after the
     deal has closed (after ard_pay on Maya's side, after the close on a seller's)."""
     import pages
     import receipt
@@ -398,7 +398,7 @@ def ard_open_receipt_page() -> None:
 @_tool("maya", "alder", "kestrel")
 def ard_open_card_page() -> None:
     """Open THIS window's own History card as a page in the browser, for the audience: capsule-viewer's History
-    view of its own card (standard_history/1), with the demo labels. Call it before the deal and again after it."""
+    view of its own card (standard_history/1), with only the labels its count needs. Call it before the deal and again after it."""
     import pages
 
     node, label = _own_node()

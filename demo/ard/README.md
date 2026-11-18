@@ -33,7 +33,7 @@ edit). All thresholds are placeholders for this demo only.
 
 ## Run sheet
 
-Needs Python 3.10+, an evidencebook checkout at commit 733aed4 (its `python/` package installed, and
+Needs Python 3.10+, an evidencebook checkout at commit 5d29ccc (its `python/` package installed, and
 the checkout itself for the Goose reference and the x-deal-v0 checker), and a `capsule-engine` binary
 built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
 
@@ -48,6 +48,10 @@ cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
 ../../.venv/bin/python demo.py run --rail lightning  # the demo; --rail fake moves no money
 ```
+
+Step 0, before `run`: the presenter says once, "This is sample history, and the payment is simulated: no money
+moves" (on a real rail: "This is sample history, and the payment is real: a small Lightning payment between our
+test wallets"). Nothing on screen says it for them.
 
 `run` pauses at each step (Enter) and asks for the new threshold (default 50). The popup opens in the
 browser; click "Pay Alder Print Co. 289 msat". `Ctrl-C` ends a run; running again starts over on the
@@ -106,6 +110,10 @@ else already holds that port (an earlier demo's `stage.py`, say), the windows re
 | Maya | `ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | the steps of the script demo; `ard_pay` is the one tool that moves money; her own card and receipt |
 | Alder, Kestrel | `ard_seller_activity`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page` | what that seller's agent did; its own History card; its own receipt for the deal |
 
+At the start of the show the presenter says, once: "This is sample history, and the payment is simulated: no
+money moves." (on a real rail, say instead that the payment is real). Nothing on screen says it for them: the pages and the tools' output carry no demo banner (Ethan,
+2026-11-17), and only the payment dialog repeats "simulated rail: no money moves".
+
 Set up (once): seed the demo home as above, then
 
 ```bash
@@ -127,7 +135,9 @@ receipt holds no payment step: the payment is the buyer's act, so only Maya's re
 The History card as a page. `ard_open_card_page` writes that party's own card as a page under `$ARD_HOME/pages/` and
 opens it in the browser (`ARD_OPEN_PAGES=0` writes it without opening): capsule-viewer's History view (`history-view/v0`),
 drawn by the released `history-view.iife.js` of capsule-viewer 0.18.0 vendored in `vendor/` and pinned by its sha256, from
-a model the party builds from its own card (`pages.py`). The page carries the demo banner and labels and fetches nothing.
+a model the party builds from its own card (`pages.py`). The page fetches nothing and carries no demo banner (Ethan, 2026-11-17: the presenter says "sample history,
+simulated payment" once at the start); it keeps only the label a count needs, such as Kestrel's did-not-hold counted
+from its own note.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under
 `$ARD_HOME/pages/` and opens it the same way (`receipt.py`). The page is capsule-viewer's receipt module (the Python
@@ -138,7 +148,7 @@ other step's reader sees it), whose lines are this demo's words from the party's
 closed and the other party's closing half has arrived. The report is kept under the party's home (`receipts/`) and
 sealed again only when the deal book grew. On the simulated rail Maya's live deal seals the rail `simulated` in its
 terms, so neither its records nor its receipt say Lightning (the sample deals keep `lightning`; they carry no payment).
-Every receipt page carries the demo banner.
+A receipt page is capsule-viewer's own, with nothing added: no banner, and no DEMO badge (the baseline seals no `demo` flag).
 
 The payment gate. `ard_pay` never pays on the agent's word: before it moves anything it shows a native macOS dialog on
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter

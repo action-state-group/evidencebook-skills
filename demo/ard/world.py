@@ -7,7 +7,6 @@ keys and book. The sellers answer Maya's evidence requests through the one priva
 (:mod:`relay`) the way the Goose reference answers over a Nostr mailbox."""
 from __future__ import annotations
 
-import dataclasses
 import sys
 import threading
 import time
@@ -49,10 +48,8 @@ DEALS_EACH = 24
 
 
 def terms(item: str, price_minor: int, currency: str, rail: str, refundable: bool = False) -> dr.Terms:
-    """A deal's terms. A Goose reference whose ``Terms`` seals the demo flag gets ``demo=True``, so its opening
-    record says the deal is a demonstration (capsule-viewer shows its DEMO badge); an older one does not take it."""
-    flag = {"demo": True} if "demo" in {f.name for f in dataclasses.fields(dr.Terms)} else {}
-    return dr.Terms(item, price_minor, currency, rail, refundable, **flag)
+    """A deal's terms. Its baseline seals no ``demo`` flag (Ethan, 2026-11-17: "doesn't buy us anything")."""
+    return dr.Terms(item, price_minor, currency, rail, refundable)
 
 
 @dataclass
