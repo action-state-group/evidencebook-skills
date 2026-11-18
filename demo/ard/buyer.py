@@ -36,7 +36,7 @@ PICKED = "ard_pick"
 CARD_RECEIVED = "ard_card_received"
 #: Facts the demo operator supplies (the trust roots of the demo pack name them): the platform and
 #: the one party that is witness and controller. They are the operator's, not a registry's.
-OPERATOR_FACTS = {"witness": "operator-witness", "controller": "operator-controller"}
+OPERATOR_FACTS = {"witness": "demo-witness", "controller": "demo-controller"}  # the pack's trust roots name these (pack-source.yaml:52-53); never printed
 
 
 @dataclass
