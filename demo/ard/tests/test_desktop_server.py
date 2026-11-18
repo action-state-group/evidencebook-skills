@@ -63,6 +63,18 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
     refused = tools.ard_pay("alder")
     assert "the presenter did not approve" in refused and tools._session.run.rail.paid == []
+    # The first call after a refusal opens no dialog: it hands the agent the question to ask Maya first.
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
+    reask = tools.ard_pay("alder")
+    assert reask.startswith("REFUSED: the presenter did not approve the last payment to Alder Print Co.")
+    assert 'The question is: "Pay Alder Print Co. 289 msat on the simulated rail, where no money moves?"' in reask
+    assert "If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now." in reask
+    assert "call ard_pay again only after she says yes" in reask and tools._session.run.rail.paid == []
+    # A second refusal sets it again: each Cancel is followed by the question before the next dialog.
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
+    assert "the presenter did not approve" in tools.ard_pay("alder")
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
+    assert "REFUSED: the presenter did not approve the last payment" in tools.ard_pay("alder")
     asked: list[str] = []
     monkeypatch.setattr(tools, "approve_payment", lambda summary: asked.append(summary) or True)
     paid = tools.ard_pay("alder")
