@@ -13,9 +13,7 @@ its own outcome record states, and on a simulated rail nothing says money moved.
 binary ``CAPSULECTL_DEAL`` names) checks the copy, and capsule-viewer's receipt module renders it from that report."""
 from __future__ import annotations
 
-import base64
 import hashlib
-import html
 import json
 import os
 import secrets
@@ -41,10 +39,6 @@ _TYPED = {"proposed-action/v0": "check", "action-evaluation/v0": "verdict", "act
 #: The report's step kind for each record kind (capsule-viewer places a step by it).
 _KIND = {"baseline": "open", "check": "check", "verdict": "check", "approval": "approval", "action": "act",
          "task_authority": "open", "outcome": "outcome", "close": "close", OUTCOME_NOTE: "outcome"}
-#: The demo's banner style, allowed in the receipt page's CSP by its hash.
-_CSS = (".ard-demo{font:15px/1.4 system-ui,sans-serif;margin:0;padding:12px 16px;background:#5a1d1d;color:#fff}"
-        ".ard-demo p{margin:0 0 4px}.ard-demo .banner{font-weight:700}")
-_CSP_STYLE = "style-src &#x27;sha256-"
 
 
 class ReceiptError(RuntimeError):
@@ -243,17 +237,6 @@ def render(bundle: dict, output: dict) -> str:
     return page
 
 
-def label(page: str, notes: list[str]) -> str:
-    """The page with the demo's labels on top, the banner first; the banner's style is allowed by its hash."""
-    digest = base64.b64encode(hashlib.sha256(_CSS.encode()).digest()).decode()
-    if page.count(_CSP_STYLE) != 1 or page.count("</head>") != 1 or page.count('<body class="cv-kit">') != 1:
-        raise ReceiptError("the receipt page's head is not the shape the labels are added to")
-    page = page.replace(_CSP_STYLE, f"style-src &#x27;sha256-{digest}&#x27; &#x27;sha256-", 1)
-    page = page.replace("</head>", f"<style>{_CSS}</style></head>", 1)
-    text = "".join(f'<p class="{"banner" if i == 0 else "label"}">{html.escape(t)}</p>' for i, t in enumerate(notes))
-    return page.replace('<body class="cv-kit">', f'<body class="cv-kit"><div class="ard-demo" role="note">{text}</div>', 1)
-
-
 def sealed_real(node: gn.Node, deal_id: str) -> bool:
     """Whether the deal was paid on a real rail, read from its own sealed terms (``pay.Rail.SEALED``): a deal
     sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173)."""
@@ -263,21 +246,14 @@ def sealed_real(node: gn.Node, deal_id: str) -> bool:
 
 def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: str, seller: bool) -> Path:
     """Write the party's receipt page for a closed deal, and return its path. Whether money moved is the
-    deal's own sealed rail, not this run's ``rail`` (``ARD_RAIL``), which only names the banner's real rail."""
+    deal's own sealed rail, not this run's ``rail`` (``ARD_RAIL``)."""
     real = sealed_real(node, deal_id)
-    if not real:
-        rail = "fake"
-    elif rail not in ("lightning", "local"):
-        rail = "lightning"
     bundle = keep_copy(node, deal_id, seller=seller, real=real)
     bundle_path = pages.home() / "pages" / f"{name}-receipt-{deal_id}.bundle.json"
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_text(json.dumps(bundle, sort_keys=True))
-    page = render(bundle, verify(bundle_path))
-    notes = [screens.banner(rail), f"{party}: its own receipt for {deal_id}, drawn from its own sealed records"]
-    if not real:
-        notes.append("simulated rail: no money moved in this deal")
-    # No payment line of ours on a seller's page: capsule-viewer's seller view says "Payment: Not recorded in this
-    # copy", which is true (no deal record kind carries a payment the seller received), and a second line from the
-    # seller's own outcome record would contradict it on the same page (Sherlock2, #173). The buyer's page shows the payment.
-    return pages.write(name, "receipt", label(page, notes))
+    # The page is capsule-viewer's own, with nothing added: its DEMO badge (the baseline's ``demo: true``) marks
+    # the deal, and the presenter says "sample history, simulated payment" once at the start (Ethan, 2026-11-17).
+    # Nor a payment line of ours on a seller's page: the viewer's "Payment: Not recorded in this copy" is true
+    # (Sherlock2, #173). The buyer's page shows the payment.
+    return pages.write(name, "receipt", render(bundle, verify(bundle_path)))
