@@ -236,7 +236,7 @@ This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts.
 6. If the windows are still not tiled: allow the access, click Maya's window, then run this (it tiles the open windows, no new ones). The script prints the same line.
 
    ```
-   osascript -e 'tell application "Goose" to activate' -e 'tell application "System Events" to tell process "Goose" to click menu item "Left & Quarters" of menu "Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1'
+   osascript -e 'tell application "System Events" to set frontmost of process "Goose" to true' -e 'tell application "System Events" to tell process "Goose" to click menu item "Left & Quarters" of menu "Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1'
    ```
 
    **Expect:** Maya on the left half, the sellers on the right quarters. By hand: Window, Move & Resize, Left & Quarters.
