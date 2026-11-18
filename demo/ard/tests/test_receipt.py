@@ -32,14 +32,17 @@ pages_only = pytest.mark.skipif(not os.environ.get("CAPSULECTL_DEAL") or not _vi
                                 reason="CAPSULECTL_DEAL names the verifier, and the capsule-viewer package draws the page")
 
 
-def _reads(world, deal_id: str) -> dict:
-    """What the other readers of the two books see: each card's counts, the deal's chain and Maya's half."""
+def _reads(world, deal_id: str, now: datetime | None = None) -> dict:
+    """What the other readers of the two books see: each card's counts, the deal's chain and Maya's half. Pass the
+    same ``now`` to compare two reads: a checkpoint is due once a minute, so two reads at different times can see a
+    newer card for a reason that has nothing to do with what ran between them."""
     import deals
 
+    now = now or datetime.now(timezone.utc)
     out = {}
     for name in ("maya", "alder"):
         n = world.nodes[name]
-        n.tick(datetime.now(timezone.utc))
+        n.tick(now)
         out[f"card_{name}"] = json.loads(n.standard_history()["card"])["outcomes"]
         out[f"chain_{name}"] = n.deal(deal_id).records
         out[f"deals_{name}"] = deals.deal_ids(n)
@@ -106,7 +109,8 @@ def test_no_page_before_the_close(tmp_path):
 
 def test_the_report_changes_nothing_another_reader_sees(seeded):
     world, deal_id = seeded
-    before = _reads(world, deal_id)
+    now = datetime.now(timezone.utc)
+    before = _reads(world, deal_id, now)
     for name, seller in (("maya", False), ("alder", True)):
         node = world.nodes[name]
         copy = receipt.keep_copy(node, deal_id, seller=seller, real=False)
@@ -120,7 +124,7 @@ def test_the_report_changes_nothing_another_reader_sees(seeded):
         text = json.dumps(block["agent_input"]["report"])
         assert "simulated" in text.lower(), name
         assert [w for w in ("capsulectl", "Lightning", "lightning") if w in text] == [], (name, text)
-    assert _reads(world, deal_id) == before
+    assert _reads(world, deal_id, now) == before
 
 
 def test_a_reopened_seller_reads_the_same_deal_and_the_same_report(seeded, tmp_path):
@@ -144,7 +148,8 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     from world import ITEM
 
     world, deal_id = seeded
-    before = _reads(world, deal_id)
+    now = datetime.now(timezone.utc)
+    before = _reads(world, deal_id, now)
     path = receipt.receipt_page(world.nodes[name], name, party, deal_id, rail="fake", seller=seller)
     assert path.parent == pages.home() / "pages" and path.name.startswith(f"{name}-receipt-")
     page = path.read_text()
@@ -158,7 +163,7 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
         assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
     else:
         assert "Simulated payment of 289 msat: no money moved" in page
-    assert _reads(world, deal_id) == before
+    assert _reads(world, deal_id, now) == before
 
 
 @pages_only
