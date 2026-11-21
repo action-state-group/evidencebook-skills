@@ -259,7 +259,11 @@ def _is_nonempty(message):
     if "nonempty" in message:
         return message["nonempty"] is True
     content = message.get("content")
-    return bool(content.strip()) if isinstance(content, str) else bool(content)
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):  # content parts, read as capsule-emit's task-request reads them
+        return any(isinstance(p, dict) and isinstance(p.get("text"), str) and p["text"].strip() for p in content)
+    return bool(content)
 
 
 def task_record_checks(messages):
@@ -273,12 +277,16 @@ def task_record_checks(messages):
       id, after it; a missing, duplicate or early return, or a call id used twice
       or absent, is "no". (`_tool_results` keys returns by id and so overwrites a
       duplicate and ignores order; this check does neither.)
-    - final_reply: after the last tool return, a non-empty assistant message that
-      makes no further call.
+    - final_reply: after the last tool return and the last tool call, a non-empty
+      assistant message that makes no further call.
 
     It proves the record is complete, not that the task went well."""
     if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
         return dict.fromkeys(("task_message_first", "call_results_in_order", "final_reply"), "cannot_tell")
+    for m in messages:  # a tool_calls that is not a list of objects is a record we cannot read
+        tc = m.get("tool_calls")
+        if tc and not (isinstance(tc, list) and all(isinstance(c, dict) for c in tc)):
+            return dict.fromkeys(("task_message_first", "call_results_in_order", "final_reply"), "cannot_tell")
     calls = [(i, c) for i, m in enumerate(messages) for c in (m.get("tool_calls") or [])]
     if not calls:
         return dict.fromkeys(("task_message_first", "call_results_in_order", "final_reply"), "not_applicable")
@@ -293,9 +301,9 @@ def task_record_checks(messages):
             if len(at) != 1 or at[0] <= call_at:
                 ordered = False
                 break
-    last_return = max((i for i, _ in returns), default=-1)
+    after = max([i for i, _ in returns] + [i for i, _ in calls])  # past the last return and the last call
     final = any(m.get("role") == "assistant" and _is_nonempty(m) and not m.get("tool_calls")
-                for m in messages[last_return + 1:]) if returns else False
+                for m in messages[after + 1:]) if returns else False
     yes_no = lambda ok: "yes" if ok else "no"  # noqa: E731
     return {"task_message_first": yes_no(first), "call_results_in_order": yes_no(ordered), "final_reply": yes_no(final)}
 

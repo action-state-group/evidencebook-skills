@@ -21,7 +21,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from report_spec import (UNREADABLE, MetricUnknown, ReportSpecError, _offset_matches, apply_field_projections,  # noqa: E402
                           build_documents, build_rows, compute_metric, contract_ref,
                           evaluate_group, extract_flatten_rows, extract_tool_result_rows,
-                          get_path, load_spec, render_title, safe_filename, select_record_rows,
+                          get_path, load_spec, render_title, safe_filename, select_case_rows, select_record_rows,
                           task_record_checks)
 from safe_expr import ExprError  # noqa: E402
 
@@ -109,6 +109,36 @@ class TaskRecordChecks(unittest.TestCase):
     def test_a_call_with_no_return_at_all_has_no_final_reply(self):
         self.assertEqual(self.answers(_structure(("user", True, (), None), ("assistant", True, ("a",), None))),
                          ("yes", "no", "no"))
+
+    def test_a_reply_followed_by_another_call_is_not_a_final_reply(self):
+        msgs = _structure(("user", True, (), None), ("assistant", False, ("a",), None), ("tool", True, (), "a"),
+                          ("assistant", True, (), None), ("assistant", False, ("b",), None))
+        self.assertEqual(self.answers(msgs)[2], "no")
+
+    def test_malformed_tool_calls_cannot_tell_instead_of_raising(self):
+        for bad in ([None], ["x"], "abc", 1, {"id": "a"}):
+            msgs = [{"role": "user", "nonempty": True}, {"role": "assistant", "nonempty": True, "tool_calls": bad}]
+            self.assertEqual(self.answers(msgs), ("cannot_tell",) * 3, bad)
+
+    def test_content_parts_without_text_are_empty_as_the_builder_reads_them(self):
+        blank = [{"type": "text", "text": "  "}]
+        msgs = [{"role": "user", "content": blank},
+                {"role": "assistant", "tool_calls": [{"id": "a"}]},
+                {"role": "tool", "tool_call_id": "a", "content": "x"},
+                {"role": "assistant", "content": blank}]
+        self.assertEqual(self.answers(msgs), ("no", "yes", "no"))
+        msgs[0]["content"] = msgs[3]["content"] = [{"type": "text", "text": "hi"}]
+        self.assertEqual(self.answers(msgs), ("yes", "yes", "yes"))
+
+    def test_case_rows_carry_the_three_answers(self):
+        entry = {"capsule_id": "c1", "appended_at": "2026-11-20T10:00:00Z"}
+        body = {"case": {"benchmark": "s", "domain": "d", "task_id": "t", "trial": 0},
+                "agent_interaction": {"mode": "structure", "messages": self.GOOD}}
+        with mock.patch("report_spec.list_capsules", return_value=[entry]), \
+                mock.patch("report_spec.payload", return_value=body):
+            rows = select_case_rows(None, "p")
+        self.assertEqual({k: rows[0][k] for k in self.ALL}, dict.fromkeys(self.ALL, "yes"))
+        self.assertEqual(rows[0]["tool_call_count"], 1)
 
 
 class ApplyFieldProjections(unittest.TestCase):
