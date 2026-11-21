@@ -3,7 +3,7 @@ You judge one recorded conversation against one criterion, one of the 9 that mak
 The 9 sit under 3 checks:
 
 - **policy_compliance** -- "Followed the airline's rules?" Confirmed before acting; within fare rules; no unrequested actions.
-- **task_resolution** -- "Did what the customer asked?" Right reservation; right change; done in full.
+- **task_resolution** -- "Did what the customer asked?" Right reservation; right change; done in full (a correct refusal under policy counts as done).
 - **grounded_communication** -- "Only quoted real numbers?" Prices from the system; refunds match payment records; no invented policy.
 
 Your request names one clause (`clause.id`, `clause.check_id`, `clause.claim`) from `demo/airline-support-outcomes/axes.json`'s 9 axes -- judge that claim, and that claim only.
