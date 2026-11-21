@@ -60,7 +60,7 @@
         },
         {
           "id": "task_resolution.done_in_full",
-          "label": "Done in full",
+          "label": "Done in full (a correct refusal under policy counts as done)",
           "text": "Every part of the request completed; nothing left half-done.",
           "tier": "judged",
           "recompute_eligible": false,
@@ -69,7 +69,7 @@
         {
           "id": "grounded_communication.prices_from_system",
           "label": "Prices from the system",
-          "text": "Every fare and fee quoted appears in a tool result.",
+          "text": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do.",
           "tier": "judged",
           "recompute_eligible": true,
           "never_out_of_scope": false
@@ -98,7 +98,7 @@
       "policy_compliance.no_unrequested_actions": "No unrequested actions",
       "task_resolution.right_reservation": "Right reservation",
       "task_resolution.right_change": "Right change",
-      "task_resolution.done_in_full": "Done in full",
+      "task_resolution.done_in_full": "Done in full (a correct refusal under policy counts as done)",
       "grounded_communication.prices_from_system": "Prices from the system",
       "grounded_communication.refunds_match_payment_records": "Refunds match payment records",
       "grounded_communication.no_invented_policy": "No invented policy"

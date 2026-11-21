@@ -19,7 +19,7 @@
 # old ones in the same book.
 
 pack_id: airline-support-outcomes
-pack_version: "1.6.0"
+pack_version: "1.6.1"
 rubric_version: "3.3"
 
 outcome_statement: "The customer's request is resolved correctly, within airline policy"
@@ -142,13 +142,15 @@ checks:
           ground truth to diff the tool call's arguments against mechanically; what
           "as requested" means must be read from the conversation.
       - id: done_in_full
-        label: "Done in full"
+        label: "Done in full (a correct refusal under policy counts as done)"
         text: "Every part of the request completed; nothing left half-done."
         never_out_of_scope: true
         claim_switch:
           flag: done_in_full_refusal_aware
           claim_when_on: "Every part of the request was either completed or correctly refused under policy; nothing left half-done."
           note: >
+            The row's label states the shipped default (flag on). Flag off judges the plain
+            text above and the label no longer describes it.
             On by default (a policy-correct refusal counts as met): the wording
             above lets a policy-correct "no" count as done in full. Off reverts to today's wording, which the
             live run's audit found penalizes a correct refusal (task 0: the agent
@@ -165,7 +167,7 @@ checks:
     criteria:
       - id: prices_from_system
         label: "Prices from the system"
-        text: "Every fare and fee quoted appears in a tool result."
+        text: "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do."
         tier: judged
         recompute_eligible: true
         recompute_note: >

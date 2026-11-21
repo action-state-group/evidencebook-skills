@@ -57,7 +57,7 @@
       "id": "grounded_communication.prices_from_system",
       "check_id": "grounded_communication",
       "role": "required",
-      "pass": "every fare and fee quoted appears in a tool result"
+      "pass": "every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do"
     },
     {
       "id": "grounded_communication.refunds_match_payment_records",

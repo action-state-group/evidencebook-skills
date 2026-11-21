@@ -1,7 +1,7 @@
 {
   "contract": "airline-support-outcomes/v1",
   "contract_version": "rubric-v3.3",
-  "contract_ref": "airline-support-outcomes@1.6.0",
+  "contract_ref": "airline-support-outcomes@1.6.1",
   "outcome_statement": "The customer's request is resolved correctly, within airline policy",
   "resolution_rule": "a conversation is resolved only when at least one criterion is met and every required criterion that applies to it is met; a criterion judged out_of_scope, where allowed, does not apply and never counts toward resolution (scripts/rollup.py:all_required_met)",
   "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
@@ -68,7 +68,7 @@
       "id": "task_resolution.done_in_full",
       "check_id": "task_resolution",
       "check_question": "Did what the customer asked?",
-      "label": "Done in full",
+      "label": "Done in full (a correct refusal under policy counts as done)",
       "claim": "Every part of the request completed; nothing left half-done.",
       "tier": "judged",
       "recompute_eligible": false,
@@ -77,7 +77,7 @@
       "claim_switch": {
         "flag": "done_in_full_refusal_aware",
         "claim_when_on": "Every part of the request was either completed or correctly refused under policy; nothing left half-done.",
-        "note": "On by default (a policy-correct refusal counts as met): the wording above lets a policy-correct \"no\" count as done in full. Off reverts to today's wording, which the live run's audit found penalizes a correct refusal (task 0: the agent correctly refused a cancellation outside policy and done_in_full still went not_met .93)."
+        "note": "The row's label states the shipped default (flag on). Flag off judges the plain text above and the label no longer describes it. On by default (a policy-correct refusal counts as met): the wording above lets a policy-correct \"no\" count as done in full. Off reverts to today's wording, which the live run's audit found penalizes a correct refusal (task 0: the agent correctly refused a cancellation outside policy and done_in_full still went not_met .93)."
       }
     },
     {
@@ -85,7 +85,7 @@
       "check_id": "grounded_communication",
       "check_question": "Only quoted real numbers?",
       "label": "Prices from the system",
-      "claim": "Every fare and fee quoted appears in a tool result.",
+      "claim": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do.",
       "tier": "judged",
       "recompute_eligible": true,
       "recompute_note": "A deterministic prototype exists, but its dry run found a real gap: it only matches literal figures against tool-returned fields, not sums/differences the agent legitimately computes from grounded numbers (one flagged false positive). Judged by Jev for now; recompute_eligible marks it as the first candidate once that arithmetic-reconciliation gap is closed."
@@ -128,7 +128,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "e205b20e6b5a7690432672c894b700234dbfd28e8f8d2f05c83c1c4d48d66cb7",
+  "pack_source_digest": "1fd3bbc190e76256983521210327e39f942c5036211204dc2373fe52da419f9f",
   "title": "Airline support outcomes",
   "switches": {
     "within_fare_rules_recomputed": false,
