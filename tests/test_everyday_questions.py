@@ -121,7 +121,7 @@ class RowsElevenAndTwelveScopeIsNotPermission(unittest.TestCase):
 class LabelledCases(unittest.TestCase):
     CASES = ROOT / "packs" / "everyday-rules" / "fixtures" / "cases.json"
 
-    def test_rows_11_and_12_each_have_met_not_met_and_out_of_scope(self):
+    def test_every_row_has_met_not_met_and_out_of_scope(self):
         doc = json.loads(self.CASES.read_text())
         known = set(_rows())
         seen = {}
@@ -132,11 +132,12 @@ class LabelledCases(unittest.TestCase):
                 names.add(case["case"])
                 self.assertIn(case["rule_id"], known)
                 self.assertIn(case["expected"], ("met", "not_met", "out_of_scope"))
+                self.assertTrue(case["case"].startswith("r%s-" % case["rule_id"]))
                 self.assertTrue(case["disclosed_facts"])
                 self.assertTrue(case["why"].strip())
             seen.setdefault(case["rule_id"], []).append(case["expected"])
-        for rule_id in ("11", "12"):
-            self.assertEqual(sorted(seen[rule_id]), ["met", "not_met", "out_of_scope"])
+        for rule_id in known:
+            self.assertEqual(sorted(seen.get(rule_id, [])), ["met", "not_met", "out_of_scope"], rule_id)
 
 
 if __name__ == "__main__":
