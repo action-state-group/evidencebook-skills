@@ -75,12 +75,67 @@ class NeverAroseIsOutOfScopeNotMet(unittest.TestCase):
 
 class QuestionPolarityMatchesMet(unittest.TestCase):
     """A yes to the question is a met. Rule 11 asked whether the address went to
-    an individual without asking -- a yes there is a not_met."""
+    an individual without asking -- a yes there is a not_met. Now a yes to
+    "was the user asked first?" is met, and the row's scope (an individual
+    recipient) lives in scope_note and out_of_scope_means."""
 
     def test_rule_11_asks_the_met_side(self):
         row = _rows()["11"]
         self.assertNotIn("without the user being asked", row["judge_question"])
-        self.assertIn("only to the merchant or service", row["judge_question"])
+        self.assertIn("was the user asked first?", row["judge_question"])
+        self.assertIn("the user was asked first", row["met_means"])
+
+
+
+class RowsElevenAndTwelveScopeIsNotPermission(unittest.TestCase):
+    """The scope note of rows 11 and 12 says when the row applies; whether the
+    user was asked first is only the question. The compiled claim keeps them
+    apart, and every row whose met_means names a situation says when it is out
+    of scope."""
+
+    def test_scope_notes_do_not_ask_the_permission_question(self):
+        rows = _rows()
+        for rule_id in ("11", "12"):
+            with self.subTest(rule=rule_id):
+                note = " ".join(rows[rule_id]["scope_note"].split())
+                self.assertIn("applies only when", note)
+                self.assertNotIn("Judge only whether", note)
+                self.assertIn("is the question above, not part of this scope", note)
+
+    def test_compiled_claims_for_11_and_12_carry_the_split(self):
+        compiled = json.loads(COMPILED.read_text())
+        claims = {c["rule_id"]: c["claim"] for c in compiled["clauses"]}
+        for rule_id in ("11", "12"):
+            with self.subTest(rule=rule_id):
+                self.assertIn("This row applies only when", claims[rule_id])
+                self.assertIn("was the user asked first?", claims[rule_id])
+
+    def test_every_row_with_a_situation_has_out_of_scope_means(self):
+        for rule_id, crit in _rows().items():
+            if "did not come up" in crit["judge_question"]:
+                with self.subTest(rule=rule_id):
+                    self.assertTrue(str(crit.get("out_of_scope_means", "")).strip())
+
+
+class LabelledCases(unittest.TestCase):
+    CASES = ROOT / "packs" / "everyday-rules" / "fixtures" / "cases.json"
+
+    def test_rows_11_and_12_each_have_met_not_met_and_out_of_scope(self):
+        doc = json.loads(self.CASES.read_text())
+        known = set(_rows())
+        seen = {}
+        names = set()
+        for case in doc["cases"]:
+            with self.subTest(case=case["case"]):
+                self.assertNotIn(case["case"], names)
+                names.add(case["case"])
+                self.assertIn(case["rule_id"], known)
+                self.assertIn(case["expected"], ("met", "not_met", "out_of_scope"))
+                self.assertTrue(case["disclosed_facts"])
+                self.assertTrue(case["why"].strip())
+            seen.setdefault(case["rule_id"], []).append(case["expected"])
+        for rule_id in ("11", "12"):
+            self.assertEqual(sorted(seen[rule_id]), ["met", "not_met", "out_of_scope"])
 
 
 if __name__ == "__main__":
