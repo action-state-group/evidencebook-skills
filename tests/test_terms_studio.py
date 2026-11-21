@@ -329,12 +329,18 @@ class Folds(unittest.TestCase):
         self.assertEqual(fold(sale("2026-11-01T09:59:59Z"), 3), "not_met")
         self.assertEqual(fold(sale("2026-11-01T10:00:00Z"), 1), "met")  # same instant: zero days
 
-    def test_same_instant_payment_meets_paid_before_delivered_as_the_rows_say_by(self):
-        # the pack rows read "paid before ..., by the delivery time the seller reports" (#186)
+    def test_same_instant_payment_meets_paid_before_delivered_as_the_rows_say_no_later_than(self):
+        # the pack rows read "paid no later than the delivery time the seller reports" (#186, Sherlock2's ruling)
         fold, _ = transaction.CHECKS["paid_before_delivered"]
         at = "2026-11-01T10:00:00Z"
         self.assertEqual(fold({"paid_at": at, "delivered_at": at}, None), "met")
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:01Z", "delivered_at": at}, None), "not_met")
+
+    def test_the_within_days_case_pair_misses_on_a_delivery_before_payment(self):
+        fold, _ = transaction.CHECKS["delivered_within_days"]
+        met, miss = transaction.CASES["delivered_within_days"](1)
+        self.assertEqual((fold(met, 1), fold(miss, 1)), ("met", "not_met"))
+        self.assertLess(miss["delivered_at"], miss["paid_at"])
 
     def test_the_price_fold_compares_accepted_to_offered_only(self):
         # no amount paid exists in the record, so the fold cannot say the buyer was charged it (#186)
@@ -673,7 +679,7 @@ class OtherGoods(unittest.TestCase):
         # this digest is 0.1.2's: the delivery rows rest on the seller's report (#156, 0.1.1) and the price row says the accepted price matched the price offered (#186)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "7a4bc42d508fa6a6963cac0798ee88a4eb37b62b798b1fa16027aef1eef5769c")
+                         "655d47a5f3bfbc243a11ae4b02e4d1ba0f9cedcb43a148dd34193ed1981732e5")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)

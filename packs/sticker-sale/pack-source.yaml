@@ -8,13 +8,13 @@ pack_id: sticker-sale
 pack_version: 0.1.2
 title: Sticker sale terms
 statement: >-
-  A sticker sale came through when the buyer paid before delivery and delivery came
-  within a day of payment, both by the delivery time the seller reports, and the
-  accepted price matched the price offered.
+  A sticker sale came through when the buyer paid no later than the delivery time the
+  seller reports, delivery came within a day of payment, and the accepted price
+  matched the price offered.
 evaluator: transaction
 rows:
   - id: paid_before_delivered
-    statement: The buyer paid before the sticker was delivered, by the delivery time the seller reports.
+    statement: The buyer paid no later than the delivery time the seller reports.
     tier: recomputed
     check: paid_before_delivered
     proves: [paid_at, delivered_at]

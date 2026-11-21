@@ -22,9 +22,10 @@ needs is not_evaluable, never not_met: a transaction that is not delivered yet h
 missed a delivery term.
 
     paid_before_delivered      paid_at is not after delivered_at. The packs' rows say
-                               "paid before the goods were delivered, by the delivery
-                               time the seller reports", so payment at the very instant
-                               of the reported delivery meets it ("by" includes it)
+                               "paid no later than the delivery time the seller
+                               reports" (Sherlock2's ruling on evidencebook-skills#194),
+                               so payment at the very instant of the reported delivery
+                               meets it
     delivered_within_days(N)   delivered_at - paid_at is between zero and N whole days
                                (N is written in the row's `check`, so the
                                number a seller edits lives inside the row); a
@@ -118,8 +119,10 @@ def _delivered_after(delta):
 CASES = {
     "paid_before_delivered": lambda arg: (_delivered_after(datetime.timedelta(hours=2)),
                                           _delivered_after(datetime.timedelta(hours=-1))),
+    # the miss is a delivery reported before payment (#186: it used to pass); the
+    # N days + 1 second edge is pinned in tests/test_terms_studio.py
     "delivered_within_days": lambda arg: (_delivered_after(datetime.timedelta(days=arg)),
-                                          _delivered_after(datetime.timedelta(days=arg, seconds=1))),
+                                          _delivered_after(datetime.timedelta(days=-arg))),
     "price_as_offered": lambda arg: ({"offered_price": 500, "accepted_price": 500},
                                      {"offered_price": 500, "accepted_price": 450}),
 }
