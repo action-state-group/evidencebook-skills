@@ -21,11 +21,19 @@ The folds, each met / not_met / not_evaluable. A fold that lacks a field it
 needs is not_evaluable, never not_met: a transaction that is not delivered yet has not
 missed a delivery term.
 
-    paid_before_delivered      paid_at is not after delivered_at
-    delivered_within_days(N)   delivered_at - paid_at is at most N whole days
+    paid_before_delivered      paid_at is not after delivered_at. The packs' rows say
+                               "paid no later than the delivery time the seller
+                               reports" (Sherlock2's ruling on evidencebook-skills#194),
+                               so payment at the very instant of the reported delivery
+                               meets it
+    delivered_within_days(N)   delivered_at - paid_at is between zero and N whole days
                                (N is written in the row's `check`, so the
-                               number a seller edits lives inside the row)
-    price_as_offered           accepted_price equals offered_price
+                               number a seller edits lives inside the row); a
+                               delivery reported before payment is not_met, never a
+                               pass, so a row read alone cannot hide it
+    price_as_offered           accepted_price equals offered_price. The record has no
+                               amount actually paid, so this says the seller accepted
+                               the price offered, not that the buyer was charged it
 
 `CHECKS` is the closed list of check names a row may use; `CASES` builds the two
 transactions per check (one met, one not) that `terms test` runs.
@@ -71,7 +79,8 @@ def delivered_within_days(deal, arg):
     paid, delivered = _time(deal.get("paid_at")), _time(deal.get("delivered_at"))
     if paid is None or delivered is None:
         return "not_evaluable"
-    return "met" if delivered - paid <= datetime.timedelta(days=arg) else "not_met"
+    gap = delivered - paid
+    return "met" if datetime.timedelta(0) <= gap <= datetime.timedelta(days=arg) else "not_met"
 
 
 def price_as_offered(deal, arg):
@@ -110,8 +119,10 @@ def _delivered_after(delta):
 CASES = {
     "paid_before_delivered": lambda arg: (_delivered_after(datetime.timedelta(hours=2)),
                                           _delivered_after(datetime.timedelta(hours=-1))),
+    # the miss is a delivery reported before payment (#186: it used to pass); the
+    # N days + 1 second edge is pinned in tests/test_terms_studio.py
     "delivered_within_days": lambda arg: (_delivered_after(datetime.timedelta(days=arg)),
-                                          _delivered_after(datetime.timedelta(days=arg, seconds=1))),
+                                          _delivered_after(datetime.timedelta(days=-arg))),
     "price_as_offered": lambda arg: ({"offered_price": 500, "accepted_price": 500},
                                      {"offered_price": 500, "accepted_price": 450}),
 }

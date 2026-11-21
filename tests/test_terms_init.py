@@ -162,7 +162,7 @@ class Init(unittest.TestCase):
     def test_rewording_a_row_keeps_it_unready(self):
         _, res = self.init([self.sale(offered_price="5.00", accepted_price="5.00")])
         src = pathlib.Path(res["pack"])
-        src.write_text(src.read_text().replace("The price was the price offered.", "We charged what we listed."))
+        src.write_text(src.read_text().replace("The accepted price matched the price offered.", "We charged what we listed."))
         call("lint", src)
         table = json.loads((src.parent / "readiness.json").read_text())
         row = {t["term"]: t for t in table["terms"]}["price_as_offered"]

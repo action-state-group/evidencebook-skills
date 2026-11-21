@@ -74,16 +74,16 @@ rows and change only the words and the number:
 scope:
   kind: deal
 pack_id: sticker-sale
-pack_version: 0.1.1
+pack_version: 0.1.2
 title: Sticker sale terms
 statement: >-
-  A sticker sale came through when the buyer paid before delivery and delivery came
-  within a day of payment, both by the delivery time the seller reports, and the
-  price was the price offered.
+  A sticker sale came through when the buyer paid no later than the delivery time the
+  seller reports, the seller reports delivery within a day of payment, and the
+  accepted price matched the price offered.
 evaluator: transaction
 rows:
   - id: paid_before_delivered
-    statement: The buyer paid before the sticker was delivered, by the delivery time the seller reports.
+    statement: The buyer paid no later than the delivery time the seller reports.
     tier: recomputed
     check: paid_before_delivered
     proves: [paid_at, delivered_at]
@@ -93,7 +93,7 @@ rows:
     check: delivered_within_days(1)
     proves: [paid_at, delivered_at]
   - id: price_as_offered
-    statement: The price was the price offered.
+    statement: The accepted price matched the price offered.
     tier: recomputed
     check: price_as_offered
     proves: [offered_price, accepted_price]
@@ -110,7 +110,7 @@ the path of the file you wrote.
 The three checks are all there is: `paid_before_delivered`, `delivered_within_days(N)` (a
 whole number of days, written inside the row) and `price_as_offered`. When the seller
 changes the number, change it in both places: the `statement` and the `check`. Bump
-`pack_version` (0.1.1 to 0.1.2) whenever a row changes, so the two versions can be told apart.
+`pack_version` (0.1.2 to 0.1.3) whenever a row changes, so the two versions can be told apart.
 `delivered_at` is the delivery time the seller reports, not one the buyer confirmed, so keep
 that in the `paid_before_delivered` and `delivered_within_days` statements ("by the delivery time the seller
 reports", "by the seller's own report").

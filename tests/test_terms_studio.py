@@ -321,6 +321,33 @@ class Folds(unittest.TestCase):
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 1), "not_met")
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 2), "met")
 
+    def test_delivered_within_days_is_not_met_when_delivery_precedes_payment(self):
+        # evidencebook-skills#186: a negative gap used to pass "within N days"
+        fold, _ = transaction.CHECKS["delivered_within_days"]
+        sale = lambda d: {"paid_at": "2026-11-01T10:00:00Z", "delivered_at": d}  # noqa: E731
+        self.assertEqual(fold(sale("2026-10-30T10:00:00Z"), 1), "not_met")
+        self.assertEqual(fold(sale("2026-11-01T09:59:59Z"), 3), "not_met")
+        self.assertEqual(fold(sale("2026-11-01T10:00:00Z"), 1), "met")  # same instant: zero days
+
+    def test_same_instant_payment_meets_paid_before_delivered_as_the_rows_say_no_later_than(self):
+        # the pack rows read "paid no later than the delivery time the seller reports" (#186, Sherlock2's ruling)
+        fold, _ = transaction.CHECKS["paid_before_delivered"]
+        at = "2026-11-01T10:00:00Z"
+        self.assertEqual(fold({"paid_at": at, "delivered_at": at}, None), "met")
+        self.assertEqual(fold({"paid_at": "2026-11-01T10:00:01Z", "delivered_at": at}, None), "not_met")
+
+    def test_the_within_days_case_pair_misses_on_a_delivery_before_payment(self):
+        fold, _ = transaction.CHECKS["delivered_within_days"]
+        met, miss = transaction.CASES["delivered_within_days"](1)
+        self.assertEqual((fold(met, 1), fold(miss, 1)), ("met", "not_met"))
+        self.assertLess(miss["delivered_at"], miss["paid_at"])
+
+    def test_the_price_fold_compares_accepted_to_offered_only(self):
+        # no amount paid exists in the record, so the fold cannot say the buyer was charged it (#186)
+        fold, _ = transaction.CHECKS["price_as_offered"]
+        self.assertEqual(fold({"offered_price": 500, "accepted_price": 500, "paid_price": 900}, None), "met")
+        self.assertEqual(fold({"offered_price": 500, "paid_price": 500}, None), "not_evaluable")
+
     def test_paid_before_delivered_fails_when_delivery_comes_first(self):
         fold, _ = transaction.CHECKS["paid_before_delivered"]
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:00Z", "delivered_at": "2026-11-01T09:00:00Z"}, None), "not_met")
@@ -456,7 +483,7 @@ class RulesChecker(unittest.TestCase):
         ok = self.run_checker(check_input("deal-a", 150, 150))
         self.assertEqual((ok["verdict"], ok["definition_digest"]), ("allow", self.pin["definition_digest"]))
         # capsulectl's sealer reads name@version as an email address and refuses the answer
-        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.1")
+        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.2")
         self.assertNotIn("@", ok["ruleset_id"])
         by = {f["id"]: f["verdict"] for f in ok["findings"]}
         self.assertEqual(by, {"paid_before_delivered": "not_applicable", "delivered_within_days": "not_applicable",
@@ -480,19 +507,19 @@ class RulesChecker(unittest.TestCase):
         usd = check_input("deal-a", 50, 60)
         usd["record"]["agent_input"]["body"]["currency"] = "USD"
         bad = self.price_finding(usd)
-        self.assertEqual(bad["reason"], 'your rule "The price was the price offered" did not hold (the commit was $0.60, the offer $0.50)')
+        self.assertEqual(bad["reason"], 'your rule "The accepted price matched the price offered" did not hold (the commit was $0.60, the offer $0.50)')
         # a unit the card cannot format (sats), or none stated, leaves the amounts out, never printed wrong
         self.assertNotIn("$", self.price_finding(check_input("deal-a", 50, 60))["reason"])
         sats = check_input("deal-a", 50, 60)
         sats["record"]["agent_input"]["body"]["currency"] = "SAT"
         self.assertEqual(self.price_finding(sats)["reason"],
-                         'your rule "The price was the price offered" did not hold (the commit price is not the price offered)')
+                         'your rule "The accepted price matched the price offered" did not hold (the commit price is not the price offered)')
         # the offer stage: no commit yet, the row is said as pending, not as unchecked
         offer = check_input("deal-a", 50, 50)
         offer["record"]["agent_input"]["body"] = {"action": "offer", "amount_minor": 50}
         pending = self.price_finding(offer)
         self.assertEqual((pending["verdict"], pending["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is checked at the commit'))
+                         ("not_evaluable", 'your rule "The accepted price matched the price offered" is checked at the commit'))
         # a commit with no offer on record is a real gap, said as one
         gap = check_input("deal-a", 50, 50)
         gap["history"] = []
@@ -508,7 +535,7 @@ class RulesChecker(unittest.TestCase):
         after["record"]["agent_input"]["body"] = {"action": "share_contact"}
         done = self.price_finding(after)
         self.assertEqual((done["verdict"], done["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is decided at the commit'))
+                         ("not_evaluable", 'your rule "The accepted price matched the price offered" is decided at the commit'))
         # a clean commit says nothing
         self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
 
@@ -649,10 +676,10 @@ class OtherGoods(unittest.TestCase):
 
     def test_the_sticker_sale_definition_digest_pin(self):
         # the evaluator name is not part of definition_digest, so a rename changes no pin;
-        # this digest is 0.1.1's, where the delivery rows say they rest on the seller's report (#156)
+        # this digest is 0.1.2's: the delivery rows rest on the seller's report (#156, 0.1.1) and the price row says the accepted price matched the price offered (#186)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "b863e5e4898fc328acc2d997371aff651ec53bd5d4032a26aeac0b21d047d0a7")
+                         "655d47a5f3bfbc243a11ae4b02e4d1ba0f9cedcb43a148dd34193ed1981732e5")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)
