@@ -85,7 +85,7 @@
       "check_id": "grounded_communication",
       "check_question": "Only quoted real numbers?",
       "label": "Prices from the system",
-      "claim": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do.",
+      "claim": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that appear in a tool result.",
       "tier": "judged",
       "recompute_eligible": true,
       "recompute_note": "A deterministic prototype exists, but its dry run found a real gap: it only matches literal figures against tool-returned fields, not sums/differences the agent legitimately computes from grounded numbers (one flagged false positive). Judged by Jev for now; recompute_eligible marks it as the first candidate once that arithmetic-reconciliation gap is closed."
@@ -128,7 +128,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "1fd3bbc190e76256983521210327e39f942c5036211204dc2373fe52da419f9f",
+  "pack_source_digest": "b1ff048352d2d39f5548674a6da7d4127cb4ab4df3d8b243d8f70bb06b655f87",
   "title": "Airline support outcomes",
   "switches": {
     "within_fare_rules_recomputed": false,

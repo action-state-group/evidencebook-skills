@@ -9,7 +9,7 @@ An **example** pack (see [#192](https://github.com/action-state-group/evidencebo
 
 ## Known gaps
 
-- **Extra cancellation.** An unrequested cancellation the agent makes on top of the requested ones still returns `met` in the allowed-action recompute (`tests/test_recompute.py:538-559` asserts it). It is not fixed here.
+- **Extra cancellation.** An unrequested write the agent bundles into the narration of a confirmed one still reads as confirmed in the deterministic confirm-before-write check (`scripts/recompute.py:469`; `tests/test_recompute.py:538-559` asserts `met`). That check is not run for this pack, whose `confirmed_before_acting` and `no_unrequested_actions` rows are judged; the same wrong `met` is the open gap in the EU pack's recomputed row. Not fixed here.
 - **No per-row fixtures.** The judged rows have no labelled cases to check a judge against.
 - **tau2 and Jev.** The pack reads tau2 airline data and is judged by Jev (`scripts/judges/jev_judge.py`); it does not run on other data or another judge without work.
 - **Stale copy.** `demo/tau2-outcomes/` is an older compiled copy and is not regenerated from this source.

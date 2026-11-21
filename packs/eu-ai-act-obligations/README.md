@@ -11,5 +11,6 @@ A report from this pack is a count, per test, of sessions that met it, did not m
 ## Known gaps
 
 - **tau2 and Jev.** The pack is bound to tau2 airline data and judged by Jev (`scripts/judges/jev_judge.py`); its allowed-action checks are airline policy.
+- **Extra cancellation.** The recomputed `art26.allowed_action_rules` row can return `met` when an unrequested cancellation is bundled into the narration of a confirmed one (`scripts/recompute.py:469`; `tests/test_recompute.py:538-559` asserts it). Read `met` there as "no rule violation found", not as "every write was confirmed". Not fixed here.
 - **No labelled cases.** Ten of its rows are model judgments with no labelled cases to check them against.
 - **Art 50 turn-one row.** Always not evaluable on this dataset, as above.

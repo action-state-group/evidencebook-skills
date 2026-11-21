@@ -72,7 +72,7 @@
       "profile": "outcome",
       "statement": "Prices from the system",
       "tier": "must_have",
-      "evidence_rule": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "evidence_rule": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that appear in a tool result.\n\nJudged on one recorded conversation, from the conversation (`agent_interaction.messages` -- customer and agent turns, tool calls and their results, in order) and the airline policy (`airline-data/policy.md`, supplied to the judge as text).\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
       "forward_verdict": "UNAVAILABLE-MODEL-REQUIRED",
       "backward_verdict": "MODEL-ASSISTED",
       "mode": "judged",

@@ -167,7 +167,7 @@ checks:
     criteria:
       - id: prices_from_system
         label: "Prices from the system"
-        text: "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do."
+        text: "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that appear in a tool result."
         tier: judged
         recompute_eligible: true
         recompute_note: >

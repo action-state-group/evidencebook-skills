@@ -69,7 +69,7 @@
         {
           "id": "grounded_communication.prices_from_system",
           "label": "Prices from the system",
-          "text": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that do.",
+          "text": "Every fare and fee quoted appears in a tool result, or is a total or difference worked out from figures that appear in a tool result.",
           "tier": "judged",
           "recompute_eligible": true,
           "never_out_of_scope": false
