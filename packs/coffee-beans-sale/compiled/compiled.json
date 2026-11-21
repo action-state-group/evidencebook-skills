@@ -3,7 +3,7 @@
   "contract_ref": "coffee-beans-sale@0.1.2",
   "scope": "deal",
   "title": "Coffee beans sale terms",
-  "statement": "A coffee beans sale came through when the buyer paid no later than the delivery time the seller reports, delivery came within 3 days of payment, and the accepted price matched the price offered.",
+  "statement": "A coffee beans sale came through when the buyer paid no later than the delivery time the seller reports, the seller reports delivery within 3 days of payment, and the accepted price matched the price offered.",
   "evaluator": "transaction",
   "rows": [
     {
