@@ -21,8 +21,94 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
 from report_spec import (UNREADABLE, MetricUnknown, ReportSpecError, _offset_matches, apply_field_projections,  # noqa: E402
                           build_documents, build_rows, compute_metric, contract_ref,
                           evaluate_group, extract_flatten_rows, extract_tool_result_rows,
-                          get_path, load_spec, render_title, safe_filename, select_record_rows)
+                          get_path, load_spec, render_title, safe_filename, select_record_rows,
+                          task_record_checks)
 from safe_expr import ExprError  # noqa: E402
+
+
+def _structure(*items):
+    """A record sealed without text: (role, nonempty, call_ids, answers) per message."""
+    out = []
+    for role, nonempty, calls, answers in items:
+        m = {"role": role, "nonempty": nonempty}
+        if calls:
+            m["tool_calls"] = [{"id": c} for c in calls]
+        if answers:
+            m["tool_call_id"] = answers
+        out.append(m)
+    return out
+
+
+class TaskRecordChecks(unittest.TestCase):
+    ALL = ("task_message_first", "call_results_in_order", "final_reply")
+    GOOD = _structure(("user", True, (), None), ("assistant", False, ("a",), None), ("tool", True, (), "a"),
+                      ("assistant", True, (), None))
+
+    def answers(self, messages):
+        got = task_record_checks(messages)
+        self.assertEqual(tuple(got), self.ALL)
+        return tuple(got.values())
+
+    def test_complete_record_without_text(self):
+        self.assertEqual(self.answers(self.GOOD), ("yes", "yes", "yes"))
+
+    def test_complete_record_with_text_as_tau2_seals_it(self):
+        msgs = [{"role": "user", "content": "hi"},
+                {"role": "assistant", "content": None, "tool_calls": [{"id": "a", "name": "f"}]},
+                {"role": "tool", "tool_call_id": "a", "content": "ok"},
+                {"role": "assistant", "content": "done"}]
+        self.assertEqual(self.answers(msgs), ("yes", "yes", "yes"))
+
+    def test_absent_or_malformed_messages_cannot_tell(self):
+        for msgs in (None, "x", ["x"]):
+            self.assertEqual(self.answers(msgs), ("cannot_tell",) * 3)
+
+    def test_no_tool_call_is_not_applicable(self):
+        self.assertEqual(self.answers(_structure(("user", True, (), None), ("assistant", True, (), None))),
+                         ("not_applicable",) * 3)
+        self.assertEqual(self.answers([]), ("not_applicable",) * 3)
+
+    def test_the_agent_acting_before_the_person_wrote_is_no(self):
+        msgs = _structure(("assistant", False, ("a",), None), ("user", True, (), None), ("tool", True, (), "a"),
+                          ("assistant", True, (), None))
+        self.assertEqual(self.answers(msgs)[0], "no")
+        empty = _structure(("user", False, (), None), ("assistant", False, ("a",), None), ("tool", True, (), "a"),
+                           ("assistant", True, (), None))
+        self.assertEqual(self.answers(empty)[0], "no")
+
+    def test_missing_duplicate_or_early_return_is_no(self):
+        missing = _structure(("user", True, (), None), ("assistant", False, ("a", "b"), None), ("tool", True, (), "a"),
+                             ("assistant", True, (), None))
+        dup = _structure(("user", True, (), None), ("assistant", False, ("a",), None), ("tool", True, (), "a"),
+                         ("tool", True, (), "a"), ("assistant", True, (), None))
+        early = _structure(("user", True, (), None), ("tool", True, (), "a"), ("assistant", False, ("a",), None),
+                           ("assistant", True, (), None))
+        for msgs in (missing, dup, early):
+            self.assertEqual(self.answers(msgs)[1], "no")
+
+    def test_a_call_id_used_twice_or_absent_is_no(self):
+        twice = _structure(("user", True, (), None), ("assistant", False, ("a", "a"), None), ("tool", True, (), "a"),
+                           ("tool", True, (), "a"), ("assistant", True, (), None))
+        absent = [{"role": "user", "nonempty": True}, {"role": "assistant", "nonempty": False, "tool_calls": [{}]},
+                  {"role": "tool", "nonempty": True}, {"role": "assistant", "nonempty": True}]
+        self.assertEqual(self.answers(twice)[1], "no")
+        self.assertEqual(self.answers(absent)[1], "no")
+
+    def test_no_final_reply_is_no(self):
+        none = self.GOOD[:3]
+        empty = self.GOOD[:3] + _structure(("assistant", False, (), None))
+        more_calls = self.GOOD[:3] + _structure(("assistant", True, ("b",), None))
+        for msgs in (none, empty, more_calls):
+            self.assertEqual(self.answers(msgs)[2], "no")
+
+    def test_final_reply_must_come_after_the_last_return(self):
+        msgs = _structure(("user", True, (), None), ("assistant", True, ("a",), None), ("assistant", True, (), None),
+                          ("tool", True, (), "a"))
+        self.assertEqual(self.answers(msgs)[2], "no")
+
+    def test_a_call_with_no_return_at_all_has_no_final_reply(self):
+        self.assertEqual(self.answers(_structure(("user", True, (), None), ("assistant", True, ("a",), None))),
+                         ("yes", "no", "no"))
 
 
 class ApplyFieldProjections(unittest.TestCase):

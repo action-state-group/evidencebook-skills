@@ -42,7 +42,8 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
         kind: case | record | tool_result | flatten
         # kind: case        -- one row per sealed conversation record (a book
         #   entry whose payload is {"case": {...}, "agent_interaction": {...}}).
-        #   Built-in fields: case_id, day, tool_call_count, plus whatever
+        #   Built-in fields: case_id, day, tool_call_count, the three record-
+        #   completeness answers (see task_record_checks), plus whatever
         #   `fields:` (dotted paths into the payload) names.
         # kind: record      -- `case`'s sibling for a use case whose sealed
         #   records aren't tau2's conversation shape: `match:` (dotted path ->
@@ -252,6 +253,53 @@ def _tool_call_count(messages):
     return sum(len(m.get("tool_calls") or []) for m in messages or [])
 
 
+def _is_nonempty(message):
+    """A message's non-empty flag: the sealed `nonempty` (a record sealed without
+    text, as capsule-emit's task-request does by default), else its content."""
+    if "nonempty" in message:
+        return message["nonempty"] is True
+    content = message.get("content")
+    return bool(content.strip()) if isinstance(content, str) else bool(content)
+
+
+def task_record_checks(messages):
+    """The three record-completeness answers for one task's sealed messages, each
+    "yes", "no", "cannot_tell" (the messages are absent or not a list of messages)
+    or "not_applicable" (the task made no tool call). They read only roles, order,
+    call ids and non-empty flags, so they answer on a record sealed without text.
+
+    - task_message_first: a non-empty user message comes before the first tool call.
+    - call_results_in_order: every tool call has exactly one tool return with its
+      id, after it; a missing, duplicate or early return, or a call id used twice
+      or absent, is "no". (`_tool_results` keys returns by id and so overwrites a
+      duplicate and ignores order; this check does neither.)
+    - final_reply: after the last tool return, a non-empty assistant message that
+      makes no further call.
+
+    It proves the record is complete, not that the task went well."""
+    if not isinstance(messages, list) or not all(isinstance(m, dict) for m in messages):
+        return dict.fromkeys(("task_message_first", "call_results_in_order", "final_reply"), "cannot_tell")
+    calls = [(i, c) for i, m in enumerate(messages) for c in (m.get("tool_calls") or [])]
+    if not calls:
+        return dict.fromkeys(("task_message_first", "call_results_in_order", "final_reply"), "not_applicable")
+    first_call = calls[0][0]
+    first = any(m.get("role") == "user" and _is_nonempty(m) for m in messages[:first_call])
+    returns = [(i, m.get("tool_call_id")) for i, m in enumerate(messages) if m.get("role") == "tool"]
+    ids = [c.get("id") for _, c in calls]
+    ordered = all(isinstance(cid, str) and cid for cid in ids) and len(set(ids)) == len(ids)
+    if ordered:
+        for (call_at, call), cid in zip(calls, ids):
+            at = [i for i, rid in returns if rid == cid]
+            if len(at) != 1 or at[0] <= call_at:
+                ordered = False
+                break
+    last_return = max((i for i, _ in returns), default=-1)
+    final = any(m.get("role") == "assistant" and _is_nonempty(m) and not m.get("tool_calls")
+                for m in messages[last_return + 1:]) if returns else False
+    yes_no = lambda ok: "yes" if ok else "no"  # noqa: E731
+    return {"task_message_first": yes_no(first), "call_results_in_order": yes_no(ordered), "final_reply": yes_no(final)}
+
+
 def _tool_results(messages, tool_name):
     """(call, parsed_result_or_None) for every call to `tool_name`, in
     conversation order -- a small, generic correlator (tool_calls[] carry the
@@ -279,8 +327,8 @@ def _tool_results(messages, tool_name):
 
 def select_case_rows(capsulectl, profile, date_from=None, date_to=None, fields=None):
     """One row per sealed conversation in [date_from, date_to] (inclusive,
-    either end optional) -- built-in fields case_id/day/tool_call_count, plus
-    `fields` (name -> dotted path into the payload)."""
+    either end optional) -- built-in fields case_id/day/tool_call_count and the
+    task_record_checks answers, plus `fields` (name -> dotted path into the payload)."""
     fields = fields or {}
     rows = []
     for entry in list_capsules(capsulectl, profile):
@@ -301,6 +349,7 @@ def select_case_rows(capsulectl, profile, date_from=None, date_to=None, fields=N
             "case_id": case_id,
             "day": day.isoformat(),
             "tool_call_count": _tool_call_count(messages),
+            **task_record_checks(messages),
             "__capsule_id": entry["capsule_id"],
             "__messages": messages,
         }
