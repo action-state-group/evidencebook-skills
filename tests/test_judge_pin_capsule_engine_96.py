@@ -61,7 +61,7 @@ ANSWER_SCHEMA_HASH = "69fa84e81389a9544d456b189411048e32ab5b36071ef3d0136accd1db
 # above plus rule 9's compiled question (jev_judge.compiled_prompt_digest).
 # Rewording rule 9's question moves this literal, by design (evidencebook-skills#190
 # added rule 9's out_of_scope_means line, which the compiled question carries).
-RULE9_PROMPT_TEMPLATE_HASH = "e6f605c9f002e9f9eb32d9dba2fd326f52f812106367186d06ec7ef242e16bfe"
+RULE9_PROMPT_TEMPLATE_HASH = "54d68f9b3f5be23adb460cf00cb8b43ac840a63d6d16738a508e70bf62254751"
 
 
 def compiled_pack():
