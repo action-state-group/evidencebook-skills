@@ -110,11 +110,12 @@ class RowsElevenAndTwelveScopeIsNotPermission(unittest.TestCase):
                 self.assertIn("This row applies only when", claims[rule_id])
                 self.assertIn("was the user asked first?", claims[rule_id])
 
-    def test_every_row_with_a_situation_has_out_of_scope_means(self):
+    def test_every_row_has_out_of_scope_means(self):
+        """The pack header promises it for every row whose met_means names a
+        situation; all 13 rows do."""
         for rule_id, crit in _rows().items():
-            if "did not come up" in crit["judge_question"]:
-                with self.subTest(rule=rule_id):
-                    self.assertTrue(str(crit.get("out_of_scope_means", "")).strip())
+            with self.subTest(rule=rule_id):
+                self.assertTrue(str(crit.get("out_of_scope_means", "")).strip())
 
 
 class LabelledCases(unittest.TestCase):
