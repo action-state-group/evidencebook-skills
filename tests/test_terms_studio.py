@@ -477,7 +477,7 @@ class RulesChecker(unittest.TestCase):
         ok = self.run_checker(check_input("deal-a", 150, 150))
         self.assertEqual((ok["verdict"], ok["definition_digest"]), ("allow", self.pin["definition_digest"]))
         # capsulectl's sealer reads name@version as an email address and refuses the answer
-        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.1")
+        self.assertEqual(ok["ruleset_id"], "sticker-sale/0.1.2")
         self.assertNotIn("@", ok["ruleset_id"])
         by = {f["id"]: f["verdict"] for f in ok["findings"]}
         self.assertEqual(by, {"paid_before_delivered": "not_applicable", "delivered_within_days": "not_applicable",
@@ -501,19 +501,19 @@ class RulesChecker(unittest.TestCase):
         usd = check_input("deal-a", 50, 60)
         usd["record"]["agent_input"]["body"]["currency"] = "USD"
         bad = self.price_finding(usd)
-        self.assertEqual(bad["reason"], 'your rule "The price was the price offered" did not hold (the commit was $0.60, the offer $0.50)')
+        self.assertEqual(bad["reason"], 'your rule "The accepted price matched the price offered" did not hold (the commit was $0.60, the offer $0.50)')
         # a unit the card cannot format (sats), or none stated, leaves the amounts out, never printed wrong
         self.assertNotIn("$", self.price_finding(check_input("deal-a", 50, 60))["reason"])
         sats = check_input("deal-a", 50, 60)
         sats["record"]["agent_input"]["body"]["currency"] = "SAT"
         self.assertEqual(self.price_finding(sats)["reason"],
-                         'your rule "The price was the price offered" did not hold (the commit price is not the price offered)')
+                         'your rule "The accepted price matched the price offered" did not hold (the commit price is not the price offered)')
         # the offer stage: no commit yet, the row is said as pending, not as unchecked
         offer = check_input("deal-a", 50, 50)
         offer["record"]["agent_input"]["body"] = {"action": "offer", "amount_minor": 50}
         pending = self.price_finding(offer)
         self.assertEqual((pending["verdict"], pending["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is checked at the commit'))
+                         ("not_evaluable", 'your rule "The accepted price matched the price offered" is checked at the commit'))
         # a commit with no offer on record is a real gap, said as one
         gap = check_input("deal-a", 50, 50)
         gap["history"] = []
@@ -529,7 +529,7 @@ class RulesChecker(unittest.TestCase):
         after["record"]["agent_input"]["body"] = {"action": "share_contact"}
         done = self.price_finding(after)
         self.assertEqual((done["verdict"], done["reason"]),
-                         ("not_evaluable", 'your rule "The price was the price offered" is decided at the commit'))
+                         ("not_evaluable", 'your rule "The accepted price matched the price offered" is decided at the commit'))
         # a clean commit says nothing
         self.assertNotIn("reason", self.price_finding(check_input("deal-a", 50, 50)))
 
@@ -670,10 +670,10 @@ class OtherGoods(unittest.TestCase):
 
     def test_the_sticker_sale_definition_digest_pin(self):
         # the evaluator name is not part of definition_digest, so a rename changes no pin;
-        # this digest is 0.1.1's, where the delivery rows say they rest on the seller's report (#156)
+        # this digest is 0.1.2's: the delivery rows rest on the seller's report (#156, 0.1.1) and the price row says the accepted price matched the price offered (#186)
         import deal_pack
         self.assertEqual(deal_pack.definition_digest(terms.load_pack(SOURCE)),
-                         "b863e5e4898fc328acc2d997371aff651ec53bd5d4032a26aeac0b21d047d0a7")
+                         "7a4bc42d508fa6a6963cac0798ee88a4eb37b62b798b1fa16027aef1eef5769c")
 
     def test_a_second_pack_lints_tests_and_runs_over_the_same_evaluator(self):
         self.assertEqual(call("lint", self.BEANS)[0], 0)
