@@ -140,6 +140,16 @@ class TaskRecordChecks(unittest.TestCase):
         self.assertEqual({k: rows[0][k] for k in self.ALL}, dict.fromkeys(self.ALL, "yes"))
         self.assertEqual(rows[0]["tool_call_count"], 1)
 
+    def test_a_malformed_record_makes_a_row_with_cannot_tell_not_a_crash(self):
+        entry = {"capsule_id": "c1", "appended_at": "2026-11-20T10:00:00Z"}
+        for bad in (1, [None], "abc"):
+            body = {"case": {"benchmark": "s", "domain": "d", "task_id": "t", "trial": 0},
+                    "agent_interaction": {"messages": [{"role": "assistant", "tool_calls": bad}]}}
+            with mock.patch("report_spec.list_capsules", return_value=[entry]), \
+                    mock.patch("report_spec.payload", return_value=body):
+                rows = select_case_rows(None, "p")
+            self.assertEqual({k: rows[0][k] for k in self.ALL}, dict.fromkeys(self.ALL, "cannot_tell"), bad)
+
 
 class ApplyFieldProjections(unittest.TestCase):
     def test_plain_dotted_path(self):

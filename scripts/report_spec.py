@@ -250,7 +250,10 @@ def apply_field_projections(row, body, fields):
 
 
 def _tool_call_count(messages):
-    return sum(len(m.get("tool_calls") or []) for m in messages or [])
+    # A record this reader cannot parse counts no calls; task_record_checks answers cannot_tell for it.
+    if not isinstance(messages, list):
+        return 0
+    return sum(len(m["tool_calls"]) for m in messages if isinstance(m, dict) and isinstance(m.get("tool_calls"), list))
 
 
 def _is_nonempty(message):
