@@ -40,7 +40,8 @@ regulation: "Regulation (EU) 2024/1689 (the EU AI Act), as amended by Regulation
 outcome_statement: "Whether each in-scope test, read against an EU AI Act obligation, was met in this session"
 resolution_rule: >
   no resolved roll-up is reported and no overall compliance percentage is produced; each test is reported as a
-  count of sessions, met, not met or not evaluable
+  count of sessions, met, not met or not evaluable; a count of what was observed, not a finding that the AI
+  system complies or does not comply with the EU AI Act
 counterparty: SAMPLE-PLACEHOLDER-no-counterparty
 counterparty_note: >
   SAMPLE PLACEHOLDER, not a party: this contract has no counterparty, so

@@ -3,7 +3,7 @@
   "contract_version": "rubric-v0.2",
   "contract_ref": "eu-ai-act-obligations@0.2.4",
   "outcome_statement": "Whether each in-scope test, read against an EU AI Act obligation, was met in this session",
-  "resolution_rule": "no resolved roll-up is reported and no overall compliance percentage is produced; each test is reported as a count of sessions, met, not met or not evaluable",
+  "resolution_rule": "no resolved roll-up is reported and no overall compliance percentage is produced; each test is reported as a count of sessions, met, not met or not evaluable; a count of what was observed, not a finding that the AI system complies or does not comply with the EU AI Act",
   "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
   "counterparty_note": "SAMPLE PLACEHOLDER, not a party: this contract has no counterparty, so every Close is unilateral. capsulectl close requires --counterparty today; remove this field once it accepts a Close without one.",
   "source": "",
@@ -177,7 +177,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "a04c3bbcfbb7f2a45fc0718a2f7a5df8377c94dac8c7f47aede68f38acb71a8a",
+  "pack_source_digest": "eb679e0e204ef1981f6ae01c7c215df0b1a32ab110e7e6bc5142e0aaf4b31d6b",
   "title": "EU AI Act obligations",
   "switches": {
     "out_of_scope_verdict": true
