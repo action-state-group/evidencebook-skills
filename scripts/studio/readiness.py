@@ -39,7 +39,7 @@ PROPOSED_ROWS = (
      "tier": "recomputed", "check": "paid_before_delivered", "proves": ["paid_at", "delivered_at"]},
     {"id": "delivered_within_days", "statement": "By the seller's own report, the goods were delivered within 2 days of payment.",
      "tier": "recomputed", "check": "delivered_within_days(2)", "proves": ["paid_at", "delivered_at"]},
-    {"id": "price_as_offered", "statement": "The price was the price offered.",
+    {"id": "price_as_offered", "statement": "The accepted price matched the price offered.",
      "tier": "recomputed", "check": "price_as_offered", "proves": ["offered_price", "accepted_price"]},
 )
 
