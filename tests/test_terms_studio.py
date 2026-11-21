@@ -321,6 +321,27 @@ class Folds(unittest.TestCase):
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 1), "not_met")
         self.assertEqual(fold(sale("2026-11-02T10:00:01Z"), 2), "met")
 
+    def test_delivered_within_days_is_not_met_when_delivery_precedes_payment(self):
+        # evidencebook-skills#186: a negative gap used to pass "within N days"
+        fold, _ = transaction.CHECKS["delivered_within_days"]
+        sale = lambda d: {"paid_at": "2026-11-01T10:00:00Z", "delivered_at": d}  # noqa: E731
+        self.assertEqual(fold(sale("2026-10-30T10:00:00Z"), 1), "not_met")
+        self.assertEqual(fold(sale("2026-11-01T09:59:59Z"), 3), "not_met")
+        self.assertEqual(fold(sale("2026-11-01T10:00:00Z"), 1), "met")  # same instant: zero days
+
+    def test_same_instant_payment_meets_paid_before_delivered_as_the_rows_say_by(self):
+        # the pack rows read "paid before ..., by the delivery time the seller reports" (#186)
+        fold, _ = transaction.CHECKS["paid_before_delivered"]
+        at = "2026-11-01T10:00:00Z"
+        self.assertEqual(fold({"paid_at": at, "delivered_at": at}, None), "met")
+        self.assertEqual(fold({"paid_at": "2026-11-01T10:00:01Z", "delivered_at": at}, None), "not_met")
+
+    def test_the_price_fold_compares_accepted_to_offered_only(self):
+        # no amount paid exists in the record, so the fold cannot say the buyer was charged it (#186)
+        fold, _ = transaction.CHECKS["price_as_offered"]
+        self.assertEqual(fold({"offered_price": 500, "accepted_price": 500, "paid_price": 900}, None), "met")
+        self.assertEqual(fold({"offered_price": 500, "paid_price": 500}, None), "not_evaluable")
+
     def test_paid_before_delivered_fails_when_delivery_comes_first(self):
         fold, _ = transaction.CHECKS["paid_before_delivered"]
         self.assertEqual(fold({"paid_at": "2026-11-01T10:00:00Z", "delivered_at": "2026-11-01T09:00:00Z"}, None), "not_met")
