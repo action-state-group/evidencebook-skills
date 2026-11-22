@@ -138,8 +138,9 @@ with no model; steps 2 to 5 are the same.
    its digest before it writes anything to the book. For a Mesh node's settlement page
    the pack is `wording/inference-deals-settlement-en.json` (its digest is beside it in
    `wording/inference-deals-settlement-en.sha256`); with `--wording` on the
-   inference-deals pack report.sh also adds the `contract-report/v1` opt-in to the
-   bundle, because the contract report is the view that reads the pack's row words. A
+   deterministic (evaluator) pack, such as inference-deals, report.sh also adds the
+   `contract-report/v1` opt-in to the bundle, because the contract report is the view
+   that reads the pack's row words. A
    pack the viewer refuses is dropped and the page still seals and checks `match`, so
    when you hand over a worded page, read its text: the pack's row labels must be on
    it and the line "The wording pack supplied with this page was refused" must not

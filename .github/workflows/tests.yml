@@ -154,11 +154,13 @@ jobs:
   report-grades:
     runs-on: ubuntu-latest
     env:
-      # `book report build --seal` and `book report check` are on evidencebook
-      # main, not yet in a capsulectl-book release. capsule-cli is the commit
-      # that plugin's go.mod builds against.
-      EVIDENCEBOOK_REF: 608b797ad6b9114acef72db121e4c029211c7800
-      CAPSULE_CLI_REF: 759a4fb12c231e372eb285bd58f930ccc64cfee3  # v0.1.0-rc32
+      # `book report build --seal`, `book report check` and `--wording` are in
+      # capsulectl-book v0.1.0-rc46. The page check in tests/fresh_env_deals.sh
+      # needs a viewer that draws the contract report's row words (viewer go
+      # v0.19.2 in that release), which the older pins did not carry. capsule-cli
+      # is the release that plugin pairs with.
+      EVIDENCEBOOK_REF: f9e1d35ec387ed096721b5e26cea42cf89f4bc0b  # capsulectl/v0.1.0-rc46
+      CAPSULE_CLI_REF: b7fbdd0fb414780b603164388b435c9df90e5e9d  # v0.1.0-rc46
     steps:
       - uses: actions/checkout@v4
         with:

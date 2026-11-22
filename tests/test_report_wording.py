@@ -150,7 +150,8 @@ class CommittedSettlementPack(unittest.TestCase):
     def test_it_names_every_row_and_group_of_the_pack_and_no_other(self):
         entries = self.pack["entries"]
         clause_ids = [c["id"] for c in self.compiled["clauses"]]
-        groups = {c["check_id"] for c in self.compiled["clauses"]}
+        # The viewer groups a row by the part of its requirement_ref before the first dot.
+        groups = {c["id"].split(".", 1)[0] for c in self.compiled["clauses"]}
         for cid in clause_ids:
             for part in ("label", "detail", "not_evaluable"):
                 self.assertIn(f"row.{cid}.{part}", entries)
@@ -274,6 +275,20 @@ class ReportShWording(unittest.TestCase):
         argv = self.build_argv()
         self.assertIn("--seal", argv)
         self.assertEqual(argv[argv.index("--wording-digest") + 1], _sha(PACK))
+
+    @unittest.skipUnless(os.path.exists("/bin/bash"), "no system bash")
+    def test_the_flag_paths_run_under_the_system_bash(self):
+        # macOS's /bin/bash is 3.2, where an empty array under `set -u` and `mapfile` break.
+        for case in ([], self.digest_args()):
+            shutil.rmtree(self.capture); self.capture.mkdir()
+            env = dict(os.environ, STUB_CAPTURE=str(self.capture),
+                       PATH=f"{pathlib.Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}")
+            proc = subprocess.run(["/bin/bash", str(self.tmp / "scripts" / "report.sh"), "--spec", str(self.spec),
+                                   "--profile", "p", "--date", "2026-10-01", "--out", str(self.tmp / "r.html"),
+                                   "--capsulectl", str(self.ctl), "--work", str(self.tmp / "w3"), *case],
+                                  capture_output=True, text=True, env=env, timeout=120)
+            self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+            self.assertEqual("--wording" in self.build_argv(), bool(case))
 
     def test_the_two_flags_come_together(self):
         for args in (["--wording", str(PACK)], ["--wording-digest", _sha(PACK)]):
