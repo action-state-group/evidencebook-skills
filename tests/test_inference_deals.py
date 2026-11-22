@@ -441,7 +441,7 @@ class PackDigestCited(unittest.TestCase):
         # it: release the plugin with the new constant in the same batch, or
         # nodes refuse each other's proposals and this judge refuses their deals.
         self.assertEqual(compiled()["pack_source_digest"],
-                         "8a3d6ac1d585639ffd00b5d0ae858662cd355548bd26c1ef29a119b09735e37e")
+                         "cfcc3ce44fecb3ea2b5378d9a905151d2197f4f2dd9be28f29717d5313f636ae")
 
     def test_records_citing_the_packs_own_digest_are_judged_as_before(self):
         provider = load("provider")

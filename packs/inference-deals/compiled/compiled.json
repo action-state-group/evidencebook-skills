@@ -2,7 +2,7 @@
   "contract": "inference-deals/v1",
   "contract_version": "rubric-v0.1",
   "contract_ref": "inference-deals@0.1.2",
-  "outcome_statement": "On every counted deal in the window, the node's own records show it came through on the terms it accepted: it paid as agreed when it bought, and when it provided, it recorded settlement for every invoice it issued and reported running the model it was asked for. Every record is checked against the signer keys the reader trusts. A deal that holds a record whose signature does not verify (altered, or not what it claims), or whose signer is not among those keys, is shown as \"Couldn't tell\" (not_evaluable), never as met or not met; the run's result records which. A signer outside your keys is not a finding of tampering. A record that does not verify never creates a deal, so with no trusted keys there is no deal to report and the run says so. A row is countersigned only when the book also holds the other side's own signed leg of every payment and that leg's signature verifies under a key you trust; otherwise it stays self-attested, and the result says whether that leg's signature did not verify (altered, or not what it claims) or the other side signed with a key you have not chosen to trust, which alone is not a sign of tampering. To earn countersigned, give your trusted keys again with the other side's key added (capsulectl profile update --trusted-key <your key> --trusted-key <the other side's key>: the flag replaces the list).",
+  "outcome_statement": "On every counted deal in the window, the node's own records show it came through on the terms it accepted: it paid as agreed when it bought, and when it provided, it recorded settlement for every invoice it issued and reported running the model it was asked for. Every record is checked against the signer keys the reader trusts. A deal that holds a record whose signature does not verify (altered, or not what it claims), or whose signer is not among those keys, is shown as \"Couldn't tell\" (not_evaluable), never as met or not met; the run's result records which. A signer outside your keys is not a finding of tampering. A record that does not verify never creates a deal, so with no trusted keys there is no deal to report and the run says so. A row is countersigned only when the book also holds the other side's own signed leg of every payment and that leg's signature verifies under a key you trust; otherwise it stays self-attested, and the result says whether that leg's signature did not verify (altered, or not what it claims) or the other side signed with a key you have not chosen to trust, which alone is not a sign of tampering. To earn countersigned, give your trusted keys again with the other side's key added (capsulectl profile update --profile <your profile> --trusted-key <your key> --trusted-key <the other side's key>: the flag replaces the list).",
   "resolution_rule": "a deal is resolved only when every term that applies to it is met",
   "counterparty": "mesh-peer",
   "counterparty_note": "The peer's book of the same exchange is not held on this node. It is shown as not_available, never as a failure or as agreement.",
@@ -60,7 +60,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "8a3d6ac1d585639ffd00b5d0ae858662cd355548bd26c1ef29a119b09735e37e",
+  "pack_source_digest": "cfcc3ce44fecb3ea2b5378d9a905151d2197f4f2dd9be28f29717d5313f636ae",
   "title": "Inference deals",
   "switches": {
     "out_of_scope_verdict": true

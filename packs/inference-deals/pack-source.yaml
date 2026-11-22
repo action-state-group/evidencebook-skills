@@ -45,8 +45,9 @@ outcome_statement: >-
   signature did not verify (altered, or not what it claims) or the other side
   signed with a key you have not chosen to trust, which alone is not a sign of
   tampering. To earn countersigned, give your trusted keys again with the
-  other side's key added (capsulectl profile update --trusted-key <your key>
-  --trusted-key <the other side's key>: the flag replaces the list).
+  other side's key added (capsulectl profile update --profile <your profile>
+  --trusted-key <your key> --trusted-key <the other side's key>: the flag
+  replaces the list).
 resolution_rule: >-
   a deal is resolved only when every term that applies to it is met
 counterparty: mesh-peer
