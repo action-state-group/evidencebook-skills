@@ -181,7 +181,8 @@ class CommittedSettlementPack(unittest.TestCase):
 
     def test_a_row_label_does_not_promise_more_than_the_evaluator_checks(self):
         entries = self.pack["entries"]
-        self.assertIn("its own record", entries["row.come_through.served_named_model.label"])
+        self.assertIn("a referee's ruling", entries["row.come_through.served_named_model.label"])
+        self.assertIn("referee", entries["row.come_through.served_named_model.detail"])
         self.assertIn("does not show that the answer was good", entries["row.come_through.served_as_agreed.detail"])
         self.assertIn("which no one else has checked", entries["row.come_through.served_named_model.detail"])
 
