@@ -83,9 +83,9 @@ if problems:
     print("; ".join(problems), file=sys.stderr)
     print("--- the page's visible text, first 3000 characters ---", file=sys.stderr)
     print(re.sub(r"\n\s*\n+", "\n", text)[:3000], file=sys.stderr)
-    log = open(dom.replace(".dom", ".chrome.log")).read().splitlines()
+    log = open(dom[:-4] + ".chrome.log").read().splitlines()
     print("--- Chrome's console lines ---", file=sys.stderr)
-    print("\n".join(l[:400] for l in log if "CONSOLE" in l or "ERROR:CONSOLE" in l or "Uncaught" in l)[:3000], file=sys.stderr)
+    print("\n".join(l[:400] for l in log if "CONSOLE" in l or "Uncaught" in l)[:3000], file=sys.stderr)
     sys.exit(1)
 EOF
   PAGE_CHECK=PASS

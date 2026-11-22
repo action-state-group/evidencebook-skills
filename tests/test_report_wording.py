@@ -119,6 +119,8 @@ class WordingPackCheck(unittest.TestCase):
             "an invisible character in the id": lambda p: p.update(id="x\u202e/v0"),
             "an invisible character in an entry": lambda p: p["entries"].update({"report.title": "T\u200bU"}),
             "a default-ignorable character in the id": lambda p: p.update(id="x\u034f/v0"),
+            "an unassigned default-ignorable in the id": lambda p: p.update(id="x\u2065/v0"),
+            "an unassigned default-ignorable in an entry": lambda p: p["entries"].update({"report.title": "T\u2065U"}),
             "a variation selector in an entry": lambda p: p["entries"].update({"report.title": "T\ufe0fU"}),
             "a locale that is not a locale": lambda p: p.update(locale="e"),
         }.items():
