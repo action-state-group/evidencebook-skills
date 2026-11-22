@@ -46,6 +46,10 @@ class UntrustedSigner(EvidenceUnavailable):
 # cli/verify_capsule.go (bare shape), and both shapes' "no trusted key" report.
 _UNTRUSTED_TEXT = ("not authorized by the profile trusted_keys", "not among the profile's trusted keys")
 _NO_TRUSTED_KEY = "not_performed: no trusted key"
+# What it prints when it refused the capsule: the bare shape's error line, and the
+# record shape's `"...": "failed"` check member on stdout.
+_REFUSED = "capsule verification failed"
+_FAILED_CHECK = '": "failed'
 
 
 def run(capsulectl, *args, check=True):
@@ -90,9 +94,16 @@ def verify(capsulectl, profile, capsule_id, workdir):
     result = subprocess.run([capsulectl, "verify", "--profile", profile, "--capsule", str(path)], capture_output=True, text=True)
     if result.returncode != 0:
         said = result.stderr.strip()
+        # Untrusted first: the bare shape's "key_id is not among the trusted keys"
+        # message also starts with "capsule verification failed".
         if any(t in said or t in result.stdout for t in _UNTRUSTED_TEXT) or _NO_TRUSTED_KEY in result.stdout:
             raise UntrustedSigner(f"capsule {capsule_id}: signer not in the trusted keys: {said}")
-        raise CapsuleDoesNotVerify(f"capsule {capsule_id} does not verify: {said}")
+        if _REFUSED in said or _FAILED_CHECK in result.stdout:
+            raise CapsuleDoesNotVerify(f"capsule {capsule_id} does not verify: {said}")
+        # No verdict: a killed process, a bad profile, a capsulectl that could not
+        # run. That is a tool failure for the whole run, never a finding about this capsule.
+        raise EvidenceUnavailable(f"capsulectl verify gave no verdict for {capsule_id} "
+                                  f"(exit {result.returncode}): {said}")
 
 
 def committed_on(entry, day):

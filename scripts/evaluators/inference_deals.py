@@ -107,7 +107,8 @@ deal with a record that does not verify is not judged: every row is
 not_evaluable, with `x-reason` `capsule_signature_did_not_verify` (the signature
 or identity was refused) or `capsule_signer_not_trusted` (the signer is not among
 the reader's trusted keys, which is not a finding of tampering); the first wins
-when both occur. Such a record never gives a deal its window time, a side's key
+when both occur. Only a record the window reads counts: one whose own time is
+after the window end is not read, as `collect` does not read it. Such a record never gives a deal its window time, a side's key
 or a counterparty class, and never creates a deal. A record that cannot be
 attributed to a counted deal (a leg, or a record of a deal the verified records
 do not establish) only adds to `x-window.unverified_capsules`, and a leg held by
@@ -311,6 +312,15 @@ def collect(records, start, to):
     return kept, legs, own_keys
 
 
+def _after_window(body, to):
+    """Whether an untrusted record's own time says it is after the window, so
+    `collect` would not have read it either. A time that does not read is not."""
+    try:
+        return _time(body.get("timestamp")) >= to
+    except (AttributeError, ValueError):
+        return False
+
+
 def _attribute_unverified(deals, unverified_records):
     """Mark the deals that records which did not verify belong to. `unverified_records`:
     [(book capsule id, payload, reason)]. The payload is untrusted: read it only
@@ -320,18 +330,18 @@ def _attribute_unverified(deals, unverified_records):
     for cid, body, reason in unverified_records:
         try:
             kind, member = _kind(body)
+            if kind in ("observation", "exchange"):
+                source = member if kind == "observation" else member.get("serving_provenance")
+                xid = source.get("exchange_id") if isinstance(source, dict) else None
+                targets = [deals[xid]] if isinstance(xid, str) and xid in deals else []
+            elif kind == "adjudication":
+                halves = _adjudicated_halves(member)
+                targets = [d for d in deals.values()
+                           if halves & {b.get("capsule_id") for _, b, _ in d.exchanges}]
+            else:
+                continue  # a leg names no deal; it only drops out of the book (build_result)
         except (AttributeError, TypeError):
             continue  # not shaped as any Mesh record, so it names no deal
-        if kind in ("observation", "exchange"):
-            source = member if kind == "observation" else member.get("serving_provenance")
-            xid = source.get("exchange_id") if isinstance(source, dict) else None
-            targets = [deals[xid]] if isinstance(xid, str) and xid in deals else []
-        elif kind == "adjudication":
-            halves = _adjudicated_halves(member)
-            targets = [d for d in deals.values()
-                       if halves & {b.get("capsule_id") for _, b, _ in d.exchanges}]
-        else:
-            continue  # a leg names no deal; it only drops out of the book (build_result)
         for deal in targets:
             # The signature failure is the stronger reading when one deal has both.
             if deal.unverified.get(cid) != UNVERIFIED:
@@ -562,6 +572,7 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
     policy = policy or window["period_policy"]
     start, to, periods = window_bounds(date, window["months"], policy)
     deals, legs, own_keys = collect(records, start, to)
+    bad = [b for b in bad if not _after_window(b[1], to)]  # collect would not have read it
     _attribute_unverified(deals, bad)
 
     ordered = sorted(deals.values(), key=lambda d: (d.first, d.exchange_id))
@@ -634,7 +645,11 @@ def read_book(capsulectl, profile):
             body = payload(capsulectl, profile, cid)
             records.append((cid, body))
             try:
-                if _kind(body)[0] is not None:
+                try:
+                    mesh = _kind(body)[0] is not None
+                except (AttributeError, TypeError):
+                    mesh = True  # unreadable as a Mesh record: verify it, so a bad one is set aside
+                if mesh:
                     verify(capsulectl, profile, cid, work)
             except UntrustedSigner:
                 unverified[cid] = UNTRUSTED

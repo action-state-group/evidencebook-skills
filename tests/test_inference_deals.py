@@ -591,15 +591,33 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
         unverified["phantom"] = deals.UNVERIFIED
         doc, _ = self.judged(unverified, provider)
         self.assertEqual(doc["x-window"]["deals_counted"], before["x-window"]["deals_counted"])
-        self.assertEqual(doc["x-window"]["unverified_capsules"], 4)
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 3)  # the future-dated one is not read
         self.assertEqual(doc["x-window"]["signature_unverified_deals"], 1)
+
+    def test_an_unverified_record_dated_after_the_window_decides_nothing(self):
+        provider = load("provider")
+        plain, _ = run(provider)
+        late = copy.deepcopy(next(c for c in provider if observation(c)
+                                  and observation(c).get("exchange_id") == "p-deal-settled"))
+        late["capsule_id"], late["timestamp"] = "late", "2999-01-01T00:00:00Z"
+        provider.append(late)
+        doc, _ = self.judged({"late": deals.UNTRUSTED}, provider)
+        self.assertEqual(doc, plain)
 
     def test_a_malformed_unverified_record_never_stops_the_run(self):
         provider = load("provider")
         provider.append({"capsule_id": "junk1", "model_attestation": [1, 2]})
         provider.append({"capsule_id": "junk2", "model_attestation": {"compute_attestation": "x"}})
-        doc, _ = self.judged({"junk1": deals.UNVERIFIED, "junk2": deals.UNVERIFIED}, provider)
-        self.assertEqual(doc["x-window"]["unverified_capsules"], 2)
+        junk3 = copy.deepcopy(next(c for c in provider if any(b in deals._attestation(c)
+                                                              for b in deals.ADJUDICATION_BLOCKS)))
+        junk3["capsule_id"] = "junk3"
+        for block in deals.ADJUDICATION_BLOCKS:
+            if block in deals._attestation(junk3):
+                deals._attestation(junk3)[block]["halves"] = 5
+        provider.append(junk3)
+        doc, _ = self.judged({"junk1": deals.UNVERIFIED, "junk2": deals.UNVERIFIED, "junk3": deals.UNVERIFIED},
+                             provider)
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 3)
         self.assertNotIn("signature_unverified_deals", doc["x-window"])
 
     def test_a_tampered_record_cannot_exclude_a_deal_as_shop_preauth_or_change_other_grades(self):
@@ -673,6 +691,8 @@ elif a[0] == "verify":
         print("capsule verification failed: the signature verifies, but its key_id is not among the profile's trusted keys", file=sys.stderr); sys.exit(1)
     elif mode == "untrusted_record":
         print("producer is not authorized by the profile trusted_keys", file=sys.stderr); sys.exit(1)
+    elif mode == "crash":
+        print("operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
     elif mode == "no_trusted_key":
         print(json.dumps({"producer_signature": "passed", "producer_trust": "not_performed: no trusted key"})); sys.exit(3)
 '''
@@ -749,6 +769,19 @@ class ReadBookVerifiesEveryCapsule(unittest.TestCase):
         proc, _ = self.run_main({})
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertNotIn("unverified_capsules", json.loads(proc.stdout)["window"])
+
+    def test_a_malformed_capsule_that_does_not_verify_is_set_aside_and_one_that_does_stops_nothing_new(self):
+        junk = {"capsule_id": "junk", "model_attestation": [1, 2]}
+        self.provider.append(junk)
+        proc, _ = self.run_main({"junk": "bad"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["window"]["unverified_capsules"], 1)
+
+    def test_a_verify_that_gives_no_verdict_is_a_tool_failure_not_a_finding(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        proc, _ = self.run_main({victim: "crash"})
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("no verdict", json.loads(proc.stdout)["error"])
 
     def test_a_capsulectl_that_cannot_get_one_exits_2(self):
         victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
