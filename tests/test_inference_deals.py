@@ -976,6 +976,18 @@ class CounterpartyLegSignature(unittest.TestCase):
         doc, _ = self.judged({i: deals.UNVERIFIED for i in bad}, broken)
         self.assertNotIn("x-countersign", self.row(doc))
 
+    def test_a_malformed_leg_under_the_nodes_own_key_or_with_a_bad_key_never_stops_the_run(self):
+        own = [c["capsule_id"] for c in self.provider if "settlement" in c]
+        junk = []
+        for c in self.book:
+            if c["capsule_id"] in own[:2]:  # the node's own key, a payment_ref that is no object
+                c = dict(c, settlement=dict(c["settlement"], payment_ref="not-an-object"))
+            elif c["capsule_id"] in own[2:3]:  # a key_id that is no string
+                c = dict(c, key_id=[])
+            junk.append(c)
+        doc, _ = self.judged({i: deals.UNVERIFIED for i in own[:3]}, junk)
+        self.assertEqual(self.row(doc, "d3")["verdict"], "not_evaluable")
+
     def test_a_row_cites_only_the_legs_that_failed_for_it(self):
         own = [c["capsule_id"] for c in self.provider if "settlement" in c]
         bad = self.terms_leg_of("p-deal-settled")[0]

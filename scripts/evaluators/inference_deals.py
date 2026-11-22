@@ -463,9 +463,10 @@ def _countersigned(side, hashes, legs, own_keys, bad_legs=()):
                 if side == "provider" and foreign(tbody, treason) and own(body):
                     found.setdefault(h, []).append((treason, tcid))  # the counterparty's leg is the terms one
         return found
+    bad_legs = [x for x in bad_legs if _well_formed_leg(x[1], x[2])]  # before any member is read
     # A bad leg under one of this node's own keys is joined like any other.
     good = [(cid, b, m, None) for cid, b, m in legs] + [(c, b, m, None) for c, b, m, _ in bad_legs if own(b)]
-    bad = [x for x in bad_legs if not own(x[1]) and _well_formed_leg(x[1], x[2])]
+    bad = [x for x in bad_legs if not own(x[1])]
     verified = pairs(good)
     candidates = pairs(good + bad)
     reasons, cited = set(), set()
