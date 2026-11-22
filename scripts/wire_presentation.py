@@ -5,6 +5,7 @@
     wire_presentation.py --bundle bundle.json --presentation presentation.json \
         [--sealed-result result-v0-sealed.json] --out wired.json
     wire_presentation.py label --bundle wired.json
+    wire_presentation.py opt-in --bundle bundle.json --out wired.json
 
 scripts/pack_compile.py writes a presentation.json beside every compiled.json:
 exactly one template block, keyed by the pack's report template (REPORT_TEMPLATES
@@ -240,6 +241,24 @@ def wire(bundle, presentation, sealed_digest=None):
     return wired, template, card
 
 
+def opt_in(bundle):
+    """Pure: a new bundle whose extensions carry the closed empty contract-report/v1
+    opt-in and nothing else. For a report with no presentation.json (the evaluator
+    path, scripts/report.sh --wording): the opt-in alone selects the contract-report
+    module, which reads the page's words from a wording pack. A bundle that already
+    carries it is refused, never overwritten."""
+    if not isinstance(bundle, dict):
+        raise WireError("bundle is not a JSON object")
+    extensions = bundle.get("extensions")
+    if extensions is not None and not isinstance(extensions, dict):
+        raise WireError("bundle.extensions is not a JSON object")
+    if extensions and CONTRACT_REPORT_KEY in extensions:
+        raise WireError(f"bundle already carries a {CONTRACT_REPORT_KEY} extension; refusing to overwrite it")
+    wired = copy.deepcopy(bundle)
+    wired.setdefault("extensions", {})[CONTRACT_REPORT_KEY] = {}
+    return wired
+
+
 def jcs(value):
     """RFC 8785 JCS bytes for the JSON values a presentation block holds:
     objects, arrays, strings, integers, booleans and null. Keys sort by their
@@ -394,6 +413,20 @@ def main(argv):
             return 1
         args.out.write_text(json.dumps(sealed))
         print(json.dumps({"template": template, "card": card, DIGEST_MEMBER: sealed[DIGEST_MEMBER]}))
+        return 0
+    if argv[:1] == ["opt-in"]:
+        ap = argparse.ArgumentParser(prog="wire_presentation.py opt-in",
+                                     description="add the empty contract-report/v1 opt-in to a disclosed bundle")
+        ap.add_argument("--bundle", required=True, type=pathlib.Path)
+        ap.add_argument("--out", required=True, type=pathlib.Path)
+        args = ap.parse_args(argv[1:])
+        try:
+            wired = opt_in(_read(args.bundle))
+        except (OSError, json.JSONDecodeError, WireError) as e:
+            print(f"wire_presentation.py opt-in: {e}", file=sys.stderr)
+            return 1
+        args.out.write_text(json.dumps(wired))
+        print(json.dumps({"extension": CONTRACT_REPORT_KEY}))
         return 0
     if argv[:1] == ["label"]:
         ap = argparse.ArgumentParser(prog="wire_presentation.py label",

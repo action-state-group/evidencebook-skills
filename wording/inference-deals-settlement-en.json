@@ -1,0 +1,24 @@
+{
+  "wording_pack_version": "aac.wording-pack/v0",
+  "id": "evidencebook-skills.wording.inference-deals-settlement-en/v0",
+  "locale": "en",
+  "entries": {
+    "report.title": "Settlement report: this node's inference deals",
+    "report.summary": "What this node's own sealed records show about how its paid inference deals settled, with its deals counted: met, not met, couldn't tell, or did not apply. Every record is checked against the signer keys you trust; a deal whose records do not check out is counted as couldn't tell, not as a failure, and a signer you do not trust is not a sign of tampering.",
+    "group.come_through.title": "Did the node come through on the terms it accepted?",
+    "row.come_through.paid_as_agreed.label": "Paid as agreed",
+    "row.come_through.paid_as_agreed.detail": "When the node bought: every invoice it saw has a settlement its own wallet reported (the node's own report), for the invoice's amount.",
+    "row.come_through.paid_as_agreed.not_evaluable": "The node's records do not show enough to say whether it paid as agreed, or a record could not be checked: its signature did not verify, or it was signed by a key you have not chosen to trust, which alone is not a sign of tampering.",
+    "row.come_through.served_as_agreed.label": "Settlement recorded for every invoice it issued",
+    "row.come_through.served_as_agreed.detail": "When the node provided: its records show the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. This does not show that the answer was good, or that the node's own report of what it ran is true.",
+    "row.come_through.served_as_agreed.not_evaluable": "The node's records do not show enough to say whether a settlement was recorded for every invoice it issued, or a record could not be checked: its signature did not verify, or it was signed by a key you have not chosen to trust, which alone is not a sign of tampering.",
+    "row.come_through.served_named_model.label": "Model it reports running matches the model requested (its own record, or a referee's ruling)",
+    "row.come_through.served_named_model.detail": "When a referee decided the deal, this row shows the referee's verdict, read for this node. Otherwise it compares the model its record says was requested with the model its record says answered, which no one else has checked.",
+    "row.come_through.served_named_model.not_evaluable": "The node's records do not show enough to say whether the model it reports running is the model requested, or a record could not be checked: its signature did not verify, or it was signed by a key you have not chosen to trust, which alone is not a sign of tampering.",
+    "verdict.met": "Met",
+    "verdict.not_met": "Not met",
+    "verdict.not_evaluable": "Couldn't tell",
+    "verdict.out_of_scope": "Did not apply to this deal",
+    "tier.recomputed": "Recomputed from the sealed records"
+  }
+}
