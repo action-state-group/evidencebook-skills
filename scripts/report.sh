@@ -32,7 +32,7 @@
 #       --out report.html [--work DIR] [--capsulectl PATH] [--card CARD] \
 #       [--title TITLE] [--attach-input-originals] [--seal] \
 #       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live] \
-#       [--period-policy FILE] [--now TIME]
+#       [--period-policy FILE] [--now TIME] [--wording FILE --wording-digest SHA256]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
 # from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
@@ -69,6 +69,19 @@
 # tool calls and results -- is carried in the bundle and shown on the page. It
 # is off by default: it discloses the raw conversations, not just digests.
 #
+# --wording FILE --wording-digest SHA256 lays an aac.wording-pack/v0 wording pack
+# over the page's words (capsulectl book report build --wording; the two flags
+# come together, and the digest is the lowercase hex SHA-256 of the pack's exact
+# bytes). scripts/wording_pack.py checks the file and the digest before anything
+# is written to the book, so a bad pack stops the run with nothing sealed. The
+# settlement pack is wording/inference-deals-settlement-en.json (its digest is in
+# wording/inference-deals-settlement-en.sha256). On the evaluator path the pack
+# also needs the page to use the contract-report view, which is what reads its
+# row words: report.sh adds the closed empty contract-report/v1 opt-in to the
+# disclosed bundle (wire_presentation.py opt-in), which nothing signs and which
+# carries no words. Without --wording the page is unchanged. The judged and
+# report-spec paths pass the pack through as it is.
+#
 # --seal is the evidencebook-report skill's grade 2 (sealed and checked):
 # `book report build --seal` writes the page's SHA-256 into the book and
 # checkpoints it, then `book report check` must answer page "match" with the
@@ -85,13 +98,13 @@ usage: report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] 
                   [--work DIR] [--capsulectl PATH] [--card CARD]
                   [--title TITLE] [--attach-input-originals] [--seal]
                   [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
-                  [--period-policy FILE] [--now TIME]
+                  [--period-policy FILE] [--now TIME] [--wording FILE --wording-digest SHA256]
 EOF
   exit 2
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
-TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW=
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW= WORDING= WORDING_DIGEST=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -110,12 +123,20 @@ while [[ $# -gt 0 ]]; do
     --judge-backend) JUDGE_BACKEND=$2; shift 2 ;;
     --period-policy) PERIOD_POLICY=$2; shift 2 ;;
     --now) NOW=$2; shift 2 ;;
+    --wording) WORDING=$2; shift 2 ;;
+    --wording-digest) WORDING_DIGEST=$2; shift 2 ;;
     *) usage ;;
   esac
 done
 [[ -n "$SPEC" && -n "$PROFILE" && -n "$DATE" && -n "$OUT" ]] || usage
 [[ -f "$SPEC" ]] || { echo "report.sh: no such spec file: $SPEC" >&2; exit 2; }
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
+[[ -n "$WORDING" && -n "$WORDING_DIGEST" || -z "$WORDING" && -z "$WORDING_DIGEST" ]] \
+  || { echo "report.sh: --wording and --wording-digest come together" >&2; exit 2; }
+if [[ -n "$WORDING" ]]; then
+  python3 "$(dirname "${BASH_SOURCE[0]}")/wording_pack.py" check --pack "$WORDING" --digest "$WORDING_DIGEST" >/dev/null \
+    || exit 2
+fi
 if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
   [[ -n "${TYPESAFE_API_KEY:-}" || -n "${OPENROUTER_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set" >&2; exit 2; }
@@ -327,6 +348,13 @@ uncheckpointed=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); pr
 [[ "$uncheckpointed" -eq 0 ]] || fail "$uncheckpointed records in the disclosed bundle have no membership entry"
 BUNDLE="$WORK/bundle.json"
 
+if [[ -n "$WORDING" && "$MODE" == "evaluator" ]]; then
+  step "select the contract-report view: the wording pack's row words are read by it"
+  python3 "$REPO/scripts/wire_presentation.py" opt-in --bundle "$BUNDLE" --out "$WORK/bundle-contract-report.json" \
+    || fail "could not add the contract-report/v1 opt-in to the bundle"
+  BUNDLE="$WORK/bundle-contract-report.json"
+fi
+
 if [[ -n "$PRESENTATION_JSON" ]]; then
   step "wire the pack's own presentation block into the bundle (must match the sealed digest)"
   BUNDLE="$WORK/bundle-wired.json"
@@ -355,11 +383,13 @@ json.dump({'title': json.load(open(sys.argv[1]))['view']['title']}, open(sys.arg
 
 mkdir -p "$(dirname "$OUT")"
 # A sealed page is built in the run directory and reaches --out only once it checks.
-PAGE=$OUT REPORT_EXTRA=()
+PAGE=$OUT REPORT_EXTRA=() WORDING_ARGS=()
+if [[ -n "$WORDING" ]]; then WORDING_ARGS=(--wording "$WORDING" --wording-digest "$WORDING_DIGEST"); fi
 if [[ "$SEAL" -eq 1 ]]; then PAGE="$WORK/report.html"; REPORT_EXTRA+=(--seal); fi
 step "capsulectl book report build: render $PAGE (--card $CARD${REPORT_EXTRA[@]+ ${REPORT_EXTRA[*]}})"
 "$CAPSULECTL" book report build --profile "$PROFILE" --bundle "$BUNDLE" --card "$CARD" \
-  --presentation "$PRESENTATION_FILE" --out "$PAGE" ${REPORT_EXTRA[@]+"${REPORT_EXTRA[@]}"} | tee "$WORK/report-build.json"
+  --presentation "$PRESENTATION_FILE" --out "$PAGE" ${REPORT_EXTRA[@]+"${REPORT_EXTRA[@]}"} \
+  ${WORDING_ARGS[@]+"${WORDING_ARGS[@]}"} | tee "$WORK/report-build.json"
 [[ -f "$PAGE" ]] || fail "report.html was not written"
 
 if [[ "$SEAL" -eq 1 ]]; then

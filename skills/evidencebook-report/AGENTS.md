@@ -133,11 +133,17 @@ with no model; steps 2 to 5 are the same.
    The **wording pack** (`aac.wording-pack/v0`: consumer/en for a person, the node
    operator's pack for Mesh) is applied through the SDK's `report.View.Wording`
    (`evidencebook/report` v0.2.0). On the command line it is `--wording FILE
-   --wording-digest SHA256`, which is on evidencebook main but not yet in a
-   capsulectl-book release. `scripts/report.sh` takes no wording pack, so its page
-   always carries the viewer's base words, and the skill says so; only this step run by
-   hand with `--wording` and `--wording-digest`, on a capsulectl-book built from
-   evidencebook main, applies one. A worded page gets no permalink, by
+   --wording-digest SHA256` (in capsulectl-book v0.1.0-rc46: `book report build --help`
+   lists it), and `scripts/report.sh` takes the same two flags, checking the file and
+   its digest before it writes anything to the book. For a Mesh node's settlement page
+   the pack is `wording/inference-deals-settlement-en.json` (its digest is beside it in
+   `wording/inference-deals-settlement-en.sha256`); with `--wording` on the
+   inference-deals pack report.sh also adds the `contract-report/v1` opt-in to the
+   bundle, because the contract report is the view that reads the pack's row words. A
+   pack the viewer refuses is dropped and the page still seals and checks `match`, so
+   when you hand over a worded page, read its text: the pack's row labels must be on
+   it and the line "The wording pack supplied with this page was refused" must not
+   (`tests/fresh_env_deals.sh` does this). A worded page gets no permalink, by
    design: the permalink would carry the bundle without the words.
 5. **Check.** `capsulectl book report check --profile NAME --page report.html` must say
    `match`. Anything else (`mismatch`, `no sealed record`, `not covered by a checkpoint`)
@@ -191,7 +197,6 @@ with `View.Wording` and `View.ContractReport`; the judged packs above with their
 the Mesh inference-deals pack (`scripts/evaluators/inference_deals.py`, no judge, run end
 to end by `tests/fresh_env_deals.sh`); `scripts/report.sh --seal`, `scripts/packs.py` and
 `scripts/narration_check.py`, run end to end by `tests/fresh_env_report.sh`.
-Not yet: a Muse personal-deals pack; a released command-line
-wording flag (`--wording` is on evidencebook main); the standard History card
+Not yet: a Muse personal-deals pack; the standard History card
 derivation; the ad-hoc report path. The skill states each gap to the person instead of
 working around it.

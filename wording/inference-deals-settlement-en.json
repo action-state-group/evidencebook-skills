@@ -1,0 +1,24 @@
+{
+  "wording_pack_version": "aac.wording-pack/v0",
+  "id": "evidencebook-skills.wording.inference-deals-settlement-en/v0",
+  "locale": "en",
+  "entries": {
+    "report.title": "Settlement report: did the node come through on its inference deals?",
+    "report.summary": "What this node's own sealed records show about how its paid inference deals settled. Each row is one term the node accepted, with its claims counted by verdict.",
+    "group.come_through.title": "Did the node come through on the terms it accepted?",
+    "row.come_through.paid_as_agreed.label": "Paid as agreed",
+    "row.come_through.paid_as_agreed.detail": "When the node bought: every invoice it saw has a settlement its own wallet reported, for the invoice's amount.",
+    "row.come_through.paid_as_agreed.not_evaluable": "The node's records do not show enough to say whether it paid as agreed.",
+    "row.come_through.served_as_agreed.label": "Settlement recorded for what it served",
+    "row.come_through.served_as_agreed.detail": "When the node provided: it served the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. The quality of the answer is not checked.",
+    "row.come_through.served_as_agreed.not_evaluable": "The node's records do not show enough to say whether a settlement was recorded for what it served.",
+    "row.come_through.served_named_model.label": "Model it reported matches the model it named (its own report)",
+    "row.come_through.served_named_model.detail": "When the node provided: the model that answered is the model it named. Unless a referee already decided the deal, this is the node's own report of both, which no one else has checked.",
+    "row.come_through.served_named_model.not_evaluable": "The node's records do not show enough to say which model answered.",
+    "verdict.met": "Met",
+    "verdict.not_met": "Not met",
+    "verdict.not_evaluable": "Could not be decided",
+    "verdict.out_of_scope": "Did not apply to this deal",
+    "tier.recomputed": "Recomputed from the sealed records"
+  }
+}
