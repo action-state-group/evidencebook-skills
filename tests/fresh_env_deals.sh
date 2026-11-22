@@ -68,6 +68,10 @@ if entries["group.come_through.title"] not in text:
     problems.append("group title not shown")
 if entries["verdict.met"] not in text:
     problems.append("verdict word 'met' not shown")
+if node == "provider":  # its fixtures hold an undecided and a not-met deal
+    for verdict in ("verdict.not_met", "verdict.not_evaluable"):
+        if entries[verdict] not in text:
+            problems.append(f"{verdict} word not shown")
 if problems:
     print("; ".join(problems), file=sys.stderr)
     sys.exit(1)

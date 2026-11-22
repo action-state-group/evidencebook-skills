@@ -170,8 +170,19 @@ class CommittedSettlementPack(unittest.TestCase):
 
     def test_a_row_label_does_not_promise_more_than_the_evaluator_checks(self):
         entries = self.pack["entries"]
-        self.assertIn("its own report", entries["row.come_through.served_named_model.label"])
-        self.assertIn("quality of the answer is not checked", entries["row.come_through.served_as_agreed.detail"])
+        self.assertIn("its own record", entries["row.come_through.served_named_model.label"])
+        self.assertIn("does not show that the answer was good", entries["row.come_through.served_as_agreed.detail"])
+        self.assertIn("which no one else has checked", entries["row.come_through.served_named_model.detail"])
+
+    def test_an_undecided_row_says_why_a_deal_can_be_undecided(self):
+        # #187: a record whose signature fails, or whose signer is not trusted, makes the deal
+        # undecided; the page must not blame the records' content, nor call it tampering.
+        entries = self.pack["entries"]
+        for cid in (c["id"] for c in self.compiled["clauses"]):
+            note = entries[f"row.{cid}.not_evaluable"]
+            self.assertIn("signature did not verify", note)
+            self.assertIn("not a sign of tampering", note)
+        self.assertIn("not a sign of tampering", entries["report.summary"])
 
     def test_it_uses_no_placeholder(self):
         # A row word has no slot the page could fill, and a stray {x} would show as text.
