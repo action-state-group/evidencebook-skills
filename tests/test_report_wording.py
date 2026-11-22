@@ -179,11 +179,19 @@ class CommittedSettlementPack(unittest.TestCase):
         reasons = {k.rsplit(".", 1)[1] for k in entries if ".reason." in k}
         self.assertEqual(reasons, set(capsule + leg), "a reason word for a token AAC does not register")
         for k, v in entries.items():
-            if ".reason." in k and k.rsplit(".", 1)[1] in leg:
-                self.assertIn("does not raise the grade", v)
-            if k.endswith(".reason.capsule_signer_not_trusted") or k.endswith(".reason.counterparty_leg_signer_not_trusted"):
-                self.assertIn("outside the keys the report's producer trusted", v)
+            if ".reason." not in k:
+                continue
+            # Sherlock2's tailoring (Buzz 0d45230a): a capsule reason says what became of the row, a leg
+            # reason names the record and the grade the buyer sees beside it, and both say "this report".
+            if k.rsplit(".", 1)[1] in leg:
+                self.assertIn("so this row stays self-attested", v)
+                self.assertIn("record", v)
+            else:
+                self.assertIn("so this row can't be judged", v)
+            if k.endswith("_not_trusted"):
+                self.assertIn("outside the keys this report trusts", v)
                 self.assertIn("not a sign of tampering", v)
+            self.assertNotIn("producer", v)
 
     def test_it_keeps_clear_of_what_the_viewer_locks(self):
         # grade, status, sufficiency and requirement_tier words state what the sealed claim says
