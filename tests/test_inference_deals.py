@@ -81,13 +81,13 @@ class PackCompiles(unittest.TestCase):
         contract = evidence_contract.from_pack(pack_compile._strip_strings(source))
         self.assertEqual([r["tier"] for r in contract["requirements"]], ["must_have"] * 3)
         self.assertTrue(all(r["backward_verdict"] == "DETERMINISTIC" for r in contract["requirements"]))
-        published = json.loads((ROOT / "contracts" / "inference-deals" / "0.1.0.json").read_text())
+        published = json.loads((ROOT / "contracts" / "inference-deals" / "0.1.1.json").read_text())
         self.assertEqual(published, contract)
 
     def test_packs_list_shows_it_on_card_settlement(self):
         entry = {p["name"]: p for p in packs.list_packs()}["inference-deals"]
         self.assertEqual(entry["card"], "settlement")
-        self.assertEqual(entry["contract_ref"], "inference-deals@0.1.0")
+        self.assertEqual(entry["contract_ref"], "inference-deals@0.1.1")
         self.assertEqual(packs.require("inference-deals")[0], 0)
 
     def test_default_policy_is_the_nodes_service_history_policy(self):
@@ -441,7 +441,7 @@ class PackDigestCited(unittest.TestCase):
         # it: release the plugin with the new constant in the same batch, or
         # nodes refuse each other's proposals and this judge refuses their deals.
         self.assertEqual(compiled()["pack_source_digest"],
-                         "d8aa9967ebd346e386b3f27d1fe582902d964d30183e9fa377206b4ccb116a18")
+                         "f8e5c9d6465cfdaaf713b4ec05040ddaf97d97bbc2348594a41861db91990940")
 
     def test_records_citing_the_packs_own_digest_are_judged_as_before(self):
         provider = load("provider")
@@ -476,6 +476,326 @@ class PackDigestCited(unittest.TestCase):
         deals._attestation(one)[deals.EXCHANGE][deals.PACK_DIGEST_MEMBER] = "1" * 64
         doc, _ = run(provider)
         self.assertEqual(doc["x-window"]["digest_mismatch_deals"], 1)
+
+
+def deal_capsule_ids(capsules, exchange_id, kind=None):
+    """Book ids of a deal's records; kind "obs" or "exch" narrows them."""
+    ids = []
+    for c in deal_records(capsules, exchange_id):
+        is_obs = observation(c) is not None
+        if kind is None or (kind == "obs") == is_obs:
+            ids.append(c["capsule_id"])
+    return ids
+
+
+class SignaturesVerifiedPerDeal(unittest.TestCase):
+    """evidencebook-skills#187: a capsule that does not verify makes its deal
+    evidence unavailable for that deal alone, and the run still gives a Result."""
+
+    def test_no_unverified_capsule_changes_nothing(self):
+        provider = load("provider")
+        plain, _ = run(provider)
+        same, _ = deals.build_result(records(provider), compiled(), DATE, GENERATED_AT, None, {})
+        self.assertEqual(json.dumps(plain, sort_keys=True), json.dumps(same, sort_keys=True))
+        for key in ("unverified_capsules", "signature_unverified_deals", "signer_untrusted_deals"):
+            self.assertNotIn(key, plain["x-window"])
+
+    def judged(self, unverified, capsules=None):
+        capsules = capsules or load("provider")
+        return deals.build_result(records(capsules), compiled(), DATE, GENERATED_AT, None, unverified)
+
+    def test_a_book_with_no_trusted_signer_reports_no_deal_and_says_why(self):
+        provider = load("provider")
+        everything = {cid: deals.UNTRUSTED for cid, _ in records(provider)}
+        with self.assertRaises(deals.DealsError) as ctx:
+            self.judged(everything, provider)
+        self.assertIn("did not verify under the trusted keys", str(ctx.exception))
+        self.assertIn("does not mean the node made no deals", str(ctx.exception))
+
+    def test_a_tampered_observation_makes_only_its_deal_unavailable(self):
+        provider = load("provider")
+        victim = deal_capsule_ids(provider, "p-deal-settled", "obs")[0]
+        before, _ = run(provider)
+        doc, summary = self.judged({victim: deals.UNVERIFIED})
+        self.assertEqual(doc["x-window"]["signature_unverified_deals"], 1)
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 1)
+        self.assertEqual(summary["states"][deals.UNVERIFIED], 1)
+        bad = [c for c in doc["claims"] if c.get("x-reason") == deals.UNVERIFIED]
+        self.assertEqual({c["verdict"] for c in bad}, {"not_evaluable"})
+        self.assertEqual({tuple(c["x-unverified-capsules"]) for c in bad}, {(victim,)})
+        # every other deal is judged exactly as before
+        bad_deals = {c["id"].split("::")[0] for c in bad}
+        self.assertEqual(len(bad_deals), 1)
+        other = [(c["id"], c["verdict"]) for c in doc["claims"] if c["id"].split("::")[0] not in bad_deals]
+        expected = [(c["id"], c["verdict"]) for c in before["claims"] if c["id"].split("::")[0] not in bad_deals]
+        self.assertEqual(other, expected)
+        self.assertTrue(other)
+
+    def test_an_untrusted_signer_is_unavailable_and_not_called_tampered(self):
+        provider = load("provider")
+        victim = deal_capsule_ids(provider, "p-deal-short", "obs")[0]
+        doc, summary = self.judged({victim: deals.UNTRUSTED})
+        reasons = {c.get("x-reason") for c in doc["claims"]}
+        self.assertIn(deals.UNTRUSTED, reasons)
+        self.assertNotIn(deals.UNVERIFIED, reasons)
+        self.assertEqual(doc["x-window"]["signer_untrusted_deals"], 1)
+        self.assertNotIn("signature_unverified_deals", doc["x-window"])
+        self.assertEqual(summary["states"][deals.UNTRUSTED], 1)
+
+    def test_a_mixed_run_counts_each_kind_and_a_deal_with_both_reads_tampered(self):
+        provider = load("provider")
+        a = deal_capsule_ids(provider, "p-deal-settled", "obs")[0]
+        b = deal_capsule_ids(provider, "p-deal-settled", "exch")[0]
+        c = deal_capsule_ids(provider, "p-deal-short", "obs")[0]
+        doc, summary = self.judged({a: deals.UNTRUSTED, b: deals.UNVERIFIED, c: deals.UNTRUSTED})
+        self.assertEqual(doc["x-window"]["signature_unverified_deals"], 1)  # settled: tampered wins
+        self.assertEqual(doc["x-window"]["signer_untrusted_deals"], 1)      # short
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 3)
+        self.assertEqual(summary["states"][deals.UNVERIFIED], 1)
+        self.assertEqual(summary["states"][deals.UNTRUSTED], 1)
+        self.assertGreater(sum(summary["states"].values()), 2, "the other deals are still judged")
+
+    def test_unverified_wins_over_a_digest_mismatch(self):
+        provider = load("provider")
+        for cap in provider:
+            m = deals._attestation(cap).get(deals.EXCHANGE)
+            if m is not None:
+                m[deals.PACK_DIGEST_MEMBER] = "0" * 64
+        victim = deal_capsule_ids(provider, "p-deal-settled", "obs")[0]
+        doc, _ = self.judged({victim: deals.UNVERIFIED}, provider)
+        settled = {c.get("x-reason") for c in doc["claims"] if c.get("x-reason") == deals.UNVERIFIED}
+        self.assertEqual(settled, {deals.UNVERIFIED})
+        self.assertEqual(doc["x-window"]["digest_mismatch_deals"] + 1, doc["x-window"]["deals_counted"])
+
+    def test_a_tampered_payer_record_makes_a_payer_deal_unavailable(self):
+        payer = load("payer")
+        victim = deal_capsule_ids(payer, "deal-settled", "obs")[0]
+        before, _ = run(payer)
+        doc, _ = self.judged({victim: deals.UNVERIFIED}, payer)
+        paid = [c for c in doc["claims"] if c["id"].endswith("paid_as_agreed")
+                and c.get("x-reason") == deals.UNVERIFIED]
+        self.assertEqual(len(paid), 1)
+        self.assertEqual(paid[0]["verdict"], "not_evaluable")
+        bad_deal = paid[0]["id"].split("::")[0]
+        self.assertEqual([(c["id"], c["verdict"]) for c in doc["claims"] if not c["id"].startswith(bad_deal)],
+                         [(c["id"], c["verdict"]) for c in before["claims"] if not c["id"].startswith(bad_deal)])
+
+    def test_a_tampered_record_never_moves_a_verified_deals_window_or_creates_a_deal(self):
+        provider = load("provider")
+        before, _ = run(provider)
+        ids = deal_capsule_ids(provider, "p-deal-settled", "obs")
+        by_id = {c["capsule_id"]: c for c in provider}
+        unverified = {}
+        # a backdated record, a future one and one with no readable time, all unverified
+        by_id[ids[0]]["timestamp"] = "2001-01-01T00:00:00Z"
+        by_id[ids[1]]["timestamp"] = "2999-01-01T00:00:00Z"
+        by_id[ids[2]].pop("timestamp")
+        unverified.update({i: deals.UNVERIFIED for i in ids[:3]})
+        # a new exchange id named only by an unverified record: no phantom deal
+        phantom = copy.deepcopy(by_id[ids[3]])
+        phantom["capsule_id"] = "phantom"
+        observation(phantom)["exchange_id"] = "p-deal-phantom"
+        provider.append(phantom)
+        unverified["phantom"] = deals.UNVERIFIED
+        doc, _ = self.judged(unverified, provider)
+        self.assertEqual(doc["x-window"]["deals_counted"], before["x-window"]["deals_counted"])
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 3)  # the future-dated one is not read
+        self.assertEqual(doc["x-window"]["signature_unverified_deals"], 1)
+
+    def test_an_unverified_record_dated_after_the_window_decides_nothing(self):
+        provider = load("provider")
+        plain, _ = run(provider)
+        late = copy.deepcopy(next(c for c in provider if observation(c)
+                                  and observation(c).get("exchange_id") == "p-deal-settled"))
+        late["capsule_id"], late["timestamp"] = "late", "2999-01-01T00:00:00Z"
+        provider.append(late)
+        doc, _ = self.judged({"late": deals.UNTRUSTED}, provider)
+        self.assertEqual(doc, plain)
+
+    def test_a_malformed_unverified_record_never_stops_the_run(self):
+        provider = load("provider")
+        provider.append({"capsule_id": "junk1", "model_attestation": [1, 2]})
+        provider.append({"capsule_id": "junk2", "model_attestation": {"compute_attestation": "x"}})
+        junk3 = copy.deepcopy(next(c for c in provider if any(b in deals._attestation(c)
+                                                              for b in deals.ADJUDICATION_BLOCKS)))
+        junk3["capsule_id"] = "junk3"
+        for block in deals.ADJUDICATION_BLOCKS:
+            if block in deals._attestation(junk3):
+                deals._attestation(junk3)[block]["halves"] = 5
+        provider.append(junk3)
+        doc, _ = self.judged({"junk1": deals.UNVERIFIED, "junk2": deals.UNVERIFIED, "junk3": deals.UNVERIFIED},
+                             provider)
+        self.assertEqual(doc["x-window"]["unverified_capsules"], 3)
+        self.assertNotIn("signature_unverified_deals", doc["x-window"])
+
+    def test_a_tampered_record_cannot_exclude_a_deal_as_shop_preauth_or_change_other_grades(self):
+        provider = load("provider")
+        victim = deal_capsule_ids(provider, "p-deal-short", "obs")[0]
+        by_id = {c["capsule_id"]: c for c in provider}
+        by_id[victim]["counterparty_class"] = "shop_preauth"
+        by_id[victim]["key_id"] = "f" * 64
+        trusted, _ = self.judged({}, copy.deepcopy(provider))  # were the forged class believed
+        self.assertEqual(trusted["x-window"]["not_counted_shop_preauth"], 1)
+        doc, _ = self.judged({victim: deals.UNVERIFIED}, provider)
+        plain, _ = run(load("provider"))
+        self.assertEqual(doc["x-window"]["not_counted_shop_preauth"], 0)
+        self.assertEqual(doc["x-window"]["deals_counted"], plain["x-window"]["deals_counted"])
+        # the forged key_id on the unverified record is not one of the node's own keys
+        self.assertEqual([(c["id"], c.get("grade")) for c in doc["claims"] if c.get("x-reason") is None],
+                         [(c["id"], c.get("grade")) for c in plain["claims"] if not c["id"].startswith("d2::")])
+
+    def test_a_leg_that_does_not_verify_never_makes_a_payment_countersigned(self):
+        payer, provider = load("payer"), load("provider")
+        named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
+        book = provider + [c for c in payer if c["capsule_id"] in named]
+        plain, _ = run(book)
+        self.assertIn("countersigned", {c.get("grade") for c in plain["claims"]}, "fixture has a countersigned row")
+        legs = {c["capsule_id"]: deals.UNVERIFIED for c in book if isinstance(c.get("settlement"), dict)}
+        doc, _ = self.judged(legs, book)
+        self.assertNotIn("countersigned", {c.get("grade") for c in doc["claims"]})
+        self.assertEqual(doc["x-window"]["unverified_capsules"], len(legs))
+        self.assertNotIn("signature_unverified_deals", doc["x-window"])
+
+    def test_an_unverified_adjudication_is_not_read_as_adjudicated(self):
+        provider = load("provider")
+        plain, _ = run(provider)
+        self.assertGreater(plain["x-window"]["adjudicated_deals"], 0, "fixture has an adjudicated deal")
+        adjudications = {c["capsule_id"]: deals.UNVERIFIED for c in provider
+                         if any(b in deals._attestation(c) for b in deals.ADJUDICATION_BLOCKS)}
+        doc, _ = self.judged(adjudications)
+        self.assertEqual(doc["x-window"]["adjudicated_deals"], 0)
+        self.assertGreaterEqual(doc["x-window"]["signature_unverified_deals"], 1)
+
+
+FAKE_CAPSULECTL = r'''#!/usr/bin/env python3
+"""A capsulectl that serves one book from $FAKE_BOOK: {"records": [...], "verify": {capsule_id: mode}}.
+Messages are the ones capsule-cli prints (cli/command.go, cli/verify_capsule.go)."""
+import json, os, pathlib, sys
+book = json.load(open(os.environ["FAKE_BOOK"]))
+by_id = {r["capsule_id"]: r for r in book["records"]}
+a = sys.argv[1:]
+def opt(name):
+    return a[a.index(name) + 1]
+if a[:2] == ["cll", "list"]:
+    after = int(opt("--after"))
+    entries = [{"capsule_id": r["capsule_id"]} for r in book["records"][after:]]
+    print(json.dumps({"entries": entries, "next_after": len(book["records"])}))
+elif a[0] == "get" and "--raw" in a:
+    cid = opt("--capsule-id")
+    if book["verify"].get(cid) == "get_fails":
+        print("boom", file=sys.stderr); sys.exit(1)
+    pathlib.Path(opt("--output")).write_text(json.dumps(by_id[cid]))
+elif a[0] == "get":
+    print(json.dumps({"artifacts": [{"name": "payload", "content": by_id[opt("--capsule-id")]}]}))
+elif a[0] == "verify":
+    cid = pathlib.Path(opt("--capsule")).stem
+    mode = book["verify"].get(cid, "ok")
+    if mode == "ok":
+        print(json.dumps({"producer_signature_and_trust": "passed"}))
+    elif mode == "bad":
+        print(json.dumps({"producer_signature": "failed"}))
+        print("capsule verification failed: the signature does not verify under the capsule's key_id", file=sys.stderr); sys.exit(1)
+    elif mode == "untrusted_bare":
+        print("capsule verification failed: the signature verifies, but its key_id is not among the profile's trusted keys", file=sys.stderr); sys.exit(1)
+    elif mode == "untrusted_record":
+        print("producer is not authorized by the profile trusted_keys", file=sys.stderr); sys.exit(1)
+    elif mode == "crash":
+        print("operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
+    elif mode == "no_trusted_key":
+        print(json.dumps({"producer_signature": "passed", "producer_trust": "not_performed: no trusted key"})); sys.exit(3)
+'''
+
+
+class ReadBookVerifiesEveryCapsule(unittest.TestCase):
+    """read_book and main against a fake capsulectl: the verdicts above come
+    from `capsulectl verify`, and one bad capsule never costs the whole run."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        d = pathlib.Path(self.tmp.name)
+        self.ctl = d / "capsulectl"
+        self.ctl.write_text(FAKE_CAPSULECTL)
+        self.ctl.chmod(0o755)
+        self.book = d / "book.json"
+        self.provider = load("provider")
+
+    def start(self, verify):
+        self.book.write_text(json.dumps({"records": self.provider, "verify": verify}))
+        os.environ["FAKE_BOOK"] = str(self.book)
+        self.addCleanup(os.environ.pop, "FAKE_BOOK", None)
+
+    def read(self, verify):
+        self.start(verify)
+        return deals.read_book(str(self.ctl), "p")
+
+    def test_every_capsule_verified_gives_no_unverified(self):
+        records_, unverified = self.read({})
+        self.assertEqual(len(records_), len(self.provider))
+        self.assertEqual(unverified, {})
+
+    def test_each_failure_is_classified(self):
+        ids = deal_capsule_ids(self.provider, "p-deal-settled", "obs")
+        _, unverified = self.read({ids[0]: "bad", ids[1]: "untrusted_bare", ids[2]: "untrusted_record",
+                                   ids[3]: "no_trusted_key"})
+        self.assertEqual(unverified, {ids[0]: deals.UNVERIFIED, ids[1]: deals.UNTRUSTED,
+                                      ids[2]: deals.UNTRUSTED, ids[3]: deals.UNTRUSTED})
+
+    def test_a_record_that_is_no_mesh_capsule_is_not_verified(self):
+        self.provider.append({"capsule_id": "other", "kind": "a sealed Result"})
+        _, unverified = self.read({"other": "bad"})
+        self.assertEqual(unverified, {})
+
+    def test_a_capsulectl_that_cannot_get_a_capsule_stops_the_run(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        with self.assertRaises(deals.EvidenceUnavailable):
+            self.read({victim: "get_fails"})
+
+    def run_main(self, verify):
+        self.start(verify)
+        out = pathlib.Path(self.tmp.name) / "out"
+        proc = subprocess.run([sys.executable, str(ROOT / "scripts" / "evaluators" / "inference_deals.py"),
+                               "--profile", "p", "--spec", str(COMPILED), "--capsulectl", str(self.ctl),
+                               "--date", "2026-11-01", "--generated-at", GENERATED_AT, "--out", str(out),
+                               "--now", "2026-12-01T00:00:00Z"],
+                              capture_output=True, text=True, env={**os.environ, "FAKE_BOOK": str(self.book)})
+        return proc, out
+
+    def test_a_run_with_one_tampered_and_one_untrusted_capsule_still_gives_a_result(self):
+        a = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        b = deal_capsule_ids(self.provider, "p-deal-short", "obs")[0]
+        proc, out = self.run_main({a: "bad", b: "untrusted_bare"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        summary = json.loads(proc.stdout)
+        self.assertEqual(summary["window"]["signature_unverified_deals"], 1)
+        self.assertEqual(summary["window"]["signer_untrusted_deals"], 1)
+        self.assertEqual(summary["window"]["unverified_capsules"], 2)
+        self.assertTrue(list(out.glob("result-v0-*.json")))
+
+    def test_a_run_with_everything_verified_is_the_unverified_free_result(self):
+        proc, _ = self.run_main({})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertNotIn("unverified_capsules", json.loads(proc.stdout)["window"])
+
+    def test_a_malformed_capsule_that_does_not_verify_is_set_aside_and_one_that_does_stops_nothing_new(self):
+        junk = {"capsule_id": "junk", "model_attestation": [1, 2]}
+        self.provider.append(junk)
+        proc, _ = self.run_main({"junk": "bad"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["window"]["unverified_capsules"], 1)
+
+    def test_a_verify_that_gives_no_verdict_is_a_tool_failure_not_a_finding(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        proc, _ = self.run_main({victim: "crash"})
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("no verdict", json.loads(proc.stdout)["error"])
+
+    def test_a_capsulectl_that_cannot_get_one_exits_2(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        proc, _ = self.run_main({victim: "get_fails"})
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("error", json.loads(proc.stdout))
 
 
 class ReportShFlags(unittest.TestCase):

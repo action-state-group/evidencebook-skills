@@ -19,16 +19,25 @@
 #
 # Grades: a claim backed only by this node's records is self-attested; one
 # whose book also holds the counterparty's signed leg of the same payment is
-# countersigned; a row the records cannot decide is not_evaluable, never not_met.
+# countersigned (the leg is present; its own signature is not checked, so a
+# display must not say the other side's signature was verified); a row the records cannot decide is not_evaluable, never not_met.
 pack_id: inference-deals
-pack_version: 0.1.0
+pack_version: 0.1.1
 rubric_version: "0.1"
 evaluator: inference_deals
 
 outcome_statement: >-
-  On every counted deal in the window, the node came through on the terms it
-  accepted: it paid as agreed when it bought, and it served as agreed, with the
-  model it named, when it provided.
+  On every counted deal in the window, the node's own records show it came
+  through on the terms it accepted: it paid as agreed when it bought, and when
+  it provided, it recorded settlement for every invoice it issued and reported
+  running the model it was asked for. Every record is checked against the
+  signer keys the reader trusts. A deal that holds a record whose signature
+  does not verify (altered, or not what it claims), or whose signer is not
+  among those keys, is shown as "Couldn't tell" (not_evaluable), never as met or not met;
+  the run's result records which. A signer outside your keys is not a finding of
+  tampering. A record that does not verify never creates a deal, so with no
+  trusted keys there is no deal to report and the run says so. A
+  counterparty's own signature on a leg is not checked.
 resolution_rule: >-
   a deal is resolved only when every term that applies to it is met
 counterparty: mesh-peer
@@ -65,34 +74,40 @@ checks:
         label: Paid as agreed
         text: >-
           When the node bought, every invoice it saw has a settlement its own
-          wallet reported, for the invoice's amount.
+          wallet reported, for the invoice's amount. Every record is verified
+          under the reader's trusted keys first. A deal with a record whose
+          signature does not verify, or whose signer is not among those keys,
+          reads "Couldn't tell", and the two reasons are told apart; a signer
+          outside your keys is not a finding of tampering.
         tier: recomputed
         fold_id: inference_deals.paid_as_agreed
         requirement_tier: must_have
         out_of_scope_means: the node did not buy on this deal
       - id: served_as_agreed
-        label: Served as agreed
+        label: Settlement recorded for every invoice it issued
         text: >-
-          When the node provided, it served the exchange it accepted terms for,
-          and every invoice it issued has a settlement its wallet reported, for
-          the invoice's amount.
+          When the node provided, its records show the exchange it accepted
+          terms for, and every invoice it issued has a settlement its wallet
+          reported, for the invoice's amount. This does not show that the answer
+          was good, or that the node's own report of what it ran is true.
+          Records are verified under the reader's trusted keys, as for the term
+          above; a counterparty's own signature on a leg is not checked.
         tier: recomputed
         fold_id: inference_deals.served_as_agreed
         requirement_tier: must_have
         out_of_scope_means: the node did not provide on this deal
       - id: served_named_model
-        label: Served the model it named
+        label: Model it reports running matches the model requested (its own record, or a referee's ruling)
         text: >-
-          When the node provided, the model that answered is the model it named.
-          A deal a referee already adjudicated is not judged again: the row
-          carries the sealed verdict, read for this node as the node's own
-          verdict counts read it (corroborated, or contradicted naming the
-          other half, is met; contradicted naming this node is not_met;
-          anything else is not_evaluable). Otherwise the
-          row reads "provider states": the node's own records of the model
-          requested and the model that answered, which no verifier can check
-          against the accepted terms, since those carry the model only inside
-          their digest.
+          When the node provided and a referee decided the deal, this row shows
+          the referee's verdict, read for this node as the node's own verdict
+          counts read it (corroborated, or contradicted naming the other half,
+          is met; contradicted naming this node is not_met; anything else reads
+          "Couldn't tell"); a deal a referee already adjudicated is not judged
+          again. Otherwise it compares the model its record says was requested
+          with the model its record says answered, which no one else has
+          checked and no verifier can check against the accepted terms, since
+          those carry the model only inside their digest.
         tier: recomputed
         fold_id: inference_deals.served_named_model
         requirement_tier: must_have
