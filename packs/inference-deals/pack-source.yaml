@@ -19,7 +19,8 @@
 #
 # Grades: a claim backed only by this node's records is self-attested; one
 # whose book also holds the counterparty's signed leg of the same payment is
-# countersigned; a row the records cannot decide is not_evaluable, never not_met.
+# countersigned (the leg is present; its own signature is not checked, so a
+# display must not say the other side's signature was verified); a row the records cannot decide is not_evaluable, never not_met.
 pack_id: inference-deals
 pack_version: 0.1.1
 rubric_version: "0.1"
@@ -33,7 +34,7 @@ outcome_statement: >-
   signer keys the reader trusts. A deal that holds a record whose signature
   does not verify (altered, or not what it claims), or whose signer is not
   among those keys, is shown as "Couldn't tell" (not_evaluable), never as met or not met;
-  the report says which. A signer outside your keys is not a finding of
+  the run's result records which. A signer outside your keys is not a finding of
   tampering. A record that does not verify never creates a deal, so with no
   trusted keys there is no deal to report and the run says so. A
   counterparty's own signature on a leg is not checked.
