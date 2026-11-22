@@ -22,16 +22,23 @@ import json
 import pathlib
 import re
 import sys
+import unicodedata
 
 VERSION = "aac.wording-pack/v0"
 # capsule-viewer ts/src/contract-report-wording.ts readWordingPack: the same shape, key and
 # reserved-prefix rules, so a pack the viewer would refuse at load is refused here first.
 KEY = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+LOCALE = re.compile(r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 MEMBERS = {"wording_pack_version", "id", "locale", "entries"}
 
 
 class PackError(Exception):
     pass
+
+
+def invisible(text):
+    """The viewer's INVISIBLE (bidi and other format controls) as far as Unicode categories say."""
+    return any(unicodedata.category(c) == "Cf" for c in text)
 
 
 def sha256_of(path):
@@ -56,13 +63,17 @@ def check(path, digest):
         raise PackError(f"{path} is not JSON: {e}")
     if not isinstance(pack, dict) or pack.get("wording_pack_version") != VERSION or set(pack) - MEMBERS:
         raise PackError(f"{path} is not an {VERSION} pack (members: {sorted(MEMBERS)} and nothing else)")
-    if not isinstance(pack.get("id"), str) or not pack["id"] or pack.get("locale") != "en":
-        raise PackError(f"{path} needs an id and locale \"en\"")
+    if not isinstance(pack.get("id"), str) or not pack["id"] or invisible(pack["id"]) \
+            or not isinstance(pack.get("locale"), str) or not LOCALE.match(pack["locale"]):
+        raise PackError(f"{path} needs an id (no invisible format characters) and a locale such as \"en\"")
     entries = pack.get("entries")
     if not isinstance(entries, dict) or not entries \
             or not all(isinstance(v, str) and v for v in entries.values()) \
             or not all(KEY.match(k) for k in entries):
         raise PackError(f"{path} needs an `entries` object of non-empty strings under lowercase keys")
+    hidden = sorted(k for k, v in entries.items() if invisible(v))
+    if hidden:
+        raise PackError(f"{path}: {hidden[0]!r} carries a bidi or other invisible format character; the page refuses such a pack")
     reserved = sorted(k for k in entries if k.startswith("core."))
     if reserved:
         raise PackError(f"{path} carries the reserved key {reserved[0]!r}: `core.` is the core's own text")

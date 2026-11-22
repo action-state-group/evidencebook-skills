@@ -110,13 +110,15 @@ class WordingPackCheck(unittest.TestCase):
         for name, mutate in {
             "another version": lambda p: p.update(wording_pack_version="aac.wording-pack/v1"),
             "no id": lambda p: p.pop("id"),
-            "another locale": lambda p: p.update(locale="fr"),
             "no entries": lambda p: p.update(entries={}),
             "an empty entry": lambda p: p["entries"].update({"report.title": ""}),
             "a non-string entry": lambda p: p["entries"].update({"report.title": 3}),
             "a bad key": lambda p: p["entries"].update({"Report Title": "T"}),
             "a core key": lambda p: p["entries"].update({"core.strip": "T"}),
             "an extra member": lambda p: p.update(extra=1),
+            "an invisible character in the id": lambda p: p.update(id="x\u202e/v0"),
+            "an invisible character in an entry": lambda p: p["entries"].update({"report.title": "T\u200bU"}),
+            "a locale that is not a locale": lambda p: p.update(locale="e"),
         }.items():
             with self.subTest(name):
                 pack = json.loads(json.dumps(base))
@@ -124,6 +126,12 @@ class WordingPackCheck(unittest.TestCase):
                 path = self.write(pack)
                 with self.assertRaises(wording_pack.PackError):
                     wording_pack.check(path, _sha(path))
+
+    def test_a_region_locale_is_taken_as_the_viewer_takes_it(self):
+        pack = self.good()
+        pack["locale"] = "en-US"
+        path = self.write(pack)
+        self.assertEqual(wording_pack.check(path, _sha(path))["locale"], "en-US")
 
     def test_text_that_is_not_json_is_refused(self):
         path = self.write("not json")
@@ -279,6 +287,14 @@ class ReportShWording(unittest.TestCase):
         self.assertEqual(proc.returncode, 2, proc.stderr)
         self.assertIn("hashes to", proc.stderr)
         self.assertFalse((self.capture / "calls.log").exists(), "no capsulectl call at all")
+
+    def test_a_wrong_digest_with_seal_still_removes_an_earlier_page(self):
+        # report.sh's own contract: a failed --seal run leaves no page at --out.
+        out = self.tmp / "report.html"
+        out.write_text("<html>an earlier page</html>")
+        proc = self.run_report("--seal", "--wording", str(PACK), "--wording-digest", "0" * 64)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertFalse(out.exists())
 
     def test_a_missing_pack_stops_the_run_the_same_way(self):
         proc = self.run_report("--wording", str(self.tmp / "nope.json"), "--wording-digest", "0" * 64)

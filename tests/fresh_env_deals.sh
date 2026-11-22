@@ -35,7 +35,7 @@ fail() { printf 'FRESH-ENV-DEALS: FAIL -- %s\n' "$*"; exit 1; }
 # usual places), its visible text, must carry the pack's row labels and verdict words and no raw
 # clause id, and must not say the viewer refused the pack. The viewer drops a pack it refuses and
 # the page still seals and checks match VALID, so only this look at the text catches that. No
-# Chrome: say NOT RUN, never pass.
+# Chrome: say NOT RUN and fail the run, never pass.
 CHROME=${CHROME:-}
 for c in "$CHROME" "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" google-chrome chromium chrome; do
   if [[ -n "$c" ]] && command -v "$c" >/dev/null 2>&1; then CHROME=$c; break; else CHROME=; fi
@@ -43,7 +43,7 @@ done
 PAGE_CHECK=NOT-RUN
 page_check() {
   local node=$1 page=$2
-  if [[ -z "$CHROME" ]]; then printf '%s page text: NOT RUN (no Chrome; set CHROME)\n' "$node"; return 0; fi
+  if [[ -z "$CHROME" ]]; then printf '%s page text: NOT RUN (no Chrome; set CHROME)\n' "$node"; return 0; fi  # the run then fails at the end: no pass without it
   "$CHROME" --headless=new --disable-gpu --virtual-time-budget=5000 --dump-dom "file://$page" >"$work/$node.dom" 2>/dev/null || true
   # Chrome headless can exit non-zero from its own teardown after it has written the DOM, so the gate is the DOM and the checks on it, not its status.
   [[ -s "$work/$node.dom" ]] || fail "$node: Chrome wrote no DOM for the page"
@@ -130,4 +130,5 @@ EOF
   printf '%s claims: %s\n' "$node" "$(jq -c '[.claims[] | [.id, .verdict, .grade]]' "$result")"
 done
 
+[[ "$PAGE_CHECK" == PASS ]] || fail "the page text check did not run (no Chrome; set CHROME): the wording is not shown to be on the page, so this is not a pass"
 printf '\nFRESH-ENV-DEALS: PASS (log: %s; page text check: %s)\n' "$log" "$PAGE_CHECK"

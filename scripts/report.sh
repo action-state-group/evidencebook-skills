@@ -133,11 +133,11 @@ done
 [[ "$JUDGE_BACKEND" == "mock" || "$JUDGE_BACKEND" == "live" ]] || usage
 [[ -n "$WORDING" && -n "$WORDING_DIGEST" || -z "$WORDING" && -z "$WORDING_DIGEST" ]] \
   || { echo "report.sh: --wording and --wording-digest come together" >&2; exit 2; }
+if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ -n "$WORDING" ]]; then
   python3 "$(dirname "${BASH_SOURCE[0]}")/wording_pack.py" check --pack "$WORDING" --digest "$WORDING_DIGEST" >/dev/null \
     || exit 2
 fi
-if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$JUDGE_BACKEND" == "live" && -z "$JUDGE_CMD" ]]; then
   [[ -n "${TYPESAFE_API_KEY:-}" || -n "${OPENROUTER_API_KEY:-}" ]] || { echo "report.sh: --judge-backend live needs TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set" >&2; exit 2; }
 fi
