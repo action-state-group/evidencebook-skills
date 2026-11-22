@@ -161,8 +161,29 @@ class CommittedSettlementPack(unittest.TestCase):
                 self.assertIn(f"row.{cid}.{part}", entries)
         for group in groups:
             self.assertIn(f"group.{group}.title", entries)
-        rows = {k.split(".", 1)[1].rsplit(".", 1)[0] for k in entries if k.startswith("row.")}
+        # row.<ref>.<part>, or row.<ref>.reason.<code> (capsule-viewer contract-report-module-v1 section 3)
+        rows = {k[len("row."):].split(".reason.")[0] if ".reason." in k else k[len("row."):].rsplit(".", 1)[0]
+                for k in entries if k.startswith("row.")}
         self.assertEqual(rows, set(clause_ids), "a row key for a clause the pack does not have shows nowhere")
+
+    def test_it_words_every_reason_the_evaluator_can_write_on_a_row(self):
+        # AAC evidence-result-v0 section 4.4's four registered tokens: a capsule token can sit on any
+        # row (the deal is not judged); a counterparty-leg token only on a row with a grade, which
+        # is every row but the model row (judge_deal gives that row no grade_extras).
+        entries = self.pack["entries"]
+        capsule = ("capsule_signature_did_not_verify", "capsule_signer_not_trusted")
+        leg = ("counterparty_leg_signature_did_not_verify", "counterparty_leg_signer_not_trusted")
+        for cid in (c["id"] for c in self.compiled["clauses"]):
+            for token in capsule + (leg if cid != "come_through.served_named_model" else ()):
+                self.assertIn(f"row.{cid}.reason.{token}", entries)
+        reasons = {k.rsplit(".", 1)[1] for k in entries if ".reason." in k}
+        self.assertEqual(reasons, set(capsule + leg), "a reason word for a token AAC does not register")
+        for k, v in entries.items():
+            if ".reason." in k and k.rsplit(".", 1)[1] in leg:
+                self.assertIn("does not raise the grade", v)
+            if k.endswith(".reason.capsule_signer_not_trusted") or k.endswith(".reason.counterparty_leg_signer_not_trusted"):
+                self.assertIn("outside the keys the report's producer trusted", v)
+                self.assertIn("not a sign of tampering", v)
 
     def test_it_keeps_clear_of_what_the_viewer_locks(self):
         # grade, status, sufficiency and requirement_tier words state what the sealed claim says
@@ -177,9 +198,14 @@ class CommittedSettlementPack(unittest.TestCase):
         self.assertEqual(len({v.lower() for v in words.values()}), len(words))
 
     def test_it_has_no_score_percentage_or_grade_letter(self):
-        text = " ".join(self.pack["entries"].values()).lower()
+        # the reason words say why a grade stayed where it is ("does not raise the grade"); they name
+        # no grade level, so "grade " is checked outside them
+        text = " ".join(v for k, v in self.pack["entries"].items() if ".reason." not in k).lower()
         for word in ("%", "percent", "score", "grade ", "rating", "rated"):
             self.assertNotIn(word, text)
+        reasons = " ".join(v for k, v in self.pack["entries"].items() if ".reason." in k).lower()
+        for word in ("%", "percent", "score", "rating", "rated"):
+            self.assertNotIn(word, reasons)
 
     def test_a_row_label_does_not_promise_more_than_the_evaluator_checks(self):
         entries = self.pack["entries"]

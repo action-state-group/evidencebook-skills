@@ -32,8 +32,8 @@ a0297e0; each book record's payload is one Mesh capsule):
 Pack digest (capsules-plugin#271). The Mesh plugin's exchange records cite the
 agreement's `inference_deals_digest` (the pack's `pack_source_digest`). A deal
 whose records cite another digest than the compiled pack this evaluator runs
-is not judged: every row is not_evaluable with `x-reason`
-`inference_deals_digest_mismatch`, naming both digests, counted in
+is not judged: every row is not_evaluable with the claim member `x-reason`
+`inference_deals_digest_mismatch` (not a token AAC registers, so it stays an `x-` member), naming both digests, counted in
 `x-window.digest_mismatch_deals`. The sealed Result carries that reason, so it
 is signed by whoever seals it. Records citing none are judged as before.
 
@@ -104,7 +104,7 @@ under its `key_id`, and that key must be one the reader trusts. This says the
 record was sealed into this book by a key the reader trusts; it does not check
 the Mesh capsule inside it, which is the counterparty's signature on a leg; that
 is checked separately (Leg signatures, below). A deal with a record that does not verify is not judged: every row is
-not_evaluable, with `x-reason` `capsule_signature_did_not_verify` (the signature
+not_evaluable, with the claim member `reason` `capsule_signature_did_not_verify` (the signature
 or identity was refused) or `capsule_signer_not_trusted` (the signer is not among
 the reader's trusted keys, which is not a finding of tampering); the first wins
 when both occur. Only a record the window reads counts: one whose own time is
@@ -125,13 +125,13 @@ leg itself, under the READER's trusted keys, after the book record holding it
 verified. A leg whose own signature does not verify (altered, or no signature)
 or whose signer the reader does not trust never makes a payment countersigned.
 It does not make the deal unavailable: the node's own records still decide the
-verdict. The row's grade is `self-attested` and its claim carries `x-countersign`
+verdict. The row's grade is `self-attested` and its claim carries `reason`
 `counterparty_leg_signature_did_not_verify` or `counterparty_leg_signer_not_trusted`
 (the first when both occur), and `x-window` counts the rows
 (`leg_signature_unverified_rows`, `leg_signer_untrusted_rows`, absent when zero).
 Only the COUNTERPARTY's leg is held to this: a leg under this node's own key sits
 in a record the reader already verified. A row with no leg of the other side in
-the book carries no `x-countersign`: nothing failed. A deal one of whose records
+the book carries no `reason`: nothing failed. A deal one of whose records
 failed its own check shows that reason alone.
 """
 import argparse
@@ -167,7 +167,7 @@ UNTRUSTED = "capsule_signer_not_trusted"
 
 # Why a row is `self-attested` though the book holds the other side's leg of
 # every payment: that leg's own signature did not verify, or its signer is not
-# among the reader's trusted keys. Carried in the claim member `x-countersign`.
+# among the reader's trusted keys. Carried in the claim member `reason` (AAC ER 4.4).
 LEG_UNVERIFIED = "counterparty_leg_signature_did_not_verify"
 LEG_UNTRUSTED = "counterparty_leg_signer_not_trusted"
 LEG_REASONS = {UNVERIFIED: LEG_UNVERIFIED, UNTRUSTED: LEG_UNTRUSTED}
@@ -552,7 +552,7 @@ def judge_deal(deal, legs, own_keys, pack_digest=None, bad_legs=()):
         reason = UNVERIFIED if UNVERIFIED in deal.unverified.values() else UNTRUSTED
         for c in verdicts:
             verdicts[c] = "not_evaluable"
-            extras[c] = {"x-state": reason, "x-reason": reason,
+            extras[c] = {"x-state": reason, "reason": reason,
                          "x-unverified-capsules": sorted(deal.unverified)}
             cited[c] = [cid for cid, _ in deal.records] + sorted(deal.unverified)
         return verdicts, extras, cited, reason, 0
@@ -582,7 +582,7 @@ def judge_deal(deal, legs, own_keys, pack_digest=None, bad_legs=()):
     if why:
         # The other side's leg is in the book but its own signature does not
         # check out: say why the row is not countersigned, and cite the leg.
-        grade_extras["x-countersign"] = LEG_REASONS[why]
+        grade_extras["reason"] = LEG_REASONS[why]
     if side == "payer":
         verdicts[PAID] = verdict
         extras[PAID] = dict(grade_extras)
@@ -674,8 +674,8 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
         counts["adjudicated_deals"] += int((extras.get(MODEL) or {}).get("x-reading") == "adjudicated")
         counts["states"][state] = counts["states"].get(state, 0) + 1
         for e in extras.values():
-            if e.get("x-countersign"):
-                counts["leg_rows"][e["x-countersign"]] = counts["leg_rows"].get(e["x-countersign"], 0) + 1
+            if e.get("reason") in LEG_REASONS.values():
+                counts["leg_rows"][e["reason"]] = counts["leg_rows"].get(e["reason"], 0) + 1
         n += 1
         case_id = f"d{n}"
         tiers = {c: "recomputed" for c in verdicts}
