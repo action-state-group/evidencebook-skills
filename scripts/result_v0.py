@@ -179,7 +179,7 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
         # `reason` is the one defined member admitted here (evidence-result-v0 section 4.4,
         # display-only); the schema, not this function, checks where it may appear.
         if not (name.startswith("x-") or name == "reason") or name in claim:
-            raise RollupError(f"criterion {criterion_id!r}: {name!r} is not a free x- member")
+            raise RollupError(f"criterion {criterion_id!r}: {name!r} is neither a free x- member nor an unused `reason`")
         claim[name] = value
     return claim
 
