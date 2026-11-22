@@ -44,7 +44,7 @@ PAGE_CHECK=NOT-RUN
 page_check() {
   local node=$1 page=$2
   if [[ -z "$CHROME" ]]; then printf '%s page text: NOT RUN (no Chrome; set CHROME)\n' "$node"; return 0; fi  # the run then fails at the end: no pass without it
-  "$CHROME" --headless=new --disable-gpu --virtual-time-budget=60000 --dump-dom "file://$page" >"$work/$node.dom" 2>/dev/null || true
+  "$CHROME" --headless=new --disable-gpu --virtual-time-budget=60000 --enable-logging=stderr --v=0 --dump-dom "file://$page" >"$work/$node.dom" 2>"$work/$node.chrome.log" || true
   # Chrome headless can exit non-zero from its own teardown after it has written the DOM, so the gate is the DOM and the checks on it, not its status.
   [[ -s "$work/$node.dom" ]] || fail "$node: Chrome wrote no DOM for the page"
   python3 - "$work/$node.dom" "$PACK" "$node" <<'EOF' || fail "$node: the page does not show the wording pack"
@@ -80,6 +80,9 @@ if problems:
     print("; ".join(problems), file=sys.stderr)
     print("--- the page's visible text, first 3000 characters ---", file=sys.stderr)
     print(re.sub(r"\n\s*\n+", "\n", text)[:3000], file=sys.stderr)
+    log = open(dom.replace(".dom", ".chrome.log")).read().splitlines()
+    print("--- Chrome's console lines ---", file=sys.stderr)
+    print("\n".join(l[:400] for l in log if "CONSOLE" in l or "ERROR:CONSOLE" in l or "Uncaught" in l)[:3000], file=sys.stderr)
     sys.exit(1)
 EOF
   PAGE_CHECK=PASS
