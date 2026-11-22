@@ -81,13 +81,13 @@ class PackCompiles(unittest.TestCase):
         contract = evidence_contract.from_pack(pack_compile._strip_strings(source))
         self.assertEqual([r["tier"] for r in contract["requirements"]], ["must_have"] * 3)
         self.assertTrue(all(r["backward_verdict"] == "DETERMINISTIC" for r in contract["requirements"]))
-        published = json.loads((ROOT / "contracts" / "inference-deals" / "0.1.1.json").read_text())
+        published = json.loads((ROOT / "contracts" / "inference-deals" / "0.1.2.json").read_text())
         self.assertEqual(published, contract)
 
     def test_packs_list_shows_it_on_card_settlement(self):
         entry = {p["name"]: p for p in packs.list_packs()}["inference-deals"]
         self.assertEqual(entry["card"], "settlement")
-        self.assertEqual(entry["contract_ref"], "inference-deals@0.1.1")
+        self.assertEqual(entry["contract_ref"], "inference-deals@0.1.2")
         self.assertEqual(packs.require("inference-deals")[0], 0)
 
     def test_default_policy_is_the_nodes_service_history_policy(self):
@@ -441,7 +441,7 @@ class PackDigestCited(unittest.TestCase):
         # it: release the plugin with the new constant in the same batch, or
         # nodes refuse each other's proposals and this judge refuses their deals.
         self.assertEqual(compiled()["pack_source_digest"],
-                         "f8e5c9d6465cfdaaf713b4ec05040ddaf97d97bbc2348594a41861db91990940")
+                         "b46c7692ff3604f574a3cff5df2d0e89ada379e749b3ee4ae25aa6e6629cbbff")
 
     def test_records_citing_the_packs_own_digest_are_judged_as_before(self):
         provider = load("provider")
@@ -688,8 +688,9 @@ elif a[0] == "get" and "--raw" in a:
 elif a[0] == "get":
     print(json.dumps({"artifacts": [{"name": "payload", "content": by_id[opt("--capsule-id")]}]}))
 elif a[0] == "verify":
-    cid = pathlib.Path(opt("--capsule")).stem
-    mode = book["verify"].get(cid, "ok")
+    stem = pathlib.Path(opt("--capsule")).stem
+    # A settlement leg's own signature is checked from a bare-capsule file named leg-<id>.
+    mode = book["verify"].get("leg:" + stem[4:], "ok") if stem.startswith("leg-") else book["verify"].get(stem, "ok")
     if mode == "ok":
         print(json.dumps({"producer_signature_and_trust": "passed"}))
     elif mode == "bad":
@@ -699,6 +700,18 @@ elif a[0] == "verify":
         print("capsule verification failed: the signature verifies, but its key_id is not among the profile's trusted keys", file=sys.stderr); sys.exit(1)
     elif mode == "untrusted_record":
         print("producer is not authorized by the profile trusted_keys", file=sys.stderr); sys.exit(1)
+    elif mode == "compact_bad":  # what capsulectl v0.1.0-rc44 prints for a flipped signature
+        print('{"capsule_identity":"passed","producer_signature":"failed: the signature does not verify under the capsule\'s key_id","shape":"capsule","voice":"report"}')
+        print("capsulectl: operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
+    elif mode == "compact_untrusted":  # rc44: a signature that verifies under a key the profile does not trust
+        print('{"capsule_identity":"passed","producer_signature_and_trust":"failed: the signature verifies, but its key_id is not among the profile\'s trusted keys","shape":"capsule"}')
+        print("capsulectl: operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
+    elif mode == "compact_tampered":  # rc44: the body no longer hashes to its capsule_id
+        print('{"capsule_identity":"failed: capsule_id_mismatch","shape":"capsule"}')
+        print("capsulectl: operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
+    elif mode == "unsigned":  # rc44: a bare capsule with no signature and no key_id
+        print('{"capsule_identity":"passed","producer_signature":"absent: the capsule carries no signature and key_id","shape":"capsule"}')
+        print("capsulectl: verification incomplete or required originals unavailable", file=sys.stderr); sys.exit(3)
     elif mode == "crash":
         print("operation failed; check input, selected profile, permissions and service availability (sensitive details suppressed)", file=sys.stderr); sys.exit(1)
     elif mode == "no_trusted_key":
@@ -731,20 +744,20 @@ class ReadBookVerifiesEveryCapsule(unittest.TestCase):
         return deals.read_book(str(self.ctl), "p")
 
     def test_every_capsule_verified_gives_no_unverified(self):
-        records_, unverified = self.read({})
+        records_, unverified, legs = self.read({})
         self.assertEqual(len(records_), len(self.provider))
-        self.assertEqual(unverified, {})
+        self.assertEqual((unverified, legs), ({}, {}))
 
     def test_each_failure_is_classified(self):
         ids = deal_capsule_ids(self.provider, "p-deal-settled", "obs")
-        _, unverified = self.read({ids[0]: "bad", ids[1]: "untrusted_bare", ids[2]: "untrusted_record",
+        _, unverified, _ = self.read({ids[0]: "bad", ids[1]: "untrusted_bare", ids[2]: "untrusted_record",
                                    ids[3]: "no_trusted_key"})
         self.assertEqual(unverified, {ids[0]: deals.UNVERIFIED, ids[1]: deals.UNTRUSTED,
                                       ids[2]: deals.UNTRUSTED, ids[3]: deals.UNTRUSTED})
 
     def test_a_record_that_is_no_mesh_capsule_is_not_verified(self):
         self.provider.append({"capsule_id": "other", "kind": "a sealed Result"})
-        _, unverified = self.read({"other": "bad"})
+        _, unverified, _ = self.read({"other": "bad"})
         self.assertEqual(unverified, {})
 
     def test_a_capsulectl_that_cannot_get_a_capsule_stops_the_run(self):
@@ -816,6 +829,203 @@ class ReportShFlags(unittest.TestCase):
             proc = self.report_sh("--spec", str(spec), "--date", "2026-10-01", flag, value)
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn("apply only to a deterministic pack", proc.stderr)
+
+
+class CounterpartyLegSignature(unittest.TestCase):
+    """evidencebook-skills#207: `countersigned` is awarded only when the other
+    side's leg verified under the reader's trusted keys; a leg that did not
+    leaves the row self-attested with the reason, and its verdict unchanged."""
+
+    def setUp(self):
+        self.payer, self.provider = load("payer"), load("provider")
+        named = {c["settlement"]["terms_ref"] for c in self.provider if "settlement" in c}
+        self.held = [c for c in self.payer if c["capsule_id"] in named]  # the payer's terms legs (the counterparty's)
+        self.book = self.provider + self.held
+
+    def judged(self, leg_unverified=None, book=None, unverified=None):
+        return deals.build_result(records(book or self.book), compiled(), DATE, GENERATED_AT, None,
+                                  unverified or {}, leg_unverified or {})
+
+    def terms_leg_of(self, exchange_id):
+        """Book ids of the payer's terms legs that deal's own payee legs name."""
+        refs = {c["settlement"]["terms_ref"] for c in self.provider if "settlement" in c
+                and c["settlement"].get("payment_ref", {}).get("value") in self.hashes(exchange_id)}
+        return sorted(c["capsule_id"] for c in self.held if c["capsule_id"] in refs)
+
+    def hashes(self, exchange_id):
+        return {observation(c)["payment_hash"] for c in deal_records(self.provider, exchange_id)
+                if observation(c) and observation(c).get("payment_hash")}
+
+    def row(self, doc, case="d1"):
+        return claims(doc)[f"{case}::{SERVED}"]
+
+    def test_a_verified_leg_is_countersigned(self):
+        doc, _ = self.judged({})
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["grade"]), ("met", "countersigned"))
+        self.assertNotIn("x-countersign", row)
+        for key in ("leg_signature_unverified_rows", "leg_signer_untrusted_rows"):
+            self.assertNotIn(key, doc["x-window"])
+
+    def test_no_leg_signature_problem_leaves_the_result_byte_identical(self):
+        self.assertEqual(self.judged({})[0], run(self.book)[0])
+
+    def test_a_tampered_leg_is_not_countersigned_and_says_why(self):
+        bad = self.terms_leg_of("p-deal-settled")
+        self.assertTrue(bad)
+        doc, _ = self.judged({bad[0]: deals.UNVERIFIED})
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
+        self.assertEqual(row["x-countersign"], deals.LEG_UNVERIFIED)
+        self.assertIn(bad[0], json.dumps(row), "the row cites the leg that failed")
+        self.assertEqual(doc["x-window"]["leg_signature_unverified_rows"], 1)
+        self.assertEqual(self.row(doc, "d2")["grade"], "countersigned", "another deal's leg is not touched")
+        self.assertNotIn("signature_unverified_deals", doc["x-window"], "the deal's own records verified")
+
+    def test_a_leg_signed_by_an_untrusted_key_is_not_countersigned_and_says_why(self):
+        bad = self.terms_leg_of("p-deal-settled")
+        doc, _ = self.judged({bad[0]: deals.UNTRUSTED})
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+                         ("met", "self-attested", deals.LEG_UNTRUSTED))
+        self.assertEqual(doc["x-window"]["leg_signer_untrusted_rows"], 1)
+        self.assertNotIn("leg_signature_unverified_rows", doc["x-window"])
+
+    def test_a_missing_leg_is_self_attested_with_no_reason(self):
+        gone = [c for c in self.book if c["capsule_id"] not in self.terms_leg_of("p-deal-settled")]
+        doc, _ = self.judged({}, gone)
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
+        self.assertNotIn("x-countersign", row)
+        self.assertNotIn("leg_signature_unverified_rows", doc["x-window"])
+
+    def test_two_failing_legs_with_both_reasons_give_the_signature_failure(self):
+        legs = self.terms_leg_of("p-deal-settled")
+        self.assertEqual(len(legs), 2)
+        doc, _ = self.judged({legs[0]: deals.UNTRUSTED, legs[1]: deals.UNVERIFIED})
+        self.assertEqual(self.row(doc)["x-countersign"], deals.LEG_UNVERIFIED)
+
+    def test_one_failing_leg_of_two_payments_is_not_countersigned(self):
+        legs = self.terms_leg_of("p-deal-settled")
+        doc, _ = self.judged({legs[1]: deals.UNTRUSTED})
+        row = self.row(doc)
+        self.assertEqual((row["grade"], row["x-countersign"]), ("self-attested", deals.LEG_UNTRUSTED))
+
+    def test_a_bad_copy_under_a_good_leg_id_does_not_replace_the_good_leg(self):
+        bad = self.terms_leg_of("p-deal-settled")[0]
+        forged = copy.deepcopy(next(c for c in self.held if c["capsule_id"] == bad))
+        forged["capsule_id"] = bad  # a second book record claiming the same capsule id
+        book = self.book + [dict(forged, key_id="e" * 64)]
+        doc, _ = self.judged({}, book)
+        self.assertEqual(self.row(doc)["grade"], "countersigned")
+
+    def test_a_not_met_row_keeps_its_verdict_when_its_leg_fails(self):
+        payer_book = self.payer + [c for c in self.provider if "settlement" in c]
+        before, _ = self.judged({}, payer_book)
+        short = [cid for cid, c in claims(before).items()
+                 if c["verdict"] == "not_met" and c["grade"] == "countersigned"]
+        self.assertTrue(short, "the payer's short deal is countersigned by the payee's legs")
+        legs = [c["capsule_id"] for c in self.provider if "settlement" in c]
+        after, _ = self.judged({i: deals.UNVERIFIED for i in legs}, payer_book)
+        for cid in short:
+            row = claims(after)[cid]
+            self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+                             ("not_met", "self-attested", deals.LEG_UNVERIFIED))
+
+    def test_a_payer_node_downgrades_on_the_payees_leg(self):
+        payer_book = self.payer + [c for c in self.provider if "settlement" in c]
+        before, _ = self.judged({}, payer_book)
+        graded = [cid for cid, c in claims(before).items() if c["grade"] == "countersigned"]
+        if not graded:
+            self.skipTest("the payer fixture holds no payee leg for a settled payment")
+        legs = [c["capsule_id"] for c in self.provider if "settlement" in c]
+        after, _ = self.judged({i: deals.UNTRUSTED for i in legs}, payer_book)
+        for cid in graded:
+            self.assertEqual(claims(after)[cid]["x-countersign"], deals.LEG_UNTRUSTED)
+
+    def test_a_bad_leg_under_the_nodes_own_key_is_not_the_counterpartys(self):
+        own = [c["capsule_id"] for c in self.provider if "settlement" in c]
+        doc, _ = self.judged({i: deals.UNVERIFIED for i in own})
+        self.assertEqual(self.row(doc)["grade"], "countersigned")
+        self.assertNotIn("x-countersign", self.row(doc))
+
+    def test_a_deal_whose_own_record_failed_shows_one_reason(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        leg = self.terms_leg_of("p-deal-settled")[0]
+        doc, _ = self.judged({leg: deals.UNVERIFIED}, None, {victim: deals.UNVERIFIED})
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["x-reason"]), ("not_evaluable", deals.UNVERIFIED))
+        self.assertNotIn("x-countersign", row)
+
+    def test_an_unreadable_row_gets_no_reason(self):
+        bad = self.terms_leg_of("p-deal-settled")
+        doc, _ = self.judged({bad[0]: deals.UNVERIFIED})
+        for case in ("d3", "d4"):  # no settled payment: never a countersigned candidate
+            self.assertNotIn("x-countersign", self.row(doc, case))
+
+
+class LegSignatureRead(unittest.TestCase):
+    """read_book verifies each leg's own signature with `capsulectl verify` on
+    the leg as a bare capsule, and classifies what capsulectl prints."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        d = pathlib.Path(self.tmp.name)
+        self.ctl = d / "capsulectl"
+        self.ctl.write_text(FAKE_CAPSULECTL)
+        self.ctl.chmod(0o755)
+        self.book = d / "book.json"
+        self.provider = load("provider")
+        self.legs = [c["capsule_id"] for c in self.provider if "settlement" in c]
+
+    def read(self, verify):
+        self.book.write_text(json.dumps({"records": self.provider, "verify": verify}))
+        os.environ["FAKE_BOOK"] = str(self.book)
+        self.addCleanup(os.environ.pop, "FAKE_BOOK", None)
+        return deals.read_book(str(self.ctl), "p")
+
+    def classified(self, modes):
+        _, unverified, legs = self.read({"leg:" + cid: mode for cid, mode in zip(self.legs, modes)})
+        self.assertEqual(unverified, {})
+        self.assertEqual(legs, dict(zip(self.legs, modes.values())))
+
+    def test_each_refusal_is_a_signature_failure(self):
+        # fake modes -> reason: capsule-cli's bare-capsule messages, rc44's compact JSON (a flipped
+        # signature, a body that no longer hashes to its id) and a capsule with no signature at all
+        self.classified({"bad": deals.UNVERIFIED, "compact_bad": deals.UNVERIFIED,
+                         "compact_tampered": deals.UNVERIFIED, "unsigned": deals.UNVERIFIED})
+
+    def test_each_untrusted_signer_is_a_trust_failure(self):
+        self.classified({"untrusted_bare": deals.UNTRUSTED, "compact_untrusted": deals.UNTRUSTED,
+                         "no_trusted_key": deals.UNTRUSTED, "untrusted_record": deals.UNTRUSTED})
+
+    def test_a_record_that_failed_its_own_check_is_not_asked_twice(self):
+        outer = self.legs[0]
+        _, unverified, legs = self.read({outer: "bad", "leg:" + outer: "bad"})
+        self.assertEqual(unverified, {outer: deals.UNVERIFIED})
+        self.assertNotIn(outer, legs)
+
+    def test_a_leg_check_with_no_verdict_is_a_tool_failure(self):
+        with self.assertRaises(deals.EvidenceUnavailable):
+            self.read({"leg:" + self.legs[0]: "crash"})
+
+    def test_a_non_leg_capsule_is_not_checked_as_a_leg(self):
+        obs = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        _, _, legs = self.read({"leg:" + obs: "bad"})
+        self.assertEqual(legs, {})
+
+    def test_a_run_with_a_bad_leg_still_gives_a_result_that_says_which_rows(self):
+        sub = ReadBookVerifiesEveryCapsule("run_main")
+        sub.setUp()
+        self.addCleanup(sub.tmp.cleanup)
+        sub.provider = self.provider
+        proc, _ = sub.run_main({"leg:" + self.legs[0]: "compact_bad", "leg:" + self.legs[1]: "compact_untrusted"})
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        window = json.loads(proc.stdout)["window"]
+        self.assertNotIn("unverified_capsules", window)
+        self.assertEqual(window.get("deals_counted"), 4)
 
 
 class EvaluatorRefusesAnOpenPeriod(unittest.TestCase):

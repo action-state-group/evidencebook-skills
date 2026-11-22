@@ -4,7 +4,7 @@
   "claims": [
     {
       "id": "d1::come_through.served_as_agreed",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_as_agreed",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -95,7 +95,7 @@
     },
     {
       "id": "d1::come_through.served_named_model",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_named_model",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -131,7 +131,7 @@
     },
     {
       "id": "d2::come_through.served_as_agreed",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_as_agreed",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -222,7 +222,7 @@
     },
     {
       "id": "d2::come_through.served_named_model",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_named_model",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -258,7 +258,7 @@
     },
     {
       "id": "d3::come_through.served_as_agreed",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_as_agreed",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -293,7 +293,7 @@
     },
     {
       "id": "d3::come_through.served_named_model",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_named_model",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -320,7 +320,7 @@
     },
     {
       "id": "d4::come_through.served_as_agreed",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_as_agreed",
       "tier": "recomputed",
       "grade": "self-attested",
@@ -379,7 +379,7 @@
     },
     {
       "id": "d4::come_through.served_named_model",
-      "contract_ref": "inference-deals@0.1.1",
+      "contract_ref": "inference-deals@0.1.2",
       "requirement_ref": "come_through.served_named_model",
       "tier": "recomputed",
       "grade": "self-attested",

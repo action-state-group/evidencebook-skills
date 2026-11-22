@@ -49,7 +49,11 @@ _NO_TRUSTED_KEY = "not_performed: no trusted key"
 # What it prints when it refused the capsule: the bare shape's error line, and the
 # record shape's `"...": "failed"` check member on stdout.
 _REFUSED = "capsule verification failed"
-_FAILED_CHECK = '": "failed'
+# capsulectl prints compact JSON ("producer_signature":"failed: ..."), so the
+# space after the colon is optional. A bare capsule that carries no signature
+# says `"producer_signature":"absent` and exits 3: it is not authenticated.
+_FAILED_CHECK = re.compile(r'":\s*"failed')
+_ABSENT_SIGNATURE = re.compile(r'"producer_signature":\s*"absent')
 
 
 def run(capsulectl, *args, check=True):
@@ -91,18 +95,25 @@ def verify(capsulectl, profile, capsule_id, workdir):
     path = pathlib.Path(workdir) / f"{capsule_id}.json"
     if not path.exists():
         run(capsulectl, "get", "--profile", profile, "--capsule-id", capsule_id, "--raw", "--output", str(path))
+    verify_file(capsulectl, profile, path, capsule_id)
+
+
+def verify_file(capsulectl, profile, path, label):
+    """Verify one capsule file (a record or a bare capsule) under the profile's
+    trusted keys. Raises CapsuleDoesNotVerify, UntrustedSigner or, when
+    capsulectl gave no verdict at all, EvidenceUnavailable."""
     result = subprocess.run([capsulectl, "verify", "--profile", profile, "--capsule", str(path)], capture_output=True, text=True)
     if result.returncode != 0:
         said = result.stderr.strip()
         # Untrusted first: the bare shape's "key_id is not among the trusted keys"
         # message also starts with "capsule verification failed".
         if any(t in said or t in result.stdout for t in _UNTRUSTED_TEXT) or _NO_TRUSTED_KEY in result.stdout:
-            raise UntrustedSigner(f"capsule {capsule_id}: signer not in the trusted keys: {said}")
-        if _REFUSED in said or _FAILED_CHECK in result.stdout:
-            raise CapsuleDoesNotVerify(f"capsule {capsule_id} does not verify: {said}")
+            raise UntrustedSigner(f"capsule {label}: signer not in the trusted keys: {said}")
+        if _REFUSED in said or _FAILED_CHECK.search(result.stdout) or _ABSENT_SIGNATURE.search(result.stdout):
+            raise CapsuleDoesNotVerify(f"capsule {label} does not verify: {said}")
         # No verdict: a killed process, a bad profile, a capsulectl that could not
         # run. That is a tool failure for the whole run, never a finding about this capsule.
-        raise EvidenceUnavailable(f"capsulectl verify gave no verdict for {capsule_id} "
+        raise EvidenceUnavailable(f"capsulectl verify gave no verdict for {label} "
                                   f"(exit {result.returncode}): {said}")
 
 
