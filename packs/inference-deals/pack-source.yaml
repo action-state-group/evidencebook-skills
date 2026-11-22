@@ -97,19 +97,17 @@ checks:
         requirement_tier: must_have
         out_of_scope_means: the node did not provide on this deal
       - id: served_named_model
-        label: Model it reports running matches the model requested (its own record)
+        label: Model it reports running matches the model requested (its own record, or a referee's ruling)
         text: >-
-          When the node provided, the model its record says answered is the model
-          its record says was requested. A deal a referee already adjudicated is
-          not judged again: the row
-          carries the sealed verdict, read for this node as the node's own
-          verdict counts read it (corroborated, or contradicted naming the
-          other half, is met; contradicted naming this node is not_met;
-          anything else reads "Couldn't tell"). Otherwise the
-          row reads "provider states": the node's own records of the model
-          requested and the model that answered, which no verifier can check
-          against the accepted terms, since those carry the model only inside
-          their digest.
+          When the node provided and a referee decided the deal, this row shows
+          the referee's verdict, read for this node as the node's own verdict
+          counts read it (corroborated, or contradicted naming the other half,
+          is met; contradicted naming this node is not_met; anything else reads
+          "Couldn't tell"); a deal a referee already adjudicated is not judged
+          again. Otherwise it compares the model its record says was requested
+          with the model its record says answered, which no one else has
+          checked and no verifier can check against the accepted terms, since
+          those carry the model only inside their digest.
         tier: recomputed
         fold_id: inference_deals.served_named_model
         requirement_tier: must_have

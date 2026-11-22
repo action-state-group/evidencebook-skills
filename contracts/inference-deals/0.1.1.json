@@ -23,9 +23,9 @@
     {
       "id": "come_through.served_named_model",
       "profile": "outcome",
-      "statement": "Model it reports running matches the model requested (its own record)",
+      "statement": "Model it reports running matches the model requested (its own record, or a referee's ruling)",
       "tier": "must_have",
-      "evidence_rule": "When the node provided, the model its record says answered is the model its record says was requested. A deal a referee already adjudicated is not judged again: the row carries the sealed verdict, read for this node as the node's own verdict counts read it (corroborated, or contradicted naming the other half, is met; contradicted naming this node is not_met; anything else reads \"Couldn't tell\"). Otherwise the row reads \"provider states\": the node's own records of the model requested and the model that answered, which no verifier can check against the accepted terms, since those carry the model only inside their digest.\n\nRecomputed by fold inference_deals.served_named_model.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "evidence_rule": "When the node provided and a referee decided the deal, this row shows the referee's verdict, read for this node as the node's own verdict counts read it (corroborated, or contradicted naming the other half, is met; contradicted naming this node is not_met; anything else reads \"Couldn't tell\"); a deal a referee already adjudicated is not judged again. Otherwise it compares the model its record says was requested with the model its record says answered, which no one else has checked and no verifier can check against the accepted terms, since those carry the model only inside their digest.\n\nRecomputed by fold inference_deals.served_named_model.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
       "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
       "backward_verdict": "DETERMINISTIC"
     }
