@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills afa24e7 · evidencebook 5d29ccc · evidencebook-deal 2f82b61 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills afa24e7 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc46 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -114,18 +114,21 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    git -C evidencebook-skills checkout -q afa24e740bc218979c51910b73d4fdc240d65bc7
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
-   git clone -q https://github.com/action-state-group/evidencebook-deal
-   git -C evidencebook-deal checkout -q 2f82b61e6410e70d9ca88712d72b0a3f5faeb31d
    git clone -q https://github.com/action-state-group/capsule-engine
    git -C capsule-engine checkout -q a3310060b2d94359bc71c77ae9360d52ee02cf46
    (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
-   (cd evidencebook-deal && GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
+   mkdir -p $HOME/ard-demo/dl && cd $HOME/ard-demo/dl
+   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc46/SHA256SUMS
+   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc46/capsulectl-deal-v0.1.0-rc46-darwin-arm64
+   cd $HOME/ard-demo
+   (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc46-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - \
+     && install -m 755 capsulectl-deal-v0.1.0-rc46-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
    cd evidencebook-skills && python3 -m venv .venv
    .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" \
      "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
    ```
 
-   **Expect:** pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
+   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc46-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
 
 2. Already cloned? Move the checkout to this pin instead.
 
