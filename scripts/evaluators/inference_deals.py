@@ -94,7 +94,28 @@ Grades: `countersigned` when, for every settled payment of the row, the book
 also holds the counterparty's leg of it (a `settlement` leg under a key that
 is not this node's, joined by payment hash and terms_ref to this node's own
 leg under its own key), else `self-attested`. The key is read from the
-record (`key_id`); the counterparty's signature is not verified here.
+record (`key_id`). A counterparty leg's own signature is not verified here:
+what is verified is the book record that holds it (below).
+
+Signatures (evidencebook-skills#187). Every book record that holds a Mesh
+capsule is authenticated with `capsulectl verify` under the READER's trusted
+keys before a term reads it (read_book): the record's signature must verify
+under its `key_id`, and that key must be one the reader trusts. This says the
+record was sealed into this book by a key the reader trusts; it does not check
+the Mesh capsule inside it, which is the counterparty's signature on a leg. A
+deal with a record that does not verify is not judged: every row is
+not_evaluable, with `x-reason` `capsule_signature_did_not_verify` (the signature
+or identity was refused) or `capsule_signer_not_trusted` (the signer is not among
+the reader's trusted keys, which is not a finding of tampering); the first wins
+when both occur. Such a record never gives a deal its window time, a side's key
+or a counterparty class, and never creates a deal. A record that cannot be
+attributed to a counted deal (a leg, or a record of a deal the verified records
+do not establish) only adds to `x-window.unverified_capsules`, and a leg held by
+a record that does not verify never makes a payment countersigned. The counts
+are in `x-window` (`signature_unverified_deals`, `signer_untrusted_deals`,
+`unverified_capsules`, absent when zero) and in `states`, so a run with
+unavailable deals never reads as clean. One record that fails to verify never
+stops the run; a capsulectl that cannot run at all still does (exit 2).
 """
 import argparse
 import calendar
@@ -103,9 +124,11 @@ import hashlib
 import json
 import pathlib
 import sys
+import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from capsulectl_calls import EvidenceUnavailable, list_capsules, payload  # noqa: E402
+from capsulectl_calls import (CapsuleDoesNotVerify, EvidenceUnavailable, UntrustedSigner,  # noqa: E402
+                              list_capsules, payload, verify)
 from result_v0 import build_result_v0_for_day, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 
@@ -118,6 +141,12 @@ EXCHANGE_ROLES = {"served": "provider", "requested": "payer"}
 # reason a deal that cites another pack is not judged.
 PACK_DIGEST_MEMBER = "inference_deals_digest"
 MISMATCH = "inference_deals_digest_mismatch"
+
+# Why a capsule or a deal is evidence unavailable before any term is read: the
+# capsule's signature did not verify (possible tampering), or its signer is not
+# among the reader's trusted keys (trust not established, no claim of tampering).
+UNVERIFIED = "capsule_signature_did_not_verify"
+UNTRUSTED = "capsule_signer_not_trusted"
 
 PAID = "come_through.paid_as_agreed"
 SERVED = "come_through.served_as_agreed"
@@ -220,6 +249,7 @@ class Deal:
         self.adjudications = []  # (book capsule id, member)
         self.first = None
         self.records = []        # every capsule of this deal, as (book capsule id, body)
+        self.unverified = {}     # book capsule id -> reason, for this deal's records that did not verify
 
     def add(self, cid, body, when):
         self.records.append((cid, body))
@@ -279,6 +309,33 @@ def collect(records, start, to):
         deal.adjudications = [(cid, m) for cid, m in adjudications if _adjudicated_halves(m) & halves]
     kept = {x: d for x, d in deals.items() if start <= d.first < to}
     return kept, legs, own_keys
+
+
+def _attribute_unverified(deals, unverified_records):
+    """Mark the deals that records which did not verify belong to. `unverified_records`:
+    [(book capsule id, payload, reason)]. The payload is untrusted: read it only
+    with type checks that never raise, and use it only to withhold a judgement,
+    never to add a deal or give one evidence. A record that names no counted
+    deal marks none."""
+    for cid, body, reason in unverified_records:
+        try:
+            kind, member = _kind(body)
+        except (AttributeError, TypeError):
+            continue  # not shaped as any Mesh record, so it names no deal
+        if kind in ("observation", "exchange"):
+            source = member if kind == "observation" else member.get("serving_provenance")
+            xid = source.get("exchange_id") if isinstance(source, dict) else None
+            targets = [deals[xid]] if isinstance(xid, str) and xid in deals else []
+        elif kind == "adjudication":
+            halves = _adjudicated_halves(member)
+            targets = [d for d in deals.values()
+                       if halves & {b.get("capsule_id") for _, b, _ in d.exchanges}]
+        else:
+            continue  # a leg names no deal; it only drops out of the book (build_result)
+        for deal in targets:
+            # The signature failure is the stronger reading when one deal has both.
+            if deal.unverified.get(cid) != UNVERIFIED:
+                deal.unverified[cid] = reason
 
 
 def _join(invoice, settlement):
@@ -412,6 +469,16 @@ def judge_deal(deal, legs, own_keys, pack_digest=None):
     `inference_deals_digest_mismatch`, which the sealed Result then carries."""
     verdicts = {PAID: "out_of_scope", SERVED: "out_of_scope", MODEL: "out_of_scope"}
     extras, cited = {}, {}
+    if deal.unverified:
+        # A record this reader cannot authenticate decides nothing, not even
+        # which pack digest the deal cites.
+        reason = UNVERIFIED if UNVERIFIED in deal.unverified.values() else UNTRUSTED
+        for c in verdicts:
+            verdicts[c] = "not_evaluable"
+            extras[c] = {"x-state": reason, "x-reason": reason,
+                         "x-unverified-capsules": sorted(deal.unverified)}
+            cited[c] = [cid for cid, _ in deal.records] + sorted(deal.unverified)
+        return verdicts, extras, cited, reason, 0
     cites = cited_pack_digests(deal)
     if pack_digest is not None and any(d != pack_digest for d in cites):
         for c in verdicts:
@@ -478,8 +545,13 @@ def counterparty_class(deal):
     return None, len(values) > 1
 
 
-def build_result(records, compiled, date, generated_at, policy=None):
-    """Pure: the book's records -> (Result v0 document, summary). No I/O."""
+def build_result(records, compiled, date, generated_at, policy=None, unverified=None):
+    """Pure: the book's records -> (Result v0 document, summary). No I/O.
+    `unverified` maps the book capsule ids that did not verify to UNVERIFIED or
+    UNTRUSTED; those records are never read as evidence (see the module docstring)."""
+    unverified = unverified or {}
+    bad = [(cid, body, unverified[cid]) for cid, body in records if cid in unverified]
+    records = [(cid, body) for cid, body in records if cid not in unverified]
     for clause in compiled["clauses"]:
         if FOLDS.get(clause.get("fold_id")) != clause["id"]:
             raise DealsError(f"clause {clause['id']!r} names fold {clause.get('fold_id')!r}, which this "
@@ -490,6 +562,7 @@ def build_result(records, compiled, date, generated_at, policy=None):
     policy = policy or window["period_policy"]
     start, to, periods = window_bounds(date, window["months"], policy)
     deals, legs, own_keys = collect(records, start, to)
+    _attribute_unverified(deals, bad)
 
     ordered = sorted(deals.values(), key=lambda d: (d.first, d.exchange_id))
     rollups, sources, extras_by_case = [], {}, {}
@@ -539,13 +612,35 @@ def build_result(records, compiled, date, generated_at, policy=None):
     }
     if counts["states"].get(MISMATCH):  # absent otherwise, so an unaffected Result is byte-identical
         doc["x-window"]["digest_mismatch_deals"] = counts["states"][MISMATCH]
+    if bad:
+        doc["x-window"]["unverified_capsules"] = len(bad)
+    for state, key in ((UNVERIFIED, "signature_unverified_deals"), (UNTRUSTED, "signer_untrusted_deals")):
+        if counts["states"].get(state):
+            doc["x-window"][key] = counts["states"][state]
     summary = {"contract_ref": compiled["contract_ref"], "window": doc["x-window"], "states": counts["states"]}
     return doc, summary
 
 
 def read_book(capsulectl, profile):
-    return [(e["capsule_id"], payload(capsulectl, profile, e["capsule_id"]))
-            for e in list_capsules(capsulectl, profile)]
+    """(records, unverified): every book record as (capsule id, payload), and
+    the ids of the Mesh capsules among them that did not verify, each with its
+    reason. Only a capsule `_kind` reads is verified (a sealed Result or another
+    pack's case in the same book is not this pack's evidence); a capsulectl that
+    cannot get a capsule at all still raises EvidenceUnavailable."""
+    records, unverified = [], {}
+    with tempfile.TemporaryDirectory() as work:
+        for e in list_capsules(capsulectl, profile):
+            cid = e["capsule_id"]
+            body = payload(capsulectl, profile, cid)
+            records.append((cid, body))
+            try:
+                if _kind(body)[0] is not None:
+                    verify(capsulectl, profile, cid, work)
+            except UntrustedSigner:
+                unverified[cid] = UNTRUSTED
+            except CapsuleDoesNotVerify:
+                unverified[cid] = UNVERIFIED
+    return records, unverified
 
 
 def main(argv=None):
@@ -577,8 +672,8 @@ def main(argv=None):
         if anchor > now:
             raise DealsError(f"the window would end at {_iso(anchor)}, after now ({_iso(now)}): "
                              "that period has not closed")
-        doc, summary = build_result(read_book(args.capsulectl, args.profile), compiled, date,
-                                    args.generated_at, policy)
+        records, unverified = read_book(args.capsulectl, args.profile)
+        doc, summary = build_result(records, compiled, date, args.generated_at, policy, unverified)
     except (DealsError, EvidenceUnavailable, ValueError) as e:
         print(json.dumps({"error": str(e)}, indent=2))
         return 2

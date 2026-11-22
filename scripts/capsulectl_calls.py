@@ -31,6 +31,23 @@ class EvidenceUnavailable(Exception):
     """A consequential step produced no record. The run stops at this step."""
 
 
+class CapsuleDoesNotVerify(EvidenceUnavailable):
+    """`capsulectl verify` refused one capsule: its signature or identity does not check out."""
+
+
+class UntrustedSigner(EvidenceUnavailable):
+    """One capsule's signature is not refused, but its signer is not among the
+    reader's trusted keys (or the profile has none): trust was not established,
+    which is not evidence of tampering."""
+
+
+# What capsulectl prints when trust, not the signature, is what failed:
+# capsule-cli cli/command.go (record shape, SafeError for ErrUntrustedSigner),
+# cli/verify_capsule.go (bare shape), and both shapes' "no trusted key" report.
+_UNTRUSTED_TEXT = ("not authorized by the profile trusted_keys", "not among the profile's trusted keys")
+_NO_TRUSTED_KEY = "not_performed: no trusted key"
+
+
 def run(capsulectl, *args, check=True):
     """Run one capsulectl verb and return its JSON result (or None)."""
     proc = subprocess.run([capsulectl, *args], capture_output=True, text=True)
@@ -72,7 +89,10 @@ def verify(capsulectl, profile, capsule_id, workdir):
         run(capsulectl, "get", "--profile", profile, "--capsule-id", capsule_id, "--raw", "--output", str(path))
     result = subprocess.run([capsulectl, "verify", "--profile", profile, "--capsule", str(path)], capture_output=True, text=True)
     if result.returncode != 0:
-        raise EvidenceUnavailable(f"capsule {capsule_id} does not verify: {result.stderr.strip()}")
+        said = result.stderr.strip()
+        if any(t in said or t in result.stdout for t in _UNTRUSTED_TEXT) or _NO_TRUSTED_KEY in result.stdout:
+            raise UntrustedSigner(f"capsule {capsule_id}: signer not in the trusted keys: {said}")
+        raise CapsuleDoesNotVerify(f"capsule {capsule_id} does not verify: {said}")
 
 
 def committed_on(entry, day):

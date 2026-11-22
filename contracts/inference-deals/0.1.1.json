@@ -1,0 +1,33 @@
+{
+  "id": "inference-deals",
+  "version": "0.1.1",
+  "requirements": [
+    {
+      "id": "come_through.paid_as_agreed",
+      "profile": "outcome",
+      "statement": "Paid as agreed",
+      "tier": "must_have",
+      "evidence_rule": "When the node bought, every invoice it saw has a settlement its own wallet reported, for the invoice's amount. Every record is verified under the reader's trusted keys first: a deal with a record whose signature does not verify, or whose signer is not among those keys, is not_evaluable, and the two reasons are told apart.\n\nRecomputed by fold inference_deals.paid_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "come_through.served_as_agreed",
+      "profile": "outcome",
+      "statement": "Settlement recorded for what it served",
+      "tier": "must_have",
+      "evidence_rule": "When the node provided, its records show the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. The pack proves what was recorded and settled; it does not prove the answer was good or that the provider's own report of what it ran is true. Records are verified under the reader's trusted keys, as for the term above.\n\nRecomputed by fold inference_deals.served_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "come_through.served_named_model",
+      "profile": "outcome",
+      "statement": "Model it reported matches the model it named (its own report)",
+      "tier": "must_have",
+      "evidence_rule": "When the node provided, the model it reports having run is the model it named. A deal a referee already adjudicated is not judged again: the row carries the sealed verdict, read for this node as the node's own verdict counts read it (corroborated, or contradicted naming the other half, is met; contradicted naming this node is not_met; anything else is not_evaluable). Otherwise the row reads \"provider states\": the node's own records of the model requested and the model that answered, which no verifier can check against the accepted terms, since those carry the model only inside their digest.\n\nRecomputed by fold inference_deals.served_named_model.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    }
+  ]
+}
