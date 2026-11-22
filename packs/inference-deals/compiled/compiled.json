@@ -2,7 +2,7 @@
   "contract": "inference-deals/v1",
   "contract_version": "rubric-v0.1",
   "contract_ref": "inference-deals@0.1.1",
-  "outcome_statement": "On every counted deal in the window, the node's own records show it came through on the terms it accepted: it paid as agreed when it bought, and when it provided, it recorded settlement for every invoice it issued and reported running the model it was asked for. Every record is checked against the signer keys the reader trusts. A deal whose record's signature does not verify (altered, or not what it claims), or whose signer is not among those keys, is shown as \"Couldn't tell\" (not_evaluable), never as met or not met; the report says which. A signer outside your keys is not a finding of tampering. A record that does not verify never creates a deal, so with no trusted keys there is no deal to report and the run says so. A counterparty's own signature on a leg is not checked.",
+  "outcome_statement": "On every counted deal in the window, the node's own records show it came through on the terms it accepted: it paid as agreed when it bought, and when it provided, it recorded settlement for every invoice it issued and reported running the model it was asked for. Every record is checked against the signer keys the reader trusts. A deal that holds a record whose signature does not verify (altered, or not what it claims), or whose signer is not among those keys, is shown as \"Couldn't tell\" (not_evaluable), never as met or not met; the report says which. A signer outside your keys is not a finding of tampering. A record that does not verify never creates a deal, so with no trusted keys there is no deal to report and the run says so. A counterparty's own signature on a leg is not checked.",
   "resolution_rule": "a deal is resolved only when every term that applies to it is met",
   "counterparty": "mesh-peer",
   "counterparty_note": "The peer's book of the same exchange is not held on this node. It is shown as not_available, never as a failure or as agreement.",
@@ -60,7 +60,7 @@
   "disclosure": {
     "suppress": []
   },
-  "pack_source_digest": "dc9fc2e5c18facfb0204c20f69b0c667465f1ff759d13a8b6c6db851036f12dd",
+  "pack_source_digest": "dc35adf89203cc13273680aaf0aa3c9c9caa0bd1c34f7d72fd65c31280ecb419",
   "title": "Inference deals",
   "switches": {
     "out_of_scope_verdict": true
