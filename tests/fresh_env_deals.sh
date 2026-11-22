@@ -47,6 +47,15 @@ page_check() {
   "$CHROME" --headless=new --disable-gpu --virtual-time-budget=60000 --enable-logging=stderr --v=0 --dump-dom "file://$page" >"$work/$node.dom" 2>"$work/$node.chrome.log" || true
   # Chrome headless can exit non-zero from its own teardown after it has written the DOM, so the gate is the DOM and the checks on it, not its status.
   [[ -s "$work/$node.dom" ]] || fail "$node: Chrome wrote no DOM for the page"
+  # DEBUG (#102, to be removed): which Chrome flags draw the page on this machine.
+  if ! grep -q "$(jq -r '.entries["row.come_through.paid_as_agreed.label"] // .entries["row.come_through.served_as_agreed.label"]' "$PACK")" "$work/$node.dom"; then
+    printf 'DEBUG chrome: %s\n' "$("$CHROME" --version 2>&1)"
+    for flags in "--timeout=20000" "--virtual-time-budget=60000 --window-size=1280,2400" "--no-sandbox --virtual-time-budget=60000" "--headless=new --disable-dev-shm-usage --virtual-time-budget=60000"; do
+      "$CHROME" --headless=new --disable-gpu $flags --dump-dom "file://$page" >"$work/$node.dbg.dom" 2>/dev/null || true
+      printf 'DEBUG variant [%s]: label=%s refused=%s\n' "$flags" \
+        "$(grep -c 'Settlement recorded for every invoice it issued\|Paid as agreed' "$work/$node.dbg.dom")" "$(grep -c 'presentation for this bundle failed' "$work/$node.dbg.dom")"
+    done
+  fi
   python3 - "$work/$node.dom" "$PACK" "$node" <<'EOF' || fail "$node: the page does not show the wording pack"
 import html, json, re, sys
 dom, pack, node = sys.argv[1:4]
