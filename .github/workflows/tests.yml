@@ -36,14 +36,13 @@ jobs:
   ard-demo:
     # The ARD two-seller demo (demo/ard): its tests, end to end on a simulated rail, against the
     # Goose reference and the x-deal-v0 checker in a pinned evidencebook checkout, and a
-    # capsule-engine built from a pinned tag, and capsulectl-deal built from a pinned
-    # evidencebook-deal commit for the receipt pages' verify (the run sheet's pins).
+    # capsule-engine built from a pinned tag, and the capsulectl-deal binary from a pinned
+    # evidencebook release for the receipt pages' verify (the run sheet's pins).
     runs-on: ubuntu-latest
     env:
       EVIDENCEBOOK_REF: 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9  # #522: #514 reverted; the demo seals no demo flag
       CAPSULE_ENGINE_TAG: go/v0.4.0
-      # evidencebook-deal#220 (merged): cll/go v0.4.0, so verify --bundle accepts the Goose reference's checkpoints.
-      EVIDENCEBOOK_DEAL_REF: 2f82b61e6410e70d9ca88712d72b0a3f5faeb31d
+      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc46  # evidencebook#610: the deal plugin moved into evidencebook
       CAPSULE_VIEWER_REF: 613a8a95144e5851bbb61df72df8cc76b7500381
     steps:
       - uses: actions/checkout@v4
@@ -61,12 +60,6 @@ jobs:
           ref: ${{ env.CAPSULE_ENGINE_TAG }}
           path: .deps/capsule-engine
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/evidencebook-deal
-          ref: ${{ env.EVIDENCEBOOK_DEAL_REF }}
-          path: .deps/evidencebook-deal
-          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: .deps/capsule-engine/go/go.mod
@@ -75,21 +68,27 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
-      # The two Go binaries depend only on their pinned refs and the Go toolchain: build them once per pin.
+      # capsule-engine depends only on its pinned ref and the Go toolchain: build it once per pin.
       - id: bins
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bin
-          key: ard-bins-${{ runner.os }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.EVIDENCEBOOK_DEAL_REF }}-${{ hashFiles('.deps/capsule-engine/go/go.mod', '.deps/evidencebook-deal/go.mod') }}
+          key: ard-bins-${{ runner.os }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ hashFiles('.deps/capsule-engine/go/go.mod') }}
       - name: build capsule-engine
         if: steps.bins.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
-      - name: build capsulectl-deal
-        if: steps.bins.outputs.cache-hit != 'true'
+      - name: fetch capsulectl-deal
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          (cd .deps/evidencebook-deal && GOTOOLCHAIN=auto CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
+          d="$(mktemp -d)"
+          gh release download "$CAPSULECTL_DEAL_TAG" -R action-state-group/evidencebook -D "$d" \
+            -p SHA256SUMS -p "capsulectl-deal-${CAPSULECTL_DEAL_TAG#capsulectl/}-linux-amd64"
+          (cd "$d" && grep ' capsulectl-deal-.*-linux-amd64$' SHA256SUMS | sha256sum -c -)
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 755 "$d"/capsulectl-deal-*-linux-amd64 "$RUNNER_TEMP/bin/capsulectl-deal"
       - name: the demo's tests
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
