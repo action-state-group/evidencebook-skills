@@ -441,7 +441,7 @@ class PackDigestCited(unittest.TestCase):
         # it: release the plugin with the new constant in the same batch, or
         # nodes refuse each other's proposals and this judge refuses their deals.
         self.assertEqual(compiled()["pack_source_digest"],
-                         "b46c7692ff3604f574a3cff5df2d0e89ada379e749b3ee4ae25aa6e6629cbbff")
+                         "8a3d6ac1d585639ffd00b5d0ae858662cd355548bd26c1ef29a119b09735e37e")
 
     def test_records_citing_the_packs_own_digest_are_judged_as_before(self):
         provider = load("provider")
@@ -956,6 +956,33 @@ class CounterpartyLegSignature(unittest.TestCase):
         row = self.row(doc)
         self.assertEqual((row["verdict"], row["x-reason"]), ("not_evaluable", deals.UNVERIFIED))
         self.assertNotIn("x-countersign", row)
+
+    def test_an_unsigned_counterparty_leg_with_no_key_still_gives_the_reason(self):
+        bad = self.terms_leg_of("p-deal-settled")
+        book = [{k: v for k, v in c.items() if k not in ("key_id", "signature")} if c["capsule_id"] in bad else c
+                for c in self.book]
+        doc, _ = self.judged({i: deals.UNVERIFIED for i in bad}, book)
+        row = self.row(doc)
+        self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+                         ("met", "self-attested", deals.LEG_UNVERIFIED))
+
+    def test_a_malformed_leg_that_did_not_verify_never_stops_the_run(self):
+        bad = self.terms_leg_of("p-deal-settled")
+        broken = []
+        for c in self.book:
+            if c["capsule_id"] in bad:
+                c = dict(c, settlement=dict(c["settlement"], payment_ref="not-an-object", terms_ref=5))
+            broken.append(c)
+        doc, _ = self.judged({i: deals.UNVERIFIED for i in bad}, broken)
+        self.assertNotIn("x-countersign", self.row(doc))
+
+    def test_a_row_cites_only_the_legs_that_failed_for_it(self):
+        own = [c["capsule_id"] for c in self.provider if "settlement" in c]
+        bad = self.terms_leg_of("p-deal-settled")[0]
+        doc, _ = self.judged({bad: deals.UNVERIFIED, **{i: deals.UNVERIFIED for i in own}})
+        cited = json.dumps(self.row(doc))
+        self.assertIn(bad, cited)
+        self.assertNotIn(own[0], cited, "the node's own leg did not cause the downgrade")
 
     def test_an_unreadable_row_gets_no_reason(self):
         bad = self.terms_leg_of("p-deal-settled")

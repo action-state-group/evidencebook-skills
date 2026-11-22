@@ -410,60 +410,76 @@ def payment_state(observations, side):
     return "not_evaluable", "no_settlement_seen", len(unmatched), set()
 
 
+def _well_formed_leg(body, m):
+    """Whether a leg's members the join reads have the types it expects. A leg
+    that did not verify is untrusted input: one that does not read this way can
+    match no payment, so it is left out rather than allowed to stop the run."""
+    ref = m.get("payment_ref")
+    return (isinstance(body, dict) and isinstance(m, dict)
+            and all(isinstance(x, str) for x in (body.get("capsule_id"), m.get("terms_ref"), m.get("leg"),
+                                                 m.get("sealer_role")) if x is not None)
+            and (ref is None or (isinstance(ref, dict) and isinstance(ref.get("value"), (str, type(None)))))
+            and isinstance(body.get("key_id", ""), (str, type(None))))
+
+
 def _countersigned(side, hashes, legs, own_keys, bad_legs=()):
-    """(countersigned, reason): whether, for EVERY one of these payments, the
-    book holds the counterparty's leg beside this node's own: on a payer node,
-    the payee's payee_observed leg naming one of the payer's own terms legs; on
-    a provider node, the payer's terms leg its own payee_observed leg names. A
-    leg is this node's only under one of its own keys, and the counterparty's
-    only under a key that is present and not one of them.
+    """(countersigned, reason, cited ids): whether, for EVERY one of these
+    payments, the book holds the counterparty's leg beside this node's own: on
+    a payer node, the payee's payee_observed leg naming one of the payer's own
+    terms legs; on a provider node, the payer's terms leg its own payee_observed
+    leg names. A leg is this node's only under one of its own keys, and the
+    counterparty's only under a key that is present and not one of them.
 
     `bad_legs` are legs whose own signature did not verify, as (book capsule
-    id, body, member, reason). They are never joined as evidence. When a
-    payment has no verified pair but a pair that a bad COUNTERPARTY leg would
-    complete, the payment is the reason's; the reason is UNVERIFIED's when both
-    kinds occur. A node's own leg is held by a book record this reader already
-    verified, so its own signature is not asked for again."""
+    id, body, member, reason). They are never joined as evidence. A payment
+    with no verified pair but a pair that a bad COUNTERPARTY leg would complete
+    is the reason's (a bad leg with no key_id at all counts as the
+    counterparty's, since nothing says it is this node's); the reason is
+    UNVERIFIED's when both kinds occur, and the cited ids are those legs. A
+    node's own leg is held by a book record this reader already verified, so
+    its own signature is not asked for again."""
     if not hashes or None in hashes:
-        return False, None
+        return False, None, []
     def own(body):
         return body.get("key_id") in own_keys
-    def foreign(body):
-        return bool(body.get("key_id")) and body["key_id"] not in own_keys
-    def stamped_by(candidates):
-        """{payment hash: [reason or None for each pair found]}"""
+    def foreign(body, reason):
+        key = body.get("key_id")
+        return (bool(key) and key not in own_keys) or (reason is not None and not key)
+    def pairs(candidates):
+        """{payment hash: [(reason, cited leg id)] for each pair found}"""
         by_id = {}
         for cid, body, m, reason in candidates:
-            by_id.setdefault(body.get("capsule_id"), []).append((body, m, reason))
+            by_id.setdefault(body.get("capsule_id"), []).append((cid, body, m, reason))
         found = {}
         for cid, body, m, reason in candidates:
             h = (m.get("payment_ref") or {}).get("value")
             if m.get("leg") != "payee_observed" or m.get("sealer_role") != "payee" or h not in hashes:
                 continue
-            for tbody, tm, treason in by_id.get(m.get("terms_ref"), []):
+            for tcid, tbody, tm, treason in by_id.get(m.get("terms_ref"), []):
                 if tm.get("leg") != "terms" or tm.get("sealer_role") != "payer":
                     continue
-                if side == "payer" and foreign(body) and own(tbody):
-                    found.setdefault(h, []).append(reason)  # the counterparty's leg is the payee_observed one
-                if side == "provider" and foreign(tbody) and own(body):
-                    found.setdefault(h, []).append(treason)  # the counterparty's leg is the terms one
+                if side == "payer" and foreign(body, reason) and own(tbody):
+                    found.setdefault(h, []).append((reason, cid))  # the counterparty's leg is the payee_observed one
+                if side == "provider" and foreign(tbody, treason) and own(body):
+                    found.setdefault(h, []).append((treason, tcid))  # the counterparty's leg is the terms one
         return found
     # A bad leg under one of this node's own keys is joined like any other.
     good = [(cid, b, m, None) for cid, b, m in legs] + [(c, b, m, None) for c, b, m, _ in bad_legs if own(b)]
-    bad = [tuple(x) for x in bad_legs if not own(x[1])]
-    verified = stamped_by(good)
-    candidates = stamped_by(good + bad)
-    reasons = set()
+    bad = [x for x in bad_legs if not own(x[1]) and _well_formed_leg(x[1], x[2])]
+    verified = pairs(good)
+    candidates = pairs(good + bad)
+    reasons, cited = set(), set()
     for h in hashes:
         if h in verified:
             continue
-        if h in candidates:
-            reasons |= {r for r in candidates[h] if r}
-        else:
-            return False, None  # no pair at all: the other side's leg is missing
+        if h not in candidates:
+            return False, None, []  # no pair at all: the other side's leg is missing
+        failed = [(r, cid) for r, cid in candidates[h] if r]
+        reasons |= {r for r, _ in failed}
+        cited |= {cid for _, cid in failed}
     if reasons:
-        return False, UNVERIFIED if UNVERIFIED in reasons else UNTRUSTED
-    return True, None
+        return False, UNVERIFIED if UNVERIFIED in reasons else UNTRUSTED, sorted(cited)
+    return True, None, []
 
 
 def _cited(deal, legs, hashes):
@@ -557,20 +573,15 @@ def judge_deal(deal, legs, own_keys, pack_digest=None, bad_legs=()):
         return verdicts, extras, cited, "conflicting_roles", 0
     side = roles.pop()
     verdict, state, unmatched, hashes = payment_state(deal.observations, side)
-    signed, why = False, None
+    signed, why, legs_cited = False, None, []
     if verdict in ("met", "not_met"):
-        signed, why = _countersigned(side, hashes, legs, own_keys, bad_legs)
+        signed, why, legs_cited = _countersigned(side, hashes, legs, own_keys, bad_legs)
     grade = "countersigned" if signed else "self-attested"
     grade_extras = {"grade": grade, "x-state": state}
     if why:
         # The other side's leg is in the book but its own signature does not
         # check out: say why the row is not countersigned, and cite the leg.
         grade_extras["x-countersign"] = LEG_REASONS[why]
-        bad_ids = sorted(cid for cid, _, m, _ in bad_legs
-                         if (m.get("payment_ref") or {}).get("value") in hashes)
-        legs_cited = bad_ids
-    else:
-        legs_cited = []
     if side == "payer":
         verdicts[PAID] = verdict
         extras[PAID] = dict(grade_extras)

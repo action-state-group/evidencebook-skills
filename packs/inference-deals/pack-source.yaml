@@ -44,8 +44,9 @@ outcome_statement: >-
   otherwise it stays self-attested, and the result says whether that leg's
   signature did not verify (altered, or not what it claims) or the other side
   signed with a key you have not chosen to trust, which alone is not a sign of
-  tampering. To earn countersigned, add the other side's key to your trusted
-  keys (capsulectl profile update --trusted-key).
+  tampering. To earn countersigned, give your trusted keys again with the
+  other side's key added (capsulectl profile update --trusted-key <your key>
+  --trusted-key <the other side's key>: the flag replaces the list).
 resolution_rule: >-
   a deal is resolved only when every term that applies to it is met
 counterparty: mesh-peer
