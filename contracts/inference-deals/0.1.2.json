@@ -1,0 +1,33 @@
+{
+  "id": "inference-deals",
+  "version": "0.1.2",
+  "requirements": [
+    {
+      "id": "come_through.paid_as_agreed",
+      "profile": "outcome",
+      "statement": "Paid as agreed",
+      "tier": "must_have",
+      "evidence_rule": "When the node bought, every invoice it saw has a settlement its own wallet reported, for the invoice's amount. Every record is verified under the reader's trusted keys first. A deal with a record whose signature does not verify, or whose signer is not among those keys, reads \"Couldn't tell\", and the two reasons are told apart; a signer outside your keys is not a finding of tampering.\n\nRecomputed by fold inference_deals.paid_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "come_through.served_as_agreed",
+      "profile": "outcome",
+      "statement": "Settlement recorded for every invoice it issued",
+      "tier": "must_have",
+      "evidence_rule": "When the node provided, its records show the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. This does not show that the answer was good, or that the node's own report of what it ran is true. Records are verified under the reader's trusted keys, as for the term above. The grade countersigned also needs the other side's own signed leg of each payment to verify under a key you trust.\n\nRecomputed by fold inference_deals.served_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "come_through.served_named_model",
+      "profile": "outcome",
+      "statement": "Model it reports running matches the model requested (its own record, or a referee's ruling)",
+      "tier": "must_have",
+      "evidence_rule": "When the node provided and a referee decided the deal, this row shows the referee's verdict, read for this node as the node's own verdict counts read it (corroborated, or contradicted naming the other half, is met; contradicted naming this node is not_met; anything else reads \"Couldn't tell\"); a deal a referee already adjudicated is not judged again. Otherwise it compares the model its record says was requested with the model its record says answered, which no one else has checked and no verifier can check against the accepted terms, since those carry the model only inside their digest.\n\nRecomputed by fold inference_deals.served_named_model.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
+      "backward_verdict": "DETERMINISTIC"
+    }
+  ]
+}

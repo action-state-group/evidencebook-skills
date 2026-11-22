@@ -19,10 +19,12 @@
 #
 # Grades: a claim backed only by this node's records is self-attested; one
 # whose book also holds the counterparty's signed leg of the same payment is
-# countersigned (the leg is present; its own signature is not checked, so a
-# display must not say the other side's signature was verified); a row the records cannot decide is not_evaluable, never not_met.
+# countersigned only when that leg's own signature also verified under a key the
+# reader trusts (a leg that does not verify, or whose signer the reader does not
+# trust, leaves the row self-attested and the claim's `x-countersign` says
+# which); a row the records cannot decide is not_evaluable, never not_met.
 pack_id: inference-deals
-pack_version: 0.1.1
+pack_version: 0.1.2
 rubric_version: "0.1"
 evaluator: inference_deals
 
@@ -36,8 +38,16 @@ outcome_statement: >-
   among those keys, is shown as "Couldn't tell" (not_evaluable), never as met or not met;
   the run's result records which. A signer outside your keys is not a finding of
   tampering. A record that does not verify never creates a deal, so with no
-  trusted keys there is no deal to report and the run says so. A
-  counterparty's own signature on a leg is not checked.
+  trusted keys there is no deal to report and the run says so. A row is
+  countersigned only when the book also holds the other side's own signed leg
+  of every payment and that leg's signature verifies under a key you trust;
+  otherwise it stays self-attested, and the result says whether that leg's
+  signature did not verify (altered, or not what it claims) or the other side
+  signed with a key you have not chosen to trust, which alone is not a sign of
+  tampering. To earn countersigned, give your trusted keys again with the
+  other side's key added (capsulectl profile update --profile <your profile>
+  --trusted-key <your key> --trusted-key <the other side's key>: the flag
+  replaces the list).
 resolution_rule: >-
   a deal is resolved only when every term that applies to it is met
 counterparty: mesh-peer
@@ -91,7 +101,8 @@ checks:
           reported, for the invoice's amount. This does not show that the answer
           was good, or that the node's own report of what it ran is true.
           Records are verified under the reader's trusted keys, as for the term
-          above; a counterparty's own signature on a leg is not checked.
+          above. The grade countersigned also needs the other side's own signed
+          leg of each payment to verify under a key you trust.
         tier: recomputed
         fold_id: inference_deals.served_as_agreed
         requirement_tier: must_have

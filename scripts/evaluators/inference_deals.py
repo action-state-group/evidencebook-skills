@@ -93,17 +93,17 @@ not_evaluable.
 Grades: `countersigned` when, for every settled payment of the row, the book
 also holds the counterparty's leg of it (a `settlement` leg under a key that
 is not this node's, joined by payment hash and terms_ref to this node's own
-leg under its own key), else `self-attested`. The key is read from the
-record (`key_id`). A counterparty leg's own signature is not verified here:
-what is verified is the book record that holds it (below).
+leg under its own key) and that leg's own signature verifies under the
+reader's trusted keys, else `self-attested`. The key is read from the record
+(`key_id`). Legs are checked in read_book (below).
 
 Signatures (evidencebook-skills#187). Every book record that holds a Mesh
 capsule is authenticated with `capsulectl verify` under the READER's trusted
 keys before a term reads it (read_book): the record's signature must verify
 under its `key_id`, and that key must be one the reader trusts. This says the
 record was sealed into this book by a key the reader trusts; it does not check
-the Mesh capsule inside it, which is the counterparty's signature on a leg. A
-deal with a record that does not verify is not judged: every row is
+the Mesh capsule inside it, which is the counterparty's signature on a leg; that
+is checked separately (Leg signatures, below). A deal with a record that does not verify is not judged: every row is
 not_evaluable, with `x-reason` `capsule_signature_did_not_verify` (the signature
 or identity was refused) or `capsule_signer_not_trusted` (the signer is not among
 the reader's trusted keys, which is not a finding of tampering); the first wins
@@ -117,6 +117,22 @@ are in `x-window` (`signature_unverified_deals`, `signer_untrusted_deals`,
 `unverified_capsules`, absent when zero) and in `states`, so a run with
 unavailable deals never reads as clean. One record that fails to verify never
 stops the run; a capsulectl that cannot run at all still does (exit 2).
+
+Leg signatures (evidencebook-skills#207). A settlement leg is a bare Mesh capsule
+with its own inline signature and `key_id`: the signature of the side that
+sealed it. read_book checks each leg with `capsulectl verify --capsule` on the
+leg itself, under the READER's trusted keys, after the book record holding it
+verified. A leg whose own signature does not verify (altered, or no signature)
+or whose signer the reader does not trust never makes a payment countersigned.
+It does not make the deal unavailable: the node's own records still decide the
+verdict. The row's grade is `self-attested` and its claim carries `x-countersign`
+`counterparty_leg_signature_did_not_verify` or `counterparty_leg_signer_not_trusted`
+(the first when both occur), and `x-window` counts the rows
+(`leg_signature_unverified_rows`, `leg_signer_untrusted_rows`, absent when zero).
+Only the COUNTERPARTY's leg is held to this: a leg under this node's own key sits
+in a record the reader already verified. A row with no leg of the other side in
+the book carries no `x-countersign`: nothing failed. A deal one of whose records
+failed its own check shows that reason alone.
 """
 import argparse
 import calendar
@@ -129,7 +145,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from capsulectl_calls import (CapsuleDoesNotVerify, EvidenceUnavailable, UntrustedSigner,  # noqa: E402
-                              list_capsules, payload, verify)
+                              list_capsules, payload, verify, verify_file)
 from result_v0 import build_result_v0_for_day, report_title  # noqa: E402
 from rollup import RollupError  # noqa: E402
 
@@ -148,6 +164,13 @@ MISMATCH = "inference_deals_digest_mismatch"
 # among the reader's trusted keys (trust not established, no claim of tampering).
 UNVERIFIED = "capsule_signature_did_not_verify"
 UNTRUSTED = "capsule_signer_not_trusted"
+
+# Why a row is `self-attested` though the book holds the other side's leg of
+# every payment: that leg's own signature did not verify, or its signer is not
+# among the reader's trusted keys. Carried in the claim member `x-countersign`.
+LEG_UNVERIFIED = "counterparty_leg_signature_did_not_verify"
+LEG_UNTRUSTED = "counterparty_leg_signer_not_trusted"
+LEG_REASONS = {UNVERIFIED: LEG_UNVERIFIED, UNTRUSTED: LEG_UNTRUSTED}
 
 PAID = "come_through.paid_as_agreed"
 SERVED = "come_through.served_as_agreed"
@@ -387,33 +410,77 @@ def payment_state(observations, side):
     return "not_evaluable", "no_settlement_seen", len(unmatched), set()
 
 
-def _countersigned(side, hashes, legs, own_keys):
-    """Whether, for EVERY one of these payments, the book holds the
-    counterparty's leg beside this node's own: on a payer node, the payee's
-    payee_observed leg naming one of the payer's own terms legs; on a provider
-    node, the payer's terms leg its own payee_observed leg names. A leg is
-    this node's only under one of its own keys, and the counterparty's only
-    under a key that is present and not one of them."""
+def _well_formed_leg(body, m):
+    """Whether a leg's members the join reads have the types it expects. A leg
+    that did not verify is untrusted input: one that does not read this way can
+    match no payment, so it is left out rather than allowed to stop the run."""
+    ref = m.get("payment_ref")
+    return (isinstance(body, dict) and isinstance(m, dict)
+            and all(isinstance(x, str) for x in (body.get("capsule_id"), m.get("terms_ref"), m.get("leg"),
+                                                 m.get("sealer_role")) if x is not None)
+            and (ref is None or (isinstance(ref, dict) and isinstance(ref.get("value"), (str, type(None)))))
+            and isinstance(body.get("key_id", ""), (str, type(None))))
+
+
+def _countersigned(side, hashes, legs, own_keys, bad_legs=()):
+    """(countersigned, reason, cited ids): whether, for EVERY one of these
+    payments, the book holds the counterparty's leg beside this node's own: on
+    a payer node, the payee's payee_observed leg naming one of the payer's own
+    terms legs; on a provider node, the payer's terms leg its own payee_observed
+    leg names. A leg is this node's only under one of its own keys, and the
+    counterparty's only under a key that is present and not one of them.
+
+    `bad_legs` are legs whose own signature did not verify, as (book capsule
+    id, body, member, reason). They are never joined as evidence. A payment
+    with no verified pair but a pair that a bad COUNTERPARTY leg would complete
+    is the reason's (a bad leg with no key_id at all counts as the
+    counterparty's, since nothing says it is this node's); the reason is
+    UNVERIFIED's when both kinds occur, and the cited ids are those legs. A
+    node's own leg is held by a book record this reader already verified, so
+    its own signature is not asked for again."""
     if not hashes or None in hashes:
-        return False
+        return False, None, []
     def own(body):
         return body.get("key_id") in own_keys
-    def foreign(body):
-        return bool(body.get("key_id")) and body["key_id"] not in own_keys
-    by_id = {body.get("capsule_id"): (body, m) for _, body, m in legs}
-    stamped = set()
-    for _, body, m in legs:
-        h = (m.get("payment_ref") or {}).get("value")
-        if m.get("leg") != "payee_observed" or m.get("sealer_role") != "payee" or h not in hashes:
+    def foreign(body, reason):
+        key = body.get("key_id")
+        return (bool(key) and key not in own_keys) or (reason is not None and not key)
+    def pairs(candidates):
+        """{payment hash: [(reason, cited leg id)] for each pair found}"""
+        by_id = {}
+        for cid, body, m, reason in candidates:
+            by_id.setdefault(body.get("capsule_id"), []).append((cid, body, m, reason))
+        found = {}
+        for cid, body, m, reason in candidates:
+            h = (m.get("payment_ref") or {}).get("value")
+            if m.get("leg") != "payee_observed" or m.get("sealer_role") != "payee" or h not in hashes:
+                continue
+            for tcid, tbody, tm, treason in by_id.get(m.get("terms_ref"), []):
+                if tm.get("leg") != "terms" or tm.get("sealer_role") != "payer":
+                    continue
+                if side == "payer" and foreign(body, reason) and own(tbody):
+                    found.setdefault(h, []).append((reason, cid))  # the counterparty's leg is the payee_observed one
+                if side == "provider" and foreign(tbody, treason) and own(body):
+                    found.setdefault(h, []).append((treason, tcid))  # the counterparty's leg is the terms one
+        return found
+    bad_legs = [x for x in bad_legs if _well_formed_leg(x[1], x[2])]  # before any member is read
+    # A bad leg under one of this node's own keys is joined like any other.
+    good = [(cid, b, m, None) for cid, b, m in legs] + [(c, b, m, None) for c, b, m, _ in bad_legs if own(b)]
+    bad = [x for x in bad_legs if not own(x[1])]
+    verified = pairs(good)
+    candidates = pairs(good + bad)
+    reasons, cited = set(), set()
+    for h in hashes:
+        if h in verified:
             continue
-        terms = by_id.get(m.get("terms_ref"))
-        if terms is None or terms[1].get("leg") != "terms" or terms[1].get("sealer_role") != "payer":
-            continue
-        if side == "payer" and foreign(body) and own(terms[0]):
-            stamped.add(h)
-        if side == "provider" and foreign(terms[0]) and own(body):
-            stamped.add(h)
-    return stamped == hashes
+        if h not in candidates:
+            return False, None, []  # no pair at all: the other side's leg is missing
+        failed = [(r, cid) for r, cid in candidates[h] if r]
+        reasons |= {r for r, _ in failed}
+        cited |= {cid for _, cid in failed}
+    if reasons:
+        return False, UNVERIFIED if UNVERIFIED in reasons else UNTRUSTED, sorted(cited)
+    return True, None, []
 
 
 def _cited(deal, legs, hashes):
@@ -471,7 +538,7 @@ def cited_pack_digests(deal):
                    for _, _, m in deal.exchanges if PACK_DIGEST_MEMBER in m})
 
 
-def judge_deal(deal, legs, own_keys, pack_digest=None):
+def judge_deal(deal, legs, own_keys, pack_digest=None, bad_legs=()):
     """{criterion: verdict}, {criterion: extras}, {criterion: cited ids}, the
     deal's state, and its unmatched settlement count. A deal whose records
     cite an inference-deals digest other than `pack_digest` (the pack this
@@ -507,12 +574,19 @@ def judge_deal(deal, legs, own_keys, pack_digest=None):
         return verdicts, extras, cited, "conflicting_roles", 0
     side = roles.pop()
     verdict, state, unmatched, hashes = payment_state(deal.observations, side)
-    grade = "countersigned" if verdict in ("met", "not_met") and _countersigned(side, hashes, legs, own_keys) \
-        else "self-attested"
+    signed, why, legs_cited = False, None, []
+    if verdict in ("met", "not_met"):
+        signed, why, legs_cited = _countersigned(side, hashes, legs, own_keys, bad_legs)
+    grade = "countersigned" if signed else "self-attested"
+    grade_extras = {"grade": grade, "x-state": state}
+    if why:
+        # The other side's leg is in the book but its own signature does not
+        # check out: say why the row is not countersigned, and cite the leg.
+        grade_extras["x-countersign"] = LEG_REASONS[why]
     if side == "payer":
         verdicts[PAID] = verdict
-        extras[PAID] = {"grade": grade, "x-state": state}
-        cited[PAID] = _cited(deal, legs, hashes)
+        extras[PAID] = dict(grade_extras)
+        cited[PAID] = sorted(set(_cited(deal, legs, hashes) + legs_cited))
         return verdicts, extras, cited, state, unmatched
     served = [(cid, body, m) for cid, body, m in deal.exchanges if m.get("role") == "served"]
     if not served:
@@ -522,8 +596,8 @@ def judge_deal(deal, legs, own_keys, pack_digest=None):
         cited[SERVED] = cited[MODEL] = _cited(deal, legs, hashes)
         return verdicts, extras, cited, state, unmatched
     verdicts[SERVED] = verdict
-    extras[SERVED] = {"grade": grade, "x-state": state}
-    cited[SERVED] = _cited(deal, legs, hashes)
+    extras[SERVED] = dict(grade_extras)
+    cited[SERVED] = sorted(set(_cited(deal, legs, hashes) + legs_cited))
     own_nodes = {(m.get("serving_provenance") or {}).get("served_by_node_id") for _, _, m in served}
     adjudicated = _adjudication(deal, own_nodes.pop() if len(own_nodes) == 1 else None)
     if adjudicated is not None:
@@ -555,11 +629,15 @@ def counterparty_class(deal):
     return None, len(values) > 1
 
 
-def build_result(records, compiled, date, generated_at, policy=None, unverified=None):
+def build_result(records, compiled, date, generated_at, policy=None, unverified=None, leg_unverified=None):
     """Pure: the book's records -> (Result v0 document, summary). No I/O.
     `unverified` maps the book capsule ids that did not verify to UNVERIFIED or
-    UNTRUSTED; those records are never read as evidence (see the module docstring)."""
+    UNTRUSTED; those records are never read as evidence (see the module docstring).
+    `leg_unverified` maps the book capsule ids of settlement legs whose OWN
+    signature did not verify (the book record holding them did) to the same two
+    reasons; such a leg never makes a payment countersigned."""
     unverified = unverified or {}
+    leg_unverified = leg_unverified or {}
     bad = [(cid, body, unverified[cid]) for cid, body in records if cid in unverified]
     records = [(cid, body) for cid, body in records if cid not in unverified]
     for clause in compiled["clauses"]:
@@ -572,13 +650,16 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
     policy = policy or window["period_policy"]
     start, to, periods = window_bounds(date, window["months"], policy)
     deals, legs, own_keys = collect(records, start, to)
+    bad_legs = [(cid, body, m, leg_unverified[cid]) for cid, body, m in legs if cid in leg_unverified]
+    legs = [leg for leg in legs if leg[0] not in leg_unverified]
     bad = [b for b in bad if not _after_window(b[1], to)]  # collect would not have read it
     _attribute_unverified(deals, bad)
 
     ordered = sorted(deals.values(), key=lambda d: (d.first, d.exchange_id))
     rollups, sources, extras_by_case = [], {}, {}
     counts = {"deals_counted": 0, "not_counted_shop_preauth": 0, "class_missing": 0,
-              "class_conflicting": 0, "unmatched_settlements": 0, "adjudicated_deals": 0, "states": {}}
+              "class_conflicting": 0, "unmatched_settlements": 0, "adjudicated_deals": 0, "states": {},
+              "leg_rows": {}}
     n = 0
     for deal in ordered:
         cls, conflicting = counterparty_class(deal)
@@ -588,10 +669,13 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
         if cls is None:
             counts["class_missing"] += 1
             counts["class_conflicting"] += int(conflicting)
-        verdicts, extras, cited, state, unmatched = judge_deal(deal, legs, own_keys, compiled.get("pack_source_digest"))
+        verdicts, extras, cited, state, unmatched = judge_deal(deal, legs, own_keys, compiled.get("pack_source_digest"), bad_legs)
         counts["unmatched_settlements"] += unmatched
         counts["adjudicated_deals"] += int((extras.get(MODEL) or {}).get("x-reading") == "adjudicated")
         counts["states"][state] = counts["states"].get(state, 0) + 1
+        for e in extras.values():
+            if e.get("x-countersign"):
+                counts["leg_rows"][e["x-countersign"]] = counts["leg_rows"].get(e["x-countersign"], 0) + 1
         n += 1
         case_id = f"d{n}"
         tiers = {c: "recomputed" for c in verdicts}
@@ -633,17 +717,24 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
     for state, key in ((UNVERIFIED, "signature_unverified_deals"), (UNTRUSTED, "signer_untrusted_deals")):
         if counts["states"].get(state):
             doc["x-window"][key] = counts["states"][state]
+    for reason, key in ((LEG_UNVERIFIED, "leg_signature_unverified_rows"), (LEG_UNTRUSTED, "leg_signer_untrusted_rows")):
+        if counts["leg_rows"].get(reason):  # absent when zero, so an unaffected Result is byte-identical
+            doc["x-window"][key] = counts["leg_rows"][reason]
     summary = {"contract_ref": compiled["contract_ref"], "window": doc["x-window"], "states": counts["states"]}
     return doc, summary
 
 
 def read_book(capsulectl, profile):
-    """(records, unverified): every book record as (capsule id, payload), and
-    the ids of the Mesh capsules among them that did not verify, each with its
-    reason. Only a capsule `_kind` reads is verified (a sealed Result or another
-    pack's case in the same book is not this pack's evidence); a capsulectl that
-    cannot get a capsule at all still raises EvidenceUnavailable."""
-    records, unverified = [], {}
+    """(records, unverified, leg_unverified): every book record as (capsule id,
+    payload); the ids of the Mesh capsules among them that did not verify, each
+    with its reason; and the ids of the settlement legs among the verified ones
+    whose OWN signature did not verify (a leg is a bare Mesh capsule with its
+    inline signature and key_id: the counterparty's signature, which the book
+    record's does not cover), each with its reason. Only a capsule `_kind`
+    reads is verified (a sealed Result or another pack's case in the same book
+    is not this pack's evidence); a capsulectl that cannot get a capsule at all
+    still raises EvidenceUnavailable."""
+    records, unverified, leg_unverified = [], {}, {}
     with tempfile.TemporaryDirectory() as work:
         for e in list_capsules(capsulectl, profile):
             cid = e["capsule_id"]
@@ -660,7 +751,17 @@ def read_book(capsulectl, profile):
                 unverified[cid] = UNTRUSTED
             except CapsuleDoesNotVerify:
                 unverified[cid] = UNVERIFIED
-    return records, unverified
+            else:
+                if mesh and _kind(body)[0] == "leg":
+                    leg_file = pathlib.Path(work) / f"leg-{cid}.json"
+                    leg_file.write_text(json.dumps(body, ensure_ascii=False))
+                    try:
+                        verify_file(capsulectl, profile, leg_file, f"leg {cid}")
+                    except UntrustedSigner:
+                        leg_unverified[cid] = UNTRUSTED
+                    except CapsuleDoesNotVerify:
+                        leg_unverified[cid] = UNVERIFIED
+    return records, unverified, leg_unverified
 
 
 def main(argv=None):
@@ -692,8 +793,8 @@ def main(argv=None):
         if anchor > now:
             raise DealsError(f"the window would end at {_iso(anchor)}, after now ({_iso(now)}): "
                              "that period has not closed")
-        records, unverified = read_book(args.capsulectl, args.profile)
-        doc, summary = build_result(records, compiled, date, args.generated_at, policy, unverified)
+        records, unverified, leg_unverified = read_book(args.capsulectl, args.profile)
+        doc, summary = build_result(records, compiled, date, args.generated_at, policy, unverified, leg_unverified)
     except (DealsError, EvidenceUnavailable, ValueError) as e:
         print(json.dumps({"error": str(e)}, indent=2))
         return 2
