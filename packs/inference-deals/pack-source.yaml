@@ -34,8 +34,9 @@ outcome_statement: >-
   verify (altered, or not what it claims), or whose signer is not among those
   keys, is shown as "Couldn't tell" (not_evaluable), never as met or not met;
   the report says which. A signer outside your keys is not a finding of
-  tampering. With no trusted keys, every deal reads "Couldn't tell". A
-  counterparty's own signature on a leg is not re-checked.
+  tampering. A record that does not verify never creates a deal, so with no
+  trusted keys there is no deal to report and the run says so. A
+  counterparty's own signature on a leg is not checked.
 resolution_rule: >-
   a deal is resolved only when every term that applies to it is met
 counterparty: mesh-peer
@@ -89,7 +90,7 @@ checks:
           reported, for the invoice's amount. This does not show that the answer
           was good, or that the node's own report of what it ran is true.
           Records are verified under the reader's trusted keys, as for the term
-          above; a counterparty's own signature on a leg is not re-checked.
+          above; a counterparty's own signature on a leg is not checked.
         tier: recomputed
         fold_id: inference_deals.served_as_agreed
         requirement_tier: must_have

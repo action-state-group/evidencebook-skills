@@ -600,7 +600,9 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
         sources[case_id] = {}
     counts["deals_counted"] = n
     if not rollups:
-        raise DealsError(f"no counted deal in the window {_iso(start)} to {_iso(to)}: nothing to report")
+        why = (f"; {len(unverified)} book record(s) did not verify under the trusted keys and create no deal"
+               if unverified else "")
+        raise DealsError(f"no counted deal in the window {_iso(start)} to {_iso(to)}: nothing to report{why}")
 
     all_criteria = tuple(c["id"] for c in compiled["clauses"])
     label = f"{start.date().isoformat()} to {(to - datetime.timedelta(seconds=1)).date().isoformat()}"

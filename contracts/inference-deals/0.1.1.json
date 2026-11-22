@@ -16,7 +16,7 @@
       "profile": "outcome",
       "statement": "Settlement recorded for every invoice it issued",
       "tier": "must_have",
-      "evidence_rule": "When the node provided, its records show the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. This does not show that the answer was good, or that the node's own report of what it ran is true. Records are verified under the reader's trusted keys, as for the term above; a counterparty's own signature on a leg is not re-checked.\n\nRecomputed by fold inference_deals.served_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
+      "evidence_rule": "When the node provided, its records show the exchange it accepted terms for, and every invoice it issued has a settlement its wallet reported, for the invoice's amount. This does not show that the answer was good, or that the node's own report of what it ran is true. Records are verified under the reader's trusted keys, as for the term above; a counterparty's own signature on a leg is not checked.\n\nRecomputed by fold inference_deals.served_as_agreed.\nAnswers: met; not_met; not_evaluable when the evidence does not show either way; out_of_scope when the situation this asks about did not come up, which excludes the session as not applicable and is never met or not_met.",
       "forward_verdict": "UNAVAILABLE-STATE-REQUIRED",
       "backward_verdict": "DETERMINISTIC"
     },

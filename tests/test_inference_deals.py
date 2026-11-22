@@ -441,7 +441,7 @@ class PackDigestCited(unittest.TestCase):
         # it: release the plugin with the new constant in the same batch, or
         # nodes refuse each other's proposals and this judge refuses their deals.
         self.assertEqual(compiled()["pack_source_digest"],
-                         "d7e264e8ae5690068767912646963d4811dfc72d7a57baaed83f448a734755c0")
+                         "dc9fc2e5c18facfb0204c20f69b0c667465f1ff759d13a8b6c6db851036f12dd")
 
     def test_records_citing_the_packs_own_digest_are_judged_as_before(self):
         provider = load("provider")
@@ -503,6 +503,13 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
     def judged(self, unverified, capsules=None):
         capsules = capsules or load("provider")
         return deals.build_result(records(capsules), compiled(), DATE, GENERATED_AT, None, unverified)
+
+    def test_a_book_with_no_trusted_signer_reports_no_deal_and_says_why(self):
+        provider = load("provider")
+        everything = {cid: deals.UNTRUSTED for cid, _ in records(provider)}
+        with self.assertRaises(deals.DealsError) as ctx:
+            self.judged(everything, provider)
+        self.assertIn("did not verify under the trusted keys", str(ctx.exception))
 
     def test_a_tampered_observation_makes_only_its_deal_unavailable(self):
         provider = load("provider")
