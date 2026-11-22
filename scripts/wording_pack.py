@@ -9,8 +9,8 @@ book before it builds the page, so a bad pack is refused here first, with nothin
 written. It checks only what makes a pack unusable (agent-action-capsule's
 spec/presentation-contract-v0.md section 7.4): the digest is the lowercase hex
 SHA-256 of the exact bytes; the pack is a JSON object with
-wording_pack_version "aac.wording-pack/v0", an id, locale "en" and an `entries`
-object of strings. The page's own rules (placeholders, distinct verdict words)
+wording_pack_version "aac.wording-pack/v0", an id, a locale (a language tag such as "en"
+or "en-US") and an `entries` object of non-empty strings under lowercase keys. The page's own rules (placeholders, distinct verdict words)
 are the viewer's, and a pack failing them is dropped there and shows default
 words, so the committed pack's own test checks them (tests/test_report_wording.py).
 """
@@ -36,9 +36,18 @@ class PackError(Exception):
     pass
 
 
+# The viewer's INVISIBLE is [\p{Cf}\p{Default_Ignorable_Code_Point}]. Python has no property for the
+# second, so its code points outside Cf are listed (Unicode DerivedCoreProperties).
+_DEFAULT_IGNORABLE = (
+    (0x034F, 0x034F), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180B, 0x180F), (0x3164, 0x3164),
+    (0xFE00, 0xFE0F), (0xFFA0, 0xFFA0), (0xFFF0, 0xFFF8), (0xE0000, 0xE0FFF),
+)
+
+
 def invisible(text):
-    """The viewer's INVISIBLE (bidi and other format controls) as far as Unicode categories say."""
-    return any(unicodedata.category(c) == "Cf" for c in text)
+    """Bidi and other format controls, and default-ignorable code points: refused, as the viewer does."""
+    return any(unicodedata.category(c) == "Cf" or any(lo <= ord(c) <= hi for lo, hi in _DEFAULT_IGNORABLE)
+               for c in text)
 
 
 def sha256_of(path):
