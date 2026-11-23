@@ -123,7 +123,7 @@
       "Proof that the database change matches the act: the records show the gate's order, not its effect.",
       "A person as the customer: the customer is a model, signs nothing, and its words are as the airline's agent recorded them.",
       "An independent evaluator: the demo operator runs the evaluator and both agents. The default judge is the operator's Goose model, not the rubric's pinned judge.",
-      "Core capsulectl verify alone: it does not run the x-deal-v1 report rule and says INCOMPLETE; capsulectl deal verify does.",
+      "Core capsulectl verify alone: it does not run the x-deal-v1 report rule and says so in a "Not checked here" note; capsulectl deal verify runs it.",
       "Reading OTel back into books: spans here carry references only.",
       "A counterparty copy: this customer keeps no signed records of its own."].forEach(function (s) { ul.appendChild(el("li", null, s)); });
     stage.detail = ul;

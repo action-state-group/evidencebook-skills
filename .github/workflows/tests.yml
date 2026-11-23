@@ -42,7 +42,7 @@ jobs:
     env:
       EVIDENCEBOOK_REF: 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9  # #522: #514 reverted; the demo seals no demo flag
       CAPSULE_ENGINE_TAG: go/v0.7.0  # b84d7d0: guard check --limits (capsule-engine#314), for the spending-limit tests
-      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc49  # rc49 for the receipt pages; evidencebook#610: the deal plugin moved into evidencebook
+      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc50  # rc49 or later for the receipt pages; evidencebook#610: the deal plugin moved into evidencebook
       CAPSULE_VIEWER_REF: 613a8a95144e5851bbb61df72df8cc76b7500381
     steps:
       - uses: actions/checkout@v4
@@ -204,29 +204,16 @@ jobs:
   tau2-live:
     # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,
     # no model: a canned two-party script and the mock judge) through the real records, tool
-    # server, evaluator and report, ending in two bundles capsulectl verifies. Pinned to what the
-    # demo's README installs.
+    # server, evaluator and report, ending in two bundles capsulectl verifies. Pinned to the
+    # released binaries the demo's README installs.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      CAPSULE_CLI_REF: 034dc8fb77895b970dc91e3ef63a0c023ba6db59  # v0.1.0-rc49
-      EVIDENCEBOOK_REF: 7499da439816a66858d5c3c64793476c75a9069d  # main after evidencebook#766 (to: null), not yet released
+      CAPSULECTL_VERSION: v0.1.0-rc50  # capsule-cli release and evidencebook release capsulectl/v0.1.0-rc50
       CAPSULE_ENGINE_REF: c9e72572a020d2b22a44d20f0aad7345033598da  # go/v0.6.0
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/capsule-cli
-          ref: ${{ env.CAPSULE_CLI_REF }}
-          path: .deps/capsule-cli
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/evidencebook
-          ref: ${{ env.EVIDENCEBOOK_REF }}
-          path: .deps/evidencebook
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -236,16 +223,25 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: .deps/evidencebook/capsulectl/go.mod
+          go-version-file: .deps/capsule-engine/go/go.mod
           cache: false
       - uses: astral-sh/setup-uv@v6
-      - name: build capsulectl, its deal and book plugins, and capsule-engine
+      - name: fetch capsulectl and its deal and book plugins (released binaries, checked against SHA256SUMS), build capsule-engine
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins"
+          V="$CAPSULECTL_VERSION"; P=linux-amd64
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins" "$RUNNER_TEMP/dl/cli" "$RUNNER_TEMP/dl/eb"
           chmod 755 "$RUNNER_TEMP/plugins"
-          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
-          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-deal" ./cmd/capsulectl-deal)
-          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-book" ./cmd/capsulectl-book)
+          gh release download "$V" -R action-state-group/capsule-cli -D "$RUNNER_TEMP/dl/cli" \
+            -p SHA256SUMS -p "capsulectl-$V-$P"
+          (cd "$RUNNER_TEMP/dl/cli" && grep " capsulectl-$V-$P\$" SHA256SUMS | sha256sum -c -)
+          gh release download "capsulectl/$V" -R action-state-group/evidencebook -D "$RUNNER_TEMP/dl/eb" \
+            -p SHA256SUMS -p "capsulectl-deal-$V-$P" -p "capsulectl-book-$V-$P"
+          (cd "$RUNNER_TEMP/dl/eb" && grep -E " capsulectl-(deal|book)-$V-$P\$" SHA256SUMS | sha256sum -c -)
+          install -m 755 "$RUNNER_TEMP/dl/cli/capsulectl-$V-$P" "$RUNNER_TEMP/bin/capsulectl"
+          install -m 755 "$RUNNER_TEMP/dl/eb/capsulectl-deal-$V-$P" "$RUNNER_TEMP/plugins/capsulectl-deal"
+          install -m 755 "$RUNNER_TEMP/dl/eb/capsulectl-book-$V-$P" "$RUNNER_TEMP/plugins/capsulectl-book"
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: unit tests

@@ -48,16 +48,16 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
 
   ```sh
   cd demo/tau2-live
-  V=v0.1.0-rc49
-  mkdir -p .tools/bin .tools/plugins
-  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-darwin-arm64" -O .tools/bin/capsulectl
-  # The plugins come from evidencebook main until a release carries evidencebook#766 (an offer
-  # to a party that keeps no signed records, which rc49 refuses): build them at a pinned commit.
-  EB=7499da439816a66858d5c3c64793476c75a9069d
-  git clone -q https://github.com/action-state-group/evidencebook.git .tools/evidencebook
-  git -C .tools/evidencebook checkout -q $EB
-  (cd .tools/evidencebook/capsulectl && go build -o ../../plugins/capsulectl-deal ./cmd/capsulectl-deal && go build -o ../../plugins/capsulectl-book ./cmd/capsulectl-book)
-  chmod 755 .tools/plugins .tools/bin/capsulectl
+  V=v0.1.0-rc50; P=darwin-arm64
+  mkdir -p .tools/bin .tools/plugins .tools/dl
+  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-$P" -p SHA256SUMS -D .tools/dl
+  gh release download capsulectl/$V -R action-state-group/evidencebook -p "capsulectl-deal-$V-$P" -p "capsulectl-book-$V-$P" -p SHA256SUMS -D .tools/dl/eb
+  (cd .tools/dl && grep " capsulectl-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
+  (cd .tools/dl/eb && grep -E " capsulectl-(deal|book)-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
+  install -m 755 .tools/dl/capsulectl-$V-$P .tools/bin/capsulectl
+  install -m 755 .tools/dl/eb/capsulectl-deal-$V-$P .tools/plugins/capsulectl-deal
+  install -m 755 .tools/dl/eb/capsulectl-book-$V-$P .tools/plugins/capsulectl-book
+  chmod 755 .tools/plugins
   GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@v0.6.0
   export PATH=$PWD/.tools/bin:$PATH CAPSULECTL_PLUGIN_ROOTS=$PWD/.tools/plugins
   capsulectl plugin ls | grep -o '"name":"[a-z]*"'    # "book" and "deal"
@@ -87,9 +87,7 @@ one confirmed write, so it shows the gate, the act and the span join. A live run
 time: the agents are models.
 
 `report.py` waits for the book's next checkpoint, because a report rests on one. The cadence
-ticks about every five minutes. Until the plugins come from a release, capsulectl prints a
-warning that they are built for `0.1.0-dev`; it does not change the result. Ctrl-C during
-`roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
+ticks about every five minutes. Ctrl-C during `roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
 marked `stopped` or `error` in its `case.json`, and the next run opens a new case. `evaluate.py`
 and `report.py` refuse a case that did not complete unless given `--allow-incomplete`. Goose
 keeps each run's two sessions (`<case>-airline`, `<case>-customer`) in its own session store;
@@ -133,8 +131,9 @@ Space to play, Home to restart.
   yet for a person to sign an act (agent-action-capsule#627).
 - **Core verify does not run the deal rule.** `capsulectl deal verify --bundle` runs core's checks
   (signatures, record identity, the checkpoint, the disclosures) and the x-deal-v1 report rule;
-  that is the check this demo reports. Core `capsulectl verify --bundle` alone says INCOMPLETE on
-  rc49 (`report_rule_not_checked`) and names the deal command; `report.py` keeps its result too.
+  that is the check this demo reports. Core `capsulectl verify --bundle` alone does not run
+  that rule: on rc50 it answers VALID for the same bundle, with a "Not checked here" note naming
+  x-deal-v1; `report.py` keeps its result too.
 - **The judge is not the rubric's pinned judge.** `evaluate.py` defaults to `goose_judge.py`:
   the model your Goose provider runs reads the conversation and the policy and answers each of
   the nine criteria with a rationale. The rubric's pinned judge (jev-1.13.0,

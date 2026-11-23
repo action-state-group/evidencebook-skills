@@ -38,7 +38,7 @@ def wait_for_checkpoint(store: records.Store, book: str) -> dict:
 def verify(store: records.Store, bundle: Path, deal: bool = True) -> dict:
     """``capsulectl deal verify --bundle``: core's checks plus the x-deal-v1 report rule
     (xdealv1.VerifyReportBundle). Core ``capsulectl verify --bundle`` alone does not run
-    that rule and says so (INCOMPLETE on rc49, ``report_rule_not_checked``)."""
+    that rule and says so (on rc50 it answers VALID with a "Not checked here" note naming x-deal-v1)."""
     cmd = [store.capsulectl] + (["deal", "verify"] if deal else ["verify"]) + ["--bundle", str(bundle)]
     proc = subprocess.run(cmd, capture_output=True, text=True, env=store.env(), stdin=subprocess.DEVNULL)
     lines = proc.stdout.strip().splitlines()

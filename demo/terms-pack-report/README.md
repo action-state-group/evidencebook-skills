@@ -2,7 +2,7 @@
 
 An auditor wants to know whether the tool-call log of someone else's Goose agent reached that agent's book without a gap. The holder will not hand over its book, and the auditor will not take the holder's word for a verdict. So the auditor writes down the terms (a Terms Pack), names them by their SHA-256, and asks for the three fields the terms read. The holder answers with only those fields, proven to be in its log at a signed checkpoint. The auditor runs the terms over the answer, signs the Result, and builds one bundle that a machine verifies and a person reads as a page.
 
-Every command below runs offline against the released `capsulectl` and its book plugin, `v0.1.0-rc49`. No judge and no model is called, so no key is needed. Nothing is built from source.
+Every command below runs offline against the released `capsulectl` and its book plugin, `v0.1.0-rc50`. No judge and no model is called, so no key is needed. Nothing is built from source.
 
 1. [Install](#1-install)
 2. [The holder's book](#2-the-holders-book)
@@ -24,7 +24,7 @@ Download capsulectl and its book plugin (platform `darwin-arm64`, `linux-amd64` 
 
 ```sh
 umask 022 && mkdir terms-pack-report-run && cd terms-pack-report-run && mkdir bin book-dl
-V=v0.1.0-rc49; P=darwin-arm64
+V=v0.1.0-rc50; P=darwin-arm64
 gh release download $V --repo action-state-group/capsule-cli -p "capsulectl-$V-$P" -p SHA256SUMS
 grep "capsulectl-$V-$P" SHA256SUMS | shasum -a 256 -c
 gh release download capsulectl/$V --repo action-state-group/evidencebook -p "capsulectl-book-$V-$P" -p SHA256SUMS -D book-dl
@@ -47,7 +47,7 @@ capsulectl --version
 capsulectl plugin install bin/capsulectl-book | jq -r .version_check
 ```
 
-**Expect:** a `capsulectl v0.1.0-rc49` line, then `matches capsulectl v0.1.0-rc49`.
+**Expect:** a `capsulectl v0.1.0-rc50` line, then `matches capsulectl v0.1.0-rc50`.
 
 Get this repository, for the pack, the fixtures, the evaluator and the page wording:
 
