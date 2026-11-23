@@ -41,8 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EVIDENCEBOOK_REF: 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9  # #522: #514 reverted; the demo seals no demo flag
-      CAPSULE_ENGINE_TAG: go/v0.4.0
-      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc46  # evidencebook#610: the deal plugin moved into evidencebook
+      CAPSULE_ENGINE_TAG: go/v0.7.0  # b84d7d0: guard check --limits (capsule-engine#314), for the spending-limit tests
+      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc49  # rc49 for the receipt pages; evidencebook#610: the deal plugin moved into evidencebook
       CAPSULE_VIEWER_REF: 613a8a95144e5851bbb61df72df8cc76b7500381
     steps:
       - uses: actions/checkout@v4

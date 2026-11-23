@@ -35,7 +35,7 @@ edit). All thresholds are placeholders for this demo only.
 
 Needs Python 3.10+, an evidencebook checkout at commit 5d29ccc (its `python/` package installed, and
 the checkout itself for the Goose reference and the x-deal-v0 checker), and a `capsule-engine` binary
-built at `go/v0.4.0` (the spending limit below needs a later capsule-engine, with `guard check --limits`): the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
+built at `go/v0.7.0` (b84d7d0, which has `guard check --limits` for the spending limit below): the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
 
 ```bash
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
@@ -184,8 +184,8 @@ on the payment dialog, so the order is stopped after that click and before any p
 holds the check and a note of what the rules said (`ard_rules_checked`), and the screen says which rule stopped it. The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment
 dialog already asks the person, so they are listed, not blocking. Sherlock2 accepted for Tuesday that the block comes after
 the click and before any payment; a hard limit applied before the dialog is the follow-up (below). The verdict record the reference seals keeps its
-`rules: not_configured` (this demo adds no protocol); the note is where the rules' answer is kept. Needs a
-capsule-engine with `guard check --limits` (capsule-engine#314); without it the order is refused and says so.
+`rules: not_configured` (this demo adds no protocol); the note is where the rules' answer is kept. Needs capsule-engine go/v0.7.0 or later
+(`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under
 `$ARD_HOME/pages/` and opens it the same way (`receipt.py`). The page is capsule-viewer's receipt module (the Python
