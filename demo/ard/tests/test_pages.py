@@ -180,13 +180,14 @@ def test_the_card_page_reads_the_witness_slot_from_a_node_that_holds_a_receipt_f
 def test_a_witnessed_card_page_says_the_witness_is_ours():
     card = {"outcomes": {"of": 3, "did_not_hold": 0}}
     assert pages.labels(card, "fake", True, False, "Alder", witnessed=True) == [pages.WITNESS_NOTE]
-    assert "not independent of us" in pages.WITNESS_NOTE and pages.labels(card, "fake", True, False, "Alder") == []
+    assert "not independent of us" in pages.WITNESS_NOTE and "Any witness the deal names can do this job." in pages.WITNESS_NOTE
+    assert pages.labels(card, "fake", True, False, "Alder") == []
 
 
 def test_a_deal_line_with_a_receipt_page_gets_the_demos_own_link_and_says_whose_it_is():
     page = pages.history_page(model(standard_history()), [], "History", {"d1": "kestrel-receipt-x.html"})
     assert '"d1":"kestrel-receipt-x.html"' in page.replace(" ", "")
-    assert pages.RECEIPT_LINK_NOTE in page and "not part of the History view" in page
+    assert json.dumps(pages.RECEIPT_LINK_NOTE) in page and "the History card itself carries no link" in page
     assert '"receipt-links"' in page
 
 

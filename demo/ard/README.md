@@ -161,14 +161,15 @@ The witness. Each checkpoint a party takes is offered to **Action State's hosted
 hashes only. The receipt it returns is checked under the key the service publishes at `/.well-known/did.json` (the
 directory is `demo_node.WITNESS_DIRECTORY`), and a card anchored on a checkpoint with a verified receipt shows each deal
 row `TIME-STAMPED ... by Action State's hosted witness`. That witness is run by Action State, the demo operator: it shows a
-hosted witness, not one independent of us, and the presenter says so. With no network or `ARD_WITNESS=off` the cards read
+hosted witness, not one independent of us: the page says "This demo's witness is run by Action State, so it is not
+independent of us. Any witness the deal names can do this job." (Sherlock2, 2026-11-23). With no network or `ARD_WITNESS=off` the cards read
 unwitnessed and nothing else changes. The assessment's witness row (`buyer.OPERATOR_FACTS`, the pack's `demo-witness`) is
 still the operator's and not checked, as the screen says; the witnessed card page is what shows a real receipt.
 
 An Open receipt link on the deal line. The History page's deal rows have no link to a receipt in capsule-viewer's History
 view. This demo adds its own: under each deal line whose party holds a receipt page (the live deal; the sample deals have
 none), `ard_open_card_page` writes that receipt page beside the card page and puts an "Open receipt" link under the line,
-labelled as this demo's link, not part of the History view. The viewer's own control for this is on its contract report
+labelled "Demo link to this party's receipt page; the History card itself carries no link." The viewer's own control for this is on its contract report
 page (`book report build --receipts`, capsule-viewer 0.22.0); building a report for these deals is the follow-up
 [evidencebook-skills#221](https://github.com/action-state-group/evidencebook-skills/issues/221).
 
@@ -181,7 +182,8 @@ caps rule with the engine's own words ("the 7-day total with this purchase is ov
 2,000 msat, this order would bring it to 4,000 msat)"). The deal is opened and the check sealed after the presenter's click
 on the payment dialog, so the order is stopped after that click and before any payment: nothing is paid, Maya's book
 holds the check and a note of what the rules said (`ard_rules_checked`), and the screen says which rule stopped it. The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment
-dialog already asks the person, so they are listed, not blocking. The verdict record the reference seals keeps its
+dialog already asks the person, so they are listed, not blocking. Sherlock2 accepted for Tuesday that the block comes after
+the click and before any payment; a hard limit applied before the dialog is the follow-up (below). The verdict record the reference seals keeps its
 `rules: not_configured` (this demo adds no protocol); the note is where the rules' answer is kept. Needs a
 capsule-engine with `guard check --limits` (capsule-engine#314); without it the order is refused and says so.
 

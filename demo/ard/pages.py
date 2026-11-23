@@ -106,7 +106,8 @@ def history_input(sh: dict, *, name: str, seller: bool, last_at: dict[str, str],
 
 
 #: Said on a card page whose rows read witnessed (coordinator, 2026-11-23): the witness is the demo operator's own.
-WITNESS_NOTE = "The witness is Action State's hosted witness, run by Action State: it is not independent of us."
+WITNESS_NOTE = ("This demo's witness is run by Action State, so it is not independent of us. "
+                "Any witness the deal names can do this job.")
 
 
 def labels(card: dict, rail: str, seller: bool, sample_card: bool, party: str, witnessed: bool = False) -> list[str]:
@@ -135,12 +136,12 @@ _HOST_CSS = (".ard-labels{font:13px/1.4 system-ui,sans-serif;margin:0;padding:8p
              ".ard-receipt-link span{color:#57606a}")
 #: The demo's own link under a deal line (not part of capsule-viewer's History view, which has none): it names itself as
 #: the demo's, so the page never reads as the viewer's feature. Placed by the record id the view prints in each row.
-RECEIPT_LINK_NOTE = "this demo's link to this party's receipt page, not part of the History view"
+RECEIPT_LINK_NOTE = "Demo link to this party's receipt page; the History card itself carries no link."
 _LINKS_JS = ("(function(l){var rows=document.querySelectorAll('#history .cvh-row');"
              "for(var i=0;i<rows.length;i++){var c=rows[i].querySelector('code');var h=c&&l[c.textContent];if(!h)continue;"
              "var p=document.createElement('p');p.className='ard-receipt-link';var a=document.createElement('a');"
              "a.href=h;a.textContent='Open receipt';p.appendChild(a);var s=document.createElement('span');"
-             "s.textContent=' ('+%s+')';p.appendChild(s);rows[i].appendChild(p);}})(JSON.parse("
+             "s.style.display='block';s.textContent=%s;p.appendChild(s);rows[i].appendChild(p);}})(JSON.parse("
              "document.getElementById('receipt-links').textContent));")
 
 
