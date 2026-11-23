@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Judge walkthrough: a live airline support case, sealed and reported</title>
+<link rel="stylesheet" href="walkthrough.css">
+</head>
+<body>
+<div id="app">
+  <header class="bar">
+    <div class="brand">Judge walkthrough <span class="sub">a live airline support case, sealed on x-deal-v1</span></div>
+    <div class="ctl">
+      <button id="restart" type="button" title="Back to the start (Home)">Restart</button>
+      <button id="prev" type="button" title="Previous step (Left arrow)">Back</button>
+      <button id="play" type="button" class="primary" title="Play or pause (Space)">Play</button>
+      <button id="next" type="button" title="Next step (Right arrow)">Next</button>
+      <span id="count" class="count"></span>
+    </div>
+  </header>
+  <nav id="timeline" class="tl" aria-label="Steps"></nav>
+  <main class="main">
+    <section class="rack" aria-label="Books">
+      <h2>Books</h2>
+      <div id="books"></div>
+    </section>
+    <section class="talk" aria-label="Conversation">
+      <div class="parties"><span class="p cust">Customer (simulated, keeps no records)</span><span class="p air">Airline agent (Goose)</span></div>
+      <div id="talk"></div>
+    </section>
+    <aside class="side">
+      <h2 id="stitle"></h2>
+      <p id="stext"></p>
+      <div id="detail"></div>
+    </aside>
+  </main>
+  <section class="otel" aria-label="OpenTelemetry trace">
+    <div class="otel-h">OpenTelemetry trace <code id="traceid"></code> <span class="hint">a span carries only <code>aac.capsule_id</code>, a reference to the record; the record stays in the book</span></div>
+    <div id="spans"></div>
+  </section>
+  <p id="nodata" class="nodata" hidden>No case data: run <code>export_walkthrough.py CASE_DIR</code> to write <code>data.js</code>.</p>
+</div>
+<script src="data.js"></script>
+<script src="walkthrough.js"></script>
+</body>
+</html>

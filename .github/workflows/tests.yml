@@ -200,3 +200,57 @@ jobs:
         run: |
           CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
             bash tests/fresh_env_deals.sh
+
+  tau2-live:
+    # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,
+    # no model: a canned two-party script and the mock judge) through the real records, tool
+    # server, evaluator and report, ending in two bundles capsulectl verifies. Pinned to the
+    # releases the demo's README installs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CAPSULE_CLI_REF: 034dc8fb77895b970dc91e3ef63a0c023ba6db59  # v0.1.0-rc49
+      EVIDENCEBOOK_REF: 3230e013cd5a57ace167b3eb134a72d76e3bb5e9  # capsulectl/v0.1.0-rc49
+      CAPSULE_ENGINE_REF: c9e72572a020d2b22a44d20f0aad7345033598da  # go/v0.6.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-cli
+          ref: ${{ env.CAPSULE_CLI_REF }}
+          path: .deps/capsule-cli
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/evidencebook
+          ref: ${{ env.EVIDENCEBOOK_REF }}
+          path: .deps/evidencebook
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-engine
+          ref: ${{ env.CAPSULE_ENGINE_REF }}
+          path: .deps/capsule-engine
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: .deps/evidencebook/capsulectl/go.mod
+          cache: false
+      - uses: astral-sh/setup-uv@v6
+      - name: build capsulectl, its deal and book plugins, and capsule-engine
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins"
+          chmod 755 "$RUNNER_TEMP/plugins"
+          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
+          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-deal" ./cmd/capsulectl-deal)
+          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-book" ./cmd/capsulectl-book)
+          (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: unit tests
+        working-directory: demo/tau2-live
+        run: uv run --group dev pytest -q tests
+      - name: a scripted case, end to end
+        working-directory: demo/tau2-live
+        run: CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" uv run python tests/e2e_scripted.py "$RUNNER_TEMP/tau2-live"
