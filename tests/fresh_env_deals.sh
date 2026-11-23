@@ -41,6 +41,7 @@ for c in "$CHROME" "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
   if [[ -n "$c" ]] && command -v "$c" >/dev/null 2>&1; then CHROME=$c; break; else CHROME=; fi
 done
 PAGE_CHECK=NOT-RUN
+REASONS_CHECK=NOT-RUN
 page_check() {
   local node=$1 page=$2
   if [[ -z "$CHROME" ]]; then printf '%s page text: NOT RUN (no Chrome; set CHROME)\n' "$node"; return 0; fi  # the run then fails at the end: no pass without it
@@ -50,7 +51,7 @@ page_check() {
   # page settled, and of four flag variants only the larger window drew it (checked on CI, #102).
   # Chrome headless can exit non-zero from its own teardown after it has written the DOM, so the gate is the DOM and the checks on it, not its status.
   [[ -s "$work/$node.dom" ]] || fail "$node: Chrome wrote no DOM for the page"
-  python3 - "$work/$node.dom" "$PACK" "$node" <<'EOF' || fail "$node: the page does not show the wording pack"
+  python3 - "$work/$node.dom" "$PACK" "${node%-legs}" <<'EOF' || fail "$node: the page does not show the wording pack"
 import html, json, re, sys
 dom, pack, node = sys.argv[1:4]
 text = open(dom).read()
@@ -92,6 +93,58 @@ EOF
   printf '%s page text: the pack'"'"'s row labels, group title and verdict words are shown\n' "$node"
 }
 
+# Every `reason` a claim carries must be the registered leg token on a self-attested row, and the
+# page's text must carry the pack's sentence for it (capsule-viewer draws it beside the row, labelled
+# as the producer's statement; a viewer older than go v0.20.0 draws none).
+reasons_check() {
+  local node=$1 result=$2 page=$3 dom=$work/$node-open.dom
+  if [[ -z "$CHROME" ]]; then printf '%s claim reasons: NOT RUN (no Chrome; set CHROME)\n' "$node"; return 0; fi  # the run then fails at the end
+  # The runtime builds a row's claims when the row opens; depth L2 in the page's render options opens
+  # them all, so the dump holds the reason lines (evidencebook capsulectl/internal/book/report_reason_test.go
+  # does the same). The copy is read for its text only: its content-security meta is removed so the
+  # edited options run, and it is never checked or handed over.
+  python3 - "$page" "$work/$node-open.html" <<'EOF' || fail "$node: could not open the page's rows"
+import pathlib, re, sys
+page = pathlib.Path(sys.argv[1]).read_text()
+opened = page.replace('{"audience":"*"', '{"audience":"*","depth":"L2"', 1)
+if opened == page:
+    sys.exit("the page has no render options to open")
+opened = re.sub(r'<meta http-equiv="Content-Security-Policy"[^>]*>', "", opened)
+pathlib.Path(sys.argv[2]).write_text(opened)
+EOF
+  "$CHROME" --headless=new --use-mock-keychain --password-store=basic --user-data-dir="$work/chrome-profile" --disable-gpu --window-size=1280,2400 --virtual-time-budget=60000 --dump-dom "file://$work/$node-open.html" >"$dom" 2>/dev/null || true
+  [[ -s "$dom" ]] || fail "$node: Chrome wrote no DOM for the opened page"
+  REASONS_CHECK=PASS
+  python3 - "$result" "$dom" "$PACK" <<'EOF' || fail "$node: the claim reason is not on the page in the pack's words"
+import html, json, re, sys
+result, dom, pack = sys.argv[1:4]
+claims = json.load(open(result))["claims"]
+entries = json.load(open(pack))["entries"]
+text = open(dom).read()
+text = re.sub(r"<script.*?</script>|<style.*?</style>", "", text, flags=re.S)
+text = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", text)))
+withreason = [c for c in claims if "reason" in c]
+problems = []
+if not withreason:
+    problems.append("no claim carries a reason")
+for c in withreason:
+    key = f"row.{c['requirement_ref']}.reason.{c['reason']}"
+    if c["reason"] != "counterparty_leg_signer_not_trusted" or c["grade"] != "self-attested":
+        problems.append(f"unexpected reason {c['reason']!r} on a {c['grade']} claim {c['id']}")
+    sentence = re.sub(r"\s+", " ", entries.get(key, ""))
+    if not sentence:
+        problems.append(f"the pack has no sentence {key}")
+    elif sentence not in text:
+        problems.append(f"the page does not show {key}: {sentence!r}")
+if "x-countersign" in json.dumps(claims):
+    problems.append("a claim still carries x-countersign")
+if problems:
+    print("; ".join(problems), file=sys.stderr)
+    sys.exit(1)
+print(f"claim reasons shown on the page in the pack's words: {len(withreason)} claim(s)")
+EOF
+}
+
 export HOME=$work/home XDG_CONFIG_HOME=$work/home/.config
 mkdir -p "$XDG_CONFIG_HOME"
 "$CTL" book report check --help >/dev/null 2>&1 || fail "$CTL has no \`book report check\` (capsulectl-book plugin missing or too old)"
@@ -99,8 +152,24 @@ mkdir -p "$XDG_CONFIG_HOME"
 PACK=$REPO/wording/inference-deals-settlement-en.json
 PACK_DIGEST=$(tr -d '[:space:]' < "$REPO/wording/inference-deals-settlement-en.sha256")
 
-for node in payer provider; do
-  step "$node: a book with the $node node's records"
+# provider-legs: the provider's book also holds the payer's terms legs its payee legs name. Those legs
+# are signed by the payer's own key, which this reader does not trust, so every settled row stays
+# self-attested and its claim carries the registered `reason` counterparty_leg_signer_not_trusted
+# (AAC evidence-result-v0 section 4.4); the page must show the pack's sentence for it (#209).
+python3 - "$REPO/tests/fixtures/inference-deals" "$work/provider-legs.jsonl" <<'EOF'
+import json, pathlib, sys
+src, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+provider = [json.loads(l) for l in (src / "provider.jsonl").read_text().splitlines()]
+payer = [json.loads(l) for l in (src / "payer.jsonl").read_text().splitlines()]
+named = {c["settlement"]["terms_ref"] for c in provider if "settlement" in c}
+lines = [json.dumps(c) for c in provider + [c for c in payer if c["capsule_id"] in named]]
+out.write_text("\n".join(lines) + "\n")
+EOF
+
+for node in payer provider provider-legs; do
+  base=${node%-legs}
+  if [[ $node == provider-legs ]]; then records=$work/provider-legs.jsonl; else records=$REPO/tests/fixtures/inference-deals/$node.jsonl; fi
+  step "$node: a book with the $base node's records"
   "$CTL" key generate --output "$work/$node.seed" >"$work/$node.json"
   "$CTL" key generate --output "$work/$node-cp.seed" >"$work/$node-cp.json"
   "$CTL" profile create --name "$node" --type jsonl --jsonl-path "$work/$node-store" \
@@ -110,7 +179,7 @@ for node in payer provider; do
     --checkpoint-trusted-key "$(jq -r .public_key "$work/$node-cp.json")" >/dev/null
   "$CTL" store init --profile "$node" >/dev/null
   mkdir -p "$work/$node-requests"
-  python3 - "$REPO/tests/fixtures/inference-deals/$node.jsonl" "$work/$node-requests" "$node-node" <<'EOF'
+  python3 - "$records" "$work/$node-requests" "$node-node" <<'EOF'
 import json, pathlib, sys
 src, out, operator = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
 for i, line in enumerate(src.read_text().splitlines()):
@@ -139,8 +208,12 @@ EOF
   page_check "$node" "$work/$node.html"
   result=$(ls "$work/$node-run"/run.*/rollup/result-v0-*.json)
   printf '%s window: %s\n' "$node" "$(jq -c '."x-window"' "$result")"
-  printf '%s claims: %s\n' "$node" "$(jq -c '[.claims[] | [.id, .verdict, .grade]]' "$result")"
+  printf '%s claims: %s\n' "$node" "$(jq -c '[.claims[] | [.id, .verdict, .grade, .reason]]' "$result")"
+  if [[ $node == provider-legs ]]; then
+    reasons_check "$node" "$result" "$work/$node.html"
+  fi
 done
 
 [[ "$PAGE_CHECK" == PASS ]] || fail "the page text check did not run (no Chrome; set CHROME): the wording is not shown to be on the page, so this is not a pass"
-printf '\nFRESH-ENV-DEALS: PASS (log: %s; page text check: %s)\n' "$log" "$PAGE_CHECK"
+[[ "$REASONS_CHECK" == PASS ]] || fail "the claim reasons were not checked on the page (no Chrome; set CHROME), so this is not a pass"
+printf '\nFRESH-ENV-DEALS: PASS (log: %s; page text check: %s; claim reasons on the page: %s)\n' "$log" "$PAGE_CHECK" "$REASONS_CHECK"
