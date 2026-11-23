@@ -12,7 +12,7 @@ Every command below runs offline against the released `capsulectl` and its book 
 
 ## What you will see
 
-Two import passes of the agent host's tool-call log: five calls with nothing missing, then two later calls after the host's log had already dropped two cursors, so the second pass declares a gap. The report has three terms: the log was imported (met), no gap declared (not met), no late or changed row (met). The page is built from the same bundle `capsulectl verify --bundle` checks.
+Two import passes of the agent host's tool-call log: five calls with nothing missing, then two later calls after the host's log had already dropped two cursors, so the second pass declares a gap. The report has three terms: the log was imported (met), no gap declared (not met), no late or refused row (met). The page is built from the same bundle `capsulectl verify --bundle` checks.
 
 The rows here are a hand-written sample, not read from a Goose host: `fixtures/pass1.jsonl` and `fixtures/pass2.jsonl` are `backfill-source-record/v0` lines in the shape a Goose reader would write from the host's own tool-call table. capsulectl has no code for any particular host; a reader for your host writes the same lines from its own store (see `docs/quickstart.md`, "Logs into a book").
 
@@ -109,7 +109,7 @@ jq -n --slurpfile p $T/pack.json \
 capsulectl book doctor --profile holder | jq -r '.findings[] | select(.check == "terms_packs_served") | .detail'
 ```
 
-**Expect:** `42fee573234638156a61345863e8f3a1d95d60ad53121054eeb9acf29226e495 (forms full_history, 1 granted)`. That digest is the pack's. A pack not listed here is refused `derivation_unsupported`, whatever digest a requester names.
+**Expect:** `6f9866750bae33a8cb02a834cd63d0ad61c5e053a5865545e021f1335f5ef382 (forms full_history, 1 granted)`. That digest is the pack's. A pack not listed here is refused `derivation_unsupported`, whatever digest a requester names.
 
 ## 3. The auditor asks, by digest
 
@@ -160,7 +160,7 @@ python3 $T/evaluator.py --pack $T/pack.json --inputs $QS/inputs.json > $QS/resul
 jq -c '.aggregate.buckets' $QS/result.json
 ```
 
-**Expect:** `met` holds `record_keeping.passes_present` and `record_keeping.no_late_or_changed_rows`, `not_met` holds `record_keeping.no_declared_gaps`.
+**Expect:** `met` holds `record_keeping.passes_present` and `record_keeping.no_late_or_refused_rows`, `not_met` holds `record_keeping.no_declared_gaps`.
 
 `book report derive` seals the Result in the auditor's own book, signed by the auditor's key. It checks that you name the pack the holder answered, that the Result is valid and that every claim cites the response, and writes the bundle:
 

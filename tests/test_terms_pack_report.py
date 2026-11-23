@@ -68,13 +68,13 @@ class Verdicts(unittest.TestCase):
         v, _ = verdicts(answer(import_row(), import_row(gaps=[GAP], rows_read="2")))
         self.assertEqual(v["record_keeping.no_declared_gaps"], "not_met")
         self.assertEqual(v["record_keeping.passes_present"], "met")
-        self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "met")
+        self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "met")
 
     def test_a_late_or_a_refused_row_is_not_met(self):
         for member in ("anomalies", "refused"):
             with self.subTest(member):
                 v, _ = verdicts(answer(import_row(**{member: [{"id": "tc-1"}]})))
-                self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "not_met")
+                self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "not_met")
                 self.assertEqual(v["record_keeping.no_declared_gaps"], "met")
 
     def test_no_import_record_reads_not_evaluable_never_not_met(self):
@@ -88,11 +88,11 @@ class Verdicts(unittest.TestCase):
         del row["fields"]["statement"]["gaps"]
         v, _ = verdicts(answer(row))
         self.assertEqual(v["record_keeping.no_declared_gaps"], "not_evaluable")
-        self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "met")
+        self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "met")
         row = import_row()
         row["fields"]["statement"]["anomalies"] = "none"
         v, _ = verdicts(answer(row))
-        self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "not_evaluable")
+        self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "not_evaluable")
         row = import_row()
         del row["fields"]["statement"]
         v, _ = verdicts(answer(row))
@@ -102,9 +102,9 @@ class Verdicts(unittest.TestCase):
         broken = import_row()
         del broken["fields"]["statement"]["anomalies"]
         v, _ = verdicts(answer(import_row(anomalies=[{"id": "tc-1"}]), broken))
-        self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "not_met")
+        self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "not_met")
         v, _ = verdicts(answer(broken, import_row(anomalies=[{"id": "tc-1"}])))
-        self.assertEqual(v["record_keeping.no_late_or_changed_rows"], "not_met")
+        self.assertEqual(v["record_keeping.no_late_or_refused_rows"], "not_met")
 
     def test_a_row_with_no_record_type_cannot_be_ruled_out(self):
         # Dropping it would let a row hiding a gap read as met.

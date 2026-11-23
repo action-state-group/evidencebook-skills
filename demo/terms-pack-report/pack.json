@@ -22,9 +22,9 @@
       }
     },
     {
-      "claim": "No import pass the holder answered with listed a row that arrived late, a re-read row whose content changed after it was first digested, or an id that appears twice in one pass with different contents.",
-      "id": "record_keeping.no_late_or_changed_rows",
-      "label": "No late or changed rows in the imported log",
+      "claim": "No import pass the holder answered with listed a late row (one that arrived after a later row was already read) or a refused row (a re-read row whose content changed after it was first digested, or an id that appears twice in one pass with different contents).",
+      "id": "record_keeping.no_late_or_refused_rows",
+      "label": "No late or refused rows in the imported log",
       "rule": {
         "kind": "every_record_empty",
         "paths": [
@@ -43,7 +43,7 @@
     "statement.gaps",
     "statement.refused"
   ],
-  "outcome_statement": "The holder's book shows the agent host's tool-call log was imported with no declared gap and no late or changed row. The book records what the host wrote down when each pass read it; it does not show what the agent did that the host did not write, or that the host's own log is true.",
+  "outcome_statement": "The holder's book shows the agent host's tool-call log was imported with no declared gap and no late or refused row. The book records what the host wrote down when each pass read it; it does not show what the agent did that the host did not write, or that the host's own log is true.",
   "pack_id": "goose-record-keeping",
   "pack_version": "0.1.0",
   "resolution_rule": "every clause is met",
