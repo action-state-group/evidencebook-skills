@@ -131,3 +131,19 @@ def test_a_seller_server_keeps_its_lock(tools, monkeypatch):
             tools._lock("alder")
     finally:
         tools._seller, tools._seller_lock = None, None
+
+
+@pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
+def test_with_a_spending_limit_a_second_order_is_stopped_at_the_deal_check_and_pays_nothing(tools, monkeypatch):
+    """Runs after the story: Alder was paid 2,000 msat once. With the person's limit set at that amount, ard_pay takes
+    a second order as a new deal; the Everyday Rules stop it at the deal check and the rail is not called."""
+    assert tools._session.run.rail.paid == [2000]
+    tools._session.paid.add("alder")  # as after a payment the rail reported succeeded (the story test cleared it)
+    monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
+    second = tools.ard_pay("alder")
+    assert "REFUSED:" in second and "Blocked at deal check, nothing paid" in second and "blocked at deal check" in second and "limit you set" in second
+    assert "limit 2,000 msat" in second and "4,000 msat" in second and "Nothing was paid" in second
+    assert tools._session.run.rail.paid == [2000]
+    # a blocked order is not an attempted payment: nothing to confirm in a wallet
+    assert "alder" not in tools._session.attempted

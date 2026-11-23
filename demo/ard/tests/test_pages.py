@@ -128,7 +128,7 @@ def test_card_page_writes_under_the_demo_home_and_opens_only_when_asked(tmp_path
     sh = standard_history()
     note = SimpleNamespace(header=SimpleNamespace(committed_at="2026-11-17T10:06:00Z"))
     node = SimpleNamespace(
-        tick=lambda now: None, standard_history=lambda: sh,
+        tick=lambda now: None, standard_history=lambda: sh, has_deal=lambda deal_id: False,
         deal_payloads=lambda deal_id: [json.dumps({"x-deal-v0": {"at": "2026-11-17T10:05:00Z"}}).encode()],
         notes=lambda kind: [(note, {"deal_id": "d0", "key_id": "ab" * 32, "close_half_digest": "cd" * 32})])
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
@@ -143,6 +143,54 @@ def test_card_page_writes_under_the_demo_home_and_opens_only_when_asked(tmp_path
     calls = []
     monkeypatch.setattr(pages.subprocess, "run", lambda argv, **k: calls.append(argv) or SimpleNamespace(returncode=0))
     assert pages.open_page(path) is True and calls == [["open", str(path)]]
+
+
+WITNESSED = {"by": "Action State's hosted witness", "at": "2026-11-17T10:30:00Z"}
+
+
+def test_a_witnessed_card_reads_each_row_witnessed_by_the_named_witness_and_an_unwitnessed_one_reads_none():
+    sh = standard_history()
+    witnessed = pages.history_input(sh, name="Kestrel Print", seller=True, last_at={}, seconds={},
+                                    built_at="2026-11-17T11:00:00Z", witnessed=WITNESSED)
+    assert all(r["witness"] == {"state": "passed", **WITNESSED} for r in witnessed["rows"])
+    assert {"id": "witness", "status": "pass"} in witnessed["checks"]
+    plain = model(sh)
+    assert all(r["witness"] == {"state": "none"} for r in plain["rows"])
+    assert {"id": "witness", "status": "not_run"} in plain["checks"]
+
+
+@pytest.mark.skipif(NODE is None, reason="needs node to draw the view")
+def test_the_view_draws_the_named_witness_on_each_witnessed_row():
+    sh = standard_history()
+    html_ = draw(pages.history_input(sh, name="Kestrel Print", seller=True, last_at={}, seconds={},
+                                     built_at="2026-11-17T11:00:00Z", witnessed=WITNESSED))
+    assert html_.count("by Action State&#39;s hosted witness") + html_.count("by Action State's hosted witness") == 3
+
+
+def test_a_witnessed_card_page_says_the_witness_is_ours():
+    card = {"outcomes": {"of": 3, "did_not_hold": 0}}
+    assert pages.labels(card, "fake", True, False, "Alder", witnessed=True) == [pages.WITNESS_NOTE]
+    assert "not independent of us" in pages.WITNESS_NOTE and pages.labels(card, "fake", True, False, "Alder") == []
+
+
+def test_a_deal_line_with_a_receipt_page_gets_the_demos_own_link_and_says_whose_it_is():
+    page = pages.history_page(model(standard_history()), [], "History", {"d1": "kestrel-receipt-x.html"})
+    assert '"d1":"kestrel-receipt-x.html"' in page.replace(" ", "")
+    assert pages.RECEIPT_LINK_NOTE in page and "not part of the History view" in page
+    assert '"receipt-links"' in page
+
+
+def test_only_a_closed_deal_with_the_others_closing_half_gets_a_receipt_link(tmp_path, monkeypatch):
+    import receipt
+
+    def ready(node, deal_id):
+        if deal_id != "d1":
+            raise receipt.ReceiptError("not closed")
+
+    monkeypatch.setattr(receipt, "ready", ready)
+    monkeypatch.setattr(receipt, "receipt_page", lambda node, name, label, deal_id, **k: tmp_path / f"{name}-receipt-{deal_id}.html")
+    links = pages._receipt_links(object(), "maya", "Maya", ["d0", "d1", "d2"], rail="fake", seller=False)
+    assert links == {"d1": "maya-receipt-d1.html"}
 
 
 @engine_only

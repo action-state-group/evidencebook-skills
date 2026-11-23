@@ -102,3 +102,9 @@ def button(name: str, a: Assessment) -> str:
 
 def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
+
+
+def rules_blocked(reasons: list[str]) -> str:
+    """What the screen says when the deal check stops an order under the spending limit the person set."""
+    return ("Blocked at deal check, nothing paid. The Everyday Rules stopped this order: "
+            + "; ".join(reasons) + ". The limit is the one you set.")

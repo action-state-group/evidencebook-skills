@@ -49,6 +49,7 @@ import buyer  # noqa: E402
 import pack as packs  # noqa: E402
 import parties  # noqa: E402
 import pay  # noqa: E402
+import rules  # noqa: E402
 import screens  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from world import SELLERS  # noqa: E402
@@ -280,7 +281,14 @@ def ard_pay(seller: str) -> None:
     key = _seller_key(seller)
     if key not in s.picked:
         raise RuntimeError(f"no sealed pick of {SELLERS[key]['label']} within its limit: call ard_pick first")
+    limit = rules.limit_msat()
     with s.pay_lock:  # a second call waits here, then sees the seller attempted or paid
+        if limit is not None and key in s.paid:
+            # With a spending limit set, a second order is the point of the show: it goes to the deal check as a new
+            # deal, and the Everyday Rules decide. Without one, a seller is paid once per run, as before.
+            s.paid.discard(key)
+            s.attempted.discard(key)
+            print(f"a second order to {SELLERS[key]['label']}: the deal check will run the Everyday Rules under your limit")
         if key in s.paid:
             raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
         if key in s.attempted:
@@ -310,15 +318,25 @@ def ard_pay(seller: str) -> None:
             s.declined.add(key)
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
+    try:
+        _pay(s, key, limit)
+    except rules.RuleBlocked as blocked:
+        s.attempted.discard(key)  # nothing was paid: the order may be tried again
+        print(screens.rules_blocked(blocked.reasons))
+        raise RuntimeError(f"{blocked} Nothing was paid. Tell Maya which rule stopped the order and why; do not try to pay "
+                           "around it.") from None
+
+
+def _pay(s, key: str, limit: int | None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key])
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
     chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK, run.rail.SEALED)
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
-    payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat,
+    payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit,
                                  on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
     who = ("the buyer's test node paid it" if run.banner == screens.BANNER else "the buyer's wallet paid it") if run.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
     print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}"

@@ -41,6 +41,7 @@ import goose_node as gn  # noqa: E402
 import mailbox_exchange as mx  # noqa: E402
 import nostr_mailbox as mb  # noqa: E402
 import responder  # noqa: E402
+import rules  # noqa: E402
 import screens  # noqa: E402
 from demo_node import RECONCILED, DemoNode  # noqa: E402
 from world import RELAY_NAME, SAMPLE_COUNTS, SELLERS, World  # noqa: E402
@@ -399,19 +400,24 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
 
 # -- Maya's half of the deal ----------------------------------------------------------------------
 
-def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_wait: float = 120, on_paid=None) -> object:
+def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_wait: float = 120, on_paid=None,
+               limit: int | None = None) -> object:
     """Maya's half of :func:`deals.run_deal`: open, wait for the seller's half, pay, exchange halves, close.
-    Returns the payment."""
+    With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order over it raises
+    :class:`rules.RuleBlocked` and nothing is paid. Returns the payment."""
     wire = peer.home / "stage" / "wire"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     deal_id = chain.deal_id
     write_atomic(wire / peer.id / f"{deal_id}.m1.json", json.dumps(maya.half(deal_id)).encode())
     s1 = wait_file(wire / "maya" / f"{deal_id}.s1.json", seller_wait)
     deals._reconcile(maya, s1, peer)
+    if limit is not None:
+        rules.gate(maya, maya.deal(deal_id), limit, now())  # raises RuleBlocked: nothing is paid
     payment = rail.pay(price_msat)
     if on_paid is not None:
         on_paid(payment)  # at once: what follows (the seller's half, the close) can fail after the money moved
-    maya.seal(maya.deal(deal_id), maya.deal(deal_id).check_and_pay(now(), payment.reference))
+    maya.seal(maya.deal(deal_id), rules.pay_after_check(maya.deal(deal_id), now(), payment.reference) if limit is not None
+              else maya.deal(deal_id).check_and_pay(now(), payment.reference))
     maya.ask_half(deal_id)
     write_atomic(wire / peer.id / f"{deal_id}.m2.json", json.dumps(maya.half(deal_id)).encode())
     s2 = wait_file(wire / "maya" / f"{deal_id}.s2.json", seller_wait)

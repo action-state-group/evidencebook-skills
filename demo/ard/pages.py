@@ -3,7 +3,7 @@
 §3.6 item 11).
 
 The page is capsule-viewer's History view (``history-view/v0``, capsule-viewer
-``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.18.0/
+``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.23.0/
 history-view.iife.js`` is ``dist/history-view.iife.js`` of the npm package
 ``@action-state-group/capsule-viewer@0.18.0``, copied unchanged with the package's own ``.sha256`` and
 licences, and :data:`VIEWER_SHA256` pins it. The view draws and never verifies: the party builds the
@@ -32,11 +32,11 @@ from pathlib import Path
 import screens
 
 HERE = Path(__file__).resolve().parent
-VIEWER = "capsule-viewer-0.18.0"
+VIEWER = "capsule-viewer-0.23.0"
 VIEWER_DIR = HERE / "vendor" / VIEWER
 VIEWER_SCRIPT = VIEWER_DIR / "history-view.iife.js"
 #: The package's own digest of the script (``dist/history-view.iife.js.sha256``).
-VIEWER_SHA256 = "63c0bdaedbc29ddd9e1377ccf63ac662fbcee291f0cd39382b68d6b39cb32148"
+VIEWER_SHA256 = "7bb461b020c72110a714eeca3c060362db441275bbb49cc8e0b29c5eeb0105e3"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
 OWN_NOTE = "this party's own note, not verified"
@@ -74,10 +74,12 @@ def _outcome(outcome: str, seller: bool) -> str:
 
 
 def history_input(sh: dict, *, name: str, seller: bool, last_at: dict[str, str],
-                  seconds: dict[str, tuple[str, str]], built_at: str) -> dict:
+                  seconds: dict[str, tuple[str, str]], built_at: str, witnessed: dict | None = None) -> dict:
     """The ``history-view/v0`` model of a party's own card. ``sh`` is ``Node.standard_history()``;
     ``last_at`` maps a deal id to its last step's time and ``seconds`` maps a deal id to the other party
-    whose half this node verified and when (the card's ``stamped_by_both``). Deal rows, newest first."""
+    whose half this node verified and when (the card's ``stamped_by_both``). ``witnessed`` is ``None`` when no witness ran,
+    else ``{"by": name, "at": time}`` of the witnessed checkpoint the card is anchored on: every deal the card counts
+    lies under that checkpoint, so each row reads witnessed by it. Deal rows, newest first."""
     rows = []
     for d in sorted(sh["deals"], key=lambda d: d["agreed_at"], reverse=True):
         deal_id = d["deal"]
@@ -90,8 +92,8 @@ def history_input(sh: dict, *, name: str, seller: bool, last_at: dict[str, str],
         rows.append({"kind": "deal", "asked": f"{verb} at the agreed price", "outcome": _outcome(d["outcome"], seller),
                      "money": _money(d["amount"]), "opened_at": d["agreed_at"],
                      "last_at": last_at.get(deal_id, d["agreed_at"]), "record": deal_id,
-                     # The demo runs no witness (CAPSULE_WITNESS=off): no record is time-stamped.
-                     "witness": {"state": "none"}, "second_signature": second})
+                     "witness": ({"state": "passed", **witnessed} if witnessed else {"state": "none"}),
+                     "second_signature": second})
     stamped = bool(rows) and all(r["second_signature"]["state"] == "passed" for r in rows)
     return {
         "view": "history-view/v0", "kind": "deal", "surface": "neutral", "reader": "owner",
@@ -99,13 +101,19 @@ def history_input(sh: dict, *, name: str, seller: bool, last_at: dict[str, str],
         "checked": {"where": "builder", "by": "this party's own node, from its sealed records"},
         "rows": rows,
         "checks": [{"id": "second_signature", "status": "pass" if stamped else "not_run"},
-                   {"id": "witness", "status": "not_run"}],
+                   {"id": "witness", "status": "pass" if witnessed and rows else "not_run"}],
     }
 
 
-def labels(card: dict, rail: str, seller: bool, sample_card: bool, party: str) -> list[str]:
+#: Said on a card page whose rows read witnessed (coordinator, 2026-11-23): the witness is the demo operator's own.
+WITNESS_NOTE = "The witness is Action State's hosted witness, run by Action State: it is not independent of us."
+
+
+def labels(card: dict, rail: str, seller: bool, sample_card: bool, party: str, witnessed: bool = False) -> list[str]:
     """The labels this party's page must carry, none when its count needs none (no banner: Ethan, 2026-11-17)."""
     out: list[str] = []
+    if witnessed:
+        out.append(WITNESS_NOTE)
     if card["outcomes"]["did_not_hold"]:
         out.append(f"{card['outcomes']['did_not_hold']} of {card['outcomes']['of']} deals did not hold: did not hold counted from "
                    + ("the seller's own note, not confirmed by the buyer or a ruling" if seller
@@ -122,11 +130,24 @@ def _script_json(value: dict) -> str:
 
 
 _HOST_CSS = (".ard-labels{font:13px/1.4 system-ui,sans-serif;margin:0;padding:8px 16px;color:#57606a}"
-             ".ard-labels p{margin:0}")
+             ".ard-labels p{margin:0}"
+             ".ard-receipt-link{font:13px/1.4 system-ui,sans-serif;margin:6px 0 0}"
+             ".ard-receipt-link span{color:#57606a}")
+#: The demo's own link under a deal line (not part of capsule-viewer's History view, which has none): it names itself as
+#: the demo's, so the page never reads as the viewer's feature. Placed by the record id the view prints in each row.
+RECEIPT_LINK_NOTE = "this demo's link to this party's receipt page, not part of the History view"
+_LINKS_JS = ("(function(l){var rows=document.querySelectorAll('#history .cvh-row');"
+             "for(var i=0;i<rows.length;i++){var c=rows[i].querySelector('code');var h=c&&l[c.textContent];if(!h)continue;"
+             "var p=document.createElement('p');p.className='ard-receipt-link';var a=document.createElement('a');"
+             "a.href=h;a.textContent='Open receipt';p.appendChild(a);var s=document.createElement('span');"
+             "s.textContent=' ('+%s+')';p.appendChild(s);rows[i].appendChild(p);}})(JSON.parse("
+             "document.getElementById('receipt-links').textContent));")
 
 
-def history_page(view_input: dict, page_labels: list[str], title: str) -> str:
-    """A self-contained page: the labels, then capsule-viewer's History view drawn by its own script."""
+def history_page(view_input: dict, page_labels: list[str], title: str, receipt_links: dict[str, str] | None = None) -> str:
+    """A self-contained page: the labels, then capsule-viewer's History view drawn by its own script. ``receipt_links``
+    maps a deal id to the file name of that deal's receipt page (beside this page): each such deal line gets the demo's
+    own "Open receipt" link."""
     notes = "".join(f"<p>{html.escape(t)}</p>" for t in page_labels)
     return (
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -141,6 +162,8 @@ def history_page(view_input: dict, page_labels: list[str], title: str) -> str:
         "<script>(function(){var s=document.createElement('style');s.textContent=HistoryView.historyViewStyles;"
         "document.head.appendChild(s);HistoryView.renderHistoryView(JSON.parse("
         "document.getElementById('history-input').textContent),document.getElementById('history'));})();</script>"
+        f"<script type=\"application/json\" id=\"receipt-links\">{_script_json(receipt_links or {})}</script>"
+        f"<script>{_LINKS_JS % json.dumps(RECEIPT_LINK_NOTE)}</script>"
         "</body></html>\n")
 
 
@@ -173,6 +196,31 @@ def write(name: str, kind: str, page: str) -> Path:
     return path
 
 
+def _witnessed(node, sh: dict) -> dict | None:
+    """The witness slot of the card's rows: set only when a verified receipt covers the checkpoint the card is anchored on."""
+    witnessed_tick = getattr(node, "witnessed_tick", None)
+    tick = witnessed_tick(sh["tick"]) if witnessed_tick else None
+    if tick is None:
+        return None
+    import demo_node
+    return {"by": demo_node.WITNESS_NAME, "at": tick.at.strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+def _receipt_links(node, name: str, label: str, deal_ids: list[str], *, rail: str, seller: bool) -> dict[str, str]:
+    """A receipt page for each counted deal that has one (the deal closed on this party's book and the other party's
+    closing half arrived: the sample history has none), by deal id; the pages sit beside the card page."""
+    import receipt
+
+    links = {}
+    for deal_id in deal_ids:
+        try:
+            receipt.ready(node, deal_id)
+            links[deal_id] = receipt.receipt_page(node, name, label, deal_id, rail=rail, seller=seller).name
+        except receipt.ReceiptError:
+            continue
+    return links
+
+
 def card_page(node, name: str, label: str, *, rail: str, seller: bool, sample_card: bool,
               half_received: str = "goose_half_received") -> Path:
     """Write the party's History card page from its own records, as of its newest checkpoint (taken now when one
@@ -181,9 +229,11 @@ def card_page(node, name: str, label: str, *, rail: str, seller: bool, sample_ca
     sh = node.standard_history()
     card = json.loads(sh["card"])
     view = history_input(sh, name=label, seller=seller, last_at=_deal_times(node, [d["deal"] for d in sh["deals"]]),
-                         seconds=_seconds(node, half_received),
+                         seconds=_seconds(node, half_received), witnessed=_witnessed(node, sh),
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(name, "history", history_page(view, labels(card, rail, seller, sample_card, label), f"History · {label}"))
+    links = _receipt_links(node, name, label, [d["deal"] for d in sh["deals"]], rail=rail, seller=seller)
+    page_labels = labels(card, rail, seller, sample_card, label, witnessed=view["rows"] and view["rows"][0]["witness"]["state"] == "passed")
+    return write(name, "history", history_page(view, page_labels, f"History · {label}", links))
 
 
 def open_page(path: Path) -> bool:
