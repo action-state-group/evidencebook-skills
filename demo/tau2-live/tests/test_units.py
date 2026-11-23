@@ -51,9 +51,16 @@ def test_book_name():
 @pytest.mark.parametrize("text,ok", [
     ("Yes.", True), ("yes, please go ahead", True), ("Confirmed", True), ("Yes please do it", True),
     ("No, not yet", False), ("Wait, let me check", False), ("What will it cost?", False), ("", False),
+    ("Yes, but change it to the 3pm flight instead", False), ("I'm not sure you should go ahead yet", False),
+    ("Yes, please make the change.", True),
 ])
 def test_confirmation(text, ok):
     assert airline_mcp.confirmed(text) is ok
+
+
+def test_canonical_arguments_ignore_key_order():
+    assert airline_mcp.canonical({"b": 1, "a": [1, 2]}) == airline_mcp.canonical({"a": [1, 2], "b": 1})
+    assert airline_mcp.canonical({"a": 1}) != airline_mcp.canonical({"a": 2})
 
 
 def test_offer_rows_are_the_rubric_checks_owed_by_the_airline():

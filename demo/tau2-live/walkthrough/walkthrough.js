@@ -48,7 +48,7 @@
     book(air, air, "the airline's book for " + air.replace(/^.*?-/, ""));
     stage.detail = kv([["book", air], ["window", "month (configurable: day, month, year)"]]);
   }, true);
-  step("Deal", "One case, one deal", "The airline offers to a customer who keeps no records of its own and agrees alone. The deal's rows are the three checks of the tau2 airline rubric, owed by the airline.", function () {
+  step("Deal", "One case, one deal", "The airline offers to a customer who keeps no signed records of its own and agrees alone. The deal's rows are the three checks of the tau2 airline rubric, owed by the airline.", function () {
     strip(air, "journal", "offer (to: null)", D.records.offer);
     strip(air, "", "agreement: deal book opens", D.records.agreement);
     stage.detail = kv([["deal", D.case.deal_id], ["rows", "policy_compliance, task_resolution, grounded_communication"], ["owed by", "the airline"], ["adjudicator", "the evaluator's own key"]]);
@@ -92,13 +92,13 @@
       }, isConfirm || turnCalls.some(function (c) { return c.perform; }));
   });
 
-  step("Checkpoint", "The book is checkpointed", "A report rests on a checkpoint of the book: the airline signs the book's head, so a later change to any record shows.", function () {
+  step("Checkpoint", "The book is checkpointed", "A report rests on a checkpoint of the book: the airline signs the book's head. A record changed later shows to anyone who already holds this checkpoint. No witness co-signs it here, so it is the airline's own word.", function () {
     strip(air, "", "checkpoint", null);
     stage.detail = kv([["book", air], ["covers", "every record above"]]);
     span(function (s) { return s.service === "tau2-roleplay" && !s.parent_id; });
   });
   if (D.evaluation) {
-    step("Evaluator", "The evaluator signs its own verdict", "A separate evaluator judges the case on the rubric and signs its verdict with its own key, in its own book. The airline's journal cites it; the airline does not restate it as its own.", function () {
+    step("Evaluator", "The evaluator signs its own verdict", "An evaluator judges the case on the rubric and signs its verdict with its own key, in its own book. The airline's journal cites it; the airline does not restate it as its own. In this demo the operator runs the evaluator, like both agents, so it is not independent.", function () {
       book("evaluator", "tau2 evaluator", "the evaluator's own book");
       strip("evaluator", "verdict", "verdict on " + short(D.case.deal_id), D.evaluation.evaluation_capsule_id);
       strip(air, "journal", "cites the evaluator's verdict", D.evaluation.cited_by);
@@ -108,10 +108,10 @@
     }, true);
   }
   if (D.report) {
-    step("Disclosure", "Two disclosure levels of one report", "The airline seals its report and writes two Evidence Bundles of it: its own full view, and the copy for the judge with the rows withheld. Both carry the same records, so both can be checked.", function () {
+    step("Disclosure", "Two disclosure levels of one report", "The airline seals its report and writes two Evidence Bundles of it: its own full view, and the copy for the judge with the rows withheld. Both carry the same records: the agreement and the acts the report cites. The rows read not_due because they fall due a week after the case opens; the evaluator's verdict is cited, not applied to them.", function () {
       stage.detail = levels(false);
     }, true);
-    step("Verify", "Both copies verify", "capsulectl deal verify checks each bundle on its own: signatures, record identity, the checkpoint, what each copy discloses, and the x-deal-v1 report rule.", function () {
+    step("Verify", "Both copies verify", "capsulectl deal verify checks each bundle on its own: signatures, record identity, the checkpoint, what each copy discloses, and the x-deal-v1 report rule. VALID covers the sealed report and the records in the bundle. The conversation, the customer's yes, the policy check and the verdict sit in the books, outside these bundles. VALID does not say the airline handled the case well.", function () {
       stage.detail = levels(true);
     }, true);
   }
@@ -119,8 +119,13 @@
     var ul = el("ul");
     ["The link from one window's book to the next, and coverage across windows (evidencebook#689).",
       "A person's own signature on each act: every act shows person_signature: missing (agent-action-capsule#627).",
-      "A collector that reads OTel back into books: on hold. Spans here carry references only.",
-      "A counterparty copy: this customer keeps no records of its own."].forEach(function (s) { ul.appendChild(el("li", null, s)); });
+      "A witness: checkpoints and as_of are the airline's own word.",
+      "Proof that the database change matches the act: the records show the gate's order, not its effect.",
+      "A person as the customer: the customer is a model, signs nothing, and its words are as the airline's agent recorded them.",
+      "An independent evaluator: the demo operator runs the evaluator and both agents. The default judge is the operator's Goose model, not the rubric's pinned judge.",
+      "Core capsulectl verify alone: it does not run the x-deal-v1 report rule and says INCOMPLETE; capsulectl deal verify does.",
+      "Reading OTel back into books: spans here carry references only.",
+      "A counterparty copy: this customer keeps no signed records of its own."].forEach(function (s) { ul.appendChild(el("li", null, s)); });
     stage.detail = ul;
   });
 

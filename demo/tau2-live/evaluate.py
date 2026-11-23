@@ -64,11 +64,14 @@ def messages(case_dir: Path) -> list[dict]:
     turns = json.loads((case_dir / "transcript.json").read_text())
     calls_path = case_dir / "tool_calls.jsonl"
     calls = [json.loads(line) for line in calls_path.read_text().splitlines()] if calls_path.exists() else []
-    events = [(t["at"], 0, i, t) for i, t in enumerate(turns)] + [(c["at"], 1, i, c) for i, c in enumerate(calls)]
+    # Order by the nanosecond clock both writers record (at_ns); a case written before
+    # that field existed falls back to the second, with a tool call ahead of a turn
+    # sealed in the same second (a call happens during the turn it ends).
+    def key(e, kind):
+        return (e.get("at_ns") or 0, e["at"], -kind)
+    events = [(key(t, 0), 0, i, t) for i, t in enumerate(turns)] + [(key(c, 1), 1, i, c) for i, c in enumerate(calls)]
     out: list[dict] = []
-    # A tool call happens during the agent's turn, before the reply it ends with:
-    # order calls before a turn sealed in the same second.
-    for at, kind, i, e in sorted(events, key=lambda x: (x[0], -x[1], x[2])):
+    for _, kind, i, e in sorted(events, key=lambda x: (x[0], x[2])):
         if kind == 0:
             out.append({"role": e["role"], "content": e["content"]})
             continue
@@ -128,6 +131,8 @@ def evaluate(store: records.Store, case_dir: Path, judge_cmd: str, judge_model_i
     req_path.write_text(json.dumps(request, indent=1))
     published = store.run("publish", "--request", str(req_path), profile=EVALUATOR)
     capsule_id = published.get("capsule_id") or published.get("record", {}).get("capsule_id")
+    if not capsule_id:
+        raise records.RecordError(f"publish returned no capsule id: {published}")
     case = records.load_case(store, case_dir)
     cite = case.write("evaluation-cite.json", {"about": "the evaluator's signed verdict on this case",
                                               "source": "evaluator_verdict",
@@ -147,7 +152,9 @@ def main() -> None:
                    help="goose: a model through Goose reads the case (default); mock: jev_judge.py's hash, no model")
     p.add_argument("--judge-cmd", default=None, help="any run_daily.py judge command instead (with --judge-model-id)")
     p.add_argument("--judge-model-id", default=None)
+    p.add_argument("--allow-incomplete", action="store_true", help="evaluate a case whose role-play did not complete")
     a = p.parse_args()
+    records.require_complete(a.case_dir.resolve(), a.allow_incomplete)
     if a.judge_cmd:
         if not a.judge_model_id:
             p.error("--judge-cmd needs --judge-model-id")

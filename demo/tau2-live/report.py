@@ -113,7 +113,13 @@ table{{border-collapse:collapse;width:100%}}td,th{{border-bottom:1px solid #e6e9
 <p class="note">Each act's span carries only the record's capsule id (<code>aac.capsule_id</code>); the record stays in the book.
 Every act shows <code>person_signature: missing</code>: no person's own signature format exists yet (agent-action-capsule#627).
 The book covers one window; the link between windows and coverage across them are not in this demo (evidencebook#689).
-The customer keeps no records of its own, so there is no counterparty copy here.</p>
+The customer keeps no signed records of its own, so there is no counterparty copy here.</p>
+<p class="note"><b>What VALID covers.</b> Each bundle carries the sealed report and the deal-book records it cites (the agreement and the acts).
+The conversation, the customer's "yes", the policy check and the evaluator's verdict sit in the books, outside these bundles.
+VALID does not say the airline handled the case well; that is the evaluator's verdict, which is cited, not applied to the rows.
+The rows read <code>not_due</code> because each falls due a week after the case opens.
+No witness co-signs the checkpoint: it and the report's <code>as_of</code> are the airline's own word.
+The demo operator runs the evaluator and both agents, so the verdict is not independent.</p>
 </body></html>
 """
 
@@ -122,7 +128,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("case_dir", type=Path)
     p.add_argument("--state", type=Path, default=HERE / "state")
+    p.add_argument("--allow-incomplete", action="store_true", help="report on a case whose role-play did not complete")
     a = p.parse_args()
+    records.require_complete(a.case_dir.resolve(), a.allow_incomplete)
     summary = build(records.Store(state=a.state.resolve()), a.case_dir.resolve())
     for level, b in summary["bundles"].items():
         print(f"{level}: {b['file']} verify {b['verify'].get('verdict')} (exit {b['verify']['exit_code']})")

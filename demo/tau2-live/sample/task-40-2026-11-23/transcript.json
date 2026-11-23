@@ -2,49 +2,71 @@
  {
   "role": "assistant",
   "content": "Hi! How can I help you today?",
-  "at": "2026-11-23T17:31:42Z",
-  "capsule_id": "eb93584f20e76007f3b94839d992042951a24ed8e870972d1f72636140df0fa7"
+  "at": "2026-11-23T18:08:03Z",
+  "at_ns": 1795457283649800000,
+  "capsule_id": "a47b8053c3542f6ecf48b193fbcf36997344b2d73eef70c511076134d5739846"
  },
  {
   "role": "user",
-  "content": "Hi, I need to change the passenger name on my reservation 3RK2T9 from Mei Lee to Mei Garcia.",
-  "at": "2026-11-23T17:31:47Z",
-  "capsule_id": "efd5287d73a9373859152636000f5f4e4f80fd38f4b89e31a9512901b213cf35"
+  "content": "Hi, I need to change a passenger's name on my reservation 3RK2T9.",
+  "at": "2026-11-23T18:08:08Z",
+  "at_ns": 1795457288495434000,
+  "capsule_id": "0b7aae3baf7b4719672923688bfbdeb0f9ef84b75862fba224e9e6080875601c"
  },
  {
   "role": "assistant",
-  "content": "I can help with that. Could you please give me your user ID so I can verify your account and look up reservation 3RK2T9?",
-  "at": "2026-11-23T17:31:56Z",
-  "capsule_id": "f30f5233423664033f8c815cc23998aa732ca60d4579938013333d21cb9c4d00"
+  "content": "I can help with that. To get started, please provide your user ID.",
+  "at": "2026-11-23T18:08:14Z",
+  "at_ns": 1795457295018543000,
+  "capsule_id": "0e2f6cef372c7f0b0cff01cebbf0041eccab9ce8dc2e2096e1a34a2767e055f6"
  },
  {
   "role": "user",
-  "content": "Sure, it's anya_garcia_5901.",
-  "at": "2026-11-23T17:32:01Z",
-  "capsule_id": "fdce4712ee520469117c457e9b7f489514c1a95eba4afbb6f3824d0c775a1c7c"
+  "content": "It's anya_garcia_5901.",
+  "at": "2026-11-23T18:08:18Z",
+  "at_ns": 1795457298767300000,
+  "capsule_id": "b9748fbf7c1f012970bc5ea063ba82a53965ce88aa9eeb24ed3db7fc40a4641b"
  },
  {
   "role": "assistant",
-  "content": "I found reservation 3RK2T9 under your account. It is a one-way basic economy trip from MCO to SFO, with HAT214 on 2024-05-19 and HAT009 on 2024-05-20.\n\nHere is the change I would make:\n- Passenger 1 stays the same: Anya Garcia, date of birth 1992-11-12.\n- Passenger 2 changes from Mei Lee to Mei Garcia. Her date of birth stays 1989-12-13.\n\nNothing else on the reservation changes. Do you want me to go ahead? Please reply \"yes\" to confirm.",
-  "at": "2026-11-23T17:32:15Z",
-  "capsule_id": "1b2f462ef9221edbf416d90bcfc5281b3fa90dbd489ddcada91d8b1b01d77ed1"
+  "content": "I've found reservation 3RK2T9, a one-way trip from MCO to SFO, with these passengers:\n\n1. Anya Garcia (DOB 1992-11-12)\n2. Mei Lee (DOB 1989-12-13)\n\nWhich passenger should I change, and what are their correct first name, last name and date of birth?",
+  "at": "2026-11-23T18:08:32Z",
+  "at_ns": 1795457312320653000,
+  "capsule_id": "f636f1c25deba2be264f0a3ac96c6d792e05523a2e0c721a0f36c673c36281d7"
+ },
+ {
+  "role": "user",
+  "content": "Mei Lee. Change her name to Mei Garcia. Her date of birth stays the same.",
+  "at": "2026-11-23T18:08:36Z",
+  "at_ns": 1795457316486931000,
+  "capsule_id": "772ec8de738259e5ab5305499a1a0b24822ddd38f45144ccee26a739db60c7dd"
+ },
+ {
+  "role": "assistant",
+  "content": "Here is the change I'll make to reservation 3RK2T9:\n\nUpdate the passenger list to:\n1. Anya Garcia, DOB 1992-11-12 (unchanged)\n2. Mei Garcia, DOB 1989-12-13 (was Mei Lee)\n\nDo you confirm this change? Please reply \"yes\" to proceed.",
+  "at": "2026-11-23T18:08:46Z",
+  "at_ns": 1795457326681624000,
+  "capsule_id": "aec19a14fd4c8eed9cd9474b32bee0f86221e901aa63f1e3559a8ae8a31005c1"
  },
  {
   "role": "user",
   "content": "Yes.",
-  "at": "2026-11-23T17:32:21Z",
-  "capsule_id": "46e7547f8650e26747fc4045626f79039971bc3b059efa5952782a0d8c87bc00"
+  "at": "2026-11-23T18:08:50Z",
+  "at_ns": 1795457330605517000,
+  "capsule_id": "4415fd23269de40413998d92596b800e660c722de23278a03945028d4dc801bf"
  },
  {
   "role": "assistant",
-  "content": "Reservation 3RK2T9 is updated. The second passenger is now Mei Garcia, and her date of birth is still 1989-12-13. Anya Garcia, your flights and everything else on the reservation are the same as before. Is there anything else I can help you with?",
-  "at": "2026-11-23T17:32:31Z",
-  "capsule_id": "0400413e505f80a1dd1090d2baeb48f423b005bf7774bcb7cba15a9dd3f258ec"
+  "content": "I've updated reservation 3RK2T9. The passengers are now Anya Garcia (DOB 1992-11-12) and Mei Garcia (DOB 1989-12-13). Is there anything else I can help you with?",
+  "at": "2026-11-23T18:09:00Z",
+  "at_ns": 1795457340517383000,
+  "capsule_id": "1f3260d33b85e847d53fa59fe28df5ba6e17d9984bd617e3d75268638e71a3d3"
  },
  {
   "role": "user",
-  "content": "No, that's all. Thanks!\n\n###STOP###",
-  "at": "2026-11-23T17:32:35Z",
-  "capsule_id": "cd27a64b96aa7e5d39041f51730cd74c2095efcb76fd6f3e356db6722e347852"
+  "content": "No, that's all. Thanks.\n\n###STOP###",
+  "at": "2026-11-23T18:09:04Z",
+  "at_ns": 1795457344104824000,
+  "capsule_id": "9011955e9ef3930c03b7562e5fd97b01166510b4fddc0681612ba8e626cd9ec0"
  }
 ]

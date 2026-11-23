@@ -2,66 +2,100 @@
 window.TAU2_CASE = {
  "case": {
   "book": "airline-2026-11",
-  "deal_id": "deal-729724d839003410",
+  "deal_id": "deal-1436efb584e2a3ea",
   "task_id": "40",
-  "opened_at": "2026-11-23T17:31:42Z",
+  "opened_at": "2026-11-23T18:08:03Z",
   "reason_for_call": "You booked the flight  and you want to change the passenger name on the reservation."
  },
  "records": {
-  "offer": "6c871fe62e2fd31da29c6e7cf27a747cb2ee34c6c86fb05fc4bf481ad9658bd4",
-  "agreement": "e8f65f021f46dd034f47e36a4b4b8c73d2c4e1a13e66d1e2c0e6d92ac613c4c6"
+  "offer": "a9be7cd8895a5c8db79cde7e0841f476db93405ef06122c9be8fb539cbba3951",
+  "agreement": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a"
  },
  "turns": [
   {
    "role": "assistant",
    "content": "Hi! How can I help you today?",
-   "at": "2026-11-23T17:31:42Z",
-   "capsule_id": "eb93584f20e76007f3b94839d992042951a24ed8e870972d1f72636140df0fa7"
+   "at": "2026-11-23T18:08:03Z",
+   "at_ns": 1795457283649800000,
+   "capsule_id": "a47b8053c3542f6ecf48b193fbcf36997344b2d73eef70c511076134d5739846"
   },
   {
    "role": "user",
-   "content": "Hi, I need to change the passenger name on my reservation 3RK2T9 from Mei Lee to Mei Garcia.",
-   "at": "2026-11-23T17:31:47Z",
-   "capsule_id": "efd5287d73a9373859152636000f5f4e4f80fd38f4b89e31a9512901b213cf35"
+   "content": "Hi, I need to change a passenger's name on my reservation 3RK2T9.",
+   "at": "2026-11-23T18:08:08Z",
+   "at_ns": 1795457288495434000,
+   "capsule_id": "0b7aae3baf7b4719672923688bfbdeb0f9ef84b75862fba224e9e6080875601c"
   },
   {
    "role": "assistant",
-   "content": "I can help with that. Could you please give me your user ID so I can verify your account and look up reservation 3RK2T9?",
-   "at": "2026-11-23T17:31:56Z",
-   "capsule_id": "f30f5233423664033f8c815cc23998aa732ca60d4579938013333d21cb9c4d00"
+   "content": "I can help with that. To get started, please provide your user ID.",
+   "at": "2026-11-23T18:08:14Z",
+   "at_ns": 1795457295018543000,
+   "capsule_id": "0e2f6cef372c7f0b0cff01cebbf0041eccab9ce8dc2e2096e1a34a2767e055f6"
   },
   {
    "role": "user",
-   "content": "Sure, it's anya_garcia_5901.",
-   "at": "2026-11-23T17:32:01Z",
-   "capsule_id": "fdce4712ee520469117c457e9b7f489514c1a95eba4afbb6f3824d0c775a1c7c"
+   "content": "It's anya_garcia_5901.",
+   "at": "2026-11-23T18:08:18Z",
+   "at_ns": 1795457298767300000,
+   "capsule_id": "b9748fbf7c1f012970bc5ea063ba82a53965ce88aa9eeb24ed3db7fc40a4641b"
   },
   {
    "role": "assistant",
-   "content": "I found reservation 3RK2T9 under your account. It is a one-way basic economy trip from MCO to SFO, with HAT214 on 2024-05-19 and HAT009 on 2024-05-20.\n\nHere is the change I would make:\n- Passenger 1 stays the same: Anya Garcia, date of birth 1992-11-12.\n- Passenger 2 changes from Mei Lee to Mei Garcia. Her date of birth stays 1989-12-13.\n\nNothing else on the reservation changes. Do you want me to go ahead? Please reply \"yes\" to confirm.",
-   "at": "2026-11-23T17:32:15Z",
-   "capsule_id": "1b2f462ef9221edbf416d90bcfc5281b3fa90dbd489ddcada91d8b1b01d77ed1"
+   "content": "I've found reservation 3RK2T9, a one-way trip from MCO to SFO, with these passengers:\n\n1. Anya Garcia (DOB 1992-11-12)\n2. Mei Lee (DOB 1989-12-13)\n\nWhich passenger should I change, and what are their correct first name, last name and date of birth?",
+   "at": "2026-11-23T18:08:32Z",
+   "at_ns": 1795457312320653000,
+   "capsule_id": "f636f1c25deba2be264f0a3ac96c6d792e05523a2e0c721a0f36c673c36281d7"
+  },
+  {
+   "role": "user",
+   "content": "Mei Lee. Change her name to Mei Garcia. Her date of birth stays the same.",
+   "at": "2026-11-23T18:08:36Z",
+   "at_ns": 1795457316486931000,
+   "capsule_id": "772ec8de738259e5ab5305499a1a0b24822ddd38f45144ccee26a739db60c7dd"
+  },
+  {
+   "role": "assistant",
+   "content": "Here is the change I'll make to reservation 3RK2T9:\n\nUpdate the passenger list to:\n1. Anya Garcia, DOB 1992-11-12 (unchanged)\n2. Mei Garcia, DOB 1989-12-13 (was Mei Lee)\n\nDo you confirm this change? Please reply \"yes\" to proceed.",
+   "at": "2026-11-23T18:08:46Z",
+   "at_ns": 1795457326681624000,
+   "capsule_id": "aec19a14fd4c8eed9cd9474b32bee0f86221e901aa63f1e3559a8ae8a31005c1"
   },
   {
    "role": "user",
    "content": "Yes.",
-   "at": "2026-11-23T17:32:21Z",
-   "capsule_id": "46e7547f8650e26747fc4045626f79039971bc3b059efa5952782a0d8c87bc00"
+   "at": "2026-11-23T18:08:50Z",
+   "at_ns": 1795457330605517000,
+   "capsule_id": "4415fd23269de40413998d92596b800e660c722de23278a03945028d4dc801bf"
   },
   {
    "role": "assistant",
-   "content": "Reservation 3RK2T9 is updated. The second passenger is now Mei Garcia, and her date of birth is still 1989-12-13. Anya Garcia, your flights and everything else on the reservation are the same as before. Is there anything else I can help you with?",
-   "at": "2026-11-23T17:32:31Z",
-   "capsule_id": "0400413e505f80a1dd1090d2baeb48f423b005bf7774bcb7cba15a9dd3f258ec"
+   "content": "I've updated reservation 3RK2T9. The passengers are now Anya Garcia (DOB 1992-11-12) and Mei Garcia (DOB 1989-12-13). Is there anything else I can help you with?",
+   "at": "2026-11-23T18:09:00Z",
+   "at_ns": 1795457340517383000,
+   "capsule_id": "1f3260d33b85e847d53fa59fe28df5ba6e17d9984bd617e3d75268638e71a3d3"
   },
   {
    "role": "user",
-   "content": "No, that's all. Thanks!\n\n###STOP###",
-   "at": "2026-11-23T17:32:35Z",
-   "capsule_id": "cd27a64b96aa7e5d39041f51730cd74c2095efcb76fd6f3e356db6722e347852"
+   "content": "No, that's all. Thanks.\n\n###STOP###",
+   "at": "2026-11-23T18:09:04Z",
+   "at_ns": 1795457344104824000,
+   "capsule_id": "9011955e9ef3930c03b7562e5fd97b01166510b4fddc0681612ba8e626cd9ec0"
   }
  ],
  "tool_calls": [
+  {
+   "tool": "get_user_details",
+   "arguments": {
+    "user_id": "anya_garcia_5901"
+   },
+   "result": "{\"user_id\":\"anya_garcia_5901\",\"name\":{\"first_name\":\"Anya\",\"last_name\":\"Garcia\"},\"address\":{\"address1\":\"555 Highland Drive\",\"address2\":\"Suite 243\",\"city\":\"San Antonio\",\"country\":\"USA\",\"state\":\"TX\",\"zip\":\"78256\"},\"email\":\"anya.garcia8816@example.com\",\"dob\":\"1992-11-12\",\"payment_methods\":{\"gift_card_2550356\":{\"source\":\"gift_card\",\"id\":\"gift_card_2550356\",\"amount\":149.0},\"certificate_7583008\":{\"source\":\"certificate\",\"id\":\"certificate_7583008\",\"amount\":150.0}},\"saved_passengers\":[{\"first_name\":\"Mei\",\"last_name\":\"Lee\",\"dob\":\"1989-12-13\"}],\"membership\":\"silver\",\"reservations\":[\"82K959\",\"790JYN\",\"BE2L57\",\"CXBB4L\",\"TAMSDK\",\"3RK2T9\",\"VAOW1B\",\"Q4MCUF\",\"JMO1MG\"]}",
+   "kind": "read",
+   "at": "2026-11-23T18:08:27Z",
+   "at_ns": 1795457307529446000,
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "14bdd01856b29162"
+  },
   {
    "tool": "get_reservation_details",
    "arguments": {
@@ -69,9 +103,34 @@ window.TAU2_CASE = {
    },
    "result": "{\"reservation_id\":\"3RK2T9\",\"user_id\":\"anya_garcia_5901\",\"origin\":\"MCO\",\"destination\":\"SFO\",\"flight_type\":\"one_way\",\"cabin\":\"basic_economy\",\"flights\":[{\"flight_number\":\"HAT214\",\"origin\":\"MCO\",\"destination\":\"PHX\",\"date\":\"2024-05-19\",\"price\":57},{\"flight_number\":\"HAT009\",\"origin\":\"PHX\",\"destination\":\"SFO\",\"date\":\"2024-05-20\",\"price\":83}],\"passengers\":[{\"first_name\":\"Anya\",\"last_name\":\"Garcia\",\"dob\":\"1992-11-12\"},{\"first_name\":\"Mei\",\"last_name\":\"Lee\",\"dob\":\"1989-12-13\"}],\"payment_history\":[{\"payment_id\":\"gift_card_2550356\",\"amount\":280}],\"created_at\":\"2024-05-02T06:02:56\",\"total_baggages\":0,\"nonfree_baggages\":0,\"insurance\":\"no\",\"status\":null}",
    "kind": "read",
-   "at": "2026-11-23T17:32:11Z",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "dde4328e1d697158"
+   "at": "2026-11-23T18:08:29Z",
+   "at_ns": 1795457309552006000,
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "52b62c020361e5b4"
+  },
+  {
+   "tool": "update_reservation_passengers",
+   "arguments": {
+    "reservation_id": "3RK2T9",
+    "passengers": [
+     {
+      "first_name": "Anya",
+      "last_name": "Garcia",
+      "dob": "1992-11-12"
+     },
+     {
+      "first_name": "Mei",
+      "last_name": "Garcia",
+      "dob": "1989-12-13"
+     }
+    ]
+   },
+   "kind": "write",
+   "gate": "proposed",
+   "at": "2026-11-23T18:08:43Z",
+   "at_ns": 1795457323859702000,
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "46c1fb4fd6680a59"
   },
   {
    "tool": "update_reservation_passengers",
@@ -92,118 +151,170 @@ window.TAU2_CASE = {
    },
    "result": "{\"reservation_id\":\"3RK2T9\",\"user_id\":\"anya_garcia_5901\",\"origin\":\"MCO\",\"destination\":\"SFO\",\"flight_type\":\"one_way\",\"cabin\":\"basic_economy\",\"flights\":[{\"flight_number\":\"HAT214\",\"origin\":\"MCO\",\"destination\":\"PHX\",\"date\":\"2024-05-19\",\"price\":57},{\"flight_number\":\"HAT009\",\"origin\":\"PHX\",\"destination\":\"SFO\",\"date\":\"2024-05-20\",\"price\":83}],\"passengers\":[{\"first_name\":\"Anya\",\"last_name\":\"Garcia\",\"dob\":\"1992-11-12\"},{\"first_name\":\"Mei\",\"last_name\":\"Garcia\",\"dob\":\"1989-12-13\"}],\"payment_history\":[{\"payment_id\":\"gift_card_2550356\",\"amount\":280}],\"created_at\":\"2024-05-02T06:02:56\",\"total_baggages\":0,\"nonfree_baggages\":0,\"insurance\":\"no\",\"status\":null}",
    "kind": "write",
-   "confirmation": "46e7547f8650e26747fc4045626f79039971bc3b059efa5952782a0d8c87bc00",
-   "check": "1c498767ba688244c902e17a1f0722f70c5261eb647d86de8ac23d73752bbfeb",
-   "perform": "95ab8079f6187e3258a9eac5dbd17bff8b9c212b966b93b867cfd8c0d0b43ff4",
-   "at": "2026-11-23T17:32:29Z",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "077c70d62a1ed2bf"
+   "confirmation": "4415fd23269de40413998d92596b800e660c722de23278a03945028d4dc801bf",
+   "check": "5b6f8be0ec7a5fa3e7a006214e5fffa025c8b25ae56b82eb89e74e69925b5e0a",
+   "perform": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+   "person_signature": "missing",
+   "at": "2026-11-23T18:08:57Z",
+   "at_ns": 1795457337946437000,
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "bae60b091171d3df"
   }
  ],
  "spans": [
   {
-   "name": "turn 1 customer",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "baa92f0938e66ba4",
-   "parent_id": "a7de1bfbee8540ea",
+   "name": "turn 0 airline greeting",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "7fa341dd6967a02a",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:31:47.351768Z",
-   "end": "2026-11-23T17:31:47.470023Z",
-   "capsule_id": "efd5287d73a9373859152636000f5f4e4f80fd38f4b89e31a9512901b213cf35"
+   "start": "2026-11-23T18:08:03.553721Z",
+   "end": "2026-11-23T18:08:03.651145Z",
+   "capsule_id": "a47b8053c3542f6ecf48b193fbcf36997344b2d73eef70c511076134d5739846"
+  },
+  {
+   "name": "turn 1 customer",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "9b74a2d2d12bad38",
+   "parent_id": "7b12d57e51867141",
+   "service": "tau2-roleplay",
+   "start": "2026-11-23T18:08:08.393633Z",
+   "end": "2026-11-23T18:08:08.496273Z",
+   "capsule_id": "0b7aae3baf7b4719672923688bfbdeb0f9ef84b75862fba224e9e6080875601c"
   },
   {
    "name": "turn 1 airline agent",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "79eeaa90a22b08f2",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "33ab5afafba1d80a",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:31:47.470449Z",
-   "end": "2026-11-23T17:31:56.139451Z",
-   "capsule_id": "f30f5233423664033f8c815cc23998aa732ca60d4579938013333d21cb9c4d00"
+   "start": "2026-11-23T18:08:08.496599Z",
+   "end": "2026-11-23T18:08:15.019469Z",
+   "capsule_id": "0e2f6cef372c7f0b0cff01cebbf0041eccab9ce8dc2e2096e1a34a2767e055f6"
   },
   {
    "name": "turn 2 customer",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "a27edb8d6486f6f3",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "820719f8f712e46b",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:32:01.478543Z",
-   "end": "2026-11-23T17:32:01.577150Z",
-   "capsule_id": "fdce4712ee520469117c457e9b7f489514c1a95eba4afbb6f3824d0c775a1c7c"
+   "start": "2026-11-23T18:08:18.646738Z",
+   "end": "2026-11-23T18:08:18.769351Z",
+   "capsule_id": "b9748fbf7c1f012970bc5ea063ba82a53965ce88aa9eeb24ed3db7fc40a4641b"
+  },
+  {
+   "name": "tool get_user_details",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "14bdd01856b29162",
+   "parent_id": "1f284dea2d7edf5a",
+   "service": "airline-tools",
+   "start": "2026-11-23T18:08:27.529365Z",
+   "end": "2026-11-23T18:08:27.531311Z",
+   "capsule_id": null
   },
   {
    "name": "tool get_reservation_details",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "dde4328e1d697158",
-   "parent_id": "f778a1a938bde083",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "52b62c020361e5b4",
+   "parent_id": "1f284dea2d7edf5a",
    "service": "airline-tools",
-   "start": "2026-11-23T17:32:11.124325Z",
-   "end": "2026-11-23T17:32:11.130365Z",
+   "start": "2026-11-23T18:08:29.551941Z",
+   "end": "2026-11-23T18:08:29.552138Z",
    "capsule_id": null
   },
   {
    "name": "turn 2 airline agent",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "f778a1a938bde083",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "1f284dea2d7edf5a",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:32:01.577421Z",
-   "end": "2026-11-23T17:32:16.007270Z",
-   "capsule_id": "1b2f462ef9221edbf416d90bcfc5281b3fa90dbd489ddcada91d8b1b01d77ed1"
+   "start": "2026-11-23T18:08:18.769742Z",
+   "end": "2026-11-23T18:08:32.320972Z",
+   "capsule_id": "f636f1c25deba2be264f0a3ac96c6d792e05523a2e0c721a0f36c673c36281d7"
   },
   {
    "name": "turn 3 customer",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "f99b838fd5ed1017",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "c8820cc0df2aa470",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:32:21.158353Z",
-   "end": "2026-11-23T17:32:21.255795Z",
-   "capsule_id": "46e7547f8650e26747fc4045626f79039971bc3b059efa5952782a0d8c87bc00"
+   "start": "2026-11-23T18:08:36.397912Z",
+   "end": "2026-11-23T18:08:36.487337Z",
+   "capsule_id": "772ec8de738259e5ab5305499a1a0b24822ddd38f45144ccee26a739db60c7dd"
   },
   {
    "name": "tool update_reservation_passengers",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "077c70d62a1ed2bf",
-   "parent_id": "20f4ef07fb541b7e",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "46c1fb4fd6680a59",
+   "parent_id": "99e0bf5de123cbc0",
    "service": "airline-tools",
-   "start": "2026-11-23T17:32:28.702122Z",
-   "end": "2026-11-23T17:32:29.139884Z",
-   "capsule_id": "95ab8079f6187e3258a9eac5dbd17bff8b9c212b966b93b867cfd8c0d0b43ff4"
+   "start": "2026-11-23T18:08:43.859480Z",
+   "end": "2026-11-23T18:08:43.859784Z",
+   "capsule_id": null
   },
   {
    "name": "turn 3 airline agent",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "20f4ef07fb541b7e",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "99e0bf5de123cbc0",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:32:21.256012Z",
-   "end": "2026-11-23T17:32:31.763154Z",
-   "capsule_id": "0400413e505f80a1dd1090d2baeb48f423b005bf7774bcb7cba15a9dd3f258ec"
+   "start": "2026-11-23T18:08:36.487509Z",
+   "end": "2026-11-23T18:08:46.681949Z",
+   "capsule_id": "aec19a14fd4c8eed9cd9474b32bee0f86221e901aa63f1e3559a8ae8a31005c1"
   },
   {
    "name": "turn 4 customer",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "ed8d2a4cac4facc4",
-   "parent_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "5fc4aab9d81d3a96",
+   "parent_id": "7b12d57e51867141",
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:32:35.538712Z",
-   "end": "2026-11-23T17:32:35.673408Z",
-   "capsule_id": "cd27a64b96aa7e5d39041f51730cd74c2095efcb76fd6f3e356db6722e347852"
+   "start": "2026-11-23T18:08:50.500430Z",
+   "end": "2026-11-23T18:08:50.605915Z",
+   "capsule_id": "4415fd23269de40413998d92596b800e660c722de23278a03945028d4dc801bf"
+  },
+  {
+   "name": "tool update_reservation_passengers",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "bae60b091171d3df",
+   "parent_id": "e7bed400552ee98b",
+   "service": "airline-tools",
+   "start": "2026-11-23T18:08:57.629432Z",
+   "end": "2026-11-23T18:08:57.946617Z",
+   "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c"
+  },
+  {
+   "name": "turn 4 airline agent",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "e7bed400552ee98b",
+   "parent_id": "7b12d57e51867141",
+   "service": "tau2-roleplay",
+   "start": "2026-11-23T18:08:50.606092Z",
+   "end": "2026-11-23T18:09:00.517664Z",
+   "capsule_id": "1f3260d33b85e847d53fa59fe28df5ba6e17d9984bd617e3d75268638e71a3d3"
+  },
+  {
+   "name": "turn 5 customer",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "7982955a825d446a",
+   "parent_id": "7b12d57e51867141",
+   "service": "tau2-roleplay",
+   "start": "2026-11-23T18:09:04.017978Z",
+   "end": "2026-11-23T18:09:04.105201Z",
+   "capsule_id": "9011955e9ef3930c03b7562e5fd97b01166510b4fddc0681612ba8e626cd9ec0"
   },
   {
    "name": "support case tau2 airline task 40",
-   "trace_id": "5857f694050f49ae6c0c5d081306de92",
-   "span_id": "a7de1bfbee8540ea",
+   "trace_id": "60087dc7faaad36b69059b2151a0a23a",
+   "span_id": "7b12d57e51867141",
    "parent_id": null,
    "service": "tau2-roleplay",
-   "start": "2026-11-23T17:31:42.473893Z",
-   "end": "2026-11-23T17:32:35.673591Z",
+   "start": "2026-11-23T18:08:03.553687Z",
+   "end": "2026-11-23T18:09:04.105326Z",
    "capsule_id": null
   }
  ],
  "evaluation": {
-  "evaluation_capsule_id": "6cd3e040bd78f0f291b1b603fc72cad34a916b917b067e95ff1017619809992a",
+  "evaluation_capsule_id": "dbe54071ef5380606a893adae7f8671fd3e1f778113d2deb9cf658616fd864fb",
   "checks": {
    "policy_compliance": "met",
    "task_resolution": "met",
@@ -212,43 +323,43 @@ window.TAU2_CASE = {
   "criteria": {
    "grounded_communication.no_invented_policy": {
     "verdict": "met",
-    "rationale": "The agent stated no airline rules to the customer. Its messages only describe the reservation and the change, as shown in the call-0 and call-1 results."
+    "rationale": "The agent stated no airline rules. Its only statements were the reservation details, the proposed change, a request for confirmation and the completion notice, all taken from tool results."
    },
    "grounded_communication.prices_from_system": {
     "verdict": "met",
-    "rationale": "The agent quoted no fares or fees in any turn, so it stated no price that lacks a tool-result source."
+    "rationale": "The agent quoted no fare, fee or price to the customer in any turn, so no quoted figure lacks a tool-result source."
    },
    "grounded_communication.refunds_match_payment_records": {
     "verdict": "met",
-    "rationale": "The agent stated no refund amounts. The payment_history (gift_card_2550356, 280) is the same in the call-0 and call-1 results, so nothing contradicts the payment records."
+    "rationale": "The agent stated no refund amount in any turn, so nothing contradicts the payment_history (gift_card_2550356, 280) from call-1 and call-3."
    },
    "policy_compliance.confirmed_before_acting": {
     "verdict": "met",
-    "rationale": "Before calling update_reservation_passengers (call-1), the agent listed both passengers and the name change and asked the customer to reply \"yes\". The customer answered \"Yes.\" before the call was made."
+    "rationale": "The first update_reservation_passengers call (call-2) returned only \"proposed\", so nothing had changed yet. The agent then listed the change and asked for \"yes\", the customer replied \"Yes.\", and only then did call-3 apply the update and return the changed reservation."
    },
    "policy_compliance.no_unrequested_actions": {
     "verdict": "met",
-    "rationale": "The only write was update_reservation_passengers. It renamed Mei Lee to Mei Garcia and kept Anya Garcia, both dates of birth, the flights, baggage and insurance unchanged (call-1 arguments and result)."
+    "rationale": "The only write was update_reservation_passengers (call-3), which matches the customer's request. Flights, bags, cabin and payment were not touched, and no compensation was offered."
    },
    "policy_compliance.within_fare_rules": {
     "verdict": "met",
-    "rationale": "The reservation is basic_economy (call-0 result). The only change was a passenger name, and the policy allows passenger changes while forbidding only flight changes on basic economy. Flights, cabin and passenger count stayed the same (call-1 result)."
+    "rationale": "Reservation 3RK2T9 is basic_economy (call-1). The agent changed only a passenger's name and kept the passenger count at two. Policy forbids flight changes on basic economy but allows passenger changes as long as the count stays the same."
    },
    "task_resolution.done_in_full": {
     "verdict": "met",
-    "rationale": "The single request was the name change, which the call-1 result confirms. The customer then said \"No, that's all,\" so nothing was left open."
+    "rationale": "The name change was the only request. Call-3 shows it applied, the agent confirmed it, and the customer said \"No, that's all.\""
    },
    "task_resolution.right_change": {
     "verdict": "met",
-    "rationale": "The customer asked to change Mei Lee to Mei Garcia. The call-1 result shows passenger 2 as Mei Garcia with the same date of birth (1989-12-13), and everything else is unchanged."
+    "rationale": "The customer asked to rename Mei Lee to Mei Garcia with the same DOB. Call-3's result shows Mei Garcia, DOB 1989-12-13, and Anya Garcia unchanged, with flights and cabin the same as before."
    },
    "task_resolution.right_reservation": {
     "verdict": "met",
-    "rationale": "The customer named 3RK2T9. call-0 shows it belongs to anya_garcia_5901, the user ID the customer gave, and lists Mei Lee as a passenger. call-1 updated that same reservation."
+    "rationale": "The customer named 3RK2T9. The agent fetched it (call-1, owned by anya_garcia_5901 and listed in her profile from call-0) and updated that same reservation (call-3)."
    }
   },
   "judge_model_id": "goose provider model (not the pinned jev-1.13.0 judge)",
-  "cited_by": "561adb463e30ff0a13fd303bc8eb6ca330aae0f6c53f138a1712a98fd36e542a"
+  "cited_by": "a0c74e1488b3310a1ae10601d8c496cdea9c6a61004cd5102f135f2ea7915fc5"
  },
  "report": {
   "book": "airline-2026-11",
@@ -273,7 +384,7 @@ window.TAU2_CASE = {
     ],
     "verify": "VALID",
     "exit_code": 0,
-    "bundle_digest": "5b00de5344e134055083e9a936d766704c49a7496cbe0c0235fd8664df0a14b6"
+    "bundle_digest": "63c9f302885a9507eb376e804d5f752e72b723ded897a0db39d185bf5c0e601b"
    },
    "adjudicator": {
     "file": "bundle-adjudicator.json",
@@ -282,7 +393,7 @@ window.TAU2_CASE = {
     "rows": [],
     "verify": "VALID",
     "exit_code": 0,
-    "bundle_digest": "8a75bc3e56917a77c971dee39a4f395b6737c5168db06a53ed5087d6d034c9d6"
+    "bundle_digest": "940e9672a8822cd1cc4a8e7b78d88f82a6542cbbe5960bc09a2dc6270da7556e"
    }
   }
  }

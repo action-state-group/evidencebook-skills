@@ -5,12 +5,14 @@ The tools are tau2-bench's own ``AirlineTools`` (MIT, Sierra Research; pinned in
 pyproject.toml) over this case's copy of the booking database, so a write changes
 only the case's copy. Two things are added around each call:
 
-- **The policy gate.** tau2's airline policy says the agent must obtain the
-  customer's explicit "yes" before any booking-database change. A write tool runs
-  only when the customer's latest sealed message is such a confirmation and has not
-  already been used for another write; the airline's ``deal check`` reads it, then
-  the write runs, then ``deal perform`` seals the act. Without it the tool changes
-  nothing and tells the agent to read the action back and ask.
+- **The policy gate.** tau2's airline policy says the agent must list the action and
+  obtain the customer's explicit "yes" before any booking-database change. A write
+  call first records the exact action (tool and arguments) as pending and changes
+  nothing: the agent reads it to the customer. The write runs only when it is called
+  again with exactly those arguments and the customer's latest sealed message, sealed
+  after the action was proposed, is an explicit yes not yet used for another write.
+  The airline's ``deal check`` reads that yes, then the write runs, then ``deal
+  perform`` seals the act. A yes binds to one proposed action and authorizes it once.
 - **The OTel span.** Each call is a span in the case's trace, a child of the
   current turn's span (roleplay.py writes its ``traceparent`` to the case directory). A sealed act's capsule id is stamped on the span with
   capsule-emit's ``stamp_reverse_join`` before the span ends: the span carries a
@@ -25,6 +27,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,6 +35,7 @@ import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
+from opentelemetry.trace import StatusCode
 
 import records
 import telemetry
@@ -49,9 +53,17 @@ def as_text(result: object) -> str:
     return result if isinstance(result, str) else json.dumps(result)
 
 
+HEDGE = re.compile(r"\b(no|not|don't|do not|wait|stop|later|instead|but|rather|unless)\b", re.IGNORECASE)
+
+
 def confirmed(text: str) -> bool:
-    """Is a customer message an explicit confirmation? A 'no' anywhere voids it."""
-    return bool(CONFIRM.search(text)) and not re.search(r"\b(no|don't|do not|wait|stop)\b", text, re.IGNORECASE)
+    """Is a customer message an explicit, unconditional confirmation? A yes with any
+    negation, condition or change in it ("yes, but...", "not yet") is not one."""
+    return bool(CONFIRM.search(text)) and not HEDGE.search(text)
+
+
+def canonical(arguments: dict) -> str:
+    return json.dumps(arguments, sort_keys=True, separators=(",", ":"))
 
 
 class Airline:
@@ -75,20 +87,36 @@ class Airline:
             out.append(types.Tool(name=name, description=fn.get("description", ""), inputSchema=fn["parameters"]))
         return out
 
+    def reload(self) -> None:
+        from tau2.domains.airline.data_model import FlightDB
+        from tau2.domains.airline.tools import AirlineTools
+
+        self.db = FlightDB.load(str(self.db_path))
+        self.tools = AirlineTools(self.db)
+
     def writes(self, name: str) -> bool:
         return self.tools.tool_type(name).value == "write"
 
-    def confirmation(self) -> dict | None:
-        """The customer's latest sealed message, if it confirms and is not yet used."""
-        path = self.case_dir / "last_customer.json"
-        if not path.exists():
+    def confirmation(self, name: str, arguments: dict) -> dict | None:
+        """The customer's yes to exactly this action: the latest sealed customer message,
+        an explicit yes, not yet used, and sealed after this action was proposed."""
+        pending_path, path = self.case_dir / "pending_action.json", self.case_dir / "last_customer.json"
+        if not pending_path.exists() or not path.exists():
+            return None
+        pending = json.loads(pending_path.read_text())
+        if pending["tool"] != name or pending["arguments"] != canonical(arguments):
             return None
         msg = json.loads(path.read_text())
         used = self.case_dir / "used_confirmations.json"
         spent = set(json.loads(used.read_text())) if used.exists() else set()
-        if msg["capsule_id"] in spent or not confirmed(msg["text"]):
+        if msg["capsule_id"] in spent or not confirmed(msg["text"]) or msg.get("at_ns", 0) <= pending["at_ns"]:
             return None
         return msg
+
+    def propose(self, name: str, arguments: dict) -> None:
+        """Record the exact action the agent must read to the customer."""
+        (self.case_dir / "pending_action.json").write_text(json.dumps(
+            {"tool": name, "arguments": canonical(arguments), "at_ns": time.time_ns()}))
 
     def spend(self, capsule_id: str) -> None:
         used = self.case_dir / "used_confirmations.json"
@@ -96,7 +124,7 @@ class Airline:
         used.write_text(json.dumps(spent + [capsule_id]))
 
     def log(self, entry: dict, span=None) -> None:
-        entry = dict(entry, at=records.utc(datetime.now(timezone.utc)))
+        entry = dict(entry, at=records.utc(datetime.now(timezone.utc)), at_ns=time.time_ns())
         if span is not None:
             ctx = span.get_span_context()
             entry.update(trace_id=format(ctx.trace_id, "032x"), span_id=format(ctx.span_id, "016x"))
@@ -111,12 +139,14 @@ class Airline:
                 result = as_text(self.tools.use_tool(name, **arguments))
                 self.log({"tool": name, "arguments": arguments, "result": result, "kind": "read"}, span)
                 return result
-            conf = self.confirmation()
+            conf = self.confirmation(name, arguments)
             if conf is None:
-                span.set_attribute("tau2.gate", "refused")
-                self.log({"tool": name, "arguments": arguments, "kind": "write", "gate": "refused"}, span)
-                return ("Not done: the airline policy needs the customer's explicit 'yes' to this exact "
-                        "action first. List the action details to the customer and ask them to confirm.")
+                self.propose(name, arguments)
+                span.set_attribute("tau2.gate", "proposed")
+                self.log({"tool": name, "arguments": arguments, "kind": "write", "gate": "proposed"}, span)
+                return ("Not done yet: this action is now pending the customer's confirmation. Read it to the "
+                        "customer exactly and ask for an explicit yes; after they say yes, call "
+                        f"{name} again with exactly the same arguments: {canonical(arguments)}")
             check = self.case.check(name, arguments, conf)
             if check.get("verdict") != "pass":
                 span.set_attribute("tau2.gate", "check_" + str(check.get("verdict")))
@@ -125,15 +155,25 @@ class Airline:
             try:
                 result = as_text(self.tools.use_tool(name, **arguments))
             except Exception as err:  # the tool refused (tau2 raises ValueError on bad input)
+                self.reload()  # a tool that failed halfway may have changed the in-memory database
                 self.log({"tool": name, "arguments": arguments, "kind": "write", "error": str(err)}, span)
                 return f"Error: {err}"
             self.db.dump(str(self.db_path))
             self.spend(conf["capsule_id"])
-            act = self.case.perform(check["check_id"], name)
+            (self.case_dir / "pending_action.json").unlink(missing_ok=True)
+            try:
+                act = self.case.perform(check["check_id"], name)
+            except records.RecordError as err:
+                span.set_status(StatusCode.ERROR, "perform not sealed")
+                self.log({"tool": name, "arguments": arguments, "result": result, "kind": "write",
+                          "confirmation": conf["capsule_id"], "check": check["check_id"], "perform_error": str(err)}, span)
+                return ("The change was made but could not be recorded. Tell the customer, make no other change, "
+                        f"and transfer to a human agent. ({err})")
             telemetry.stamp(span, act["capsule_id"])
             span.set_attribute("tau2.gate", "passed")
             self.log({"tool": name, "arguments": arguments, "result": result, "kind": "write",
-                      "confirmation": conf["capsule_id"], "check": check["check_id"], "perform": act["capsule_id"]}, span)
+                      "confirmation": conf["capsule_id"], "check": check["check_id"], "perform": act["capsule_id"],
+                      "person_signature": act.get("person_signature")}, span)
             return result
 
 

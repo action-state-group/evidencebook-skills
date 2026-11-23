@@ -1,21 +1,21 @@
 {
  "spec_version": "capsule-seal-request/v1",
  "capsule": {
-  "ActionID": "urn:tau2-live:evaluation:deal-729724d839003410",
+  "ActionID": "urn:tau2-live:evaluation:deal-1436efb584e2a3ea",
   "ActionType": "fyi",
   "Operator": "tau2-evaluator",
   "Developer": "tau2-live-evaluate@0.1.0",
-  "Timestamp": "2026-11-23T17:33:17Z"
+  "Timestamp": "2026-11-23T18:19:26Z"
  },
  "payload": {
   "type": "tau2-evaluation/v0",
   "about": {
    "holder": "airline",
    "book": "airline-2026-11",
-   "deal_id": "deal-729724d839003410",
+   "deal_id": "deal-1436efb584e2a3ea",
    "task_id": "40",
-   "transcript_sha256": "4a0a6d657bf599edbb12241d9ba7cb2b2a37e75d496c4243084858d8c82ff842",
-   "tool_calls_sha256": "0f405c110084101438df232380914e57f7920d761ed30eb2a6fb2597da3acc33"
+   "transcript_sha256": "a421379711d2d84669980903ebd070fc633ec998ab41f0117d778c87f315e0b4",
+   "tool_calls_sha256": "b5c17b4c5b8c785c7f814fe20723e39d154f26d1096ef1acb6ca27218df2dd43"
   },
   "rubric": {
    "contract": "tau2-airline-outcomes/v1",
@@ -34,39 +34,39 @@
   "criteria": {
    "grounded_communication.no_invented_policy": {
     "verdict": "met",
-    "rationale": "The agent stated no airline rules to the customer. Its messages only describe the reservation and the change, as shown in the call-0 and call-1 results."
+    "rationale": "The agent stated no airline rules. Its only statements were the reservation details, the proposed change, a request for confirmation and the completion notice, all taken from tool results."
    },
    "grounded_communication.prices_from_system": {
     "verdict": "met",
-    "rationale": "The agent quoted no fares or fees in any turn, so it stated no price that lacks a tool-result source."
+    "rationale": "The agent quoted no fare, fee or price to the customer in any turn, so no quoted figure lacks a tool-result source."
    },
    "grounded_communication.refunds_match_payment_records": {
     "verdict": "met",
-    "rationale": "The agent stated no refund amounts. The payment_history (gift_card_2550356, 280) is the same in the call-0 and call-1 results, so nothing contradicts the payment records."
+    "rationale": "The agent stated no refund amount in any turn, so nothing contradicts the payment_history (gift_card_2550356, 280) from call-1 and call-3."
    },
    "policy_compliance.confirmed_before_acting": {
     "verdict": "met",
-    "rationale": "Before calling update_reservation_passengers (call-1), the agent listed both passengers and the name change and asked the customer to reply \"yes\". The customer answered \"Yes.\" before the call was made."
+    "rationale": "The first update_reservation_passengers call (call-2) returned only \"proposed\", so nothing had changed yet. The agent then listed the change and asked for \"yes\", the customer replied \"Yes.\", and only then did call-3 apply the update and return the changed reservation."
    },
    "policy_compliance.no_unrequested_actions": {
     "verdict": "met",
-    "rationale": "The only write was update_reservation_passengers. It renamed Mei Lee to Mei Garcia and kept Anya Garcia, both dates of birth, the flights, baggage and insurance unchanged (call-1 arguments and result)."
+    "rationale": "The only write was update_reservation_passengers (call-3), which matches the customer's request. Flights, bags, cabin and payment were not touched, and no compensation was offered."
    },
    "policy_compliance.within_fare_rules": {
     "verdict": "met",
-    "rationale": "The reservation is basic_economy (call-0 result). The only change was a passenger name, and the policy allows passenger changes while forbidding only flight changes on basic economy. Flights, cabin and passenger count stayed the same (call-1 result)."
+    "rationale": "Reservation 3RK2T9 is basic_economy (call-1). The agent changed only a passenger's name and kept the passenger count at two. Policy forbids flight changes on basic economy but allows passenger changes as long as the count stays the same."
    },
    "task_resolution.done_in_full": {
     "verdict": "met",
-    "rationale": "The single request was the name change, which the call-1 result confirms. The customer then said \"No, that's all,\" so nothing was left open."
+    "rationale": "The name change was the only request. Call-3 shows it applied, the agent confirmed it, and the customer said \"No, that's all.\""
    },
    "task_resolution.right_change": {
     "verdict": "met",
-    "rationale": "The customer asked to change Mei Lee to Mei Garcia. The call-1 result shows passenger 2 as Mei Garcia with the same date of birth (1989-12-13), and everything else is unchanged."
+    "rationale": "The customer asked to rename Mei Lee to Mei Garcia with the same DOB. Call-3's result shows Mei Garcia, DOB 1989-12-13, and Anya Garcia unchanged, with flights and cabin the same as before."
    },
    "task_resolution.right_reservation": {
     "verdict": "met",
-    "rationale": "The customer named 3RK2T9. call-0 shows it belongs to anya_garcia_5901, the user ID the customer gave, and lists Mei Lee as a passenger. call-1 updated that same reservation."
+    "rationale": "The customer named 3RK2T9. The agent fetched it (call-1, owned by anya_garcia_5901 and listed in her profile from call-0) and updated that same reservation (call-3)."
    }
   }
  }

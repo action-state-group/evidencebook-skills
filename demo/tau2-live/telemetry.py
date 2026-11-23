@@ -3,11 +3,12 @@
 
 The orchestrator and each airline tool server process append their ended spans
 to the case's ``spans.jsonl`` (the SDK's own span JSON, one per line). A tool
-server joins the case's trace through ``TRACEPARENT`` (W3C trace context).
+server joins the case's trace through the W3C ``traceparent`` the orchestrator
+writes to the case directory for the current turn.
 
 The only capsule link a span carries is ``aac.capsule_id``, set by capsule-emit's
 ``stamp_reverse_join`` while the span is still open; the record itself stays in
-the airline's book. No collector is involved ([capsule-otel-v0] is on hold).
+the airline's book. Spans also carry plain attributes such as the tool name. Nothing reads OTel back into books.
 """
 from __future__ import annotations
 

@@ -4,9 +4,10 @@
 One support case is one x-deal-v1 deal (Sherlock2's what confirmation on #219,
 buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=aa77b7d21f027f70cc1555f451b3acf98da6e74b7f37a361479f0063702607ae):
 
-- the airline offers to a customer who keeps no records of its own (``to: null``)
+- the airline offers to a customer who keeps no signed records of its own (``to: null``)
   and agrees alone; the rows are the three checks of the tau2 airline rubric,
-  owed by the airline;
+  owed by the airline and due a week after the case opens;
+- a case stays in the window book it opened in, even if it runs past the window's end;
 - every turn of the conversation is a ``message`` in the airline's journal;
 - a database-changing tool call is a ``perform`` resting on a passing ``deal
   check`` whose snapshot quotes the customer's sealed confirmation. The customer's
@@ -137,8 +138,8 @@ def offer_input(task_id: str, judge_key: str, now: datetime) -> dict:
     """The airline's offer for one case: the rubric's three checks as rows it owes."""
     rubric = sha256_file(RUBRIC)
     rows = [{"id": check, "owed_by": "seller", "owed": {"check": check},
-             "due": {"at": utc(now + timedelta(hours=1))},
-             "window_end": {"at": utc(now + timedelta(days=1))}} for check in CHECKS]
+             "due": {"at": utc(now + timedelta(days=7))},
+             "window_end": {"at": utc(now + timedelta(days=14))}} for check in CHECKS]
     return {
         "role": "seller", "to": None,
         "terms": {"item": "airline support case", "conditions": {"case": f"tau2 airline task {task_id}"}},
@@ -163,8 +164,8 @@ def open_case(store: Store, task_id: str, judge_key: str, now: datetime | None =
     """Offer, admit, intend and agree: the case's deal book opens with the agreement."""
     now = now or datetime.now(timezone.utc)
     book = store.book(now)
-    case_dir = store.state / "cases" / f"{book}-task-{task_id}-{now.strftime('%H%M%S')}"
-    case_dir.mkdir(parents=True, exist_ok=True)
+    case_dir = store.state / "cases" / f"{book}-task-{task_id}-{now.strftime('%H%M%S')}-{os.urandom(2).hex()}"
+    case_dir.mkdir(parents=True)
     case = Case(store, book, "", case_dir)
     offer = store.run("deal", "offer", "--input", str(case.write("offer-in.json", offer_input(task_id, judge_key, now))),
                       "--out", str(case_dir / "offer.json"), profile=book)
@@ -183,8 +184,26 @@ def open_case(store: Store, task_id: str, judge_key: str, now: datetime | None =
                                                                     "recourse": {"rail": "none", "refundable": False}})),
                        profile=book)
     store.run("deal", "agree", offer["offer"], "--intent", intent["intent"], "--out", str(case_dir / "agree.json"), profile=book)
-    case.write("case.json", {"book": book, "deal_id": case.deal_id, "task_id": task_id, "opened_at": utc(now)})
+    case.write("case.json", {"book": book, "deal_id": case.deal_id, "task_id": task_id, "opened_at": utc(now),
+                             "status": "open"})
     return case
+
+
+def set_status(case_dir: Path, status: str, error: str | None = None) -> None:
+    """Mark how the role-play ended: complete, stopped (Ctrl-C) or error."""
+    path = case_dir / "case.json"
+    meta = json.loads(path.read_text())
+    meta["status"] = status
+    if error:
+        meta["error"] = error[-1000:]
+    path.write_text(json.dumps(meta, indent=1) + "\n")
+
+
+def require_complete(case_dir: Path, allow_incomplete: bool) -> None:
+    """evaluate.py and report.py work on a finished case unless told otherwise."""
+    status = json.loads((case_dir / "case.json").read_text()).get("status")
+    if status != "complete" and not allow_incomplete:
+        raise SystemExit(f"case {case_dir.name} did not complete (status {status!r}); pass --allow-incomplete to use it anyway")
 
 
 def load_case(store: Store, case_dir: Path) -> Case:

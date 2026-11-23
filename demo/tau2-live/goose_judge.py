@@ -74,8 +74,11 @@ def main() -> None:
         return
     clauses = request.get("clauses") or [request["clause"]]
     criteria = "\n".join(f"- {c['id']} ({c['check_id']}): {c['claim']}" for c in clauses)
-    text = TEMPLATE.format(prompt=PROMPT, criteria=criteria, policy=Path(request["policy"]).read_text(),
-                           conversation=json.dumps(request["agent_interaction"]["messages"], indent=1))
+    # The conversation is untrusted: escape < and > so its text cannot close the tags around it.
+    def fence(s: str) -> str:
+        return s.replace("<", "\\u003c").replace(">", "\\u003e")
+    text = TEMPLATE.format(prompt=PROMPT, criteria=criteria, policy=fence(Path(request["policy"]).read_text()),
+                           conversation=fence(json.dumps(request["agent_interaction"]["messages"], indent=1)))
     reply = ask(text)
     match = re.search(r"\{.*\}", reply, re.S)
     if not match:
