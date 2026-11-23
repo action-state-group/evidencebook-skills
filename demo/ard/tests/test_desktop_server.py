@@ -157,3 +157,47 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
     assert "REFUSED:" in failed and "could not run" in failed and "Nothing was paid" in failed
     assert tools._session.run.rail.paid == [2000]
     assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
+
+
+@pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
+def test_a_declined_payment_dialog_on_a_second_order_keeps_the_seller_paid_and_an_approved_hold_pays(tools, monkeypatch):
+    s = tools._session
+    assert s.run.rail.paid == [2000] and "alder" in s.paid
+    monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
+    # the presenter cancels the payment dialog of the second order: nothing started, the first order still counts as paid
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
+    assert "the presenter did not approve" in tools.ard_pay("alder")
+    assert "alder" in s.paid and "alder" not in s.attempted and s.run.rail.paid == [2000]
+    # the next call opens no dialog (it hands the agent the question), and still leaves the seller paid
+    assert "opens no dialog" in tools.ard_pay("alder") and "alder" in s.paid
+    # now the person clicks Pay, the rules hold the order, and the person approves: the payment goes on
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
+    monkeypatch.setattr(tools, "approve_hold", lambda summary: True)
+    tools.ard_pay("alder")
+    assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
+
+
+def test_a_declined_or_failed_order_on_the_multi_window_path_leaves_no_deal_id_behind(monkeypatch):
+    import types
+
+    import rules as rules_module
+
+    seen = types.SimpleNamespace(opened=[])
+    s = types.SimpleNamespace(assessed={"alder": types.SimpleNamespace(price_msat=2000)}, bworld=types.SimpleNamespace(nodes={"alder": object()}),
+                              run=types.SimpleNamespace(maya=object(), rail=types.SimpleNamespace(SEALED="simulated"), banner="x"),
+                              picked={"alder": "pick"}, deal_ids=["deal-earlier"], paid=set())
+    monkeypatch.setattr(tools_module(), "ROLE", "maya")
+    monkeypatch.setattr(tools_module().buyer, "open_deal", lambda *a, **k: types.SimpleNamespace(deal_id="deal-new"))
+    for stopped in (rules_module.RuleHeld("held", ["why"]), rules_module.RulesError("could not run")):
+        def buyer_deal(*a, _stopped=stopped, **k):
+            raise _stopped
+        monkeypatch.setattr(tools_module().parties, "buyer_deal", buyer_deal)
+        with pytest.raises(type(stopped)):
+            tools_module()._pay(s, "alder", 2000)
+        assert s.deal_ids == ["deal-earlier"] and s.paid == set()
+
+
+def tools_module():
+    import desktop_server
+
+    return desktop_server

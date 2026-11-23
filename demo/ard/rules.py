@@ -216,7 +216,13 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
     node.seal(chain, pay_check(chain, at))
     outcome = check(node, chain, len(node.deal_payloads(chain.deal_id)) - 1, limit)
     if outcome.held:
-        outcome.decision = "approved" if approve is not None and approve(outcome) else "declined"
+        try:
+            ok = approve is not None and bool(approve(outcome))
+        except Exception as exc:  # the question could not be put: nothing is paid and the order is not approved
+            outcome.decision = "declined"
+            seal_note(node, chain.deal_id, outcome)
+            raise RulesError(f"the person could not be asked about the held order: {type(exc).__name__}: {exc}") from None
+        outcome.decision = "approved" if ok else "declined"
     seal_note(node, chain.deal_id, outcome)
     if outcome.decision == "declined":
         raise RuleHeld("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons), outcome.reasons)

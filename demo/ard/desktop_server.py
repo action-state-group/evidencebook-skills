@@ -310,33 +310,38 @@ def ard_pay(seller: str) -> None:
             s.paid.discard(key)
             s.attempted.discard(key)
             print(f"a second order to {SELLERS[key]['label']}: the deal check will run the Everyday Rules under your limit")
-        if key in s.paid:
-            raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
-        if key in s.attempted:
-            raise RuntimeError(f"a payment to {SELLERS[key]['label']} was already attempted in this run and is not confirmed: "
-                               "check the wallet before trying again")
-        rail_name = os.environ.get("ARD_RAIL", "fake")
-        real = rail_name in ("lightning", "local")
-        label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
-        shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
-        summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
-                   else f"Pay {label} {amount} on the simulated rail: no money moves.")
-        if key in s.declined:
-            # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
-            # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
-            # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
-            # call opens the dialog again, and the presenter's click stays the gate.
-            s.declined.discard(key)
-            raise RuntimeError(
-                f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
-                f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
-                + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
-                "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
-        try:
-            approval_gate(real, rail_name, summary)
-        except NotApproved:
-            s.declined.add(key)
+        try:  # nothing is paid until the lines below pass: a refusal here restores a paid seller the second order lifted
+            if key in s.paid:
+                raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
+            if key in s.attempted:
+                raise RuntimeError(f"a payment to {SELLERS[key]['label']} was already attempted in this run and is not confirmed: "
+                                   "check the wallet before trying again")
+            rail_name = os.environ.get("ARD_RAIL", "fake")
+            real = rail_name in ("lightning", "local")
+            label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
+            shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
+            summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
+                       else f"Pay {label} {amount} on the simulated rail: no money moves.")
+            if key in s.declined:
+                # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
+                # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
+                # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
+                # call opens the dialog again, and the presenter's click stays the gate.
+                s.declined.discard(key)
+                raise RuntimeError(
+                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
+                    f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
+                    + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
+                    + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
+                    "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
+            try:
+                approval_gate(real, rail_name, summary)
+            except NotApproved:
+                s.declined.add(key)
+                raise
+        except BaseException:
+            if was_paid:
+                s.paid.add(key)
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
