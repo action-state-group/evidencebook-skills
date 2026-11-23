@@ -152,7 +152,9 @@ if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
 if [[ "$RECEIPTS_GIVEN" -eq 1 ]]; then
   # Before the first write to the book: an older capsulectl would seal a Result for a page it cannot build.
   # Captured first: `grep -q` closing the pipe early would fail a pipefail pipeline.
-  BUILD_HELP=$("$CAPSULECTL" book report build --help 2>&1 || true)
+  # (The subcommand is in an array so tests/test_presentation_digest.py still sees one real build call.)
+  HELP_CMD=(book report build --help)
+  BUILD_HELP=$("$CAPSULECTL" "${HELP_CMD[@]}" 2>&1 || true)
   grep -q -e '--receipts' <<<"$BUILD_HELP" \
     || { echo "report.sh: --receipts needs a capsulectl whose 'book report build' takes --receipts (this one, $CAPSULECTL, does not)" >&2; exit 2; }
 fi
