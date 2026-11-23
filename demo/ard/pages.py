@@ -5,7 +5,7 @@
 The page is capsule-viewer's History view (``history-view/v0``, capsule-viewer
 ``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.23.0/
 history-view.iife.js`` is ``dist/history-view.iife.js`` of the npm package
-``@action-state-group/capsule-viewer@0.18.0``, copied unchanged with the package's own ``.sha256`` and
+``@action-state-group/capsule-viewer@0.23.0``, copied unchanged with the package's own ``.sha256`` and
 licences, and :data:`VIEWER_SHA256` pins it. The view draws and never verifies: the party builds the
 view model from its own ``standard_history/1`` card (``Node.standard_history()``) and the checks its own
 node ran, and the page inlines the script and the model, so it opens offline and fetches nothing

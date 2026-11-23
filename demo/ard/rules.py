@@ -22,7 +22,7 @@ import os
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import deal_records as dr
@@ -119,8 +119,14 @@ def _record(node, book, payloads: list[bytes], i: int) -> dict:
     return {**capsule, "agent_input": json.loads(payloads[i])}
 
 
-def _paid_acts(node, skip_deal: str) -> list[dict]:
-    """Maya's earlier ``pay`` acts on her other deals, newest first (the history the weekly limit sums)."""
+WINDOW_DAYS = 7
+MAX_HISTORY = 200
+
+
+def _paid_acts(node, skip_deal: str, now: datetime | None = None) -> list[dict]:
+    """Maya's earlier ``pay`` acts on her other deals within the last 7 days, newest first (the history the weekly limit
+    sums), at most :data:`MAX_HISTORY` of them (the input says so in its ``history_scope``)."""
+    since = (now or datetime.now(timezone.utc)) - timedelta(days=WINDOW_DAYS)
     acts = []
     for book_id in sorted(node.shelf.books()):
         if not book_id.startswith("deal/") or book_id.count("/") != 1 or book_id == f"deal/{skip_deal}":
@@ -130,8 +136,10 @@ def _paid_acts(node, skip_deal: str) -> list[dict]:
         for i, p in enumerate(payloads):
             j = json.loads(p)
             if (j.get("x-deal-v0") or {}).get("record_type") == deal.TYPE_ACTION and j.get("body", {}).get("action") == "pay":
-                acts.append((j["x-deal-v0"]["at"], _record(node, book, payloads, i)))
-    return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)]
+                at = j["x-deal-v0"]["at"]
+                if datetime.fromisoformat(at.replace("Z", "+00:00")) >= since:
+                    acts.append((at, _record(node, book, payloads, i)))
+    return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)][:MAX_HISTORY]
 
 
 def engine() -> str:
@@ -155,18 +163,24 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     payloads = node.deal_payloads(chain.deal_id)
     inp = {"schema": "external-check-input/v0", "party_role": "buyer",
            "record": _record(node, book, payloads, check_step_index), "history": _paid_acts(node, chain.deal_id),
-           "history_scope": {"days": 7, "max_records": 200, "complete": True}}
-    with tempfile.TemporaryDirectory(prefix="ard-rules-") as tmp:
-        limits = Path(tmp) / "limits.json"
-        limits.write_text(json.dumps(limits_profile(limit)))
-        run = subprocess.run([engine(), "guard", "check", "--limits", str(limits)], input=json.dumps(inp),
-                             capture_output=True, text=True, timeout=60)
-    if run.returncode != 0:
-        say = run.stderr.strip().splitlines()[-1] if run.stderr.strip() else f"exit {run.returncode}"
-        if "--limits" in run.stderr or "usage" in run.stderr:
-            raise RulesError(ENGINE_FLAG_MISSING)
-        raise RulesError(f"the deal check could not run: {say}")
-    result = json.loads(run.stdout)
+           "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": True}}
+    try:
+        with tempfile.TemporaryDirectory(prefix="ard-rules-") as tmp:
+            limits = Path(tmp) / "limits.json"
+            limits.write_text(json.dumps(limits_profile(limit)))
+            run = subprocess.run([engine(), "guard", "check", "--limits", str(limits)], input=json.dumps(inp),
+                                 capture_output=True, text=True, timeout=60)
+        if run.returncode != 0:
+            say = run.stderr.strip().splitlines()[-1] if run.stderr.strip() else f"exit {run.returncode}"
+            if "--limits" in run.stderr or "usage" in run.stderr:
+                raise RulesError(ENGINE_FLAG_MISSING)
+            raise RulesError(f"the deal check could not run: {say}")
+        result = json.loads(run.stdout)
+        result["findings"], result["ruleset_id"], result["verdict"]  # the members read below
+    except RulesError:
+        raise
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
+        raise RulesError(f"the deal check could not run: {type(exc).__name__}: {exc}") from None
     failing = [f for f in result["findings"] if f["verdict"] == "fail"]
     caps = [f for f in failing if str(f.get("check", "")).startswith("caps/")]
     reasons = [_words(f) for f in caps]

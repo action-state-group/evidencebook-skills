@@ -283,7 +283,8 @@ def ard_pay(seller: str) -> None:
         raise RuntimeError(f"no sealed pick of {SELLERS[key]['label']} within its limit: call ard_pick first")
     limit = rules.limit_msat()
     with s.pay_lock:  # a second call waits here, then sees the seller attempted or paid
-        if limit is not None and key in s.paid:
+        was_paid = limit is not None and key in s.paid
+        if was_paid:
             # With a spending limit set, a second order is the point of the show: it goes to the deal check as a new
             # deal, and the Everyday Rules decide. Without one, a seller is paid once per run, as before.
             s.paid.discard(key)
@@ -320,11 +321,17 @@ def ard_pay(seller: str) -> None:
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
         _pay(s, key, limit)
-    except rules.RuleBlocked as blocked:
-        s.attempted.discard(key)  # nothing was paid: the order may be tried again
-        print(screens.rules_blocked(blocked.reasons))
-        raise RuntimeError(f"{blocked} Nothing was paid. Tell Maya which rule stopped the order and why; do not try to pay "
-                           "around it.") from None
+    except (rules.RuleBlocked, rules.RulesError) as stopped:
+        # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
+        # (an earlier paid order stays paid, and the order may be tried again).
+        s.attempted.discard(key)
+        if was_paid:
+            s.paid.add(key)
+        if isinstance(stopped, rules.RuleBlocked):
+            print(screens.rules_blocked(stopped.reasons))
+            raise RuntimeError(f"{stopped} Nothing was paid. Tell Maya which rule stopped the order and why; do not try to "
+                               "pay around it.") from None
+        raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 
 def _pay(s, key: str, limit: int | None) -> None:
@@ -336,8 +343,12 @@ def _pay(s, key: str, limit: int | None) -> None:
     chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK, run.rail.SEALED)
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
-    payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit,
-                                 on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
+    try:
+        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit,
+                                     on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
+    except (rules.RuleBlocked, rules.RulesError):
+        s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a stopped order is not one
+        raise
     who = ("the buyer's test node paid it" if run.banner == screens.BANNER else "the buyer's wallet paid it") if run.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
     print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}"
           + screens.fee_note(payment.fee_msat, run.banner != screens.BANNER_FAKE))

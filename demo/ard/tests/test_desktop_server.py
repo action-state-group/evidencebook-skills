@@ -145,5 +145,11 @@ def test_with_a_spending_limit_a_second_order_is_stopped_at_the_deal_check_and_p
     assert "REFUSED:" in second and "Blocked at deal check, nothing paid" in second and "blocked at deal check" in second and "limit you set" in second
     assert "limit 2,000 msat" in second and "4,000 msat" in second and "Nothing was paid" in second
     assert tools._session.run.rail.paid == [2000]
-    # a blocked order is not an attempted payment: nothing to confirm in a wallet
-    assert "alder" not in tools._session.attempted
+    # a blocked order is not an attempted payment: nothing to confirm in a wallet, and the earlier order stays paid
+    assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
+    # the same when the check cannot run at all (no engine): nothing paid, the session as it was, and a retry is possible
+    monkeypatch.setenv("CAPSULE_ENGINE", "/nonexistent/capsule-engine")
+    failed = tools.ard_pay("alder")
+    assert "REFUSED:" in failed and "could not run" in failed and "Nothing was paid" in failed
+    assert tools._session.run.rail.paid == [2000]
+    assert "alder" not in tools._session.attempted and "alder" in tools._session.paid

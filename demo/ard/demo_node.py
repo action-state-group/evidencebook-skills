@@ -60,6 +60,7 @@ class DemoNode(gn.Node):
                 self._witness_tick(result.tick)
             except Exception as exc:  # the card then reads unwitnessed; never a failed run
                 self.witness_error = f"{type(exc).__name__}: {exc}"
+                print(f"(the hosted witness gave no receipt for this checkpoint: {self.witness_error}; the card reads unwitnessed)")
         return result
 
     witness_error: str | None = None

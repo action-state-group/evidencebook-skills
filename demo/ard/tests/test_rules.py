@@ -160,3 +160,27 @@ def test_the_real_everyday_rules_block_the_second_order_over_the_limit(tmp_path)
         deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("a blocked order is not paid"), limit=2000)
     assert "limit you set" in blocked.value.reasons[0] and "2,000" in blocked.value.reasons[0] and "4,000" in blocked.value.reasons[0]
     maya.close(); alder.close()
+
+
+def test_only_acts_in_the_last_seven_days_are_the_history_and_any_failure_of_the_check_is_a_rules_error(tmp_path, monkeypatch):
+    from datetime import timedelta
+
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    first = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    assert len(rules._paid_acts(maya, "deal-0000000000000000")) == 1
+    assert rules._paid_acts(maya, first) == [], "the checked deal's own acts are not history"
+    assert rules._paid_acts(maya, "deal-0000000000000000", now=datetime.now(timezone.utc) + timedelta(days=8)) == []
+    # an engine that is not there, or answers with something else, is a RulesError (nothing is paid)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(tmp_path / "missing"))
+    with pytest.raises(rules.RulesError, match="could not run"):
+        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    garbage = tmp_path / "garbage"
+    garbage.write_text(f"#!{sys.executable}\nimport sys; sys.stdin.read(); print('not json')\n")
+    garbage.chmod(garbage.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(garbage))
+    with pytest.raises(rules.RulesError, match="could not run"):
+        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    maya.close(); alder.close()

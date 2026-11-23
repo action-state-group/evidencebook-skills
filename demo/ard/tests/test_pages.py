@@ -167,6 +167,16 @@ def test_the_view_draws_the_named_witness_on_each_witnessed_row():
     assert html_.count("by Action State&#39;s hosted witness") + html_.count("by Action State's hosted witness") == 3
 
 
+def test_the_card_page_reads_the_witness_slot_from_a_node_that_holds_a_receipt_for_the_anchor_tick():
+    from datetime import datetime, timezone
+
+    tick = SimpleNamespace(at=datetime(2026, 11, 23, 16, 31, tzinfo=timezone.utc))
+    held = SimpleNamespace(witnessed_tick=lambda n: tick if n == 7 else None)
+    assert pages._witnessed(held, {"tick": 7}) == {"by": "Action State's hosted witness", "at": "2026-11-23T16:31:00Z"}
+    assert pages._witnessed(held, {"tick": 8}) is None
+    assert pages._witnessed(SimpleNamespace(), {"tick": 7}) is None
+
+
 def test_a_witnessed_card_page_says_the_witness_is_ours():
     card = {"outcomes": {"of": 3, "did_not_hold": 0}}
     assert pages.labels(card, "fake", True, False, "Alder", witnessed=True) == [pages.WITNESS_NOTE]
