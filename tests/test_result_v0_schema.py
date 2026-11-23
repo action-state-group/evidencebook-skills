@@ -1,8 +1,8 @@
 """Results built by scripts/result_v0.py validate against AAC's evidence-result-v0 schema.
 
 tests/fixtures/evidence-result-v0.json is a byte copy of agent-action-capsule's
-`schemas/evidence-result-v0.json` at commit `9d653f41419d2d2bac4714137b763315947ec754`,
-SHA-256 `2776a4441b3ee2e3a9c30fe63c008efdebc5bf6450cdaf0a422ec6b5586352e4`. Section 8a
+`schemas/evidence-result-v0.json` at commit `5c8f6f8ccd7ed9b6b74a3b7d94e937761f9cc4f7` (the claim member `reason`, section 4.4),
+SHA-256 `a6a9d9780daea831567974208642c97c99cd3af75865ae828a2eeb2e1ac3b6d8`. Section 8a
 admits a claim member outside the schema's own set only when its name begins with `x-`;
 the judge pin and rule id ride in `x-judge-pin` (producer-private content).
 """
@@ -21,7 +21,7 @@ from result_v0 import build_result_v0  # noqa: E402
 from rollup import all_criteria_from_clauses  # noqa: E402
 
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "fixtures" / "evidence-result-v0.json"
-SCHEMA_SHA256 = "46599d231759a3354392f6e596cab0b58467a3ee8681466721263d811fe76da2"
+SCHEMA_SHA256 = "a6a9d9780daea831567974208642c97c99cd3af75865ae828a2eeb2e1ac3b6d8"
 GENERATED_AT = "2026-10-26T00:00:00Z"
 PIN = {"model_id": "example-judge-1", "model_hosting": "hosted", "input_refs": ["amount_minor"],
        "prompt_template_hash": "bf" * 32, "schema_hash": "df" * 32}

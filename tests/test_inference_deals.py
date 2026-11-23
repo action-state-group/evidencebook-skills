@@ -520,7 +520,7 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
         self.assertEqual(doc["x-window"]["signature_unverified_deals"], 1)
         self.assertEqual(doc["x-window"]["unverified_capsules"], 1)
         self.assertEqual(summary["states"][deals.UNVERIFIED], 1)
-        bad = [c for c in doc["claims"] if c.get("x-reason") == deals.UNVERIFIED]
+        bad = [c for c in doc["claims"] if c.get("reason") == deals.UNVERIFIED]
         self.assertEqual({c["verdict"] for c in bad}, {"not_evaluable"})
         self.assertEqual({tuple(c["x-unverified-capsules"]) for c in bad}, {(victim,)})
         # every other deal is judged exactly as before
@@ -535,7 +535,7 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
         provider = load("provider")
         victim = deal_capsule_ids(provider, "p-deal-short", "obs")[0]
         doc, summary = self.judged({victim: deals.UNTRUSTED})
-        reasons = {c.get("x-reason") for c in doc["claims"]}
+        reasons = {c.get("reason") for c in doc["claims"]}
         self.assertIn(deals.UNTRUSTED, reasons)
         self.assertNotIn(deals.UNVERIFIED, reasons)
         self.assertEqual(doc["x-window"]["signer_untrusted_deals"], 1)
@@ -563,7 +563,7 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
                 m[deals.PACK_DIGEST_MEMBER] = "0" * 64
         victim = deal_capsule_ids(provider, "p-deal-settled", "obs")[0]
         doc, _ = self.judged({victim: deals.UNVERIFIED}, provider)
-        settled = {c.get("x-reason") for c in doc["claims"] if c.get("x-reason") == deals.UNVERIFIED}
+        settled = {c.get("reason") for c in doc["claims"] if c.get("reason") == deals.UNVERIFIED}
         self.assertEqual(settled, {deals.UNVERIFIED})
         self.assertEqual(doc["x-window"]["digest_mismatch_deals"] + 1, doc["x-window"]["deals_counted"])
 
@@ -573,7 +573,7 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
         before, _ = run(payer)
         doc, _ = self.judged({victim: deals.UNVERIFIED}, payer)
         paid = [c for c in doc["claims"] if c["id"].endswith("paid_as_agreed")
-                and c.get("x-reason") == deals.UNVERIFIED]
+                and c.get("reason") == deals.UNVERIFIED]
         self.assertEqual(len(paid), 1)
         self.assertEqual(paid[0]["verdict"], "not_evaluable")
         bad_deal = paid[0]["id"].split("::")[0]
@@ -641,7 +641,7 @@ class SignaturesVerifiedPerDeal(unittest.TestCase):
         self.assertEqual(doc["x-window"]["not_counted_shop_preauth"], 0)
         self.assertEqual(doc["x-window"]["deals_counted"], plain["x-window"]["deals_counted"])
         # the forged key_id on the unverified record is not one of the node's own keys
-        self.assertEqual([(c["id"], c.get("grade")) for c in doc["claims"] if c.get("x-reason") is None],
+        self.assertEqual([(c["id"], c.get("grade")) for c in doc["claims"] if c.get("reason") is None],
                          [(c["id"], c.get("grade")) for c in plain["claims"] if not c["id"].startswith("d2::")])
 
     def test_a_leg_that_does_not_verify_never_makes_a_payment_countersigned(self):
@@ -863,7 +863,7 @@ class CounterpartyLegSignature(unittest.TestCase):
         doc, _ = self.judged({})
         row = self.row(doc)
         self.assertEqual((row["verdict"], row["grade"]), ("met", "countersigned"))
-        self.assertNotIn("x-countersign", row)
+        self.assertNotIn("reason", row)
         for key in ("leg_signature_unverified_rows", "leg_signer_untrusted_rows"):
             self.assertNotIn(key, doc["x-window"])
 
@@ -876,7 +876,7 @@ class CounterpartyLegSignature(unittest.TestCase):
         doc, _ = self.judged({bad[0]: deals.UNVERIFIED})
         row = self.row(doc)
         self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
-        self.assertEqual(row["x-countersign"], deals.LEG_UNVERIFIED)
+        self.assertEqual(row["reason"], deals.LEG_UNVERIFIED)
         self.assertIn(bad[0], json.dumps(row), "the row cites the leg that failed")
         self.assertEqual(doc["x-window"]["leg_signature_unverified_rows"], 1)
         self.assertEqual(self.row(doc, "d2")["grade"], "countersigned", "another deal's leg is not touched")
@@ -886,7 +886,7 @@ class CounterpartyLegSignature(unittest.TestCase):
         bad = self.terms_leg_of("p-deal-settled")
         doc, _ = self.judged({bad[0]: deals.UNTRUSTED})
         row = self.row(doc)
-        self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+        self.assertEqual((row["verdict"], row["grade"], row["reason"]),
                          ("met", "self-attested", deals.LEG_UNTRUSTED))
         self.assertEqual(doc["x-window"]["leg_signer_untrusted_rows"], 1)
         self.assertNotIn("leg_signature_unverified_rows", doc["x-window"])
@@ -896,20 +896,20 @@ class CounterpartyLegSignature(unittest.TestCase):
         doc, _ = self.judged({}, gone)
         row = self.row(doc)
         self.assertEqual((row["verdict"], row["grade"]), ("met", "self-attested"))
-        self.assertNotIn("x-countersign", row)
+        self.assertNotIn("reason", row)
         self.assertNotIn("leg_signature_unverified_rows", doc["x-window"])
 
     def test_two_failing_legs_with_both_reasons_give_the_signature_failure(self):
         legs = self.terms_leg_of("p-deal-settled")
         self.assertEqual(len(legs), 2)
         doc, _ = self.judged({legs[0]: deals.UNTRUSTED, legs[1]: deals.UNVERIFIED})
-        self.assertEqual(self.row(doc)["x-countersign"], deals.LEG_UNVERIFIED)
+        self.assertEqual(self.row(doc)["reason"], deals.LEG_UNVERIFIED)
 
     def test_one_failing_leg_of_two_payments_is_not_countersigned(self):
         legs = self.terms_leg_of("p-deal-settled")
         doc, _ = self.judged({legs[1]: deals.UNTRUSTED})
         row = self.row(doc)
-        self.assertEqual((row["grade"], row["x-countersign"]), ("self-attested", deals.LEG_UNTRUSTED))
+        self.assertEqual((row["grade"], row["reason"]), ("self-attested", deals.LEG_UNTRUSTED))
 
     def test_a_bad_copy_under_a_good_leg_id_does_not_replace_the_good_leg(self):
         bad = self.terms_leg_of("p-deal-settled")[0]
@@ -929,7 +929,7 @@ class CounterpartyLegSignature(unittest.TestCase):
         after, _ = self.judged({i: deals.UNVERIFIED for i in legs}, payer_book)
         for cid in short:
             row = claims(after)[cid]
-            self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+            self.assertEqual((row["verdict"], row["grade"], row["reason"]),
                              ("not_met", "self-attested", deals.LEG_UNVERIFIED))
 
     def test_a_payer_node_downgrades_on_the_payees_leg(self):
@@ -941,21 +941,21 @@ class CounterpartyLegSignature(unittest.TestCase):
         legs = [c["capsule_id"] for c in self.provider if "settlement" in c]
         after, _ = self.judged({i: deals.UNTRUSTED for i in legs}, payer_book)
         for cid in graded:
-            self.assertEqual(claims(after)[cid]["x-countersign"], deals.LEG_UNTRUSTED)
+            self.assertEqual(claims(after)[cid]["reason"], deals.LEG_UNTRUSTED)
 
     def test_a_bad_leg_under_the_nodes_own_key_is_not_the_counterpartys(self):
         own = [c["capsule_id"] for c in self.provider if "settlement" in c]
         doc, _ = self.judged({i: deals.UNVERIFIED for i in own})
         self.assertEqual(self.row(doc)["grade"], "countersigned")
-        self.assertNotIn("x-countersign", self.row(doc))
+        self.assertNotIn("reason", self.row(doc))
 
     def test_a_deal_whose_own_record_failed_shows_one_reason(self):
         victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
         leg = self.terms_leg_of("p-deal-settled")[0]
         doc, _ = self.judged({leg: deals.UNVERIFIED}, None, {victim: deals.UNVERIFIED})
         row = self.row(doc)
-        self.assertEqual((row["verdict"], row["x-reason"]), ("not_evaluable", deals.UNVERIFIED))
-        self.assertNotIn("x-countersign", row)
+        self.assertEqual((row["verdict"], row["reason"]), ("not_evaluable", deals.UNVERIFIED))
+        self.assertNotIn("leg_signature_unverified_rows", doc["x-window"])
 
     def test_an_unsigned_counterparty_leg_with_no_key_still_gives_the_reason(self):
         bad = self.terms_leg_of("p-deal-settled")
@@ -963,7 +963,7 @@ class CounterpartyLegSignature(unittest.TestCase):
                 for c in self.book]
         doc, _ = self.judged({i: deals.UNVERIFIED for i in bad}, book)
         row = self.row(doc)
-        self.assertEqual((row["verdict"], row["grade"], row["x-countersign"]),
+        self.assertEqual((row["verdict"], row["grade"], row["reason"]),
                          ("met", "self-attested", deals.LEG_UNVERIFIED))
 
     def test_a_malformed_leg_that_did_not_verify_never_stops_the_run(self):
@@ -974,7 +974,7 @@ class CounterpartyLegSignature(unittest.TestCase):
                 c = dict(c, settlement=dict(c["settlement"], payment_ref="not-an-object", terms_ref=5))
             broken.append(c)
         doc, _ = self.judged({i: deals.UNVERIFIED for i in bad}, broken)
-        self.assertNotIn("x-countersign", self.row(doc))
+        self.assertNotIn("reason", self.row(doc))
 
     def test_a_malformed_leg_under_the_nodes_own_key_or_with_a_bad_key_never_stops_the_run(self):
         own = [c["capsule_id"] for c in self.provider if "settlement" in c]
@@ -1000,7 +1000,7 @@ class CounterpartyLegSignature(unittest.TestCase):
         bad = self.terms_leg_of("p-deal-settled")
         doc, _ = self.judged({bad[0]: deals.UNVERIFIED})
         for case in ("d3", "d4"):  # no settled payment: never a countersigned candidate
-            self.assertNotIn("x-countersign", self.row(doc, case))
+            self.assertNotIn("reason", self.row(doc, case))
 
 
 class LegSignatureRead(unittest.TestCase):
@@ -1076,6 +1076,81 @@ class EvaluatorRefusesAnOpenPeriod(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("that period has not closed", proc.stdout)
 
+
+class ReasonMember(unittest.TestCase):
+    """AAC evidence-result-v0 section 4.4: the claim member `reason` carries the four registered
+    tokens, only where the schema allows each; every other code stays an `x-` member; and it is
+    display-only (evidencebook-skills#209)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import jsonschema
+        schema = json.loads((ROOT / "tests" / "fixtures" / "evidence-result-v0.json").read_text())
+        cls.validator = jsonschema.Draft202012Validator(schema)
+
+    def setUp(self):
+        self.payer, self.provider = load("payer"), load("provider")
+        named = {c["settlement"]["terms_ref"] for c in self.provider if "settlement" in c}
+        self.book = self.provider + [c for c in self.payer if c["capsule_id"] in named]
+
+    def judged(self, leg_unverified=None, unverified=None):
+        return deals.build_result(records(self.book), compiled(), DATE, GENERATED_AT, None,
+                                  unverified or {}, leg_unverified or {})[0]
+
+    def errors(self, doc):
+        return [e.message for e in self.validator.iter_errors(doc)]
+
+    def leg(self):
+        refs = {c["settlement"]["terms_ref"] for c in self.provider if "settlement" in c}
+        return sorted(c["capsule_id"] for c in self.payer if c["capsule_id"] in refs)[0]
+
+    def reasons(self, doc):
+        return {c["reason"] for c in doc["claims"] if "reason" in c}
+
+    def test_each_registered_token_validates_on_the_claim_its_row_allows(self):
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        for token, doc in ((deals.UNVERIFIED, self.judged(unverified={victim: deals.UNVERIFIED})),
+                           (deals.UNTRUSTED, self.judged(unverified={victim: deals.UNTRUSTED})),
+                           (deals.LEG_UNVERIFIED, self.judged({self.leg(): deals.UNVERIFIED})),
+                           (deals.LEG_UNTRUSTED, self.judged({self.leg(): deals.UNTRUSTED}))):
+            with self.subTest(token=token):
+                self.assertEqual(self.reasons(doc), {token})
+                self.assertEqual(self.errors(doc), [])
+                for c in doc["claims"]:
+                    if "reason" in c and token in (deals.UNVERIFIED, deals.UNTRUSTED):
+                        self.assertEqual((c["sufficiency"], c["verdict"]), ("GAP", "not_evaluable"))
+                    elif "reason" in c:
+                        self.assertEqual((c["verdict"], c["grade"]), ("met", "self-attested"))
+                    self.assertNotIn("x-reason", c)
+
+    def test_an_unregistered_code_stays_an_x_member_and_validates(self):
+        provider = load("provider")
+        for c in provider:
+            m = deals._attestation(c).get(deals.EXCHANGE)
+            if m is not None:
+                m[deals.PACK_DIGEST_MEMBER] = "0" * 64
+        doc, _ = run(provider)
+        self.assertEqual(self.errors(doc), [])
+        for c in doc["claims"]:
+            self.assertEqual(c["x-reason"], deals.MISMATCH)
+            self.assertNotIn("reason", c)
+
+    def test_a_leg_token_on_a_countersigned_claim_fails_the_schema(self):
+        doc = self.judged()
+        served = next(c for c in doc["claims"] if c["grade"] == "countersigned")
+        served["reason"] = deals.LEG_UNVERIFIED
+        self.assertNotEqual(self.errors(doc), [])
+
+    def test_a_result_stays_valid_with_reason_removed(self):
+        # ER 4.4: with `reason` removed from every claim the document is still valid (display-only)
+        victim = deal_capsule_ids(self.provider, "p-deal-settled", "obs")[0]
+        for doc in (self.judged({self.leg(): deals.UNVERIFIED}),
+                    self.judged(unverified={victim: deals.UNVERIFIED})):
+            bare = copy.deepcopy(doc)
+            for c in bare["claims"]:
+                c.pop("reason", None)
+            self.assertTrue(self.reasons(doc))
+            self.assertEqual(self.errors(bare), [])
 
 if __name__ == "__main__":
     unittest.main()

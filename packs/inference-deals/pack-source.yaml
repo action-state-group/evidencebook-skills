@@ -21,7 +21,7 @@
 # whose book also holds the counterparty's signed leg of the same payment is
 # countersigned only when that leg's own signature also verified under a key the
 # reader trusts (a leg that does not verify, or whose signer the reader does not
-# trust, leaves the row self-attested and the claim's `x-countersign` says
+# trust, leaves the row self-attested and the claim's `reason` says
 # which); a row the records cannot decide is not_evaluable, never not_met.
 pack_id: inference-deals
 pack_version: 0.1.2

@@ -128,7 +128,8 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     "self-attested" unless a caller that can show more says so, as
     scripts/evaluators/inference_deals.py does for a payment the counterparty's
     own signed leg also records ("countersigned"). `extensions` are further
-    `x-` members for the claim (section 8a), each name checked here.
+    `x-` members for the claim (section 8a), and the registered `reason` member (section 4.4),
+    each name checked here.
 
     `verdict` is strictly `met`/`not_met`/`not_evaluable` -- Evidence Result v0's
     closed Verdict enum, which this function never widens: an `out_of_scope`
@@ -175,8 +176,10 @@ def claim_for(criterion_id, verdict, contract_ref, tier, report_digest=None, cla
     if ext:
         claim["x-judge-pin"] = ext
     for name, value in (extensions or {}).items():
-        if not name.startswith("x-") or name in claim:
-            raise RollupError(f"criterion {criterion_id!r}: {name!r} is not a free x- member")
+        # `reason` is the one defined member admitted here (evidence-result-v0 section 4.4,
+        # display-only); the schema, not this function, checks where it may appear.
+        if not (name.startswith("x-") or name == "reason") or name in claim:
+            raise RollupError(f"criterion {criterion_id!r}: {name!r} is neither a free x- member nor an unused `reason`")
         claim[name] = value
     return claim
 
