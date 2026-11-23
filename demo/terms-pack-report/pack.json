@@ -1,0 +1,51 @@
+{
+  "clauses": [
+    {
+      "claim": "At least one import pass of the agent host's own tool-call log is recorded in the holder's book.",
+      "id": "record_keeping.passes_present",
+      "label": "The host's tool-call log was imported into the book",
+      "rule": {
+        "kind": "any_record",
+        "record_type": "backfill_import"
+      }
+    },
+    {
+      "claim": "No import pass the holder answered with declared a gap: no stretch of the host's log was unreadable, expired before a pass read it, or a cursor range the host never used.",
+      "id": "record_keeping.no_declared_gaps",
+      "label": "No gap declared in the imported log",
+      "rule": {
+        "kind": "every_record_empty",
+        "paths": [
+          "statement.gaps"
+        ],
+        "record_type": "backfill_import"
+      }
+    },
+    {
+      "claim": "No import pass the holder answered with listed a late row (one that arrived after a later row was already read) or a refused row (a re-read row whose content changed after it was first digested, or an id that appears twice in one pass with different contents).",
+      "id": "record_keeping.no_late_or_refused_rows",
+      "label": "No late or refused rows in the imported log",
+      "rule": {
+        "kind": "every_record_empty",
+        "paths": [
+          "statement.anomalies",
+          "statement.refused"
+        ],
+        "record_type": "backfill_import"
+      }
+    }
+  ],
+  "contract": "goose-record-keeping/v1",
+  "contract_ref": "goose-record-keeping@0.1.0",
+  "fields": [
+    "record_type",
+    "statement.anomalies",
+    "statement.gaps",
+    "statement.refused"
+  ],
+  "outcome_statement": "The holder's book shows the agent host's tool-call log was imported with no declared gap and no late or refused row. The book records what the host wrote down when each pass read it; it does not show what the agent did that the host did not write, or that the host's own log is true.",
+  "pack_id": "goose-record-keeping",
+  "pack_version": "0.1.0",
+  "resolution_rule": "every clause is met",
+  "title": "Goose agent record-keeping"
+}

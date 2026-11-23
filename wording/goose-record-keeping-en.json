@@ -1,0 +1,22 @@
+{
+ "wording_pack_version": "aac.wording-pack/v0",
+ "id": "evidencebook-skills.wording.goose-record-keeping-en/v0",
+ "locale": "en",
+ "entries": {
+  "report.title": "Record-keeping report: a sample Goose agent's imported tool-call log",
+  "report.summary": "The rows behind this page are a hand-written sample in the shape a Goose host's log would give. What the holder's book shows about the tool-call log of its agent host, as the holder imported it, from the passes the holder answered with: whether it was imported, whether any pass declared a gap, and whether any row arrived late or was refused. The auditor ran these three terms over the rows the holder answered with. Each row was proven to be in the holder's log at a signed checkpoint; the values on it are the holder's own word, and no proof shows that no row was left out. The book detects a gap or a late row an import pass can see; it does not prevent one.",
+  "group.record_keeping.title": "Did the agent's tool-call log reach the holder's book without a gap?",
+  "row.record_keeping.passes_present.label": "The host's tool-call log was imported into the book",
+  "row.record_keeping.passes_present.detail": "At least one import pass of the agent host's own tool-call log is recorded in the holder's book.",
+  "row.record_keeping.passes_present.not_evaluable": "The holder's answer holds no import pass, so this report can't say whether the host's log was imported.",
+  "row.record_keeping.no_declared_gaps.label": "No gap declared in the imported log",
+  "row.record_keeping.no_declared_gaps.detail": "No import pass the holder answered with declared a gap: no stretch of the host's log was unreadable, expired before a pass read it, or a cursor range the host never used.",
+  "row.record_keeping.no_declared_gaps.not_evaluable": "An import pass in the holder's answer does not carry its list of gaps, or the answer names a record it does not type, so this report can't say whether a gap was declared.",
+  "row.record_keeping.no_late_or_refused_rows.label": "No late or refused rows in the imported log",
+  "row.record_keeping.no_late_or_refused_rows.detail": "No import pass the holder answered with listed a late row (one that arrived after a later row was already read) or a refused row (a re-read row whose content changed after it was first digested, or an id that appears twice in one pass with different contents).",
+  "row.record_keeping.no_late_or_refused_rows.not_evaluable": "An import pass in the holder's answer does not carry its lists of late and refused rows, or the answer names a record it does not type, so this report can't say whether any row arrived late or was refused.",
+  "verdict.met": "Met",
+  "verdict.not_met": "Not met",
+  "verdict.not_evaluable": "Couldn't tell"
+ }
+}
