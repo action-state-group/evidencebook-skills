@@ -143,10 +143,12 @@ class Airline:
             if conf is None:
                 self.propose(name, arguments)
                 span.set_attribute("tau2.gate", "proposed")
-                self.log({"tool": name, "arguments": arguments, "kind": "write", "gate": "proposed"}, span)
-                return ("Not done yet: this action is now pending the customer's confirmation. Read it to the "
+                said = ("Not done yet: this action is now pending the customer's confirmation. Read it to the "
                         "customer exactly and ask for an explicit yes; after they say yes, call "
                         f"{name} again with exactly the same arguments: {canonical(arguments)}")
+                # The result is what the agent read, so the judge sees that nothing changed yet.
+                self.log({"tool": name, "arguments": arguments, "kind": "write", "gate": "proposed", "result": said}, span)
+                return said
             check = self.case.check(name, arguments, conf)
             if check.get("verdict") != "pass":
                 span.set_attribute("tau2.gate", "check_" + str(check.get("verdict")))
@@ -163,7 +165,7 @@ class Airline:
             (self.case_dir / "pending_action.json").unlink(missing_ok=True)
             try:
                 act = self.case.perform(check["check_id"], name)
-            except records.RecordError as err:
+            except Exception as err:  # the write ran; whatever failed, record that it was not sealed
                 span.set_status(StatusCode.ERROR, "perform not sealed")
                 self.log({"tool": name, "arguments": arguments, "result": result, "kind": "write",
                           "confirmation": conf["capsule_id"], "check": check["check_id"], "perform_error": str(err)}, span)

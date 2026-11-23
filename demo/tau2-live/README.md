@@ -115,11 +115,14 @@ Space to play, Home to restart.
   bundle (above).
 - **The records show the gate's order, not its effect.** The policy check comes before the
   perform. Nothing here proves that the tool server's database change matches the perform.
+  The gate ties the write to the proposed action by its exact arguments, and the customer's
+  "yes" to that proposal only by order (sealed after it). It does not check that the agent read
+  the action back; the transcript shows whether it did, and the judge reads that.
 - **The customer is a model, not a person, and signs nothing.** Its words are as the airline's
   agent recorded them.
 - **The evaluator is not independent.** The demo operator runs it, the airline agent and the
   customer. Its verdict shows how the rubric reads this case, not an outside party's judgment.
-- **The report's rows are not due yet.** Each row falls due an hour after the case opens, so a
+- **The report's rows are not due yet.** Each row falls due a week after the case opens, so a
   report cut right after the case reads `not_due`, beside the evaluator's verdict. The verdict is
   cited, not applied to the rows.
 - **No continuity across windows.** The link from one window's book to the next, and the
