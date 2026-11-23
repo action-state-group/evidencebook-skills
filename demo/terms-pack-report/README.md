@@ -91,7 +91,7 @@ capsulectl book backfill run --profile holder --source $T/fixtures/pass2.jsonl |
 echo "exit ${pipestatus[1]:-${PIPESTATUS[0]}}"
 ```
 
-**Expect:** `"rows_read":2` and one gap from cursor 6 to 7; `exit 3` (the `echo` line works in zsh and bash).
+**Expect:** `"rows_read":2` and one gap from cursor 6 to 7; `exit 3`, with a line on stderr saying the verification is incomplete (the `echo` line works in zsh and bash).
 
 Each pass sealed one `backfill_import` record whose statement names its gaps, late rows and refused rows. Cut a checkpoint over them, so a requester can ask for a state the holder has signed:
 
@@ -121,7 +121,7 @@ D=$(jq -cS . $T/pack.json | tr -d '\n' | shasum -a 256 | cut -d' ' -f1); echo $D
 
 **Expect:** the same digest the holder's `doctor` listed. If you change one character of `pack.json` the digest changes, and the holder's answer is refused.
 
-The question is the holder's full history, derived by that pack, as of at least checkpoint 1:
+The question is the holder's full history, derived by that pack, from a checkpoint over at least one record (`min_freshness` is a log size here; the holder picks the anchor):
 
 ```sh
 echo "{\"subject\":{\"full_history\":null},\"coverage\":{\"min_freshness\":1},\"derivation\":\"$D\"}" > $QS/ask.json
