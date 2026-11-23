@@ -1162,7 +1162,9 @@ class AgentActivityStarterSpec(unittest.TestCase):
         b, _ = self._verdicts("no", "yes", "cannot_tell")
         self.assertEqual(a, b)
 
-    def test_the_spec_says_complete_not_went_well_and_never_compliant(self):
+    def test_the_spec_says_what_the_checks_show_not_that_it_went_well_and_never_compliant(self):
         text = (pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/agent-activity-starter.yaml").read_text()
-        self.assertIn("not that the task went well", text.replace("\n    ", " "))
+        flat = text.replace("\n    ", " ")
+        self.assertIn("a result for every action and a final reply, not that the task went well", flat)
+        self.assertNotIn("is complete", flat)
         self.assertNotIn("complian", text.lower())

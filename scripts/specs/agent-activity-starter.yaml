@@ -2,8 +2,8 @@
 #
 # Three yes/no checks answered from the messages sealed in each agent task
 # record (scripts/report_spec.py task_record_checks reads only roles, order,
-# call ids and non-empty flags). They show that the record is complete, not
-# that the task went well. A record that is missing or cannot be read is "cannot
+# call ids and non-empty flags). They show that each record has its request, a
+# result for every action and a final reply, not that the task went well. A record that is missing or cannot be read is "cannot
 # tell", never "no" (the claim is not_evaluable); a task that made no tool
 # call does not apply (out_of_scope).
 #
@@ -13,7 +13,7 @@
 spec_version: report-spec/v1
 id: agent-activity-starter
 version: 1
-title: "Agent activity: is each task's record complete"
+title: "Agent activity: does each task's record have its request, results and reply"
 group_by: day
 
 switches:
@@ -67,5 +67,5 @@ claims:
 presentation:
   card: outcome
   title_template: "{title} \u2014 {period} \u00b7 {task_count} tasks,
-    {tool_call_count} tool calls. These checks show each record is complete,
-    not that the task went well."
+    {tool_call_count} tool calls. These checks show each record has its request,
+    a result for every action and a final reply, not that the task went well."
