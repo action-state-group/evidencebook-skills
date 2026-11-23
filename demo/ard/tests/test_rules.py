@@ -94,39 +94,57 @@ def test_the_limits_file_is_the_engines_policy_profile():
         "caps": {"caps_minor": {"money.purchase": 2000}, "per_action_minor": {"money.purchase": 2000}}}}]}
 
 
-def test_the_first_order_goes_ahead_and_the_second_is_blocked_before_any_payment(tmp_path, monkeypatch):
+def test_the_first_order_goes_ahead_and_the_second_is_held_for_the_persons_ok_and_a_decline_pays_nothing(tmp_path, monkeypatch):
     engine, log = stub_engine(tmp_path)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
-    paid = []
+    paid, asked = [], []
     first = deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "",
-                           pay=lambda: paid.append("1") or "ref-1", limit=2000)
-    assert paid == ["1"] and first
-    with pytest.raises(rules.RuleBlocked) as blocked:
+                           pay=lambda: paid.append("1") or "ref-1", limit=2000, approve=lambda o: asked.append(o) or True)
+    assert paid == ["1"] and first and asked == [], "an order inside the limit is not asked about"
+    with pytest.raises(rules.RuleHeld) as held:
         deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "",
-                       pay=lambda: paid.append("2") or "ref-2", limit=2000)
-    assert paid == ["1"], "the payment is never called for a blocked order"
-    assert "over the 7-day limit you set" in str(blocked.value) and "limit 2,000 msat" in blocked.value.reasons[0]
+                       pay=lambda: paid.append("2") or "ref-2", limit=2000, approve=lambda o: asked.append(o) or False)
+    assert paid == ["1"], "the payment is never called for a declined order"
+    assert len(asked) == 1 and asked[0].held and "over the 7-day limit you set" in asked[0].reasons[0]
+    assert "declined" in str(held.value) and "limit 2,000 msat" in held.value.reasons[0]
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert [c["history"] for c in calls] == [0, 1] and all(c["record_type"] == "check" for c in calls)
     assert calls[0]["argv"][:2] == ["guard", "check"] and calls[0]["limits"] == rules.limits_profile(2000)
     notes = [p for _, p in maya.notes(rules.CHECKED)]
-    assert [n["blocked"] for n in notes] == [False, True] and notes[1]["limit_msat"] == 2000
-    # the blocked order sealed its check and nothing after it: no verdict, no approval, no act
-    blocked_deal = [d for d in notes if d["blocked"]][0]["deal_id"]
-    kinds = [json.loads(p)["x-deal-v0"]["record_type"] for p in maya.deal_payloads(blocked_deal)]
+    assert [(n["held"], n["decision"]) for n in notes] == [(False, ""), (True, "declined")] and notes[1]["limit_msat"] == 2000
+    # the declined order sealed its check and nothing after it: no verdict, no approval, no act
+    declined = [d for d in notes if d["held"]][0]["deal_id"]
+    kinds = [json.loads(p)["x-deal-v0"]["record_type"] for p in maya.deal_payloads(declined)]
     assert kinds[-1] == "check" and "action" not in kinds
     maya.close(); alder.close()
 
 
-def test_a_pack_ask_that_is_not_the_limit_does_not_block(tmp_path, monkeypatch):
+def test_a_held_order_the_person_approves_goes_on_to_the_payment_and_the_approval_is_sealed(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    paid = []
+    second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: paid.append("2") or "ref-2", limit=2000, approve=lambda o: True)
+    assert paid == ["2"] and second
+    notes = [p for _, p in maya.notes(rules.CHECKED)]
+    assert (notes[-1]["held"], notes[-1]["decision"]) == (True, "approved")
+    # no one to ask (no approve): a held order is declined
+    with pytest.raises(rules.RuleHeld):
+        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    maya.close(); alder.close()
+
+
+def test_a_pack_ask_that_is_not_the_limit_is_not_held(tmp_path, monkeypatch):
     engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
     chain = maya.new_deal("deal-00000000000000a5", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
     maya.open_deal(chain, chain.open(AT, "ask"))
     outcome = rules.gate(maya, chain, 2000, AT)
-    assert outcome.blocked is False and outcome.asks == ["no earlier payment to this merchant"] and outcome.verdict == "escalate"
+    assert outcome.held is False and outcome.asks == ["no earlier payment to this merchant"] and outcome.verdict == "escalate"
     maya.close(); alder.close()
 
 
@@ -156,9 +174,10 @@ def test_the_real_everyday_rules_block_the_second_order_over_the_limit(tmp_path)
     maya, alder = pair(tmp_path)
     t = terms(ITEM, 2000, CURRENCY, "simulated")
     deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
-    with pytest.raises(rules.RuleBlocked) as blocked:
-        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("a blocked order is not paid"), limit=2000)
-    assert "limit you set" in blocked.value.reasons[0] and "2,000" in blocked.value.reasons[0] and "4,000" in blocked.value.reasons[0]
+    with pytest.raises(rules.RuleHeld) as held:
+        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("a declined order is not paid"), limit=2000,
+                       approve=lambda o: False)
+    assert "limit you set" in held.value.reasons[0] and "2,000" in held.value.reasons[0] and "4,000" in held.value.reasons[0]
     maya.close(); alder.close()
 
 

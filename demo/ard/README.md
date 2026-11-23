@@ -175,17 +175,23 @@ page (`book report build --receipts`, capsule-viewer 0.22.0); building a report 
 
 The spending limit. With `ARD_LIMIT_MSAT=2000` set in the shell that starts the windows (Maya's window only reads it),
 Maya's deal check runs the Everyday Rules (`asg/everyday/0.3.8`, embedded in capsule-engine) before any payment: the
-check record is sealed, then `capsule-engine guard check --limits FILE` reads it with Maya's earlier paid orders as
-history (`rules.py`). The limit is the most she may spend in a rolling 7 days and on one order, in msat; set it to the
-first order's price. The first order passes; a second order to the same seller is a new deal, and its check fails the
-caps rule with the engine's own words ("the 7-day total with this purchase is over the 7-day limit you set (limit
-2,000 msat, this order would bring it to 4,000 msat)"). The deal is opened and the check sealed after the presenter's click
-on the payment dialog, so the order is stopped after that click and before any payment: nothing is paid, Maya's book
-holds the check and a note of what the rules said (`ard_rules_checked`), and the screen says which rule stopped it. The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment
-dialog already asks the person, so they are listed, not blocking. Sherlock2 accepted for Tuesday that the block comes after
-the click and before any payment; a hard limit applied before the dialog is the follow-up (below). The verdict record the reference seals keeps its
-`rules: not_configured` (this demo adds no protocol); the note is where the rules' answer is kept. Needs capsule-engine go/v0.7.0 or later
-(`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
+check record is sealed, then `capsule-engine guard check --limits FILE` reads it with Maya's earlier paid orders (the last
+7 days) as history (`rules.py`). The limit is the most she may spend in a rolling 7 days and on one order, in msat; set it
+to the first order's price. The first order passes. A second order to the same seller is a new deal, and its check fails
+the caps rule with the engine's own words; the order is **held for the person's OK**, not refused (Steven, ops u325,
+2026-10-12: a failing caps check on a person-set limit is ESCALATE): the screen says "Held for your OK at deal check, nothing
+paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000
+msat, this order would bring it to 4,000 msat)." (Sherlock2, 2026-11-23) and a second dialog asks Approve or Decline
+(default Decline). The presenter declines on stage: nothing is paid, and the decline is sealed as a note in Maya's book
+(`ard_rules_checked`, with the limit, the amount and `decision: declined`). Approving goes on to the payment and seals
+`decision: approved`. The deal is opened and the check sealed after the presenter's click on the payment dialog, so the
+person is asked about the hold after that click; Sherlock2 accepted that for Tuesday, and applying the check before the
+dialog, still as a hold, is the follow-up [evidencebook-skills#223](https://github.com/action-state-group/evidencebook-skills/issues/223).
+The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment dialog already asks the
+person, so they are listed, not held. The verdict record the reference seals keeps its `rules: not_configured` (this
+demo adds no protocol); the note is where the rules' answer and the person's decision are kept. A clean check reads the
+same with or without `--limits`, so this demo's note, not the result, is the record that the limit was applied. Needs
+capsule-engine go/v0.7.0 or later (`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under
 `$ARD_HOME/pages/` and opens it the same way (`receipt.py`). The page is capsule-viewer's receipt module (the Python

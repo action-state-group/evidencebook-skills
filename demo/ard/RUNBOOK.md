@@ -22,7 +22,7 @@ Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousa
 
 5. **Payment.** A macOS dialog asks you to approve 2,000 msat. Only your click releases the payment, as long as each agent has only its own ard tools; by default the payment is simulated and no money moves.
 
-6. **Receipts.** Each side keeps its own record. Maya's card shows 1 deal, Alder's 25, each deal row reads time-stamped by Action State's hosted witness (a hosted witness, run by Action State, not independent of us), and the live deal's row has an Open receipt link (a demo link, with the line "Demo link to this party's receipt page; the History card itself carries no link."). With a spending limit set, a second order is stopped at Maya's deal check, and each side can open a receipt page.
+6. **Receipts.** Each side keeps its own record. Maya's card shows 1 deal, Alder's 25, each deal row reads time-stamped by Action State's hosted witness (a hosted witness, run by Action State, not independent of us), and the live deal's row has an Open receipt link (a demo link, with the line "Demo link to this party's receipt page; the History card itself carries no link."). With a spending limit set, a second order is held for the person's OK at Maya's deal check, and each side can open a receipt page.
 
 The registry, the seller sites and the 48 sample deals are local stand-ins. The ARD search call, fetching each seller's entry, the signature checks, the assessment and the deal records are the real code.
 
@@ -421,7 +421,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
 
    **Expect:** buyer outbound 2,000 msat succeeded; seller inbound about 1,900 msat with a fee of about 100. Not yet seen at these pins: read the real figures out.
 
-## The spending limit: a second order is stopped (needs capsule-engine go/v0.7.0)
+## The spending limit: a second order is held for your OK (needs capsule-engine go/v0.7.0)
 
 Before the run, in the shell that starts the windows, set the limit to the first order's price, then open the windows as in the steps above:
 
@@ -435,7 +435,7 @@ Before the run, in the shell that starts the windows, set the limit to the first
    Order 200 more badges from Alder Print Co.
    ```
 
-   **Expect:** a second payment dialog; click Pay. Then no payment: the screen says "Blocked at deal check, nothing paid. The Everyday Rules stopped this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat)." Say aloud at the click: the dialog is the person's yes; the rule can still stop it, and nothing is paid. Maya tells you which rule stopped it. The wallet balances do not change; Maya's History card still counts 1 deal. Not yet run by hand with Goose Desktop at these pins.
+   **Expect:** a second payment dialog; click Pay. Then a second dialog, "Held for your OK" (default Decline), and on screen: "Held for your OK at deal check, nothing paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat)." Say aloud at the first click: the dialog is the person's yes; the rule can still hold it, and nothing is paid until the second answer. Click Decline: nothing is paid, Maya tells you which rule held the order, the wallet balances do not change and Maya's History card still counts 1 deal. (Approve instead and the payment goes on and the card counts 2.) Not yet run by hand with Goose Desktop at these pins.
 
 19. Open Maya's History page again (`Show your History card, then open your History card as a page.`).
    **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. The sample deals have no link. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.

@@ -134,18 +134,22 @@ def test_a_seller_server_keeps_its_lock(tools, monkeypatch):
 
 
 @pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
-def test_with_a_spending_limit_a_second_order_is_stopped_at_the_deal_check_and_pays_nothing(tools, monkeypatch):
+def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_decline_pays_nothing(tools, monkeypatch):
     """Runs after the story: Alder was paid 2,000 msat once. With the person's limit set at that amount, ard_pay takes
-    a second order as a new deal; the Everyday Rules stop it at the deal check and the rail is not called."""
+    a second order as a new deal; the Everyday Rules hold it at the deal check, the person is asked and declines, and
+    the rail is not called."""
     assert tools._session.run.rail.paid == [2000]
     tools._session.paid.add("alder")  # as after a payment the rail reported succeeded (the story test cleared it)
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
     monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
+    asked = []
+    monkeypatch.setattr(tools, "approve_hold", lambda summary: asked.append(summary) or False)
     second = tools.ard_pay("alder")
-    assert "REFUSED:" in second and "Blocked at deal check, nothing paid" in second and "blocked at deal check" in second and "limit you set" in second
-    assert "limit 2,000 msat" in second and "4,000 msat" in second and "Nothing was paid" in second
+    assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second and "limit you set" in second
+    assert "limit 2,000 msat" in second and "4,000 msat" in second and "declined" in second
+    assert len(asked) == 1 and "Approve this order anyway, or decline?" in asked[0]
     assert tools._session.run.rail.paid == [2000]
-    # a blocked order is not an attempted payment: nothing to confirm in a wallet, and the earlier order stays paid
+    # a held order the person declines is not an attempted payment, and the earlier order stays paid
     assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
     # the same when the check cannot run at all (no engine): nothing paid, the session as it was, and a retry is possible
     monkeypatch.setenv("CAPSULE_ENGINE", "/nonexistent/capsule-engine")

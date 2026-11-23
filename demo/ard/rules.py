@@ -5,9 +5,11 @@
 The limit is ``ARD_LIMIT_MSAT``: the most Maya may spend in a rolling week, and on one order. Unset, nothing here
 runs and the demo behaves as before. With it set, each order's check record is sealed first, handed to
 ``capsule-engine guard check --limits FILE`` with Maya's earlier paid orders as history, and a failing caps finding
-(an order over the limit the person set) blocks the order: nothing is paid and the screen names the rule, the limit
-and the amount. The pack's other asks (a new merchant, a payment that cannot be undone) are what the presenter's
-payment dialog already puts to the person, so they are listed, not blocking.
+(an order over the limit the person set) is HELD for the person's OK, not refused (Steven, ops u325, 2026-10-12: a failing
+caps check on a person-set limit is ESCALATE): the screen names the rule, the limit and the amount and asks the person
+to approve or decline. A decline pays nothing; an approval goes on to the payment. Either answer is sealed as a note of
+Maya's (:data:`CHECKED`). The pack's other asks (a new merchant, a payment that cannot be undone) are what the
+presenter's payment dialog already puts to the person, so they are listed, not held.
 
 The check record is sealed before the payment and the act after it, so the deal check can stop the order. The
 evidencebook goose reference seals the check, its verdict, the approval and the act in one call
@@ -21,6 +23,7 @@ import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -39,8 +42,9 @@ class RulesError(RuntimeError):
     """The check could not run (no engine, an engine without ``--limits``, an input it refused). Nothing was paid."""
 
 
-class RuleBlocked(RuntimeError):
-    """The deal check stopped the order: nothing was paid. ``reasons`` are the rules' own words."""
+class RuleHeld(RuntimeError):
+    """The deal check held the order for the person's OK and the person declined it: nothing was paid. ``reasons`` are
+    the rules' own words."""
 
     def __init__(self, message: str, reasons: list[str]):
         super().__init__(message)
@@ -50,12 +54,13 @@ class RuleBlocked(RuntimeError):
 @dataclass
 class Outcome:
     verdict: str
-    blocked: bool
+    held: bool
     limit_msat: int
     amount_msat: int
     reasons: list[str] = field(default_factory=list)  # the failing caps findings: the rule's reason with its numbers
     asks: list[str] = field(default_factory=list)  # the pack's other failing rules: the presenter's dialog covers these
     ruleset: str = ""
+    decision: str = ""  # "approved" or "declined" when the order was held and the person was asked, else ""
 
 
 def limit_msat() -> int | None:
@@ -199,16 +204,20 @@ def seal_note(node, deal_id: str, outcome: Outcome) -> None:
     """Maya's own record of what the deal check said, in her node book (the verdict record keeps the reference's
     ``not_configured``)."""
     node.note(CHECKED, {"deal_id": deal_id, "ruleset": outcome.ruleset, "verdict": outcome.verdict,
-                        "blocked": outcome.blocked, "limit_msat": outcome.limit_msat,
+                        "held": outcome.held, "decision": outcome.decision, "limit_msat": outcome.limit_msat,
                         "amount_msat": outcome.amount_msat, "reasons": outcome.reasons}, subject_ref=deal_id)
 
 
-def gate(node, chain: dr.DealChain, limit: int, at: datetime) -> Outcome:
-    """Seal the check record and run the rules on it; return what they said once the order may go ahead. A blocked
-    order raises :class:`RuleBlocked`: the check is sealed, nothing else, and nothing is paid."""
+def gate(node, chain: dr.DealChain, limit: int, at: datetime,
+         approve: Callable[[Outcome], bool] | None = None) -> Outcome:
+    """Seal the check record and run the rules on it; return what they said once the order may go ahead. An order the
+    rules hold is put to the person through ``approve`` (no ``approve``: declined); a decline raises
+    :class:`RuleHeld`: the check is sealed, nothing else, and nothing is paid. Either answer is sealed as a note."""
     node.seal(chain, pay_check(chain, at))
     outcome = check(node, chain, len(node.deal_payloads(chain.deal_id)) - 1, limit)
+    if outcome.held:
+        outcome.decision = "approved" if approve is not None and approve(outcome) else "declined"
     seal_note(node, chain.deal_id, outcome)
-    if outcome.blocked:
-        raise RuleBlocked("blocked at deal check: " + "; ".join(outcome.reasons), outcome.reasons)
+    if outcome.decision == "declined":
+        raise RuleHeld("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons), outcome.reasons)
     return outcome

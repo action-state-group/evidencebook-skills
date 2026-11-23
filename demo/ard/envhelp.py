@@ -42,7 +42,7 @@ VARS = (
     Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
     Var("ARD_LIMIT_MSAT", "the most Maya may spend in a week and on one order, in msat: set it to the first order's price "
-        "and the second order is stopped at her deal check (needs a capsule-engine with `guard check --limits`)", "2000", ()),
+        "and the second order is held for her OK at her deal check (needs capsule-engine go/v0.7.0, `guard check --limits`)", "2000", ()),
     Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); by default each checkpoint goes to "
         "Action State's hosted witness, witness.agentactioncapsule.org, which receives hashes only", "off", ()),
 )

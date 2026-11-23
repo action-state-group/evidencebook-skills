@@ -135,6 +135,26 @@ def approve_payment(summary: str) -> bool:
     return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
 
 
+def approve_hold(summary: str) -> bool:
+    """The person's answer to an order the Everyday Rules held under their spending limit: a native dialog, as
+    :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
+    import subprocess
+
+    text = summary.replace("\\", " ").replace('"', "'")
+    script = (f'display dialog "{text}" with title "Held for your OK" buttons {{"Decline", "Approve"}} '
+              'default button "Decline" cancel button "Decline" with icon caution giving up after 180')
+    try:
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
+
+
+def _ask_about_hold(outcome: "rules.Outcome") -> bool:
+    print(screens.rules_held(outcome.reasons))
+    return approve_hold(screens.rules_held(outcome.reasons) + " Approve this order anyway, or decline?")
+
+
 _session: Session | None = None
 _seller: parties.Seller | None = None
 _seller_lock: object | None = None
@@ -321,22 +341,21 @@ def ard_pay(seller: str) -> None:
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
         _pay(s, key, limit)
-    except (rules.RuleBlocked, rules.RulesError) as stopped:
+    except (rules.RuleHeld, rules.RulesError) as stopped:
         # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
         # (an earlier paid order stays paid, and the order may be tried again).
         s.attempted.discard(key)
         if was_paid:
             s.paid.add(key)
-        if isinstance(stopped, rules.RuleBlocked):
-            print(screens.rules_blocked(stopped.reasons))
-            raise RuntimeError(f"{stopped} Nothing was paid. Tell Maya which rule stopped the order and why; do not try to "
-                               "pay around it.") from None
+        if isinstance(stopped, rules.RuleHeld):
+            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
+                               "order and why, and that nothing was paid; do not try to pay around it.") from None
         raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 
 def _pay(s, key: str, limit: int | None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit)
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
@@ -344,10 +363,10 @@ def _pay(s, key: str, limit: int | None) -> None:
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
     try:
-        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit,
+        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=_ask_about_hold,
                                      on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
-    except (rules.RuleBlocked, rules.RulesError):
-        s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a stopped order is not one
+    except (rules.RuleHeld, rules.RulesError):
+        s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a declined order is not one
         raise
     who = ("the buyer's test node paid it" if run.banner == screens.BANNER else "the buyer's wallet paid it") if run.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
     print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}"

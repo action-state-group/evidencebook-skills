@@ -26,14 +26,14 @@ def admit(node: gn.Node, peer: gn.Node, decision: str = "GO", reason: str = "", 
 
 
 def run_deal(buyer: gn.Node, seller: gn.Node, terms: dr.Terms, asked: str, payment_ref: str,
-             deal_id: str = "", pay: Any = None, opened: Any = None, limit: int | None = None) -> str:
+             deal_id: str = "", pay: Any = None, opened: Any = None, limit: int | None = None, approve: Any = None) -> str:
     """Open, answer, pay, exchange halves and close one deal; both nodes seal their sides.
 
     ``opened`` is a deal chain the caller already opened (and sealed its first step) under its own rule.
     ``pay`` is called between the buyer's reconcile and its ``pay`` record when given (the live
     payment); its result is the payment reference sealed. With ``limit`` (the person's spending limit, msat) the
-    buyer's check is sealed and put to the Everyday Rules first, and an order over the limit raises
-    :class:`rules.RuleBlocked` before ``pay`` is called. Returns the deal id."""
+    buyer's check is sealed and put to the Everyday Rules first; an order over the limit is held for the person's OK
+    (``approve``; none: declined) and a decline raises :class:`rules.RuleHeld` before ``pay`` is called. Returns the deal id."""
     deal_id = deal_id or f"deal-{os.urandom(8).hex()}"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     if opened is not None:  # Maya's deal, opened from her sealed pick
@@ -48,7 +48,7 @@ def run_deal(buyer: gn.Node, seller: gn.Node, terms: dr.Terms, asked: str, payme
     seller.open_deal(schain, steps)
     _reconcile(buyer, seller.half(deal_id), seller)
     if limit is not None:
-        rules.gate(buyer, buyer.deal(deal_id), limit, now())  # raises RuleBlocked: nothing is paid
+        rules.gate(buyer, buyer.deal(deal_id), limit, now(), approve)  # a decline raises RuleHeld: nothing is paid
     ref = pay() if pay else payment_ref
     buyer.seal(buyer.deal(deal_id), rules.pay_after_check(buyer.deal(deal_id), now(), ref) if limit is not None
                else buyer.deal(deal_id).check_and_pay(now(), ref))

@@ -401,10 +401,10 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
 # -- Maya's half of the deal ----------------------------------------------------------------------
 
 def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_wait: float = 120, on_paid=None,
-               limit: int | None = None) -> object:
+               limit: int | None = None, approve=None) -> object:
     """Maya's half of :func:`deals.run_deal`: open, wait for the seller's half, pay, exchange halves, close.
-    With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order over it raises
-    :class:`rules.RuleBlocked` and nothing is paid. Returns the payment."""
+    With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order over it is held for
+    her OK (``approve``) and a decline raises :class:`rules.RuleHeld`: nothing is paid. Returns the payment."""
     wire = peer.home / "stage" / "wire"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     deal_id = chain.deal_id
@@ -412,7 +412,7 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
     s1 = wait_file(wire / "maya" / f"{deal_id}.s1.json", seller_wait)
     deals._reconcile(maya, s1, peer)
     if limit is not None:
-        rules.gate(maya, maya.deal(deal_id), limit, now())  # raises RuleBlocked: nothing is paid
+        rules.gate(maya, maya.deal(deal_id), limit, now(), approve)  # a decline raises RuleHeld: nothing is paid
     payment = rail.pay(price_msat)
     if on_paid is not None:
         on_paid(payment)  # at once: what follows (the seller's half, the close) can fail after the money moved
