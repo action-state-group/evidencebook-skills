@@ -33,6 +33,7 @@
 #       [--title TITLE] [--attach-input-originals] [--seal] \
 #       [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live] \
 #       [--period-policy FILE] [--now TIME] [--wording FILE --wording-digest SHA256]
+#       [--receipts FILE]
 #
 # --profile names an ALREADY SET UP book (this command builds the report
 # from one; it does not seal data into it -- see tests/fresh_env_outcomes.sh
@@ -82,6 +83,17 @@
 # carries no words. Without --wording the page is unchanged. The judged and
 # report-spec paths pass the pack through as it is.
 #
+# --receipts FILE hands the sealed settlement report each deal's receipt, so the
+# page can open it from the deal's line (capsules-plugin#336, evidencebook#764).
+# FILE is what the plugin's settlement-report.sh writes: a JSON list of
+# {"exchange_capsule_id", "receipt": <bundle JSON text>} or
+# {"exchange_capsule_id", "held": true}. It is forwarded unchanged to
+# `capsulectl book report build --receipts FILE`, which owns every check on it;
+# report.sh reads nothing in it. A capsulectl whose `book report build --help`
+# does not list --receipts is refused before anything is written to the book.
+# Without --receipts nothing is probed or passed and the page is unchanged
+# (default: not carried, capsule-viewer#228).
+#
 # --seal is the evidencebook-report skill's grade 2 (sealed and checked):
 # `book report build --seal` writes the page's SHA-256 into the book and
 # checkpoints it, then `book report check` must answer page "match" with the
@@ -99,12 +111,13 @@ usage: report.sh --spec SPEC --profile NAME --date YYYY-MM-DD [--to YYYY-MM-DD] 
                   [--title TITLE] [--attach-input-originals] [--seal]
                   [--judge-cmd CMD] [--judge-model-id ID] [--judge-backend mock|live]
                   [--period-policy FILE] [--now TIME] [--wording FILE --wording-digest SHA256]
+                  [--receipts FILE]
 EOF
   exit 2
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
-TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW= WORDING= WORDING_DIGEST=
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW= WORDING= WORDING_DIGEST= RECEIPTS=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -125,6 +138,7 @@ while [[ $# -gt 0 ]]; do
     --now) NOW=$2; shift 2 ;;
     --wording) WORDING=$2; shift 2 ;;
     --wording-digest) WORDING_DIGEST=$2; shift 2 ;;
+    --receipts) RECEIPTS=$2; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -134,6 +148,14 @@ done
 [[ -n "$WORDING" && -n "$WORDING_DIGEST" || -z "$WORDING" && -z "$WORDING_DIGEST" ]] \
   || { echo "report.sh: --wording and --wording-digest come together" >&2; exit 2; }
 if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
+[[ -z "$RECEIPTS" || -f "$RECEIPTS" ]] || { echo "report.sh: no such receipts file: $RECEIPTS" >&2; exit 2; }
+if [[ -n "$RECEIPTS" ]]; then
+  # Before the first write to the book: an older capsulectl would seal a Result for a page it cannot build.
+  # Captured first: `grep -q` closing the pipe early would fail a pipefail pipeline.
+  BUILD_HELP=$("$CAPSULECTL" book report build --help 2>&1 || true)
+  grep -q -e '--receipts' <<<"$BUILD_HELP" \
+    || { echo "report.sh: --receipts needs a capsulectl whose 'book report build' takes --receipts (this one, $CAPSULECTL, does not)" >&2; exit 2; }
+fi
 if [[ -n "$WORDING" ]]; then
   python3 "$(dirname "${BASH_SOURCE[0]}")/wording_pack.py" check --pack "$WORDING" --digest "$WORDING_DIGEST" >/dev/null \
     || exit 2
@@ -383,13 +405,14 @@ json.dump({'title': json.load(open(sys.argv[1]))['view']['title']}, open(sys.arg
 
 mkdir -p "$(dirname "$OUT")"
 # A sealed page is built in the run directory and reaches --out only once it checks.
-PAGE=$OUT REPORT_EXTRA=() WORDING_ARGS=()
+PAGE=$OUT REPORT_EXTRA=() WORDING_ARGS=() RECEIPTS_ARGS=()
+if [[ -n "$RECEIPTS" ]]; then RECEIPTS_ARGS=(--receipts "$RECEIPTS"); fi
 if [[ -n "$WORDING" ]]; then WORDING_ARGS=(--wording "$WORDING" --wording-digest "$WORDING_DIGEST"); fi
 if [[ "$SEAL" -eq 1 ]]; then PAGE="$WORK/report.html"; REPORT_EXTRA+=(--seal); fi
 step "capsulectl book report build: render $PAGE (--card $CARD${REPORT_EXTRA[@]+ ${REPORT_EXTRA[*]}})"
 "$CAPSULECTL" book report build --profile "$PROFILE" --bundle "$BUNDLE" --card "$CARD" \
   --presentation "$PRESENTATION_FILE" --out "$PAGE" ${REPORT_EXTRA[@]+"${REPORT_EXTRA[@]}"} \
-  ${WORDING_ARGS[@]+"${WORDING_ARGS[@]}"} | tee "$WORK/report-build.json"
+  ${WORDING_ARGS[@]+"${WORDING_ARGS[@]}"} ${RECEIPTS_ARGS[@]+"${RECEIPTS_ARGS[@]}"} | tee "$WORK/report-build.json"
 [[ -f "$PAGE" ]] || fail "report.html was not written"
 
 if [[ "$SEAL" -eq 1 ]]; then
