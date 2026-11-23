@@ -30,6 +30,16 @@ way.
   re-judging.
 - [`skills/evaluation-compiler/references/capsule-cli.md`](skills/evaluation-compiler/references/capsule-cli.md)
   — the Capsule CLI contract copied verbatim into bundles.
+- **Supported Terms Packs** (three; every other pack in `packs/` is an example):
+  `inference-deals` (a Mesh node's paid exchanges, recomputed with no model),
+  `sticker-sale` (a seller's three sticker-sale rows, recomputed with no model) and
+  the `agent-activity-starter` report spec
+  ([`scripts/specs/agent-activity-starter.yaml`](scripts/specs/agent-activity-starter.yaml)):
+  three yes/no checks answered from the messages sealed in each agent task
+  record, no model. They show that the record is complete, not that the task went
+  well. A record that is hidden or incomplete is "cannot tell", not "no", and a
+  task that made no tool call does not apply. The ARD demo's admission pack is not
+  a Terms Pack to adopt: it lives at [`demo/ard/pack/`](demo/ard/pack/).
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
   `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
   `everyday-rules`, `inference-deals`). `scripts/pack_compile.py` compiles a

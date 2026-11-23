@@ -80,8 +80,27 @@ def is_report_pack(source):
     return not (isinstance(scope, dict) and scope.get("kind") == "admission")
 
 
+# Report specs (scripts/specs/) that are supported Terms Packs without a pack-source.yaml:
+# a no-judge report-spec/v1 that report.sh takes as it is.
+SPEC_PACKS = ("agent-activity-starter",)
+
+
+def spec_pack_entry(root, name):
+    path = root / "scripts" / "specs" / f"{name}.yaml"
+    spec = yaml.safe_load(path.read_text())
+    return {
+        "name": name,
+        "pack_id": spec["id"],
+        "title": spec["title"],
+        "contract_ref": f"{spec['id']}@{spec['version']}",
+        "spec": str(path.relative_to(root)),
+        "card": (spec.get("presentation") or {}).get("card", DEFAULT_CARD),
+    }
+
+
 def list_packs(root=ROOT):
-    return [pack_entry(root, s) for s in sorted((root / "packs").glob("*/pack-source.yaml")) if is_report_pack(s)]
+    packs = [pack_entry(root, s) for s in sorted((root / "packs").glob("*/pack-source.yaml")) if is_report_pack(s)]
+    return packs + [spec_pack_entry(root, n) for n in SPEC_PACKS if (root / "scripts" / "specs" / f"{n}.yaml").is_file()]
 
 
 def require(name, root=ROOT):

@@ -1100,3 +1100,48 @@ claims: [{{id: ok, kind: forall, source: conversations, assert: "True"}}]
                 "claims": [{"id": "ok", "kind": "forall", "source": "calls", "assert": "status == 'ok'"}]}
         verdicts, _, _ = evaluate_group(spec, "d1", {"calls": rows}, "day")
         self.assertEqual(verdicts["ok"], "not_evaluable")
+
+
+class AgentActivityStarterSpec(unittest.TestCase):
+    """scripts/specs/agent-activity-starter.yaml over hand-built task rows (#192)."""
+    SPEC = load_spec(pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/agent-activity-starter.yaml")
+    CLAIMS = ("person_wrote_before_first_action", "every_action_has_a_recorded_result", "agent_replied_after_last_action")
+
+    def _verdicts(self, *answers):
+        rows = [{"case_id": f"c{i}", "day": "d1", "__capsule_id": f"k{i}", "tool_call_count": 1,
+                 "task_message_first": a, "call_results_in_order": a, "final_reply": a}
+                for i, a in enumerate(answers)]
+        verdicts, digests, _ = evaluate_group(self.SPEC, "d1", {"tasks": rows}, "day")
+        return verdicts, digests
+
+    def test_every_answer_yes_is_met(self):
+        verdicts, _ = self._verdicts("yes", "yes")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"met"})
+
+    def test_one_no_is_not_met(self):
+        verdicts, _ = self._verdicts("yes", "no")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"not_met"})
+
+    def test_one_cannot_tell_is_not_evaluable_never_no(self):
+        verdicts, _ = self._verdicts("yes", "cannot_tell")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"not_evaluable"})
+
+    def test_a_task_with_no_tool_call_does_not_count_against_the_claim(self):
+        verdicts, digests = self._verdicts("yes", "not_applicable")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"met"})
+        self.assertEqual(digests[self.CLAIMS[0]], ["k0"])
+
+    def test_only_not_applicable_tasks_did_not_apply(self):
+        verdicts, digests = self._verdicts("not_applicable")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"out_of_scope"})
+        self.assertEqual(digests[self.CLAIMS[0]], ["k0"])
+
+    def test_row_order_does_not_change_the_verdict(self):
+        a, _ = self._verdicts("yes", "cannot_tell", "no")
+        b, _ = self._verdicts("no", "yes", "cannot_tell")
+        self.assertEqual(a, b)
+
+    def test_the_spec_says_complete_not_went_well_and_never_compliant(self):
+        text = (pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/agent-activity-starter.yaml").read_text()
+        self.assertIn("not that the task went well", text.replace("\n    ", " "))
+        self.assertNotIn("complian", text.lower())
