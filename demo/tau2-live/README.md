@@ -25,7 +25,7 @@ disclosure levels that both verify. Tracking issue: evidencebook-skills#219.
 - **The evaluator signs its own verdict** in its own book, with its own key. The airline's
   journal cites it.
 - **Two disclosure levels** of the airline's sealed report: its own view (`keep`) and the
-  judge's copy (`adjudicator`, rows withheld). Each is checked by `capsulectl verify --bundle`.
+  judge's copy (`adjudicator`, rows withheld). Each is checked by `capsulectl deal verify --bundle`.
 
 ## What you need
 
@@ -33,23 +33,26 @@ disclosure levels that both verify. Tracking issue: evidencebook-skills#219.
 - [Goose](https://block.github.io/goose/) 1.59 or later, with a working provider. The demo was
   run with the `claude-acp` provider (`goose configure`). The `goose` command must be on
   `PATH`, or Goose Desktop must be installed at `/Applications/Goose.app`.
-- capsulectl and its two plugins, from their releases:
+- capsulectl, its deal and book plugins, and capsule-engine (the admission decision a deal
+  opens under). The commands below put them in this directory's `.tools`, so nothing outside
+  it changes; the `export` line is needed in every shell you run the demo from. Use the
+  `linux-amd64` or `linux-arm64` assets on Linux.
 
   ```sh
+  cd demo/tau2-live
   V=v0.1.0-rc49
-  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-darwin-arm64" -O capsulectl
-  gh release download capsulectl/$V -R action-state-group/evidencebook -p "capsulectl-deal-$V-darwin-arm64" -O capsulectl-deal
-  gh release download capsulectl/$V -R action-state-group/evidencebook -p "capsulectl-book-$V-darwin-arm64" -O capsulectl-book
-  chmod +x capsulectl capsulectl-deal capsulectl-book
-  mv capsulectl ~/.local/bin/   # any directory on PATH
-  capsulectl plugin install ./capsulectl-deal
-  capsulectl plugin install ./capsulectl-book
-  ```
-
-- capsule-engine, for the admission decision a deal opens under:
-
-  ```sh
-  GOBIN=~/.local/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@go/v0.6.0
+  mkdir -p .tools/bin .tools/plugins
+  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-darwin-arm64" -O .tools/bin/capsulectl
+  # The plugins come from evidencebook main until a release carries evidencebook#766 (an offer
+  # to a party that keeps no records, which rc49 refuses): build them at a pinned commit.
+  EB=7499da439816a66858d5c3c64793476c75a9069d
+  git clone -q https://github.com/action-state-group/evidencebook.git .tools/evidencebook
+  git -C .tools/evidencebook checkout -q $EB
+  (cd .tools/evidencebook/capsulectl && go build -o ../../plugins/capsulectl-deal ./cmd/capsulectl-deal && go build -o ../../plugins/capsulectl-book ./cmd/capsulectl-book)
+  chmod 755 .tools/plugins .tools/bin/capsulectl
+  GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@v0.6.0
+  export PATH=$PWD/.tools/bin:$PATH CAPSULECTL_PLUGIN_ROOTS=$PWD/.tools/plugins
+  capsulectl plugin ls | grep -o '"name":"[a-z]*"'    # "book" and "deal"
   ```
 
 The demo keeps its own capsulectl profiles under `state/config` (it sets `XDG_CONFIG_HOME`),
@@ -57,7 +60,7 @@ so it never touches your own profiles.
 
 ## Run it
 
-From this directory:
+From `demo/tau2-live`, in a shell with the `export` line above:
 
 ```sh
 uv sync
@@ -65,8 +68,8 @@ uv run python roleplay.py --task 40          # one live case; prints the case di
 CASE=$(ls -dt state/cases/* | head -1)
 uv run python evaluate.py "$CASE"            # the evaluator's signed verdict
 uv run python report.py "$CASE"              # waits for the book's checkpoint (up to about 6 minutes)
-capsulectl verify --bundle "$CASE/report/bundle-keep.json"
-capsulectl verify --bundle "$CASE/report/bundle-adjudicator.json"
+capsulectl deal verify --bundle "$CASE/report/bundle-keep.json"          # verdict VALID
+capsulectl deal verify --bundle "$CASE/report/bundle-adjudicator.json"   # verdict VALID
 open "$CASE/report/report.html"
 uv run python export_walkthrough.py "$CASE"  # then open walkthrough/index.html
 ```
@@ -76,7 +79,10 @@ one confirmed write, so it shows the gate, the act and the span join. A live run
 time: the agents are models.
 
 `report.py` waits for the book's next checkpoint, because a report rests on one. The cadence
-ticks about every five minutes.
+ticks about every five minutes. Until the plugins come from a release, capsulectl prints a
+warning that they are built for `0.1.0-dev`; it does not change the result. Ctrl-C during
+`roleplay.py` stops the case; the turns said so far stay sealed, and the next run opens a new
+case.
 
 ## The walkthrough
 
@@ -84,7 +90,7 @@ ticks about every five minutes.
 turn sealed with its span, the confirmation, the check and the act, the checkpoint, the
 evaluator's signed verdict, the two disclosure levels, and both verify results. It reads only
 `walkthrough/data.js`, which `export_walkthrough.py` writes from a case directory. The page
-checks nothing itself: `capsulectl verify` is the check. Keys: Right and Left arrows to step,
+checks nothing itself: `capsulectl deal verify` is the check. Keys: Right and Left arrows to step,
 Space to play, Home to restart.
 
 ## What this demo does not do
@@ -95,13 +101,16 @@ Space to play, Home to restart.
   `window.py`, one deal profile per window.
 - **No person's signature.** Every act shows `person_signature: missing`. No format exists
   yet for a person to sign an act (agent-action-capsule#627).
-- **Deal checks are not in core verify.** `capsulectl verify --bundle` reports the `x-deal-v1`
-  extension as `uninterpreted`. VALID means the generic checks passed: signatures, record
-  identity, the checkpoint and the disclosures.
-- **The default judge is a mock.** `evaluate.py` uses `scripts/judges/jev_judge.py` with
-  `JEV_JUDGE_BACKEND=mock`. Its verdicts are a hash of the request: reproducible, and
-  meaningless about the conversation. The verdict record names that judge. A real judge
-  (`--judge-cmd` without the mock, with a TypeSafe or OpenRouter key) costs money per case.
+- **Core verify does not run the deal rule.** `capsulectl deal verify --bundle` runs core's checks
+  (signatures, record identity, the checkpoint, the disclosures) and the x-deal-v1 report rule;
+  that is the check this demo reports. Core `capsulectl verify --bundle` alone says INCOMPLETE on
+  rc49 (`report_rule_not_checked`) and names the deal command; `report.py` keeps its result too.
+- **The judge is not the rubric's pinned judge.** `evaluate.py` defaults to `goose_judge.py`:
+  the model your Goose provider runs reads the conversation and the policy and answers each of
+  the nine criteria with a rationale. The rubric's pinned judge (jev-1.13.0,
+  `scripts/judges/jev_judge.py`) costs money per case; run it with `--judge-cmd` and
+  `--judge-model-id`. `--judge mock` uses that script's mock backend, a hash with no model.
+  The verdict record names whichever judge ran.
 - **No counterparty copy.** The customer keeps no records of its own.
 - **No collector.** Nothing reads OTel back into books (`[capsule-otel-v0]` is on hold). Spans
   carry references only.
@@ -119,5 +128,7 @@ Space to play, Home to restart.
 | `evaluate.py` | The evaluator: the repository's contract path on the case, a signed verdict in its own book, cited by the airline. |
 | `report.py` | The sealed report, the two bundles, verify, and `report.html`. |
 | `export_walkthrough.py`, `walkthrough/` | The walkthrough's data file and page. |
+| `goose_judge.py` | The default judge command: the Goose provider's model answers each criterion. |
+| `sample/task-40-2026-11-23/` | One recorded case from a run of the steps above: transcript, tool calls, spans, the evaluator's verdict, the sealed report, both bundles and their verify results, and `report.html`. `walkthrough/data.js` is exported from it. |
 | `admission/pack-definition.json` | The demo admission pack: one row, the customer is not deny-listed. Demo only. |
 | `tests/` | Unit tests (`uv run --group dev pytest -q tests`). |

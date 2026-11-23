@@ -94,6 +94,7 @@
 
   step("Checkpoint", "The book is checkpointed", "A report rests on a checkpoint of the book: the airline signs the book's head, so a later change to any record shows.", function () {
     strip(air, "", "checkpoint", null);
+    stage.detail = kv([["book", air], ["covers", "every record above"]]);
     span(function (s) { return s.service === "tau2-roleplay" && !s.parent_id; });
   });
   if (D.evaluation) {
@@ -110,7 +111,7 @@
     step("Disclosure", "Two disclosure levels of one report", "The airline seals its report and writes two Evidence Bundles of it: its own full view, and the copy for the judge with the rows withheld. Both carry the same records, so both can be checked.", function () {
       stage.detail = levels(false);
     }, true);
-    step("Verify", "Both copies verify", "capsulectl verify checks each bundle on its own: signatures, record identity, the checkpoint and what each copy discloses.", function () {
+    step("Verify", "Both copies verify", "capsulectl deal verify checks each bundle on its own: signatures, record identity, the checkpoint, what each copy discloses, and the x-deal-v1 report rule.", function () {
       stage.detail = levels(true);
     }, true);
   }
@@ -176,7 +177,8 @@
         talk.appendChild(t);
       }
     });
-    talk.scrollTop = talk.scrollHeight;
+    var pane = talk.parentNode, lane = $("spans").parentNode;
+    requestAnimationFrame(function () { pane.scrollTop = pane.scrollHeight; lane.scrollTop = lane.scrollHeight; });
     renderSpans();
     var tl = $("timeline");
     Array.prototype.forEach.call(tl.children, function (chip, j) { chip.className = "chip" + (steps[j].key ? " key" : "") + (j < cur ? " done" : j === cur ? " cur" : ""); });
@@ -189,10 +191,12 @@
     var t1 = Math.max.apply(null, D.spans.map(function (s) { return Date.parse(s.end); }));
     var w = Math.max(1, t1 - t0);
     stage.spans.slice().sort(function (a, b) { return Date.parse(a.start) - Date.parse(b.start); }).forEach(function (s) {
-      var row = el("div", "span" + (s.service === "airline-tools" ? " tool" : "") + (!s.parent_id ? " root" : "") + (s.capsule_id && stage.stamped[s.capsule_id] ? " stamped" : ""));
+      var row = el("div", "span" + (s.service === "airline-tools" ? " s-tool" : "") + (!s.parent_id ? " root" : "") + (s.capsule_id && stage.stamped[s.capsule_id] ? " stamped" : ""));
       var bar = el("div", "barx", s.name + (s.capsule_id ? "  aac.capsule_id=" + short(s.capsule_id) : ""));
-      bar.style.left = (100 * (Date.parse(s.start) - t0) / w) + "%";
-      bar.style.minWidth = Math.max(0.5, 100 * (Date.parse(s.end) - Date.parse(s.start)) / w) + "%";
+      var left = 100 * (Date.parse(s.start) - t0) / w, width = Math.max(0.5, 100 * (Date.parse(s.end) - Date.parse(s.start)) / w);
+      // A bar late in the trace grows leftward from its end, so its label stays on screen.
+      if (left > 55) bar.style.right = Math.max(0, 100 - left - width) + "%"; else bar.style.left = left + "%";
+      bar.style.minWidth = width + "%";
       row.appendChild(bar); box.appendChild(row);
     });
   }

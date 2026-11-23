@@ -170,7 +170,12 @@ def main() -> None:
     p.add_argument("--state", type=Path, default=HERE / "state", help="where the demo keeps books and cases")
     p.add_argument("--window", default="month", choices=("day", "month", "year"))
     p.add_argument("--max-turns", type=int, default=20)
-    run(p.parse_args())
+    try:
+        run(p.parse_args())
+    except KeyboardInterrupt:
+        # Every turn said so far is already sealed; the case stays as it is.
+        print("\nstopped: the turns said so far are sealed in the case directory under state/cases/", file=sys.stderr)
+        sys.exit(130)
 
 
 if __name__ == "__main__":

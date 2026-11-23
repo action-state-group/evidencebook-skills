@@ -95,7 +95,7 @@ def main() -> None:
     summary = report.build(store, case.dir)
     for level in ("keep", "adjudicator"):
         v = summary["bundles"][level]["verify"]
-        check(v.get("verdict") == "VALID" and v["exit_code"] == 0, f"bundle {level}: capsulectl verify VALID")
+        check(v.get("verdict") == "VALID" and v["exit_code"] == 0, f"bundle {level}: capsulectl deal verify VALID")
     adj = summary["bundles"]["adjudicator"]["report"]
     check(adj.get("rows_state") == "withheld" and not adj.get("rows"), "the adjudicator copy withholds the rows")
     check((case.dir / "report" / "report.html").exists(), "report.html written")

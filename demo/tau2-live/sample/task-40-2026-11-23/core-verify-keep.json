@@ -1,0 +1,82 @@
+{
+ "bundle_digest": "5b00de5344e134055083e9a936d766704c49a7496cbe0c0235fd8664df0a14b6",
+ "checked_against": {
+  "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+  "checks": "aac-strict"
+ },
+ "checkpoint": {
+  "status": "pass",
+  "findings": []
+ },
+ "countersignatures": [],
+ "disclosures": [
+  {
+   "capsule_id": "95ab8079f6187e3258a9eac5dbd17bff8b9c212b966b93b867cfd8c0d0b43ff4",
+   "member": "agent_input",
+   "status": "disclosure_match"
+  },
+  {
+   "capsule_id": "e8f65f021f46dd034f47e36a4b4b8c73d2c4e1a13e66d1e2c0e6d92ac613c4c6",
+   "member": "agent_input",
+   "status": "disclosure_match"
+  }
+ ],
+ "extensions": [
+  {
+   "kind": "evidencebook/payloads",
+   "status": "uninterpreted"
+  },
+  {
+   "kind": "x-deal-report/v0",
+   "status": "uninterpreted"
+  },
+  {
+   "as_of": "as of 2026-11-23T17:44:55Z (the holder's time, when it computed the report; no witness attests it)",
+   "findings": [
+    "report_rule_not_checked"
+   ],
+   "kind": "x-deal-v1",
+   "note": "NOT_CHECKED: this verifier does not run the x-deal-v1 report rule (xdealv1.VerifyReportBundle); a verifier for that profile does. For example, with capsulectl-deal installed, run: capsulectl deal verify --bundle <file>",
+   "report": "standalone",
+   "sealed_report": "4a658549af32b4cc5a50fb13af661ac94628917a449cb09bd885dda67618fd5a",
+   "status": "pass"
+  }
+ ],
+ "graph_closure": {
+  "status": "pass",
+  "findings": []
+ },
+ "interval_coverage": {
+  "status": "pass",
+  "findings": []
+ },
+ "per_record_membership": {
+  "status": "pass",
+  "findings": []
+ },
+ "producer_signatures": {
+  "status": "pass",
+  "findings": []
+ },
+ "record_identity": {
+  "95ab8079f6187e3258a9eac5dbd17bff8b9c212b966b93b867cfd8c0d0b43ff4": "passed",
+  "e8f65f021f46dd034f47e36a4b4b8c73d2c4e1a13e66d1e2c0e6d92ac613c4c6": "passed"
+ },
+ "record_signatures": {
+  "95ab8079f6187e3258a9eac5dbd17bff8b9c212b966b93b867cfd8c0d0b43ff4": "authored",
+  "e8f65f021f46dd034f47e36a4b4b8c73d2c4e1a13e66d1e2c0e6d92ac613c4c6": "authored"
+ },
+ "spec_version": "capsule-cli-result/v1",
+ "verdict": "INCOMPLETE",
+ "witnesses": {
+  "findings": [
+   "witness_receipt_absent"
+  ],
+  "receipts": [],
+  "status": "withheld"
+ },
+ "voice": "report",
+ "say": "I couldn't check this file here.",
+ "exit_code": 3,
+ "command": "verify --bundle"
+}

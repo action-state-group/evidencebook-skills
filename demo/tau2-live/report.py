@@ -8,13 +8,14 @@
 3. Writes two Evidence Bundles of it: ``keep`` (the airline's own view, nothing
    withheld) and ``adjudicator`` (the copy for the judge: rows withheld, the
    share put on record before the file is written).
-4. Runs ``capsulectl verify --bundle`` on each and keeps the result.
+4. Runs ``capsulectl deal verify --bundle`` on each (core's checks plus the x-deal-v1
+   report rule) and keeps the result, with core ``capsulectl verify --bundle``'s beside it.
 5. Writes ``report.html``, one page showing both levels side by side with the
    evaluator's signed verdict and the OTel join, from those same files.
 
 x-deal-v1 has no report page of its own yet (``deal report --html`` refuses a v1
 deal), so the page is the demo's. It shows what the files say and checks nothing
-itself: ``capsulectl verify`` is the check.
+itself: ``capsulectl deal verify`` is the check.
 """
 from __future__ import annotations
 
@@ -34,12 +35,16 @@ def wait_for_checkpoint(store: records.Store, book: str) -> dict:
     return store.run("deal", "tick", "--wait-up-to", "6m", profile=book)
 
 
-def verify(store: records.Store, bundle: Path) -> dict:
-    proc = subprocess.run([store.capsulectl, "verify", "--bundle", str(bundle)], capture_output=True, text=True,
-                          env=store.env(), stdin=subprocess.DEVNULL)
+def verify(store: records.Store, bundle: Path, deal: bool = True) -> dict:
+    """``capsulectl deal verify --bundle``: core's checks plus the x-deal-v1 report rule
+    (xdealv1.VerifyReportBundle). Core ``capsulectl verify --bundle`` alone does not run
+    that rule and says so (INCOMPLETE on rc49, ``report_rule_not_checked``)."""
+    cmd = [store.capsulectl] + (["deal", "verify"] if deal else ["verify"]) + ["--bundle", str(bundle)]
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=store.env(), stdin=subprocess.DEVNULL)
     lines = proc.stdout.strip().splitlines()
     result = json.loads(lines[-1]) if lines else {}
     result["exit_code"] = proc.returncode
+    result["command"] = " ".join(cmd[1:3] if deal else cmd[1:2]) + " --bundle"
     return result
 
 
@@ -48,16 +53,21 @@ def build(store: records.Store, case_dir: Path, judge_label: str = "tau2 evaluat
     out = case_dir / "report"
     out.mkdir(exist_ok=True)
     tick = wait_for_checkpoint(store, case.book)
-    sealed = store.run("deal", "report", "--deal", case.deal_id, "--out", str(out / "report-sealed.json"), profile=case.book)
+    sealed_path = out / "report-sealed.json"
+    if sealed_path.exists():
+        sealed_path.unlink()  # a re-run seals a new report as of its own checkpoint
+    sealed = store.run("deal", "report", "--deal", case.deal_id, "--out", str(sealed_path), profile=case.book)
     bundles = {}
     for level, extra in (("keep", []), ("adjudicator", ["--share", "adjudicator", "--to", judge_label])):
         path = out / f"bundle-{level}.json"
         if path.exists():
             path.unlink()  # a bundle is a snapshot; a re-run writes a fresh one
         result = store.run("deal", "report", "--deal", case.deal_id, *extra, "--bundle", str(path), profile=case.book)
-        bundles[level] = {"file": path.name, "report": result.get("report"), "verify": verify(store, path)}
+        bundles[level] = {"file": path.name, "report": result.get("report"), "verify": verify(store, path),
+                          "core_verify": verify(store, path, deal=False)}
         (out / f"verify-{level}.json").write_text(json.dumps(bundles[level]["verify"], indent=1))
-    summary = {"book": case.book, "deal_id": case.deal_id, "tick": tick, "sealed": sealed.get("file"), "bundles": bundles}
+        (out / f"core-verify-{level}.json").write_text(json.dumps(bundles[level]["core_verify"], indent=1))
+    summary = {"book": case.book, "deal_id": case.deal_id, "tick": tick, "sealed": sealed_path.name, "bundles": bundles}
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
     (out / "report.html").write_text(page(case_dir, summary))
     return summary
@@ -80,7 +90,7 @@ def page(case_dir: Path, summary: dict) -> str:
         rows_html = "".join(f"<tr><td>{e(r.get('row') or r.get('id'))}</td><td>{e(r.get('status') or r.get('value') or json.dumps(r)[:80])}</td></tr>"
                             for r in rows) or f"<tr><td colspan=2><em>rows {e(rep.get('rows_state', 'none'))}</em></td></tr>"
         return f"""<section class="level"><h2>{'The airline’s own view (keep)' if level == 'keep' else 'The judge’s copy (adjudicator)'}</h2>
-<p class="verdict {'ok' if v.get('verdict') == 'VALID' else 'bad'}">capsulectl verify: <b>{e(v.get('verdict', 'no verdict'))}</b> (exit {e(v.get('exit_code'))})</p>
+<p class="verdict {'ok' if v.get('verdict') == 'VALID' else 'bad'}">capsulectl deal verify: <b>{e(v.get('verdict', 'no verdict'))}</b> (exit {e(v.get('exit_code'))})</p>
 <p>audience <code>{e(rep.get('audience'))}</code>, as of <code>{e(rep.get('as_of'))}</code></p>
 <table><tr><th>row</th><th>status</th></tr>{rows_html}</table>
 <p class="file">bundle: <code>{e(b['file'])}</code>, digest <code>{e(v.get('bundle_digest', ''))[:16]}…</code></p></section>"""

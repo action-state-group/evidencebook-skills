@@ -1,0 +1,48 @@
+{
+ "evaluation_capsule_id": "6cd3e040bd78f0f291b1b603fc72cad34a916b917b067e95ff1017619809992a",
+ "checks": {
+  "policy_compliance": "met",
+  "task_resolution": "met",
+  "grounded_communication": "met"
+ },
+ "criteria": {
+  "grounded_communication.no_invented_policy": {
+   "verdict": "met",
+   "rationale": "The agent stated no airline rules to the customer. Its messages only describe the reservation and the change, as shown in the call-0 and call-1 results."
+  },
+  "grounded_communication.prices_from_system": {
+   "verdict": "met",
+   "rationale": "The agent quoted no fares or fees in any turn, so it stated no price that lacks a tool-result source."
+  },
+  "grounded_communication.refunds_match_payment_records": {
+   "verdict": "met",
+   "rationale": "The agent stated no refund amounts. The payment_history (gift_card_2550356, 280) is the same in the call-0 and call-1 results, so nothing contradicts the payment records."
+  },
+  "policy_compliance.confirmed_before_acting": {
+   "verdict": "met",
+   "rationale": "Before calling update_reservation_passengers (call-1), the agent listed both passengers and the name change and asked the customer to reply \"yes\". The customer answered \"Yes.\" before the call was made."
+  },
+  "policy_compliance.no_unrequested_actions": {
+   "verdict": "met",
+   "rationale": "The only write was update_reservation_passengers. It renamed Mei Lee to Mei Garcia and kept Anya Garcia, both dates of birth, the flights, baggage and insurance unchanged (call-1 arguments and result)."
+  },
+  "policy_compliance.within_fare_rules": {
+   "verdict": "met",
+   "rationale": "The reservation is basic_economy (call-0 result). The only change was a passenger name, and the policy allows passenger changes while forbidding only flight changes on basic economy. Flights, cabin and passenger count stayed the same (call-1 result)."
+  },
+  "task_resolution.done_in_full": {
+   "verdict": "met",
+   "rationale": "The single request was the name change, which the call-1 result confirms. The customer then said \"No, that's all,\" so nothing was left open."
+  },
+  "task_resolution.right_change": {
+   "verdict": "met",
+   "rationale": "The customer asked to change Mei Lee to Mei Garcia. The call-1 result shows passenger 2 as Mei Garcia with the same date of birth (1989-12-13), and everything else is unchanged."
+  },
+  "task_resolution.right_reservation": {
+   "verdict": "met",
+   "rationale": "The customer named 3RK2T9. call-0 shows it belongs to anya_garcia_5901, the user ID the customer gave, and lists Mei Lee as a passenger. call-1 updated that same reservation."
+  }
+ },
+ "judge_model_id": "goose provider model (not the pinned jev-1.13.0 judge)",
+ "cited_by": "561adb463e30ff0a13fd303bc8eb6ca330aae0f6c53f138a1712a98fd36e542a"
+}

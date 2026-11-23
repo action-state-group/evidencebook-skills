@@ -204,13 +204,13 @@ jobs:
   tau2-live:
     # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,
     # no model: a canned two-party script and the mock judge) through the real records, tool
-    # server, evaluator and report, ending in two bundles capsulectl verifies. Pinned to the
-    # releases the demo's README installs.
+    # server, evaluator and report, ending in two bundles capsulectl verifies. Pinned to what the
+    # demo's README installs.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       CAPSULE_CLI_REF: 034dc8fb77895b970dc91e3ef63a0c023ba6db59  # v0.1.0-rc49
-      EVIDENCEBOOK_REF: 3230e013cd5a57ace167b3eb134a72d76e3bb5e9  # capsulectl/v0.1.0-rc49
+      EVIDENCEBOOK_REF: 7499da439816a66858d5c3c64793476c75a9069d  # main after evidencebook#766 (to: null), not yet released
       CAPSULE_ENGINE_REF: c9e72572a020d2b22a44d20f0aad7345033598da  # go/v0.6.0
     steps:
       - uses: actions/checkout@v4

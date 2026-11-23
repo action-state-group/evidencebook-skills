@@ -1,0 +1,50 @@
+[
+ {
+  "role": "assistant",
+  "content": "Hi! How can I help you today?",
+  "at": "2026-11-23T17:31:42Z",
+  "capsule_id": "eb93584f20e76007f3b94839d992042951a24ed8e870972d1f72636140df0fa7"
+ },
+ {
+  "role": "user",
+  "content": "Hi, I need to change the passenger name on my reservation 3RK2T9 from Mei Lee to Mei Garcia.",
+  "at": "2026-11-23T17:31:47Z",
+  "capsule_id": "efd5287d73a9373859152636000f5f4e4f80fd38f4b89e31a9512901b213cf35"
+ },
+ {
+  "role": "assistant",
+  "content": "I can help with that. Could you please give me your user ID so I can verify your account and look up reservation 3RK2T9?",
+  "at": "2026-11-23T17:31:56Z",
+  "capsule_id": "f30f5233423664033f8c815cc23998aa732ca60d4579938013333d21cb9c4d00"
+ },
+ {
+  "role": "user",
+  "content": "Sure, it's anya_garcia_5901.",
+  "at": "2026-11-23T17:32:01Z",
+  "capsule_id": "fdce4712ee520469117c457e9b7f489514c1a95eba4afbb6f3824d0c775a1c7c"
+ },
+ {
+  "role": "assistant",
+  "content": "I found reservation 3RK2T9 under your account. It is a one-way basic economy trip from MCO to SFO, with HAT214 on 2024-05-19 and HAT009 on 2024-05-20.\n\nHere is the change I would make:\n- Passenger 1 stays the same: Anya Garcia, date of birth 1992-11-12.\n- Passenger 2 changes from Mei Lee to Mei Garcia. Her date of birth stays 1989-12-13.\n\nNothing else on the reservation changes. Do you want me to go ahead? Please reply \"yes\" to confirm.",
+  "at": "2026-11-23T17:32:15Z",
+  "capsule_id": "1b2f462ef9221edbf416d90bcfc5281b3fa90dbd489ddcada91d8b1b01d77ed1"
+ },
+ {
+  "role": "user",
+  "content": "Yes.",
+  "at": "2026-11-23T17:32:21Z",
+  "capsule_id": "46e7547f8650e26747fc4045626f79039971bc3b059efa5952782a0d8c87bc00"
+ },
+ {
+  "role": "assistant",
+  "content": "Reservation 3RK2T9 is updated. The second passenger is now Mei Garcia, and her date of birth is still 1989-12-13. Anya Garcia, your flights and everything else on the reservation are the same as before. Is there anything else I can help you with?",
+  "at": "2026-11-23T17:32:31Z",
+  "capsule_id": "0400413e505f80a1dd1090d2baeb48f423b005bf7774bcb7cba15a9dd3f258ec"
+ },
+ {
+  "role": "user",
+  "content": "No, that's all. Thanks!\n\n###STOP###",
+  "at": "2026-11-23T17:32:35Z",
+  "capsule_id": "cd27a64b96aa7e5d39041f51730cd74c2095efcb76fd6f3e356db6722e347852"
+ }
+]
