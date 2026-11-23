@@ -600,7 +600,7 @@ class ContractReportShippedPacks(unittest.TestCase):
         return compile_pack(source, f"demo/{name}")
 
     def test_eu_and_airline_carry_the_block_exactly_empty_beside_their_card(self):
-        for name, card in (("eu-ai-act-obligations", "eu-ai-act-compliance/v1"),
+        for name, card in (("eu-ai-act-obligations", "eu-ai-act-obligations-report/v2"),
                             ("airline-support-outcomes", "outcome-report/v1")):
             with self.subTest(name):
                 _, _, _, presentation = self._compiled(name)
@@ -728,13 +728,13 @@ def eu_ai_act_source(**overrides):
         "counterparty": "SAMPLE-PLACEHOLDER-no-counterparty",
         "checks": [
             _eu_ai_act_check("art5", "no_manipulation", finding={
-                "id": "F-01", "severity": "Medium", "recommendation": "Review flagged sessions.",
+                "id": "F-01", "observed": "The sessions the judge read as not met.",
                 "owner_due": "Owner · 1 Jan 2027",
             }),
             _eu_ai_act_check("art50", "disclosure_ordering", tier="recomputed"),
         ],
         "judge": {"model_id": "jev-1.13.0"},
-        "report": {"template": "eu-ai-act-compliance/v1", "percentages": False},
+        "report": {"template": "eu-ai-act-obligations-report/v2", "percentages": False},
     }
     source.update(overrides)
     return source
@@ -758,13 +758,21 @@ class EuAiActComplianceTemplate(unittest.TestCase):
 
     def test_malformed_finding_block_is_refused(self):
         source = eu_ai_act_source()
-        source["checks"][0]["criteria"][0]["finding"] = {"id": "F-01"}  # missing severity/recommendation/owner_due
+        source["checks"][0]["criteria"][0]["finding"] = {"id": "F-01"}  # missing observed/owner_due
         issues = validate_source(source)
         self.assertTrue(any("finding" in i for i in issues), issues)
 
+    def test_a_finding_with_severity_or_a_recommendation_is_refused(self):
+        for extra in ("severity", "recommendation"):
+            source = eu_ai_act_source()
+            source["checks"][0]["criteria"][0]["finding"] = {
+                "id": "F-01", "observed": "x", "owner_due": "y", extra: "z"}
+            issues = validate_source(source)
+            self.assertTrue(any(f"finding.{extra} is not a finding member" in i for i in issues), issues)
+
     def test_presentation_carries_obligations_and_findings(self):
         compiled, axes, prompt, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
-        block = presentation["eu-ai-act-compliance/v1"]
+        block = presentation["eu-ai-act-obligations-report/v2"]
         self.assertTrue(block["enabled"])
         self.assertEqual([o["key"] for o in block["obligations"]], ["art5", "art50"])
         art5 = block["obligations"][0]
@@ -783,7 +791,7 @@ class EuAiActComplianceTemplate(unittest.TestCase):
         source = eu_ai_act_source()
         source["checks"][1]["criteria"][0].pop("finding", None)
         _, _, _, presentation = compile_pack(source, "demo/eu-ai-act-test")
-        rows = presentation["eu-ai-act-compliance/v1"]["obligations"][1]["rows"]
+        rows = presentation["eu-ai-act-obligations-report/v2"]["obligations"][1]["rows"]
         self.assertNotIn("finding", rows[0])
 
     def test_a_scalar_criteria_is_an_issue_not_a_crash(self):
@@ -805,11 +813,14 @@ class EuAiActComplianceTemplate(unittest.TestCase):
                 self.assertEqual(check["applicability"]["status"], "future", check["id"])
                 for crit in check["criteria"]:
                     if crit.get("finding"):
-                        self.assertIn("readiness tracking", crit["finding"]["recommendation"], crit["id"])
+                        self.assertIn("2 Dec 2027", check["applicability"]["note"], crit["id"])
+                    # #201: a finding states what was observed, never a grade or advice.
+                    if crit.get("finding"):
+                        self.assertEqual(set(crit["finding"]), {"id", "observed", "owner_due"}, crit["id"])
 
     def test_counts_only_no_percentages_in_this_template(self):
         _, _, _, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
-        block = presentation["eu-ai-act-compliance/v1"]
+        block = presentation["eu-ai-act-obligations-report/v2"]
         self.assertNotIn("percentages", block)
 
 

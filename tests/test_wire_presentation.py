@@ -35,8 +35,8 @@ class ShippedPacks(unittest.TestCase):
     def test_the_eu_pack_wires_its_compliance_block_verbatim_and_selects_the_obligation_card(self):
         presentation = _load("demo/eu-ai-act-obligations/presentation.json")
         wired, template, card = wire(BUNDLE, presentation)
-        self.assertEqual((template, card), ("eu-ai-act-compliance/v1", "obligation"))
-        self.assertEqual(wired["extensions"]["eu-ai-act-compliance/v1"], presentation["eu-ai-act-compliance/v1"])
+        self.assertEqual((template, card), ("eu-ai-act-obligations-report/v2", "obligation"))
+        self.assertEqual(wired["extensions"]["eu-ai-act-obligations-report/v2"], presentation["eu-ai-act-obligations-report/v2"])
 
     def test_the_airline_pack_wires_its_outcome_report_block_and_selects_the_outcome_card(self):
         presentation = _load("demo/airline-support-outcomes/presentation.json")
@@ -62,7 +62,7 @@ class ShippedPacks(unittest.TestCase):
 
 
 class Wire(unittest.TestCase):
-    BLOCK = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+    BLOCK = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []}}
 
     def test_existing_extensions_are_kept_and_the_inputs_are_not_modified(self):
         bundle = json.loads(json.dumps(BUNDLE))
@@ -71,12 +71,12 @@ class Wire(unittest.TestCase):
         self.assertEqual(wired["extensions"]["producer-key/v1"], BUNDLE["extensions"]["producer-key/v1"])
         self.assertEqual(bundle, BUNDLE)
         self.assertEqual(block, self.BLOCK)
-        wired["extensions"]["eu-ai-act-compliance/v1"]["obligations"].append("x")
+        wired["extensions"]["eu-ai-act-obligations-report/v2"]["obligations"].append("x")
         self.assertEqual(block, self.BLOCK)
 
     def test_a_bundle_with_no_extensions_gets_them(self):
         wired, _, _ = wire({"records": []}, self.BLOCK)
-        self.assertEqual(list(wired["extensions"]), ["eu-ai-act-compliance/v1"])
+        self.assertEqual(list(wired["extensions"]), ["eu-ai-act-obligations-report/v2"])
 
     def test_an_unknown_block_is_refused_not_skipped(self):
         # PR #13's first cut looked for outcome-invoice/v1, which no compiled pack
@@ -85,7 +85,7 @@ class Wire(unittest.TestCase):
             wire(BUNDLE, {"outcome-invoice/v1": {"enabled": True}})
 
     def test_two_blocks_are_refused(self):
-        both = {"outcome-report/v1": {"enabled": True}, "eu-ai-act-compliance/v1": {"enabled": True}}
+        both = {"outcome-report/v1": {"enabled": True}, "eu-ai-act-obligations-report/v2": {"enabled": True}}
         with self.assertRaisesRegex(WireError, "exactly one"):
             wire(BUNDLE, both)
 
@@ -97,10 +97,10 @@ class Wire(unittest.TestCase):
     def test_a_disabled_or_non_object_block_is_refused(self):
         for block in ({"enabled": False}, {}, [], "x"):
             with self.assertRaises(WireError):
-                wire(BUNDLE, {"eu-ai-act-compliance/v1": block})
+                wire(BUNDLE, {"eu-ai-act-obligations-report/v2": block})
 
     def test_an_extension_already_on_the_bundle_is_never_overwritten(self):
-        bundle = {"extensions": {"eu-ai-act-compliance/v1": {"enabled": True, "regulation": "theirs"}}}
+        bundle = {"extensions": {"eu-ai-act-obligations-report/v2": {"enabled": True, "regulation": "theirs"}}}
         with self.assertRaisesRegex(WireError, "refusing to overwrite"):
             wire(bundle, self.BLOCK)
 
@@ -117,19 +117,19 @@ class ContractReportV1(unittest.TestCase):
     x-presentation-digest member: the bundle digest covers it like every
     extension."""
 
-    WITH_BOTH = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}, CONTRACT_REPORT_KEY: {}}
+    WITH_BOTH = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []}, CONTRACT_REPORT_KEY: {}}
 
     def test_wired_beside_the_template_block_unchanged(self):
         wired, template, card = wire(BUNDLE, self.WITH_BOTH)
-        self.assertEqual((template, card), ("eu-ai-act-compliance/v1", "obligation"))
+        self.assertEqual((template, card), ("eu-ai-act-obligations-report/v2", "obligation"))
         self.assertEqual(wired["extensions"][CONTRACT_REPORT_KEY], {})
-        self.assertEqual(wired["extensions"]["eu-ai-act-compliance/v1"],
-                         self.WITH_BOTH["eu-ai-act-compliance/v1"])
+        self.assertEqual(wired["extensions"]["eu-ai-act-obligations-report/v2"],
+                         self.WITH_BOTH["eu-ai-act-obligations-report/v2"])
 
     def test_a_non_empty_block_is_refused_never_wired(self):
         for bad in ({"x": 1}, {"enabled": True}, []):
             with self.subTest(bad=bad):
-                presentation = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []},
+                presentation = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []},
                                 CONTRACT_REPORT_KEY: bad}
                 with self.assertRaisesRegex(WireError, "must be exactly"):
                     wire(BUNDLE, presentation)
@@ -149,12 +149,12 @@ class ContractReportV1(unittest.TestCase):
 
     def test_an_opt_in_already_on_the_bundle_is_refused_whatever_presentation_json_says(self):
         bundle = {"extensions": {CONTRACT_REPORT_KEY: {}}}
-        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        without = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []}}
         with self.assertRaisesRegex(WireError, f"{re.escape(CONTRACT_REPORT_KEY)}.*refusing to overwrite"):
             wire(bundle, without)
 
     def test_the_sealed_member_is_the_same_three_keys_with_or_without_the_opt_in(self):
-        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        without = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []}}
         sealed_without, _, _ = seal({"result_version": "evidence-result-v0"}, without)
         sealed_with, _, _ = seal({"result_version": "evidence-result-v0"}, self.WITH_BOTH)
         self.assertEqual(sealed_with[DIGEST_MEMBER], sealed_without[DIGEST_MEMBER])
@@ -163,18 +163,18 @@ class ContractReportV1(unittest.TestCase):
     def test_a_result_sealed_before_the_opt_in_wires_and_reads_signed_with_it(self):
         # A Result sealed before this pack opted in, wired with today's
         # presentation.json that carries the opt-in: nothing it signed changed.
-        without = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": []}}
+        without = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": []}}
         sealed, _, _ = seal({"result_version": "evidence-result-v0"}, without)
         wired, _, _ = wire(BUNDLE, self.WITH_BOTH, sealed_digest=sealed[DIGEST_MEMBER])
         self.assertEqual(wired["extensions"][CONTRACT_REPORT_KEY], {})
         bundle = {"root": "r", "disclosures": {"r": {"agent_input": sealed}},
                   "extensions": wired["extensions"]}
-        self.assertEqual(presentation_label(bundle), (LABEL_SIGNED, "eu-ai-act-compliance/v1"))
+        self.assertEqual(presentation_label(bundle), (LABEL_SIGNED, "eu-ai-act-obligations-report/v2"))
 
     def test_wiring_never_writes_a_non_empty_block_even_when_the_template_block_is_disabled(self):
         # The refusal to wire an unknown/disabled template block must happen
         # before this key is ever copied onto a bundle -- no partial wiring.
-        presentation = {"eu-ai-act-compliance/v1": {"enabled": False}, CONTRACT_REPORT_KEY: {}}
+        presentation = {"eu-ai-act-obligations-report/v2": {"enabled": False}, CONTRACT_REPORT_KEY: {}}
         with self.assertRaises(WireError):
             wire(BUNDLE, presentation)
 
@@ -235,7 +235,7 @@ class ProducerNote(unittest.TestCase):
         # The obligation card reads no producer_note; it labels the producer's
         # mapping itself, so a note there would be text no reader ever sees.
         wired, _, _ = wire(BUNDLE, Wire.BLOCK)
-        self.assertEqual(wired["extensions"]["eu-ai-act-compliance/v1"], Wire.BLOCK["eu-ai-act-compliance/v1"])
+        self.assertEqual(wired["extensions"]["eu-ai-act-obligations-report/v2"], Wire.BLOCK["eu-ai-act-obligations-report/v2"])
 
     def test_the_input_block_is_not_modified(self):
         presentation = json.loads(json.dumps(self.OUTCOME))
@@ -258,8 +258,8 @@ class Cli(unittest.TestCase):
     def test_prints_the_template_and_card_and_writes_the_wired_bundle(self):
         proc, out = self._run(BUNDLE, Wire.BLOCK)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(json.loads(proc.stdout), {"template": "eu-ai-act-compliance/v1", "card": "obligation"})
-        self.assertIn("eu-ai-act-compliance/v1", out["extensions"])
+        self.assertEqual(json.loads(proc.stdout), {"template": "eu-ai-act-obligations-report/v2", "card": "obligation"})
+        self.assertIn("eu-ai-act-obligations-report/v2", out["extensions"])
 
     def test_a_refusal_exits_non_zero_and_writes_nothing(self):
         proc, out = self._run(BUNDLE, {"outcome-invoice/v1": {"enabled": True}})

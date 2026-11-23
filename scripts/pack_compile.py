@@ -36,7 +36,7 @@ exactly `demo/<name>`, matching the depth scripts/run_daily.py's
                            compiled.json both refer to.
   - presentation.json   -- the bundle presentation extension for the selected
                            report.template (outcome-report/v1 or
-                           eu-ai-act-compliance/v1), plus the empty
+                           eu-ai-act-obligations-report/v2), plus the empty
                            contract-report/v1 opt-in for the packs in
                            CONTRACT_REPORT_PACKS. scripts/wire_presentation.py
                            wires it onto the bundle for the renderer.
@@ -184,7 +184,7 @@ def _build_outcome_report_presentation(source):
 
 
 def _build_eu_ai_act_presentation(source):
-    """eu-ai-act-compliance/v1: a check is an OBLIGATION (one article), each
+    """eu-ai-act-obligations-report/v2: a check is an OBLIGATION (one article), each
     criterion a TEST under it -- the same checks/criteria shape every other
     template reads, carrying obligation- and test-level metadata (article
     reference, plain-language summary, applicability, method, and an optional
@@ -257,12 +257,16 @@ PERIOD_POLICY_KEYS = ("epoch", "length_s", "min_length_s", "floor", "suppression
 # validation failure (see validate_source), never a silent fallback to this one.
 REPORT_TEMPLATES = {
     "outcome-report/v1": _build_outcome_report_presentation,
-    "eu-ai-act-compliance/v1": _build_eu_ai_act_presentation,
+    "eu-ai-act-obligations-report/v2": _build_eu_ai_act_presentation,
 }
 
 
+# What a finding template carries: its id, what was observed, and a placeholder for who follows up.
+FINDING_KEYS = ("id", "observed", "owner_due")
+
+
 def _validate_eu_ai_act_fields(source):
-    """Extra validation for report.template == "eu-ai-act-compliance/v1" --
+    """Extra validation for report.template == "eu-ai-act-obligations-report/v2" --
     the obligation/test metadata _build_eu_ai_act_presentation reads but the
     generic validate_source() above knows nothing about. Same "absent is
     never pass" discipline: a check missing its article/title/plain/
@@ -280,7 +284,7 @@ def _validate_eu_ai_act_fields(source):
         where = f"checks[{i}]"
         for key in ("article", "title", "plain", "method"):
             if not isinstance(check.get(key), str) or not check[key].strip():
-                issues.append(f"{where}.{key} must be a non-empty string (eu-ai-act-compliance/v1 requires it)")
+                issues.append(f"{where}.{key} must be a non-empty string (eu-ai-act-obligations-report/v2 requires it)")
         applicability = check.get("applicability")
         if not isinstance(applicability, dict) or applicability.get("status") not in ("in_force", "future"):
             issues.append(f"{where}.applicability must be a mapping with status in_force|future")
@@ -300,13 +304,17 @@ def _validate_eu_ai_act_fields(source):
                 if not isinstance(finding, dict):
                     issues.append(f"{cwhere}.finding must be a mapping")
                     continue
-                for key in ("id", "severity", "recommendation", "owner_due"):
+                for key in FINDING_KEYS:
                     if not isinstance(finding.get(key), str) or not finding[key].strip():
                         issues.append(f"{cwhere}.finding.{key} must be a non-empty string")
+                # A finding states what was observed. A grade (severity) or advice
+                # (a recommendation) is not part of it (Steven, 2026-11-23, #201).
+                for key in sorted(set(finding) - set(FINDING_KEYS)):
+                    issues.append(f"{cwhere}.finding.{key} is not a finding member (allowed: {', '.join(FINDING_KEYS)})")
     return issues
 
 
-REPORT_TEMPLATE_EXTRA_VALIDATORS = {"eu-ai-act-compliance/v1": _validate_eu_ai_act_fields}
+REPORT_TEMPLATE_EXTRA_VALIDATORS = {"eu-ai-act-obligations-report/v2": _validate_eu_ai_act_fields}
 
 # The report settings a pack may carry. Anything else is refused: the report states
 # outcomes, and settings that are not about presenting them (pricing a resolution,
@@ -510,7 +518,7 @@ def validate_source(source, base_dir=None):
             if "scope_note" in crit and (not isinstance(crit["scope_note"], str) or not crit["scope_note"].strip()):
                 issues.append(f"{cwhere}.scope_note must be a non-empty string")
             # Presentation-only row text for the report card, when it must say
-            # more than the label (eu-ai-act-compliance/v1 only); never judged.
+            # more than the label (eu-ai-act-obligations-report/v2 only); never judged.
             if "card_label" in crit and (not isinstance(crit["card_label"], str) or not crit["card_label"].strip()):
                 issues.append(f"{cwhere}.card_label must be a non-empty string")
             # A deterministic pre-check that runs before the judge on a judged
@@ -848,7 +856,7 @@ def build_axes_json(source):
         "outcome": source["pack_id"],
         "outcome_statement": source["outcome_statement"],
         "rule": (f"all {len(axes)} axes required -- resolved only when every one passes"
-                 if source["report"].get("template") != "eu-ai-act-compliance/v1"
+                 if source["report"].get("template") != "eu-ai-act-obligations-report/v2"
                  else f"{len(axes)} tests, each reported as a count of sessions; no resolved roll-up"),
         "checks": checks,
         "axes": axes,

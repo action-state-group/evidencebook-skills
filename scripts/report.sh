@@ -20,7 +20,7 @@
 # All paths converge on the SAME tail: (judged path only) pin the pack's own
 # compiled presentation.json block's digest in the Result v0 -> capsulectl book
 # result build -> a fresh checkpoint -> disclose -> (judged path only) wire that
-# same block (outcome-report/v1 or eu-ai-act-compliance/v1,
+# same block (outcome-report/v1 or eu-ai-act-obligations-report/v2,
 # scripts/wire_presentation.py) onto the bundle -> book report build. The block
 # is the producer's text, carried outside the signed records; the signed Result
 # pins its SHA-256 (x-presentation-digest), so a block changed after sealing no
@@ -46,7 +46,7 @@
 #
 # --card defaults to the spec's own `presentation.card` (report-spec path)
 # or, on the judged path, the card the pack's own presentation block selects
-# ("obligation" for eu-ai-act-compliance/v1, "outcome" for outcome-report/v1,
+# ("obligation" for eu-ai-act-obligations-report/v2, "outcome" for outcome-report/v1,
 # "outcome" when the pack has no presentation.json); --judge-backend defaults
 # to mock (scripts/judges/jev_judge.py's mock backend, no key, no network
 # call) -- pass --judge-backend live with TYPESAFE_API_KEY (or OPENROUTER_API_KEY) set in
