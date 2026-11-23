@@ -92,6 +92,9 @@ def decide(rule, records):
 
 
 def evaluate(pack, inputs, generated_at):
+    missing = [k for k in ("derivation", "response", "records") if k not in inputs]
+    if missing:
+        raise ValueError(f"inputs carry no {missing}: is this a `book result derived-inputs` document?")
     if not inputs.get("proven"):
         raise ValueError("the holder's answer carries no proofs; this evaluator does not report over unproven inputs")
     if canonical_digest(pack) != inputs["derivation"]:

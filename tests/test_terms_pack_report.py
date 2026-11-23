@@ -165,6 +165,13 @@ class TheResult(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     evaluator.canonical_digest(bad)
 
+    def test_a_document_that_is_not_a_derived_answer_is_refused_cleanly(self):
+        for member in ("derivation", "response", "records"):
+            doc = answer(import_row())
+            del doc[member]
+            with self.assertRaisesRegex(ValueError, "derived-inputs"):
+                evaluator.evaluate(PACK, doc, GENERATED_AT)
+
     def test_an_unproven_answer_is_refused(self):
         with self.assertRaisesRegex(ValueError, "no proofs"):
             evaluator.evaluate(PACK, answer(import_row(), proven=False), GENERATED_AT)
