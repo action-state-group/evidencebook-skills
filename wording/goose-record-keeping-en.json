@@ -3,8 +3,8 @@
  "id": "evidencebook-skills.wording.goose-record-keeping-en/v0",
  "locale": "en",
  "entries": {
-  "report.title": "Record-keeping report: this Goose agent's imported tool-call log",
-  "report.summary": "What the holder's book shows about the tool-call log of its agent host, as the holder imported it, from the passes the holder answered with: whether it was imported, whether any pass declared a gap, and whether any row arrived late or changed. The auditor ran these three terms over the rows the holder answered with. Each row was proven to be in the holder's log at a signed checkpoint; the values on it are the holder's own word, and no proof shows that no row was left out. The book detects a missing or late record, it does not prevent one.",
+  "report.title": "Record-keeping report: a sample Goose agent's imported tool-call log",
+  "report.summary": "The rows behind this page are a hand-written sample in the shape a Goose host's log would give. What the holder's book shows about the tool-call log of its agent host, as the holder imported it, from the passes the holder answered with: whether it was imported, whether any pass declared a gap, and whether any row arrived late or changed. The auditor ran these three terms over the rows the holder answered with. Each row was proven to be in the holder's log at a signed checkpoint; the values on it are the holder's own word, and no proof shows that no row was left out. The book detects a gap or a late row an import pass can see; it does not prevent one.",
   "group.record_keeping.title": "Did the agent's tool-call log reach the holder's book without a gap?",
   "row.record_keeping.passes_present.label": "The host's tool-call log was imported into the book",
   "row.record_keeping.passes_present.detail": "At least one import pass of the agent host's own tool-call log is recorded in the holder's book.",

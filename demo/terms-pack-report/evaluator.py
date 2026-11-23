@@ -31,7 +31,7 @@ from result_v0 import build_result_v0  # noqa: E402
 
 def _path(row, dotted):
     """The value at a dotted path of a row, or (None, False) when a step is missing."""
-    value = row["fields"]
+    value = row.get("fields")
     for name in dotted.split("."):
         if not isinstance(value, dict) or name not in value:
             return None, False
@@ -68,7 +68,8 @@ def decide(rule, records):
     cannot be read, and neither reads as not_met: the holder's answer does not say."""
     rows, unclassified = [], False
     for r in records:
-        kind = r["fields"].get("record_type")
+        fields = r.get("fields")
+        kind = fields.get("record_type") if isinstance(fields, dict) else None
         if not isinstance(kind, str):
             unclassified = True
         elif kind == rule["record_type"]:

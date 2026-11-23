@@ -187,7 +187,7 @@ Run `book report derive` again with the same Result and a new `--out` and it ret
 
 ## 5. What the report shows, and what it does not
 
-It shows what the holder's book holds about the host's log: the rows it was shown and when, the gaps each pass declared, and, from the holder's own signed answer, that each row is in the holder's log at a checkpoint the holder signed.
+It shows what the holder's book holds about the host's log: the passes it imported, the gaps, late rows and refused rows each pass declared, and, from the holder's own signed answer, that each row is in the holder's log at a checkpoint the holder signed.
 
 It does not show:
 

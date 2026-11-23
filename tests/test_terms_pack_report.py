@@ -117,6 +117,11 @@ class Verdicts(unittest.TestCase):
         v, _ = verdicts(answer(import_row(), unnamed))
         self.assertEqual(v["record_keeping.no_declared_gaps"], "not_evaluable")
 
+    def test_a_row_without_fields_is_unclassified_not_a_crash(self):
+        for bad in ({"digest": "x", "leaf_index": 2}, {"digest": "x", "leaf_index": 2, "fields": "nope"}):
+            v, _ = verdicts(answer(import_row(), bad))
+            self.assertEqual(v["record_keeping.no_declared_gaps"], "not_evaluable")
+
     def test_one_unreadable_pass_beats_a_met_one(self):
         broken = import_row()
         del broken["fields"]["statement"]["gaps"]
@@ -177,8 +182,11 @@ class ThePack(unittest.TestCase):
         try:
             import rfc8785
         except ImportError:
-            return
+            self.skipTest("rfc8785 is not installed")
         self.assertEqual(digest, hashlib.sha256(rfc8785.dumps(PACK)).hexdigest())
+
+    def test_the_readme_expects_the_packs_digest(self):
+        self.assertIn(DERIVATION, (DEMO / "README.md").read_text())
 
     @unittest.skipUnless(shutil.which("jq") and shutil.which("shasum"), "needs jq and shasum")
     def test_the_runbooks_hashing_pipeline_gives_the_evaluators_digest(self):
