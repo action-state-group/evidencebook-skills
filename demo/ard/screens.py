@@ -102,3 +102,10 @@ def button(name: str, a: Assessment) -> str:
 
 def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
+
+
+def rules_held(reasons: list[str]) -> str:
+    """What the screen says when the deal check holds an order over the spending limit the person set (Sherlock2,
+    2026-11-23, after Steven's ruling that a failing caps check on a person-set limit escalates, ops u325)."""
+    return ("Held for your OK at deal check, nothing paid. The Everyday Rules held this order: "
+            + "; ".join(reasons) + ".")

@@ -127,6 +127,7 @@ var HistoryView = (() => {
       "periods.cell.withheld": "{what}: fewer than 5",
       "callout.heading": "What this does not show",
       "callout.checkpoints": "These checkpoints show when this node's log was cut and how much it holds. They don't show what any exchange said or how it went, and this is not a judgment of the node.",
+      "callout.checkpoints.time": "The exact time of each exchange. Checkpoint times are rounded to the minute, and each side of an exchange gets its own checkpoint, so two can share a time.",
       "callout.deals": "\u201CSteps recorded\u201D is this side's record of each deal, not a confirmed outcome.",
       "callout.deals.picked": "{name} picked these; it isn't every deal. \u201CSteps recorded\u201D is {name}'s side's record, not a confirmed outcome.",
       "shares.heading": "What this node shares",
@@ -329,7 +330,7 @@ var HistoryView = (() => {
       s
     );
     if (!m) return void 0;
-    const [, y, mo, d, h, mi, se, frac = "", zone = "Z"] = m;
+    const [, y, mo, d, h, mi, se, , zone = "Z"] = m;
     const month = Number(mo);
     const day = Number(d);
     if (month < 1 || month > 12 || day < 1 || day > 31 || Number(h) > 23 || Number(mi) > 59 || Number(se) > 59)
@@ -347,7 +348,7 @@ var HistoryView = (() => {
       const sign = zone.startsWith("-") ? -1 : 1;
       ms -= sign * (Number(zone.slice(1, 3)) * 60 + Number(zone.slice(4, 6))) * 6e4;
     }
-    return { ms, fraction: frac };
+    return { ms };
   }
   var MONTHS = [
     "Jan",
@@ -375,11 +376,6 @@ var HistoryView = (() => {
   function shortMinuteOf(t) {
     const d = new Date(t.ms);
     return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
-  }
-  function secondOf(t, withFraction) {
-    const d = new Date(t.ms);
-    const frac = withFraction && t.fraction ? `.${t.fraction}` : "";
-    return `${dateOf(t)}, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())}:${two(d.getUTCSeconds())}${frac} UTC`;
   }
   var PLACEHOLDER = /\{([a-z_]+)\}/gu;
   function placeholders(text) {
@@ -433,7 +429,7 @@ var HistoryView = (() => {
     }
     return { state, by, at, through };
   }
-  var EPOCH = { ms: 0, fraction: "" };
+  var EPOCH = { ms: 0 };
   function readRow(r, v, path, kind) {
     if (kind === "checkpoint") {
       const o2 = r.object(
@@ -990,23 +986,15 @@ var HistoryView = (() => {
     );
     let rowList = null;
     if (drawRows) {
-      const seconds = /* @__PURE__ */ new Map();
-      if (kind === "checkpoint")
-        for (const x of rows)
-          seconds.set(
-            Math.floor(x.cut.ms / 1e3),
-            (seconds.get(Math.floor(x.cut.ms / 1e3)) ?? 0) + 1
-          );
       const items = rows.map((x) => {
         if (x.kind === "checkpoint") {
-          const tie = (seconds.get(Math.floor(x.cut.ms / 1e3)) ?? 0) > 1;
           return el(
             "li",
             { class: "cvh-row", "data-history": "row" },
             el(
               "p",
               { class: "cvh-row-title" },
-              say("row.cut", { at: secondOf(x.cut, tie) })
+              say("row.cut", { at: minuteOf(x.cut) })
             ),
             el(
               "p",
@@ -1107,7 +1095,8 @@ var HistoryView = (() => {
         "p",
         null,
         kind === "checkpoint" ? say("callout.checkpoints") : picked ? say("callout.deals.picked", { name: name ?? "" }) : say("callout.deals")
-      )
+      ),
+      kind === "checkpoint" && rows.length > 0 ? el("p", null, say("callout.checkpoints.time")) : null
     ) : null;
     let shares = null;
     if (sharing) {
@@ -1315,6 +1304,7 @@ var HistoryView = (() => {
 .cvh-seal-title{font-weight:700}.cvh-checked summary{cursor:pointer;font-weight:700;color:var(--cvh-navy)}
 .cvh-check[data-status=fail]{color:var(--cvh-bad)}.cvh-check[data-status=pass]{color:var(--cvh-ok)}
 .cvh-main,.cvh-side{display:grid;gap:16px;align-content:start}.cvh-refused{border:1px solid var(--cvh-bad);color:var(--cvh-bad);padding:8px 12px;border-radius:8px}
+@media screen and (prefers-color-scheme:dark){.cv-history{--cvh-ink:#e8eaee;--cvh-slate:#a3a9b3;--cvh-line:#33373e;--cvh-cream:#22262d;--cvh-navy:#c3d0e8;--cvh-ok:#5fcf90;--cvh-bad:#ff8f84;background:#16181c;color-scheme:dark}.cvh-badge[data-audience=private]{background:#3a2f1a;border-color:#e6b85c}}
 @media (min-width:900px){.cv-history{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}.cvh-header{grid-column:1/-1}}
 @media print{.cv-history{max-width:none;grid-template-columns:1fr}.cvh-proof code{display:block}}
 `;

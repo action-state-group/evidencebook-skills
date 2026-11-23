@@ -35,7 +35,7 @@ edit). All thresholds are placeholders for this demo only.
 
 Needs Python 3.10+, an evidencebook checkout at commit 5d29ccc (its `python/` package installed, and
 the checkout itself for the Goose reference and the x-deal-v0 checker), and a `capsule-engine` binary
-built at `go/v0.4.0`: the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
+built at `go/v0.7.0` (b84d7d0, which has `guard check --limits` for the spending limit below): the pins the `ard-demo` job in `.github/workflows/tests.yml` tests. The skills, the pack and its compiler are this repository's.
 
 ```bash
 export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned commit
@@ -151,10 +151,47 @@ receipt holds no payment step: the payment is the buyer's act, so only Maya's re
 
 The History card as a page. `ard_open_card_page` writes that party's own card as a page under `$ARD_HOME/pages/` and
 opens it in the browser (`ARD_OPEN_PAGES=0` writes it without opening): capsule-viewer's History view (`history-view/v0`),
-drawn by the released `history-view.iife.js` of capsule-viewer 0.18.0 vendored in `vendor/` and pinned by its sha256, from
+drawn by the released `history-view.iife.js` of capsule-viewer 0.23.0 vendored in `vendor/` and pinned by its sha256, from
 a model the party builds from its own card (`pages.py`). The page fetches nothing and carries no demo banner (Ethan, 2026-11-17: the presenter says "sample history,
 simulated payment" once at the start); it keeps only the label a count needs, such as Kestrel's did-not-hold counted
 from its own note.
+
+The witness. Each checkpoint a party takes is offered to **Action State's hosted witness**
+(`https://witness.agentactioncapsule.org`, capsule-anchor, the default witness of `capsulectl deal init`), which receives
+hashes only. The receipt it returns is checked under the key the service publishes at `/.well-known/did.json` (the
+directory is `demo_node.WITNESS_DIRECTORY`), and a card anchored on a checkpoint with a verified receipt shows each deal
+row `TIME-STAMPED ... by Action State's hosted witness`. That witness is run by Action State, the demo operator: it shows a
+hosted witness, not one independent of us: the page says "This demo's witness is run by Action State, so it is not
+independent of us. Any witness the deal names can do this job." (Sherlock2, 2026-11-23). With no network or `ARD_WITNESS=off` the cards read
+unwitnessed and nothing else changes. The assessment's witness row (`buyer.OPERATOR_FACTS`, the pack's `demo-witness`) is
+still the operator's and not checked, as the screen says; the witnessed card page is what shows a real receipt.
+
+An Open receipt link on the deal line. The History page's deal rows have no link to a receipt in capsule-viewer's History
+view. This demo adds its own: under each deal line whose party holds a receipt page (the live deal; the sample deals have
+none), `ard_open_card_page` writes that receipt page beside the card page and puts an "Open receipt" link under the line,
+labelled "Demo link to this party's receipt page; the History card itself carries no link." The viewer's own control for this is on its contract report
+page (`book report build --receipts`, capsule-viewer 0.22.0); building a report for these deals is the follow-up
+[evidencebook-skills#221](https://github.com/action-state-group/evidencebook-skills/issues/221).
+
+The spending limit. With `ARD_LIMIT_MSAT=2000` set in the shell that starts the windows (Maya's window only reads it),
+Maya's deal check runs the Everyday Rules (`asg/everyday/0.3.8`, embedded in capsule-engine) before any payment: the
+check record is sealed, then `capsule-engine guard check --limits FILE` reads it with Maya's earlier paid orders (the last
+7 days) as history (`rules.py`). The limit is the most she may spend in a rolling 7 days and on one order, in msat; set it
+to the first order's price. The first order passes. A second order to the same seller is a new deal, and its check fails
+the caps rule with the engine's own words; the order is **held for the person's OK**, not refused (Steven, ops u325,
+2026-10-12: a failing caps check on a person-set limit is ESCALATE): the screen says "Held for your OK at deal check, nothing
+paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000
+msat, this order would bring it to 4,000 msat)." (Sherlock2, 2026-11-23) and a second dialog asks Approve or Decline
+(default Decline). The presenter declines on stage: nothing is paid, and the decline is sealed as a note in Maya's book
+(`ard_rules_checked`, with the limit, the amount and `decision: declined`). Approving goes on to the payment and seals
+`decision: approved`. The deal is opened and the check sealed after the presenter's click on the payment dialog, so the
+person is asked about the hold after that click; Sherlock2 accepted that for Tuesday, and applying the check before the
+dialog, still as a hold, is the follow-up [evidencebook-skills#223](https://github.com/action-state-group/evidencebook-skills/issues/223).
+The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment dialog already asks the
+person, so they are listed, not held. The verdict record the reference seals keeps its `rules: not_configured` (this
+demo adds no protocol); the note is where the rules' answer and the person's decision are kept. A clean check reads the
+same with or without `--limits`, so this demo's note, not the result, is the record that the limit was applied. Needs
+capsule-engine go/v0.7.0 or later (`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under
 `$ARD_HOME/pages/` and opens it the same way (`receipt.py`). The page is capsule-viewer's receipt module (the Python

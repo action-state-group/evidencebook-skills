@@ -91,9 +91,11 @@ PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<
 def link(role: str, rail: str, placeholders: bool = False) -> str:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", "CAPSULE_WITNESS=off",
            f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}", f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}"]
-    for var in ("ARD_HOME", "ARD_STAGE_PORT", "CAPSULECTL_DEAL"):  # CAPSULECTL_DEAL: the receipt pages' verifier
+    for var in ("ARD_HOME", "ARD_STAGE_PORT", "CAPSULECTL_DEAL", "ARD_WITNESS"):  # CAPSULECTL_DEAL: the receipt pages' verifier
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
+    if role == "maya" and os.environ.get("ARD_LIMIT_MSAT"):  # the person's spending limit: only the buyer's deal check reads it
+        env.append(f"ARD_LIMIT_MSAT={os.environ['ARD_LIMIT_MSAT']}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):

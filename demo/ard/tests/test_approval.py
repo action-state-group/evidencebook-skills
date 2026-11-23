@@ -71,3 +71,31 @@ def test_the_dialog_title_names_no_demo(monkeypatch):
 def test_the_assess_tool_description_names_no_demo():
     # the agent may repeat its tool description on screen
     assert "demo" not in (ds.ard_assess.__doc__ or "").lower()
+
+
+def hold_answer(monkeypatch, returncode=0, stdout="", raises=None):
+    def run(cmd, **kw):
+        if raises:
+            raise raises
+        assert cmd[0] == "osascript" and "Decline" in cmd[2] and 'default button "Decline"' in cmd[2]
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_only_the_approve_button_approves_a_held_order(monkeypatch):
+    hold_answer(monkeypatch, stdout="button returned:Approve, gave up:false\n")
+    assert ds.approve_hold("Held for your OK") is True
+
+
+@pytest.mark.parametrize("kw", [
+    {"returncode": 1, "stdout": ""},
+    {"stdout": "button returned:Decline, gave up:false\n"},
+    {"stdout": "button returned:Approve, gave up:true\n"},
+    {"returncode": 1, "stdout": "button returned:Approve"},
+    {"raises": OSError("no osascript")},
+    {"raises": subprocess.TimeoutExpired("osascript", 200)},
+])
+def test_anything_else_declines_a_held_order(monkeypatch, kw):
+    hold_answer(monkeypatch, **kw)
+    assert ds.approve_hold("Held for your OK") is False

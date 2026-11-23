@@ -49,6 +49,7 @@ import buyer  # noqa: E402
 import pack as packs  # noqa: E402
 import parties  # noqa: E402
 import pay  # noqa: E402
+import rules  # noqa: E402
 import screens  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from world import SELLERS  # noqa: E402
@@ -132,6 +133,26 @@ def approve_payment(summary: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
+
+
+def approve_hold(summary: str) -> bool:
+    """The person's answer to an order the Everyday Rules held under their spending limit: a native dialog, as
+    :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
+    import subprocess
+
+    text = summary.replace("\\", " ").replace('"', "'")
+    script = (f'display dialog "{text}" with title "Held for your OK" buttons {{"Decline", "Approve"}} '
+              'default button "Decline" cancel button "Decline" with icon caution giving up after 180')
+    try:
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
+
+
+def _ask_about_hold(outcome: "rules.Outcome") -> bool:
+    print(screens.rules_held(outcome.reasons))
+    return approve_hold(screens.rules_held(outcome.reasons) + " Approve this order anyway, or decline?")
 
 
 _session: Session | None = None
@@ -280,46 +301,78 @@ def ard_pay(seller: str) -> None:
     key = _seller_key(seller)
     if key not in s.picked:
         raise RuntimeError(f"no sealed pick of {SELLERS[key]['label']} within its limit: call ard_pick first")
+    limit = rules.limit_msat()
     with s.pay_lock:  # a second call waits here, then sees the seller attempted or paid
-        if key in s.paid:
-            raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
-        if key in s.attempted:
-            raise RuntimeError(f"a payment to {SELLERS[key]['label']} was already attempted in this run and is not confirmed: "
-                               "check the wallet before trying again")
-        rail_name = os.environ.get("ARD_RAIL", "fake")
-        real = rail_name in ("lightning", "local")
-        label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
-        shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
-        summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
-                   else f"Pay {label} {amount} on the simulated rail: no money moves.")
-        if key in s.declined:
-            # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
-            # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
-            # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
-            # call opens the dialog again, and the presenter's click stays the gate.
-            s.declined.discard(key)
-            raise RuntimeError(
-                f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
-                f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
-                + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
-                "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
-        try:
-            approval_gate(real, rail_name, summary)
-        except NotApproved:
-            s.declined.add(key)
+        was_paid = limit is not None and key in s.paid
+        if was_paid:
+            # With a spending limit set, a second order is the point of the show: it goes to the deal check as a new
+            # deal, and the Everyday Rules decide. Without one, a seller is paid once per run, as before.
+            s.paid.discard(key)
+            s.attempted.discard(key)
+            print(f"a second order to {SELLERS[key]['label']}: the deal check will run the Everyday Rules under your limit")
+        try:  # nothing is paid until the lines below pass: a refusal here restores a paid seller the second order lifted
+            if key in s.paid:
+                raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
+            if key in s.attempted:
+                raise RuntimeError(f"a payment to {SELLERS[key]['label']} was already attempted in this run and is not confirmed: "
+                                   "check the wallet before trying again")
+            rail_name = os.environ.get("ARD_RAIL", "fake")
+            real = rail_name in ("lightning", "local")
+            label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
+            shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
+            summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
+                       else f"Pay {label} {amount} on the simulated rail: no money moves.")
+            if key in s.declined:
+                # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
+                # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
+                # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
+                # call opens the dialog again, and the presenter's click stays the gate.
+                s.declined.discard(key)
+                raise RuntimeError(
+                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
+                    f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
+                    + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
+                    + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
+                    "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
+            try:
+                approval_gate(real, rail_name, summary)
+            except NotApproved:
+                s.declined.add(key)
+                raise
+        except BaseException:
+            if was_paid:
+                s.paid.add(key)
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
+    try:
+        _pay(s, key, limit)
+    except (rules.RuleHeld, rules.RulesError) as stopped:
+        # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
+        # (an earlier paid order stays paid, and the order may be tried again).
+        s.attempted.discard(key)
+        if was_paid:
+            s.paid.add(key)
+        if isinstance(stopped, rules.RuleHeld):
+            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
+                               "order and why, and that nothing was paid; do not try to pay around it.") from None
+        raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
+
+
+def _pay(s, key: str, limit: int | None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key])
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
     chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK, run.rail.SEALED)
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
-    payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat,
-                                 on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
+    try:
+        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=_ask_about_hold,
+                                     on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
+    except (rules.RuleHeld, rules.RulesError):
+        s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a declined order is not one
+        raise
     who = ("the buyer's test node paid it" if run.banner == screens.BANNER else "the buyer's wallet paid it") if run.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
     print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}"
           + screens.fee_note(payment.fee_msat, run.banner != screens.BANNER_FAKE))

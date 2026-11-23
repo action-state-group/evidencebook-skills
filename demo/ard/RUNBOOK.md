@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills afa24e7 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc46 · capsule-engine a331006 (go/v0.4.0) · capsule-viewer 613a8a9 · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills afa24e7 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc49 (rc49 or later for the receipt pages) · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 613a8a9 (receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -22,7 +22,7 @@ Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousa
 
 5. **Payment.** A macOS dialog asks you to approve 2,000 msat. Only your click releases the payment, as long as each agent has only its own ard tools; by default the payment is simulated and no money moves.
 
-6. **Receipts.** Each side keeps its own record. Maya's card shows 1 deal, Alder's 25, and each side can open a receipt page.
+6. **Receipts.** Each side keeps its own record. Maya's card shows 1 deal, Alder's 25, each deal row reads time-stamped by Action State's hosted witness (a hosted witness, run by Action State, not independent of us), and the live deal's row has an Open receipt link (a demo link, with the line "Demo link to this party's receipt page; the History card itself carries no link."). With a spending limit set, a second order is held for the person's OK at Maya's deal check, and each side can open a receipt page.
 
 The registry, the seller sites and the 48 sample deals are local stand-ins. The ARD search call, fetching each seller's entry, the signature checks, the assessment and the deal records are the real code.
 
@@ -115,20 +115,20 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/capsule-engine
-   git -C capsule-engine checkout -q a3310060b2d94359bc71c77ae9360d52ee02cf46
+   git -C capsule-engine checkout -q b84d7d0f2d48f9acdf79880dc1e3fa059aba1355
    (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
    mkdir -p $HOME/ard-demo/dl && cd $HOME/ard-demo/dl
-   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc46/SHA256SUMS
-   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc46/capsulectl-deal-v0.1.0-rc46-darwin-arm64
+   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc49/SHA256SUMS
+   curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc49/capsulectl-deal-v0.1.0-rc49-darwin-arm64
    cd $HOME/ard-demo
-   (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc46-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - \
-     && install -m 755 capsulectl-deal-v0.1.0-rc46-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
+   (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc49-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - \
+     && install -m 755 capsulectl-deal-v0.1.0-rc49-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
    cd evidencebook-skills && python3 -m venv .venv
    .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" \
      "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
    ```
 
-   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc46-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
+   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc49-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
 
 2. Already cloned? Move the checkout to this pin instead.
 
@@ -420,6 +420,25 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    ```
 
    **Expect:** buyer outbound 2,000 msat succeeded; seller inbound about 1,900 msat with a fee of about 100. Not yet seen at these pins: read the real figures out.
+
+## The spending limit: a second order is held for your OK (needs capsule-engine go/v0.7.0)
+
+Before the run, in the shell that starts the windows, set the limit to the first order's price, then open the windows as in the steps above:
+
+   ```
+   export ARD_LIMIT_MSAT=2000
+   ```
+
+18. After step 16, in Maya's window type:
+
+   ```
+   Order 200 more badges from Alder Print Co.
+   ```
+
+   **Expect:** a second payment dialog; click Pay. Then a second dialog, "Held for your OK" (default Decline), and on screen: "Held for your OK at deal check, nothing paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat)." Say aloud at the first click: the dialog is the person's yes; the rule can still hold it, and nothing is paid until the second answer. Click Decline: nothing is paid, Maya tells you which rule held the order, the wallet balances do not change and Maya's History card still counts 1 deal. (Approve instead and the payment goes on and the card counts 2.) Not yet run by hand with Goose Desktop at these pins.
+
+19. Open Maya's History page again (`Show your History card, then open your History card as a page.`).
+   **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. The sample deals have no link. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.
 
 ## Quit and re-entry
 

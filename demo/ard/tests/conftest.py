@@ -11,6 +11,9 @@ import _paths  # noqa: E402
 
 _paths.setup()
 os.environ.setdefault("CAPSULE_WITNESS", "off")
+# The demo names a hosted witness by default (demo_node.WITNESS_DIRECTORY); tests never reach it. test_witness.py opens
+# nodes with a stand-in witness client and turns the default back on only there.
+os.environ.setdefault("ARD_WITNESS", "off")
 # pytest-xdist workers compile the pack at the same time: each compiles into a folder of its own (pack.compile_source),
 # and the servers a test starts inherit it.
 if os.environ.get("PYTEST_XDIST_WORKER"):

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import timedelta
 from typing import Any
 
@@ -23,11 +24,62 @@ from evidencebook import deal
 #: A note: this node compared its close with the counterparty's and found them the same (or not).
 RECONCILED = "ard_deal_reconciled"
 
+#: The witness the demo names: capsule-anchor at witness.agentactioncapsule.org, run by Action State Group, the
+#: default witness of ``capsulectl deal init``. It is the demo operator's own service, so a witnessed card here
+#: shows a hosted witness, not one independent of us (coordinator, 2026-11-23). It receives checkpoint hashes only.
+#: The key is the one the service publishes at /.well-known/did.json (its Ed25519 ``x``, as hex).
+WITNESS_NAME = "Action State's hosted witness"
+WITNESS_DIRECTORY = {"witnesses": [{"name": WITNESS_NAME, "endpoint": "https://witness.agentactioncapsule.org",
+                                    "key_ids": ["39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"]}]}
+
+
+def witnessing() -> bool:
+    """True unless ``ARD_WITNESS=off``: a run on a Mac with no network can still run, its card unwitnessed."""
+    return os.environ.get("ARD_WITNESS", "public") != "off"
+
 
 class DemoNode(gn.Node):
     #: The cadence's tick interval: the shortest the profile allows, so a card counts a sale one
     #: minute after the last tick instead of five (the stage waits for the next checkpoint).
     CADENCE_OPTIONS = {"interval": timedelta(minutes=1), "no_jitter": True}
+
+    @classmethod
+    def open(cls, home, *, operator: str, **kw):
+        """As :meth:`goose_node.Node.open`, with the demo's witness directory unless ``ARD_WITNESS=off``."""
+        if witnessing():
+            kw.setdefault("witnesses", WITNESS_DIRECTORY)
+        return super().open(home, operator=operator, **kw)
+
+    def tick(self, now=None):
+        """As :meth:`goose_node.Node.tick`; a tick that was cut is then offered to the witness. A witness that cannot
+        be reached leaves the tick unwitnessed (``witness_error`` says why) and the card says so; nothing else changes."""
+        result = super().tick(now)
+        if result.ticked and self.witness_directory is not None:
+            self.witness_error = None
+            try:
+                self._witness_tick(result.tick)
+            except Exception as exc:  # the card then reads unwitnessed; never a failed run
+                self.witness_error = f"{type(exc).__name__}: {exc}"
+                print(f"(the hosted witness gave no receipt for this checkpoint: {self.witness_error}; the card reads unwitnessed)")
+        return result
+
+    witness_error: str | None = None
+
+    def _witness_tick(self, tick) -> None:
+        from cll.checkpoint.witness import HttpWitnessClient
+        from evidencebook.cadence import WitnessReceipt
+
+        endpoint = WITNESS_DIRECTORY["witnesses"][0]["endpoint"]
+        got = (self._witness_client or HttpWitnessClient)(endpoint).submit(tick.checkpoint)
+        receipt = WitnessReceipt(endpoint, got.entry_hash, bytes(got.bytes), got.leaf_index, got.tree_size)
+        with self._lock:
+            self.cadence.witnessed(tick.n, receipt)
+
+    def witnessed_tick(self, n: int):
+        """The cadence tick ``n`` when a verified witness receipt covers it, else ``None``."""
+        with self._lock:
+            tick = self.cadence.get(n)
+            return tick if tick.witnessed else None
 
     def _results(self, deal_id: str, extent: int) -> tuple[deal.HistoryResult, ...]:
         """The Results this node holds for ``deal_id`` among its node book's first ``extent`` records."""
