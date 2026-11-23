@@ -3,7 +3,7 @@
 # Three yes/no checks answered from the messages sealed in each agent task
 # record (scripts/report_spec.py task_record_checks reads only roles, order,
 # call ids and non-empty flags). They show that the record is complete, not
-# that the task went well. A record that is hidden or incomplete is "cannot
+# that the task went well. A record that is missing or cannot be read is "cannot
 # tell", never "no" (the claim is not_evaluable); a task that made no tool
 # call does not apply (out_of_scope).
 #

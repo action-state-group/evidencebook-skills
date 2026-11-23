@@ -37,12 +37,12 @@ way.
   ([`scripts/specs/agent-activity-starter.yaml`](scripts/specs/agent-activity-starter.yaml)):
   three yes/no checks answered from the messages sealed in each agent task
   record, no model. They show that the record is complete, not that the task went
-  well. A record that is hidden or incomplete is "cannot tell", not "no", and a
+  well. A record that is missing or cannot be read is "cannot tell", not "no", and a
   task that made no tool call does not apply. The ARD demo's admission pack is not
   a Terms Pack to adopt: it lives at [`demo/ard/pack/`](demo/ard/pack/).
 - [`packs/`](packs/) — Terms Packs (packs): each pack's hand-editable
   `pack-source.yaml` (`airline-support-outcomes`, `eu-ai-act-obligations`,
-  `everyday-rules`, `inference-deals`). `scripts/pack_compile.py` compiles a
+  `everyday-rules`, `inference-deals`, `sticker-sale`). `scripts/pack_compile.py` compiles a
   judged pack into four files:
   `compiled.json`, the contract the run scripts read, with the pack's `title`
   for report titles (`PACK_TITLES` in the compiler, outside the pack source so
