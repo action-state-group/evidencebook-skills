@@ -132,7 +132,7 @@ Space to play, Home to restart.
 - **Core verify does not run the deal rule.** `capsulectl deal verify --bundle` runs core's checks
   (signatures, record identity, the checkpoint, the disclosures) and the x-deal-v1 report rule;
   that is the check this demo reports. Core `capsulectl verify --bundle` alone does not run
-  that rule: on rc50 it answers VALID for the same bundle, with a "Not checked here" note naming
+  that rule: on rc50 it answers VALID for the generic checks only (signatures, record identity, the checkpoint), with a "Not checked here" note naming
   x-deal-v1; `report.py` keeps its result too.
 - **The judge is not the rubric's pinned judge.** `evaluate.py` defaults to `goose_judge.py`:
   the model your Goose provider runs reads the conversation and the policy and answers each of
