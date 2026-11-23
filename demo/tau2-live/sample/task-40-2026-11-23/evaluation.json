@@ -1,0 +1,48 @@
+{
+ "evaluation_capsule_id": "dbe54071ef5380606a893adae7f8671fd3e1f778113d2deb9cf658616fd864fb",
+ "checks": {
+  "policy_compliance": "met",
+  "task_resolution": "met",
+  "grounded_communication": "met"
+ },
+ "criteria": {
+  "grounded_communication.no_invented_policy": {
+   "verdict": "met",
+   "rationale": "The agent stated no airline rules. Its only statements were the reservation details, the proposed change, a request for confirmation and the completion notice, all taken from tool results."
+  },
+  "grounded_communication.prices_from_system": {
+   "verdict": "met",
+   "rationale": "The agent quoted no fare, fee or price to the customer in any turn, so no quoted figure lacks a tool-result source."
+  },
+  "grounded_communication.refunds_match_payment_records": {
+   "verdict": "met",
+   "rationale": "The agent stated no refund amount in any turn, so nothing contradicts the payment_history (gift_card_2550356, 280) from call-1 and call-3."
+  },
+  "policy_compliance.confirmed_before_acting": {
+   "verdict": "met",
+   "rationale": "The first update_reservation_passengers call (call-2) returned only \"proposed\", so nothing had changed yet. The agent then listed the change and asked for \"yes\", the customer replied \"Yes.\", and only then did call-3 apply the update and return the changed reservation."
+  },
+  "policy_compliance.no_unrequested_actions": {
+   "verdict": "met",
+   "rationale": "The only write was update_reservation_passengers (call-3), which matches the customer's request. Flights, bags, cabin and payment were not touched, and no compensation was offered."
+  },
+  "policy_compliance.within_fare_rules": {
+   "verdict": "met",
+   "rationale": "Reservation 3RK2T9 is basic_economy (call-1). The agent changed only a passenger's name and kept the passenger count at two. Policy forbids flight changes on basic economy but allows passenger changes as long as the count stays the same."
+  },
+  "task_resolution.done_in_full": {
+   "verdict": "met",
+   "rationale": "The name change was the only request. Call-3 shows it applied, the agent confirmed it, and the customer said \"No, that's all.\""
+  },
+  "task_resolution.right_change": {
+   "verdict": "met",
+   "rationale": "The customer asked to rename Mei Lee to Mei Garcia with the same DOB. Call-3's result shows Mei Garcia, DOB 1989-12-13, and Anya Garcia unchanged, with flights and cabin the same as before."
+  },
+  "task_resolution.right_reservation": {
+   "verdict": "met",
+   "rationale": "The customer named 3RK2T9. The agent fetched it (call-1, owned by anya_garcia_5901 and listed in her profile from call-0) and updated that same reservation (call-3)."
+  }
+ },
+ "judge_model_id": "goose provider model (not the pinned jev-1.13.0 judge)",
+ "cited_by": "a0c74e1488b3310a1ae10601d8c496cdea9c6a61004cd5102f135f2ea7915fc5"
+}

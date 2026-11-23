@@ -1,0 +1,481 @@
+{
+ "book": "airline-2026-11",
+ "deal_id": "deal-1436efb584e2a3ea",
+ "tick": {
+  "cadence_log": "deal-cadence/7be2b8f93b608b8c",
+  "checkpoint": 50,
+  "due": "2026-11-23T18:29:37Z",
+  "published_this_run": 2,
+  "spec_version": "capsule-cli-result/v1",
+  "state": "ticked",
+  "tick": 11,
+  "voice": "silent",
+  "witness": "not_configured"
+ },
+ "sealed": "report-sealed.json",
+ "bundles": {
+  "keep": {
+   "file": "bundle-keep.json",
+   "report": {
+    "type": "deal_report",
+    "profile": "x-deal-v1",
+    "deal_id": "deal-1436efb584e2a3ea",
+    "audience": "keep",
+    "nonce": "5734bf1d0f74b4166e036375b02f5ee87579416987d016e72cd4a03612503c1c",
+    "as_of": "2026-11-23T18:23:44Z",
+    "deal_checkpoint": {
+     "log_id": "deal/98289ce8da2affc3158baefd809b17bd",
+     "mmr_size": 3,
+     "root": "011b34d21c71cb697a8a45dbd3a1e6f4376c28e34063b015b8f9281a40ccbb4a"
+    },
+    "pack_digest": "d9dc833e1a88cb4f4b3f3160daee14c08fd45872128a07b5dc8747f4848021cc",
+    "start": {
+     "state": "started",
+     "local": true,
+     "by": "first_act"
+    },
+    "settled": false,
+    "rows_state": "listed",
+    "rows": [
+     {
+      "id": "policy_compliance",
+      "owed_by": "seller",
+      "owed": {
+       "check": "policy_compliance"
+      },
+      "due": "2026-11-30T18:08:03Z",
+      "window_end": "2026-12-07T18:08:03Z",
+      "status": "not_due",
+      "value": null,
+      "remedy": null,
+      "remedy_made": false,
+      "local": false,
+      "check": "not_recomputed",
+      "late": {
+       "statements": [],
+       "disputes": []
+      },
+      "ruling": null,
+      "relied_on": []
+     },
+     {
+      "id": "task_resolution",
+      "owed_by": "seller",
+      "owed": {
+       "check": "task_resolution"
+      },
+      "due": "2026-11-30T18:08:03Z",
+      "window_end": "2026-12-07T18:08:03Z",
+      "status": "not_due",
+      "value": null,
+      "remedy": null,
+      "remedy_made": false,
+      "local": false,
+      "check": "not_recomputed",
+      "late": {
+       "statements": [],
+       "disputes": []
+      },
+      "ruling": null,
+      "relied_on": []
+     },
+     {
+      "id": "grounded_communication",
+      "owed_by": "seller",
+      "owed": {
+       "check": "grounded_communication"
+      },
+      "due": "2026-11-30T18:08:03Z",
+      "window_end": "2026-12-07T18:08:03Z",
+      "status": "not_due",
+      "value": null,
+      "remedy": null,
+      "remedy_made": false,
+      "local": false,
+      "check": "not_recomputed",
+      "late": {
+       "statements": [],
+       "disputes": []
+      },
+      "ruling": null,
+      "relied_on": []
+     }
+    ],
+    "rests_on": {
+     "own": {
+      "log_id": "deal/98289ce8da2affc3158baefd809b17bd",
+      "size": 2,
+      "last": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c"
+     },
+     "counterparty_layer": false,
+     "counterparty_kind": null,
+     "counterparty_proof": "no_layer"
+    },
+    "status_fact": {
+     "current": true
+    },
+    "report": {}
+   },
+   "verify": {
+    "bundle_digest": "63c9f302885a9507eb376e804d5f752e72b723ded897a0db39d185bf5c0e601b",
+    "checked_against": {
+     "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+     "checks": "aac-strict"
+    },
+    "checkpoint": {
+     "status": "pass",
+     "findings": []
+    },
+    "countersignatures": [],
+    "disclosures": [
+     {
+      "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     },
+     {
+      "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     }
+    ],
+    "extensions": [
+     {
+      "kind": "evidencebook/payloads",
+      "status": "uninterpreted"
+     },
+     {
+      "kind": "x-deal-report/v0",
+      "status": "uninterpreted"
+     },
+     {
+      "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
+      "kind": "x-deal-v1",
+      "report": "standalone",
+      "sealed_report": "699bf83272d5acba836b529b8781b29d12342c64449dad354e1fe933bacc317d",
+      "status": "pass"
+     }
+    ],
+    "graph_closure": {
+     "status": "pass",
+     "findings": []
+    },
+    "interval_coverage": {
+     "status": "pass",
+     "findings": []
+    },
+    "per_record_membership": {
+     "status": "pass",
+     "findings": []
+    },
+    "producer_signatures": {
+     "status": "pass",
+     "findings": []
+    },
+    "record_identity": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+    },
+    "record_signatures": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+    },
+    "spec_version": "capsule-cli-result/v1",
+    "verdict": "VALID",
+    "witnesses": {
+     "findings": [
+      "witness_receipt_absent"
+     ],
+     "receipts": [],
+     "status": "withheld"
+    },
+    "voice": "report",
+    "say": "Checked: unchanged since it was locked.",
+    "exit_code": 0,
+    "command": "deal verify --bundle"
+   },
+   "core_verify": {
+    "bundle_digest": "63c9f302885a9507eb376e804d5f752e72b723ded897a0db39d185bf5c0e601b",
+    "checked_against": {
+     "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+     "checks": "aac-strict"
+    },
+    "checkpoint": {
+     "status": "pass",
+     "findings": []
+    },
+    "countersignatures": [],
+    "disclosures": [
+     {
+      "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     },
+     {
+      "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     }
+    ],
+    "extensions": [
+     {
+      "kind": "evidencebook/payloads",
+      "status": "uninterpreted"
+     },
+     {
+      "kind": "x-deal-report/v0",
+      "status": "uninterpreted"
+     },
+     {
+      "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
+      "findings": [
+       "report_rule_not_checked"
+      ],
+      "kind": "x-deal-v1",
+      "note": "NOT_CHECKED: this verifier does not run the x-deal-v1 report rule (xdealv1.VerifyReportBundle); a verifier for that profile does. For example, with capsulectl-deal installed, run: capsulectl deal verify --bundle <file>",
+      "report": "standalone",
+      "sealed_report": "699bf83272d5acba836b529b8781b29d12342c64449dad354e1fe933bacc317d",
+      "status": "pass"
+     }
+    ],
+    "graph_closure": {
+     "status": "pass",
+     "findings": []
+    },
+    "interval_coverage": {
+     "status": "pass",
+     "findings": []
+    },
+    "per_record_membership": {
+     "status": "pass",
+     "findings": []
+    },
+    "producer_signatures": {
+     "status": "pass",
+     "findings": []
+    },
+    "record_identity": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+    },
+    "record_signatures": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+    },
+    "spec_version": "capsule-cli-result/v1",
+    "verdict": "INCOMPLETE",
+    "witnesses": {
+     "findings": [
+      "witness_receipt_absent"
+     ],
+     "receipts": [],
+     "status": "withheld"
+    },
+    "voice": "report",
+    "say": "I couldn't check this file here.",
+    "exit_code": 3,
+    "command": "verify --bundle"
+   }
+  },
+  "adjudicator": {
+   "file": "bundle-adjudicator.json",
+   "report": {
+    "type": "deal_report",
+    "profile": "x-deal-v1",
+    "deal_id": "deal-1436efb584e2a3ea",
+    "audience": "adjudicator",
+    "nonce": "07298b505d744614a71ad2d003ec95b2d3e3003c84135ed5354ac06a80b5176c",
+    "referee": "tau2 evaluator",
+    "as_of": "2026-11-23T18:23:44Z",
+    "deal_checkpoint": {
+     "log_id": "deal/98289ce8da2affc3158baefd809b17bd",
+     "mmr_size": 3,
+     "root": "011b34d21c71cb697a8a45dbd3a1e6f4376c28e34063b015b8f9281a40ccbb4a"
+    },
+    "pack_digest": "d9dc833e1a88cb4f4b3f3160daee14c08fd45872128a07b5dc8747f4848021cc",
+    "start": {
+     "state": "started",
+     "local": true,
+     "by": "first_act"
+    },
+    "settled": false,
+    "rows_state": "withheld",
+    "rows": [],
+    "rests_on": {
+     "own": {
+      "log_id": "deal/98289ce8da2affc3158baefd809b17bd",
+      "size": 2,
+      "last": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c"
+     },
+     "counterparty_layer": false,
+     "counterparty_kind": null,
+     "counterparty_proof": "no_layer"
+    },
+    "status_fact": {
+     "current": true
+    },
+    "report": {}
+   },
+   "verify": {
+    "bundle_digest": "940e9672a8822cd1cc4a8e7b78d88f82a6542cbbe5960bc09a2dc6270da7556e",
+    "checked_against": {
+     "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+     "checks": "aac-strict"
+    },
+    "checkpoint": {
+     "status": "pass",
+     "findings": []
+    },
+    "countersignatures": [],
+    "disclosures": [
+     {
+      "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     },
+     {
+      "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     }
+    ],
+    "extensions": [
+     {
+      "kind": "evidencebook/payloads",
+      "status": "uninterpreted"
+     },
+     {
+      "kind": "x-deal-report/v0",
+      "status": "uninterpreted"
+     },
+     {
+      "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
+      "kind": "x-deal-v1",
+      "report": "standalone",
+      "sealed_report": "0d5e34f0fa60368eb7a3be6238b05555a2e350266748aec3da921ac5a1121447",
+      "status": "pass"
+     }
+    ],
+    "graph_closure": {
+     "status": "pass",
+     "findings": []
+    },
+    "interval_coverage": {
+     "status": "pass",
+     "findings": []
+    },
+    "per_record_membership": {
+     "status": "pass",
+     "findings": []
+    },
+    "producer_signatures": {
+     "status": "pass",
+     "findings": []
+    },
+    "record_identity": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+    },
+    "record_signatures": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+    },
+    "spec_version": "capsule-cli-result/v1",
+    "verdict": "VALID",
+    "witnesses": {
+     "findings": [
+      "witness_receipt_absent"
+     ],
+     "receipts": [],
+     "status": "withheld"
+    },
+    "voice": "report",
+    "say": "Checked: unchanged since it was locked.",
+    "exit_code": 0,
+    "command": "deal verify --bundle"
+   },
+   "core_verify": {
+    "bundle_digest": "940e9672a8822cd1cc4a8e7b78d88f82a6542cbbe5960bc09a2dc6270da7556e",
+    "checked_against": {
+     "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+     "checks": "aac-strict"
+    },
+    "checkpoint": {
+     "status": "pass",
+     "findings": []
+    },
+    "countersignatures": [],
+    "disclosures": [
+     {
+      "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     },
+     {
+      "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+      "member": "agent_input",
+      "status": "disclosure_match"
+     }
+    ],
+    "extensions": [
+     {
+      "kind": "evidencebook/payloads",
+      "status": "uninterpreted"
+     },
+     {
+      "kind": "x-deal-report/v0",
+      "status": "uninterpreted"
+     },
+     {
+      "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
+      "findings": [
+       "report_rule_not_checked"
+      ],
+      "kind": "x-deal-v1",
+      "note": "NOT_CHECKED: this verifier does not run the x-deal-v1 report rule (xdealv1.VerifyReportBundle); a verifier for that profile does. For example, with capsulectl-deal installed, run: capsulectl deal verify --bundle <file>",
+      "report": "standalone",
+      "sealed_report": "0d5e34f0fa60368eb7a3be6238b05555a2e350266748aec3da921ac5a1121447",
+      "status": "pass"
+     }
+    ],
+    "graph_closure": {
+     "status": "pass",
+     "findings": []
+    },
+    "interval_coverage": {
+     "status": "pass",
+     "findings": []
+    },
+    "per_record_membership": {
+     "status": "pass",
+     "findings": []
+    },
+    "producer_signatures": {
+     "status": "pass",
+     "findings": []
+    },
+    "record_identity": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+    },
+    "record_signatures": {
+     "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
+     "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+    },
+    "spec_version": "capsule-cli-result/v1",
+    "verdict": "INCOMPLETE",
+    "witnesses": {
+     "findings": [
+      "witness_receipt_absent"
+     ],
+     "receipts": [],
+     "status": "withheld"
+    },
+    "voice": "report",
+    "say": "I couldn't check this file here.",
+    "exit_code": 3,
+    "command": "verify --bundle"
+   }
+  }
+ }
+}

@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Support case report: tau2 airline task 40</title>
+<style>body{font:15px/1.5 system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1d2433}
+.levels{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}.level{border:1px solid #d6dbe4;border-radius:8px;padding:1rem}
+table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ef;text-align:left;padding:.3rem}
+.ok{color:#11663a}.bad{color:#a11}code{font-size:.85em}.note{color:#556;font-size:.9em}</style></head><body>
+<h1>Support case report: a fictional airline, tau2 airline task 40</h1>
+<p>Window book <code>airline-2026-11</code>, deal <code>deal-1436efb584e2a3ea</code>. A live role-play between two agents, sealed as it happened: not a replay of a benchmark transcript.</p>
+<div class="levels"><section class="level"><h2>The airline’s own view (keep)</h2>
+<p class="verdict ok">capsulectl deal verify: <b>VALID</b> (exit 0)</p>
+<p>audience <code>keep</code>, as of <code>2026-11-23T18:23:44Z</code></p>
+<table><tr><th>row</th><th>status</th></tr><tr><td>policy_compliance</td><td>not_due</td></tr><tr><td>task_resolution</td><td>not_due</td></tr><tr><td>grounded_communication</td><td>not_due</td></tr></table>
+<p class="file">bundle: <code>bundle-keep.json</code>, digest <code>63c9f302885a9507…</code></p></section><section class="level"><h2>The judge’s copy (adjudicator)</h2>
+<p class="verdict ok">capsulectl deal verify: <b>VALID</b> (exit 0)</p>
+<p>audience <code>adjudicator</code>, as of <code>2026-11-23T18:23:44Z</code></p>
+<table><tr><th>row</th><th>status</th></tr><tr><td colspan=2><em>rows withheld</em></td></tr></table>
+<p class="file">bundle: <code>bundle-adjudicator.json</code>, digest <code>940e9672a8822cd1…</code></p></section></div>
+<h2>The evaluator's verdict (side by side, not merged)</h2><p>signed by the evaluator's own key, record <code>dbe54071ef5380606a893adae7f8671fd3e1f778113d2deb9cf658616fd864fb</code>; judge <code>goose provider model (not the pinned jev-1.13.0 judge)</code></p><table><tr><th>check</th><th>verdict</th></tr><tr><td>policy_compliance</td><td>met</td></tr><tr><td>task_resolution</td><td>met</td></tr><tr><td>grounded_communication</td><td>met</td></tr></table>
+<h2>Acts and their OTel spans</h2><ul><li><code>update_reservation_passengers</code> perform <code>71ffe06b1fe6</code> on span <code>bae60b091171d3df</code> (trace <code>60087dc7faaa…</code>), confirmed by message <code>4415fd23269d</code></li></ul>
+<p class="note">Each act's span carries only the record's capsule id (<code>aac.capsule_id</code>); the record stays in the book.
+Every act shows <code>person_signature: missing</code>: no person's own signature format exists yet (agent-action-capsule#627).
+The book covers one window; the link between windows and coverage across them are not in this demo (evidencebook#689).
+The customer keeps no signed records of its own, so there is no counterparty copy here.</p>
+<p class="note"><b>What VALID covers.</b> Each bundle carries the sealed report and the deal-book records it cites (the agreement and the acts).
+The conversation, the customer's "yes", the policy check and the evaluator's verdict sit in the books, outside these bundles.
+VALID does not say the airline handled the case well; that is the evaluator's verdict, which is cited, not applied to the rows.
+The rows read <code>not_due</code> because each falls due a week after the case opens.
+No witness co-signs the checkpoint: it and the report's <code>as_of</code> are the airline's own word.
+The demo operator runs the evaluator and both agents, so the verdict is not independent.</p>
+</body></html>
