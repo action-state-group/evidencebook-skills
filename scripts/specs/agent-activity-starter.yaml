@@ -1,0 +1,71 @@
+# report-spec/v1 -- agent activity, the starter Terms Pack. NO JUDGE.
+#
+# Three yes/no checks answered from the messages sealed in each agent task
+# record (scripts/report_spec.py task_record_checks reads only roles, order,
+# call ids and non-empty flags). They show that each record has its request, a
+# result for every action and a final reply, not that the task went well. A record that is missing or cannot be read is "cannot
+# tell", never "no" (the claim is not_evaluable); a task that made no tool
+# call does not apply (out_of_scope).
+#
+#   python3 scripts/report_spec.py --profile NAME \
+#       --spec scripts/specs/agent-activity-starter.yaml \
+#       --capsulectl capsulectl --generated-at <RFC3339> --out RUN_DIR/rollup
+spec_version: report-spec/v1
+id: agent-activity-starter
+version: 1
+title: "Agent activity: does each task's record have its request, results and reply"
+group_by: day
+
+switches:
+  out_of_scope_verdict: true
+
+sources:
+  - name: tasks
+    kind: case
+
+metrics:
+  - name: task_count
+    source: tasks
+    op: count
+  - name: tool_call_count
+    source: tasks
+    op: sum
+    field: tool_call_count
+
+claims:
+  - id: person_wrote_before_first_action
+    description: >-
+      in every task that made a tool call, a non-empty message from the person
+      comes before the agent's first action (it does not show that the message
+      asked for this task)
+    kind: forall
+    source: tasks
+    not_evaluable_when: task_message_first == "cannot_tell"
+    where: task_message_first != "not_applicable"
+    assert: task_message_first == "yes"
+
+  - id: every_action_has_a_recorded_result
+    description: >-
+      in every task that made a tool call, each tool call has exactly one tool
+      return with the same id, after it
+    kind: forall
+    source: tasks
+    not_evaluable_when: call_results_in_order == "cannot_tell"
+    where: call_results_in_order != "not_applicable"
+    assert: call_results_in_order == "yes"
+
+  - id: agent_replied_after_last_action
+    description: >-
+      in every task that made a tool call, the agent sent the person a
+      non-empty reply after its last action, with no further tool call
+    kind: forall
+    source: tasks
+    not_evaluable_when: final_reply == "cannot_tell"
+    where: final_reply != "not_applicable"
+    assert: final_reply == "yes"
+
+presentation:
+  card: outcome
+  title_template: "{title} \u2014 {period} \u00b7 {task_count} tasks,
+    {tool_call_count} tool calls. These checks show each record has its request,
+    a result for every action and a final reply, not that the task went well."

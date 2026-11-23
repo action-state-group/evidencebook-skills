@@ -19,7 +19,7 @@ deal profile still gives no *did not hold* from records ([#212](https://github.c
 |---|---|
 | 2 ARD discovery: Maya's agent searches the stand-in registry (`POST /search`, the item only), then fetches each seller's own `/.well-known/ard.json`, compares the entry, checks the identity names its `.test` publisher, and verifies the signed `evidence-commitment/1` | `ard.py`, `discovery.py` |
 | 3 evidence: `history_card/1` (the Goose reference's ask and poll), `standard_history/1` and the selection, each as a request sealed in Maya's book and answered over the sellers' mailbox | `buyer.gather`, `responder.py`, `relay.py` |
-| 4 assessment: `capsule-engine admission evaluate` under the demo pack, one decision per seller, sealed in Maya's book | `buyer.assess`, `pack.py`; the pack is this repository's `packs/ard-demo-buyer` |
+| 4 assessment: `capsule-engine admission evaluate` under the demo pack, one decision per seller, sealed in Maya's book | `buyer.assess`, `pack.py`; the pack is this repository's `demo/ard/pack` |
 | 4b the on-stage edit: `max_adverse_permille` 100 → 50, version 1.0.0 → 1.1.0, recompiled with this repository's `scripts/pack_compile.py`, both sellers re-assessed on the saved evidence | `Run.edit` |
 | 5 the popup and the pick, sealed before any payment | `popup.html`, `buyer.seal_pick` |
 | 6 deal opened from the pick; Shockley's wallet issues an invoice for the picked price, Brattain's wallet pays it | `buyer.open_deal`, `pay.py` |

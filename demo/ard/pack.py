@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The demo's admission pack: compile it, edit its threshold, and run the evaluator on it.
 
-The pack is evidencebook-skills' ``packs/ard-demo-buyer`` (a demo pack derived from its ``admission-baseline``),
+The pack is evidencebook-skills' ``demo/ard/pack`` (a demo pack derived from its ``admission-baseline``),
 in this repository, as the buyer skill names it (#169).
 Compiling is that repository's ``scripts/pack_compile.py`` (its ``--out`` must sit inside the
 checkout, so the work goes under ``<checkout>/demo-ard/``); deciding is ``capsule-engine admission
@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PACK = Path("packs") / "ard-demo-buyer" / "pack-source.yaml"  # in this repository
+PACK = Path("demo") / "ard" / "pack" / "pack-source.yaml"  # in this repository
 
 
 @dataclass(frozen=True)

@@ -86,6 +86,10 @@ example, scripts/specs/mesh-llm-settlement-draft.yaml for a second use case's DR
         assert: <safe_expr string over one row of that source; must hold for
                  EVERY row in this group for the claim to be met -- not_evaluable
                  when the group has no rows for that source>
+        where: <optional safe_expr: only rows it accepts count for this claim;
+               none left is the zero-rows case>
+        not_evaluable_when: <optional safe_expr: any row it matches makes the
+                            claim not_evaluable, before `where` is applied>
     switches:
       out_of_scope_verdict: <optional bool, default false: a claim with
                              readable sources and zero rows is out_of_scope
@@ -787,8 +791,29 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None, out
                 verdicts[cid] = "not_evaluable"
                 reasons[cid] = f"{len(unreadable)} unreadable row(s), e.g. {unreadable[0]}"
                 continue
+            try:
+                # `not_evaluable_when`: a row it matches cannot be told either way (a record
+                # the reader could not parse), so the claim is not_evaluable, never "no".
+                unknown = claim.get("not_evaluable_when")
+                if unknown is not None and any(eval_expr(unknown, r) for r in source_rows):
+                    verdicts[cid] = "not_evaluable"
+                    reasons[cid] = f"a row matches not_evaluable_when {unknown!r}"
+                    continue
+                # `where`: rows it rejects do not apply to this claim (a task that made no call).
+                if claim.get("where") is not None:
+                    source_rows = [r for r in source_rows if eval_expr(claim["where"], r)]
+                    digests[cid] = sorted(_cited(source_rows))
+            except MissingField as e:
+                verdicts[cid] = "not_evaluable"
+                reasons[cid] = f"claim filter: {e}"
+                continue
+            except ExprError as e:
+                raise ReportSpecError(f"claim {cid!r}: filter: {e}") from e
             if not source_rows:
-                zero_rows(claim, f"no {claim['source']!r} rows in this group: nothing to check")
+                why = (f"no {claim['source']!r} row matches where {claim['where']!r}: nothing to check"
+                       if claim.get("where") is not None and group_rows[claim["source"]]
+                       else f"no {claim['source']!r} rows in this group: nothing to check")
+                zero_rows(claim, why)
                 continue
             if not digests[cid]:
                 verdicts[cid] = "not_evaluable"

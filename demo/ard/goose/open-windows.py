@@ -46,7 +46,7 @@ PARTIES = {
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
         "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 3,000 msat. "
-                 "Your admission pack is packs/ard-demo-buyer.",
+                 "Your admission pack is demo/ard/pack.",
         # The first message searches nothing: the presenter types the ask, so all three windows can start together and
         # Maya never searches before the sellers have published their entries (Ethan, 2026-11-18).
         "prompt": "Reply in English only. I am Maya. In one short sentence, say you are my buying agent and ready. Do not "

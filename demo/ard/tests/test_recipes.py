@@ -95,11 +95,11 @@ def test_every_demo_tool_a_skill_names_is_a_tool_of_this_demo():
 def test_what_each_window_shows_names_no_demo():
     # Ethan, 2026-11-18: no mention of the demo anywhere a person sees or an agent can repeat. The recipe's own text
     # (title, description, first message, extension description, the facts before the skill) says none; the pack's
-    # directory name (packs/ard-demo-buyer) is a path, left as it is.
+    # directory name (demo/ard/pack) is a path, left as it is.
     for role in ("alder", "kestrel", "maya"):
         for rail in ("fake", "local"):
             r = _recipe(ow.link(role, rail))
-            head = r["instructions"].split("\n\n", 1)[0].replace("packs/ard-demo-buyer", "")
+            head = r["instructions"].split("\n\n", 1)[0].replace("demo/ard/pack", "")
             own = " ".join([r["title"], r["description"], r["prompt"], r["extensions"][0]["description"], head])
             assert "demo" not in own.lower(), own
     maya = _recipe(ow.link("maya", "fake"))["instructions"]

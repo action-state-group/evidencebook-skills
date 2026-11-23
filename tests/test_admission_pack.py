@@ -802,11 +802,11 @@ if __name__ == "__main__":
     unittest.main()
 
 
-ARD_DEMO = REPO_ROOT / "packs/ard-demo-buyer"
+ARD_DEMO = REPO_ROOT / "demo/ard/pack"
 
 
 class ArdDemoBuyer(unittest.TestCase):
-    """ard-demo-buyer (#169): the ARD two-seller demo's pack, moved here from the demo.
+    """ard-demo-buyer (#169): the ARD two-seller demo's pack, kept in demo/ard/pack (moved out of packs/ by #192).
     It differs from admission-baseline@1 only in its documented demo fields."""
 
     def setUp(self):

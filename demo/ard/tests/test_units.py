@@ -201,7 +201,7 @@ def test_the_owners_note_makes_a_real_card_count_did_not_hold(tmp_path):
 
 
 def test_the_demo_pack_is_this_repositorys():
-    assert packs.source_path() == packs.skills_checkout() / "packs" / "ard-demo-buyer" / "pack-source.yaml"
+    assert packs.source_path() == packs.skills_checkout() / "demo" / "ard" / "pack" / "pack-source.yaml"
 
 
 def test_the_assessment_screen_says_the_selection_has_no_inclusion_proofs():

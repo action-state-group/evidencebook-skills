@@ -1100,3 +1100,71 @@ claims: [{{id: ok, kind: forall, source: conversations, assert: "True"}}]
                 "claims": [{"id": "ok", "kind": "forall", "source": "calls", "assert": "status == 'ok'"}]}
         verdicts, _, _ = evaluate_group(spec, "d1", {"calls": rows}, "day")
         self.assertEqual(verdicts["ok"], "not_evaluable")
+
+
+class AgentActivityStarterSpec(unittest.TestCase):
+    """scripts/specs/agent-activity-starter.yaml over hand-built task rows (#192)."""
+    SPEC = load_spec(pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/agent-activity-starter.yaml")
+    CLAIMS = ("person_wrote_before_first_action", "every_action_has_a_recorded_result", "agent_replied_after_last_action")
+
+    def _verdicts(self, *answers):
+        rows = [{"case_id": f"c{i}", "day": "d1", "__capsule_id": f"k{i}", "tool_call_count": 1,
+                 "task_message_first": a, "call_results_in_order": a, "final_reply": a}
+                for i, a in enumerate(answers)]
+        verdicts, digests, _ = evaluate_group(self.SPEC, "d1", {"tasks": rows}, "day")
+        return verdicts, digests
+
+    def test_every_answer_yes_is_met(self):
+        verdicts, _ = self._verdicts("yes", "yes")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"met"})
+
+    def test_one_no_is_not_met(self):
+        verdicts, _ = self._verdicts("yes", "no")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"not_met"})
+
+    def test_one_cannot_tell_is_not_evaluable_never_no(self):
+        verdicts, _ = self._verdicts("yes", "cannot_tell")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"not_evaluable"})
+
+    def test_a_task_with_no_tool_call_does_not_count_against_the_claim(self):
+        verdicts, digests = self._verdicts("yes", "not_applicable")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"met"})
+        self.assertEqual(digests[self.CLAIMS[0]], ["k0"])
+
+    def test_only_not_applicable_tasks_did_not_apply(self):
+        verdicts, digests = self._verdicts("not_applicable")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"out_of_scope"})
+        self.assertEqual(digests[self.CLAIMS[0]], ["k0"])
+
+    def test_the_reason_when_where_drops_every_row_is_true(self):
+        rows = [{"case_id": "c0", "day": "d1", "__capsule_id": "k0", "tool_call_count": 0,
+                 "task_message_first": "not_applicable", "call_results_in_order": "not_applicable",
+                 "final_reply": "not_applicable"}]
+        out_of_scope = {}
+        evaluate_group(self.SPEC, "d1", {"tasks": rows}, "day", out_of_scope=out_of_scope)
+        reason = out_of_scope[self.CLAIMS[0]]["reason"]
+        self.assertIn("matches where", reason)
+        self.assertNotIn("no 'tasks' rows in this group", reason)
+
+    def test_a_row_missing_the_filtered_field_is_not_evaluable_never_met(self):
+        rows = [{"case_id": "c0", "day": "d1", "__capsule_id": "k0", "tool_call_count": 1}]
+        verdicts, _, _ = evaluate_group(self.SPEC, "d1", {"tasks": rows}, "day")
+        self.assertEqual({verdicts[c] for c in self.CLAIMS}, {"not_evaluable"})
+
+    def test_a_malformed_filter_is_a_spec_error(self):
+        spec = dict(self.SPEC, claims=[dict(self.SPEC["claims"][0], where="x[")])
+        rows = [{"case_id": "c0", "day": "d1", "__capsule_id": "k0", "task_message_first": "yes"}]
+        with self.assertRaisesRegex(ReportSpecError, "filter"):
+            evaluate_group(spec, "d1", {"tasks": rows}, "day")
+
+    def test_row_order_does_not_change_the_verdict(self):
+        a, _ = self._verdicts("yes", "cannot_tell", "no")
+        b, _ = self._verdicts("no", "yes", "cannot_tell")
+        self.assertEqual(a, b)
+
+    def test_the_spec_says_what_the_checks_show_not_that_it_went_well_and_never_compliant(self):
+        text = (pathlib.Path(__file__).resolve().parents[1] / "scripts/specs/agent-activity-starter.yaml").read_text()
+        flat = text.replace("\n    ", " ")
+        self.assertIn("a result for every action and a final reply, not that the task went well", flat)
+        self.assertNotIn("is complete", flat)
+        self.assertNotIn("complian", text.lower())
