@@ -810,7 +810,10 @@ def evaluate_group(spec, group_key, rows_by_name, group_field, reasons=None, out
             except ExprError as e:
                 raise ReportSpecError(f"claim {cid!r}: filter: {e}") from e
             if not source_rows:
-                zero_rows(claim, f"no {claim['source']!r} rows in this group: nothing to check")
+                why = (f"no {claim['source']!r} row matches where {claim['where']!r}: nothing to check"
+                       if claim.get("where") is not None and group_rows[claim["source"]]
+                       else f"no {claim['source']!r} rows in this group: nothing to check")
+                zero_rows(claim, why)
                 continue
             if not digests[cid]:
                 verdicts[cid] = "not_evaluable"

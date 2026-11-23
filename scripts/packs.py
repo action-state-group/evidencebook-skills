@@ -7,13 +7,14 @@ instead of a list typed into the skill, so a pack added or removed changes the
 answer without editing the skill.
 
     packs.py list                 every pack: its directory name, pack_id, title,
-                                  the compiled spec report.sh takes, and its card
+                                  the spec report.sh takes, and its card
     packs.py require NAME         that pack's entry (exit 0), or the refusal
                                   (exit 3)
     packs.py refuse               the refusal (exit 3), for a question the agent
                                   finds no pack covers
 
-NAME is a pack's directory name under packs/ or its pack_id. The refusal is
+NAME is a pack's directory name under packs/, its pack_id, or a name in
+SPEC_PACKS (a no-judge report-spec/v1 under scripts/specs/, which report.sh takes as it is). The refusal is
 JSON with the sentence the skill says to the person, naming the packs that
 exist by title; it carries no count and no judgment, because without a pack
 there is no Result to read one from.
