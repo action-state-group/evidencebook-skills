@@ -108,6 +108,12 @@ class ReportShReceipts(unittest.TestCase):
         self.assertIn("no such receipts file", proc.stderr)
         self.assertEqual(self.calls(), [])
 
+    def test_an_empty_receipts_path_is_refused_not_dropped(self):
+        proc = self.run_report("--receipts", "")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("no such receipts file", proc.stderr)
+        self.assertEqual(self.calls(), [])
+
     def test_the_judged_path_passes_it_through_too(self):
         spec = self.tmp / "judged.json"
         spec.write_text(json.dumps({"contract": "stub-pack", "clauses": [{"id": "c1"}],

@@ -117,7 +117,7 @@ EOF
 }
 
 SPEC= PROFILE= DATE= TO= OUT= WORK= CAPSULECTL=capsulectl CARD= JUDGE_CMD= JUDGE_MODEL_ID= JUDGE_BACKEND=mock
-TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW= WORDING= WORDING_DIGEST= RECEIPTS=
+TITLE_OVERRIDE= ATTACH_ORIGINALS=0 SEAL=0 PERIOD_POLICY= NOW= WORDING= WORDING_DIGEST= RECEIPTS= RECEIPTS_GIVEN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --spec) SPEC=$2; shift 2 ;;
@@ -138,7 +138,7 @@ while [[ $# -gt 0 ]]; do
     --now) NOW=$2; shift 2 ;;
     --wording) WORDING=$2; shift 2 ;;
     --wording-digest) WORDING_DIGEST=$2; shift 2 ;;
-    --receipts) RECEIPTS=$2; shift 2 ;;
+    --receipts) RECEIPTS=$2; RECEIPTS_GIVEN=1; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -148,8 +148,8 @@ done
 [[ -n "$WORDING" && -n "$WORDING_DIGEST" || -z "$WORDING" && -z "$WORDING_DIGEST" ]] \
   || { echo "report.sh: --wording and --wording-digest come together" >&2; exit 2; }
 if [[ "$SEAL" -eq 1 ]]; then rm -f "$OUT"; fi
-[[ -z "$RECEIPTS" || -f "$RECEIPTS" ]] || { echo "report.sh: no such receipts file: $RECEIPTS" >&2; exit 2; }
-if [[ -n "$RECEIPTS" ]]; then
+[[ "$RECEIPTS_GIVEN" -eq 0 || -f "$RECEIPTS" ]] || { echo "report.sh: no such receipts file: $RECEIPTS" >&2; exit 2; }
+if [[ "$RECEIPTS_GIVEN" -eq 1 ]]; then
   # Before the first write to the book: an older capsulectl would seal a Result for a page it cannot build.
   # Captured first: `grep -q` closing the pipe early would fail a pipefail pipeline.
   BUILD_HELP=$("$CAPSULECTL" book report build --help 2>&1 || true)
@@ -406,7 +406,7 @@ json.dump({'title': json.load(open(sys.argv[1]))['view']['title']}, open(sys.arg
 mkdir -p "$(dirname "$OUT")"
 # A sealed page is built in the run directory and reaches --out only once it checks.
 PAGE=$OUT REPORT_EXTRA=() WORDING_ARGS=() RECEIPTS_ARGS=()
-if [[ -n "$RECEIPTS" ]]; then RECEIPTS_ARGS=(--receipts "$RECEIPTS"); fi
+if [[ "$RECEIPTS_GIVEN" -eq 1 ]]; then RECEIPTS_ARGS=(--receipts "$RECEIPTS"); fi
 if [[ -n "$WORDING" ]]; then WORDING_ARGS=(--wording "$WORDING" --wording-digest "$WORDING_DIGEST"); fi
 if [[ "$SEAL" -eq 1 ]]; then PAGE="$WORK/report.html"; REPORT_EXTRA+=(--seal); fi
 step "capsulectl book report build: render $PAGE (--card $CARD${REPORT_EXTRA[@]+ ${REPORT_EXTRA[*]}})"
