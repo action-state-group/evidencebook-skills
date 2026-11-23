@@ -309,7 +309,7 @@ def _validate_eu_ai_act_fields(source):
                         issues.append(f"{cwhere}.finding.{key} must be a non-empty string")
                 # A finding states what was observed. A grade (severity) or advice
                 # (a recommendation) is not part of it (Steven, 2026-11-23, #201).
-                for key in sorted(set(finding) - set(FINDING_KEYS)):
+                for key in sorted(set(finding) - set(FINDING_KEYS), key=str):
                     issues.append(f"{cwhere}.finding.{key} is not a finding member (allowed: {', '.join(FINDING_KEYS)})")
     return issues
 

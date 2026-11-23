@@ -143,7 +143,7 @@
             "tier": "recomputed",
             "finding": {
               "id": "F-03",
-              "observed": "Sample placeholder: the basic-economy modifications made without a recorded confirmation before the write, or with more than one tool call in a turn, with the turns cited.",
+              "observed": "Sample placeholder: the sessions in which any part of the allowed-action check failed (a cancellation or compensation outside its conditions, a change to a basic-economy booking, a write without confirmation, or several tool calls at once), with the turns cited.",
               "owner_due": "Sample placeholder: owner \u00b7 due date"
             }
           },
@@ -154,7 +154,7 @@
             "tier": "judged",
             "finding": {
               "id": "F-04",
-              "observed": "Sample placeholder: the sessions the judge read against the instructions-for-use text, with the turns cited.",
+              "observed": "Sample placeholder: the sessions with a consequential action or refusal that the instructions for use do not allow or require, with the turns cited.",
               "owner_due": "Sample placeholder: owner \u00b7 due date"
             }
           }
@@ -235,7 +235,7 @@
             "tier": "judged",
             "finding": {
               "id": "F-09",
-              "observed": "Sample placeholder: the writes made without a confirmation summary of what, amount, refund method, fees and irreversibility, with the turns cited.",
+              "observed": "Sample placeholder: the approvals the customer gave before the agent had stated the action and the terms that matter, with the turns cited.",
               "owner_due": "Sample placeholder: owner \u00b7 due date"
             }
           }

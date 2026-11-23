@@ -770,6 +770,12 @@ class EuAiActComplianceTemplate(unittest.TestCase):
             issues = validate_source(source)
             self.assertTrue(any(f"finding.{extra} is not a finding member" in i for i in issues), issues)
 
+    def test_a_finding_with_a_non_string_extra_key_is_an_issue_not_a_crash(self):
+        source = eu_ai_act_source()
+        source["checks"][0]["criteria"][0]["finding"] = {
+            "id": "F-01", "observed": "x", "owner_due": "y", 1: "z", "severity": "High"}
+        self.assertTrue(any("finding" in i for i in validate_source(source)))
+
     def test_presentation_carries_obligations_and_findings(self):
         compiled, axes, prompt, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
         block = presentation["eu-ai-act-obligations-report/v2"]
@@ -809,14 +815,11 @@ class EuAiActComplianceTemplate(unittest.TestCase):
             for crit in check["criteria"]:
                 if crit.get("finding"):
                     self.assertTrue(crit["finding"]["owner_due"].startswith("Sample placeholder"), crit["id"])
+                    # #201: a finding states what was observed, never a grade or advice.
+                    self.assertEqual(set(crit["finding"]), {"id", "observed", "owner_due"}, crit["id"])
             if check["article"].startswith(("Art 14", "Art 26", "Art 86")):
                 self.assertEqual(check["applicability"]["status"], "future", check["id"])
-                for crit in check["criteria"]:
-                    if crit.get("finding"):
-                        self.assertIn("2 Dec 2027", check["applicability"]["note"], crit["id"])
-                    # #201: a finding states what was observed, never a grade or advice.
-                    if crit.get("finding"):
-                        self.assertEqual(set(crit["finding"]), {"id", "observed", "owner_due"}, crit["id"])
+                self.assertIn("2 Dec 2027", check["applicability"]["note"], check["id"])
 
     def test_counts_only_no_percentages_in_this_template(self):
         _, _, _, presentation = compile_pack(eu_ai_act_source(), "demo/eu-ai-act-test")
