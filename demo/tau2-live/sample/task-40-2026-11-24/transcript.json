@@ -1,0 +1,58 @@
+[
+ {
+  "role": "assistant",
+  "content": "Hi! How can I help you today?",
+  "at": "2026-11-24T07:26:01Z",
+  "at_ns": 1795505161671812000,
+  "capsule_id": "edf3232267cb67aae57e2d258023cdf618c4d43c92756bf73a93f2637a82bec4"
+ },
+ {
+  "role": "user",
+  "content": "Hi, I need to change the passenger name on my reservation 3RK2T9.",
+  "at": "2026-11-24T07:26:04Z",
+  "at_ns": 1795505164223345000,
+  "capsule_id": "921bda856c7c15ff879efc16ab27c4f030bb9ad851d7add83ee3d403c563cf08"
+ },
+ {
+  "role": "assistant",
+  "content": "I can help with that. Please give me your user ID so I can look up reservation 3RK2T9. Also tell me which passenger you want to change, and the new passenger's first name, last name and date of birth.",
+  "at": "2026-11-24T07:26:09Z",
+  "at_ns": 1795505169926511000,
+  "capsule_id": "0b4c768923c948291a66e7232e2e296f97552e0db5208bf69ec99a9d030d32b8"
+ },
+ {
+  "role": "user",
+  "content": "My user ID is anya_garcia_5901. The passenger is Mei Lee, and I need the name changed to Mei Garcia.",
+  "at": "2026-11-24T07:26:13Z",
+  "at_ns": 1795505173399975000,
+  "capsule_id": "ae382db24232afae028ceb5bbce39b3c85e984c9606b9d6a78454ee66c21be55"
+ },
+ {
+  "role": "assistant",
+  "content": "I found reservation 3RK2T9. Here is the change I will make:\n\nUpdate the passengers on reservation 3RK2T9 to:\n1. Anya Garcia, date of birth 1992-11-12 (no change)\n2. Mei Garcia, date of birth 1989-12-13 (currently Mei Lee)\n\nThe number of passengers stays the same, and so do the flights and the cabin. Do you want me to go ahead? Please reply \"yes\" to confirm.",
+  "at": "2026-11-24T07:26:26Z",
+  "at_ns": 1795505186174679000,
+  "capsule_id": "6d515541d142160dd3c7acb413bd99c6d034e2afd70912d105e9fd626ab70b41"
+ },
+ {
+  "role": "user",
+  "content": "Yes.",
+  "at": "2026-11-24T07:26:28Z",
+  "at_ns": 1795505188917931000,
+  "capsule_id": "969cfd6fc4cf9e9ebc1e54fe301fd92af87bbcc8aeb7c634b68d3b5a85bff9ca"
+ },
+ {
+  "role": "assistant",
+  "content": "I've changed the passenger name. Reservation 3RK2T9 now lists:\n\n1. Anya Garcia, date of birth 1992-11-12\n2. Mei Garcia, date of birth 1989-12-13\n\nYour flights and cabin did not change. Is there anything else I can help you with?",
+  "at": "2026-11-24T07:26:36Z",
+  "at_ns": 1795505197040884000,
+  "capsule_id": "5b4b727dea881d5729a67bab96818aaac417e1ff900078b4357787ee64f283f8"
+ },
+ {
+  "role": "user",
+  "content": "No, that's all. Thanks!\n\n###STOP###",
+  "at": "2026-11-24T07:26:39Z",
+  "at_ns": 1795505199644188000,
+  "capsule_id": "4f4fe304a7deefdeec9f0a0d66a2632359d344b12b179cca054fec51c2c7e100"
+ }
+]

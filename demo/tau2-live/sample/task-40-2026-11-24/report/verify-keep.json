@@ -1,0 +1,78 @@
+{
+ "bundle_digest": "b975fd76f654bc0fc98bfb07dc852c30c702e4fcb5c456aa8537fdc1f392999f",
+ "checked_against": {
+  "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
+  "checks": "aac-strict"
+ },
+ "checkpoint": {
+  "status": "pass",
+  "findings": []
+ },
+ "countersignatures": [],
+ "disclosures": [
+  {
+   "capsule_id": "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004",
+   "member": "agent_input",
+   "status": "disclosure_match"
+  },
+  {
+   "capsule_id": "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15",
+   "member": "agent_input",
+   "status": "disclosure_match"
+  }
+ ],
+ "extensions": [
+  {
+   "kind": "evidencebook/payloads",
+   "status": "uninterpreted"
+  },
+  {
+   "kind": "x-deal-report/v0",
+   "status": "uninterpreted"
+  },
+  {
+   "as_of": "as of 2026-11-24T07:34:26Z (the holder's time, when it computed the report; no witness attests it)",
+   "claims": [],
+   "kind": "x-deal-v1",
+   "read_by": "capsulectl-deal",
+   "report": "standalone",
+   "sealed_report": "7418469aa60a9efa7093ce6c3ac87c644bda8e2ba18e29340649c2059d9f8853",
+   "status": "pass"
+  }
+ ],
+ "graph_closure": {
+  "status": "pass",
+  "findings": []
+ },
+ "interval_coverage": {
+  "status": "pass",
+  "findings": []
+ },
+ "per_record_membership": {
+  "status": "pass",
+  "findings": []
+ },
+ "producer_signatures": {
+  "status": "pass",
+  "findings": []
+ },
+ "record_identity": {
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "passed",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "passed"
+ },
+ "record_signatures": {
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "authored",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "authored"
+ },
+ "spec_version": "capsule-cli-result/v1",
+ "verdict": "VALID",
+ "witnesses": {
+  "findings": [
+   "witness_receipt_absent"
+  ],
+  "receipts": [],
+  "status": "withheld"
+ },
+ "exit_code": 0,
+ "command": "deal verify --bundle"
+}

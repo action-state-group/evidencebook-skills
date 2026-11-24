@@ -3,7 +3,7 @@
 
     uv run python report.py CASE_DIR
 
-1. Waits for the window book's next checkpoint (a report rests on one).
+1. Waits for the deal store's next checkpoint (a report rests on one).
 2. Seals the airline's own report (``deal report --out``).
 3. Writes two Evidence Bundles of it: ``keep`` (the airline's own view, nothing
    withheld) and ``adjudicator`` (the copy for the judge: rows withheld, the
@@ -31,14 +31,14 @@ HERE = Path(__file__).resolve().parent
 
 
 def wait_for_checkpoint(store: records.Store, book: str) -> dict:
-    """Run the book's cadence until a tick covers what the case sealed."""
+    """Run the store's cadence until a tick covers what the case sealed."""
     return store.run("deal", "tick", "--wait-up-to", "6m", profile=book)
 
 
 def verify(store: records.Store, bundle: Path, deal: bool = True) -> dict:
     """``capsulectl deal verify --bundle``: core's checks plus the x-deal-v1 report rule
     (xdealv1.VerifyReportBundle). Core ``capsulectl verify --bundle`` alone does not run
-    that rule and says so (on rc50 it answers VALID with a "Not checked here" note naming x-deal-v1)."""
+    that rule and says so (on rc53 it answers VALID with a "Not checked here" note naming x-deal-v1)."""
     cmd = [store.capsulectl] + (["deal", "verify"] if deal else ["verify"]) + ["--bundle", str(bundle)]
     proc = subprocess.run(cmd, capture_output=True, text=True, env=store.env(), stdin=subprocess.DEVNULL)
     lines = proc.stdout.strip().splitlines()
@@ -67,7 +67,7 @@ def build(store: records.Store, case_dir: Path, judge_label: str = "tau2 evaluat
                           "core_verify": verify(store, path, deal=False)}
         (out / f"verify-{level}.json").write_text(json.dumps(bundles[level]["verify"], indent=1))
         (out / f"core-verify-{level}.json").write_text(json.dumps(bundles[level]["core_verify"], indent=1))
-    summary = {"book": case.book, "deal_id": case.deal_id, "tick": tick, "sealed": sealed_path.name, "bundles": bundles}
+    summary = {"book": case.book, "window": case.window, "deal_id": case.deal_id, "tick": tick, "sealed": sealed_path.name, "bundles": bundles}
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
     (out / "report.html").write_text(page(case_dir, summary))
     return summary
@@ -106,13 +106,13 @@ def page(case_dir: Path, summary: dict) -> str:
 table{{border-collapse:collapse;width:100%}}td,th{{border-bottom:1px solid #e6e9ef;text-align:left;padding:.3rem}}
 .ok{{color:#11663a}}.bad{{color:#a11}}code{{font-size:.85em}}.note{{color:#556;font-size:.9em}}</style></head><body>
 <h1>Support case report: a fictional airline, tau2 airline task {e(task['id'])}</h1>
-<p>Window book <code>{e(summary['book'])}</code>, deal <code>{e(summary['deal_id'])}</code>. A live role-play between two agents, sealed as it happened: not a replay of a benchmark transcript.</p>
+<p>Deal store <code>{e(summary['book'])}</code>, window <code>{e(summary.get('window'))}</code>, deal <code>{e(summary['deal_id'])}</code>. A live role-play between two agents, sealed as it happened: not a replay of a benchmark transcript.</p>
 <div class="levels">{column('keep')}{column('adjudicator')}</div>
 <h2>The evaluator's verdict (side by side, not merged)</h2>{eval_html}
 <h2>Acts and their OTel spans</h2><ul>{acts_html}</ul>
 <p class="note">Each act's span carries only the record's capsule id (<code>aac.capsule_id</code>); the record stays in the book.
 Every act shows <code>person_signature: missing</code>: no person's own signature format exists yet (agent-action-capsule#627).
-The book covers one window; the link between windows and coverage across them are not in this demo (evidencebook#689).
+The deal store is split into windows; this case is in window <code>{e(summary.get('window'))}</code>. A report over a range of windows, with its coverage check, is not in this demo.
 The customer keeps no signed records of its own, so there is no counterparty copy here.</p>
 <p class="note"><b>What VALID covers.</b> Each bundle carries the sealed report and the deal-book records it cites (the agreement and the acts).
 The conversation, the customer's "yes", the policy check and the evaluator's verdict sit in the books, outside these bundles.

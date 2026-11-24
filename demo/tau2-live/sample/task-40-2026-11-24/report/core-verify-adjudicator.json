@@ -1,5 +1,5 @@
 {
- "bundle_digest": "63c9f302885a9507eb376e804d5f752e72b723ded897a0db39d185bf5c0e601b",
+ "bundle_digest": "069818f2a6c42d4fd864b06592683cad44c70c59a3e93d7c21e5b2ad8715f09f",
  "checked_against": {
   "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
   "checks": "aac-strict"
@@ -11,12 +11,12 @@
  "countersignatures": [],
  "disclosures": [
   {
-   "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+   "capsule_id": "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004",
    "member": "agent_input",
    "status": "disclosure_match"
   },
   {
-   "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+   "capsule_id": "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15",
    "member": "agent_input",
    "status": "disclosure_match"
   }
@@ -31,11 +31,8 @@
    "status": "uninterpreted"
   },
   {
-   "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
    "kind": "x-deal-v1",
-   "report": "standalone",
-   "sealed_report": "699bf83272d5acba836b529b8781b29d12342c64449dad354e1fe933bacc317d",
-   "status": "pass"
+   "status": "uninterpreted"
   }
  ],
  "graph_closure": {
@@ -55,12 +52,12 @@
   "findings": []
  },
  "record_identity": {
-  "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
-  "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "passed",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "passed"
  },
  "record_signatures": {
-  "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
-  "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "authored",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "authored"
  },
  "spec_version": "capsule-cli-result/v1",
  "verdict": "VALID",
@@ -72,7 +69,7 @@
   "status": "withheld"
  },
  "voice": "report",
- "say": "Checked: unchanged since it was locked.",
+ "say": "Checked: unchanged since it was locked. Not checked here: evidencebook/payloads, x-deal-report/v0, x-deal-v1, which this tool does not interpret; check these with the tool that defines them.",
  "exit_code": 0,
- "command": "deal verify --bundle"
+ "command": "verify --bundle"
 }

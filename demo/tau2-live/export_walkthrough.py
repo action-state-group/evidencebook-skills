@@ -60,7 +60,7 @@ def export(case_dir: Path) -> dict:
                           "verify": b["verify"].get("verdict"), "exit_code": b["verify"].get("exit_code"),
                           "bundle_digest": b["verify"].get("bundle_digest")}
     return {
-        "case": {"book": meta["book"], "deal_id": meta["deal_id"], "task_id": meta["task_id"], "opened_at": meta["opened_at"],
+        "case": {"book": meta["book"], "window": meta.get("window"), "deal_id": meta["deal_id"], "task_id": meta["task_id"], "opened_at": meta["opened_at"],
                  "reason_for_call": task["user_scenario"]["instructions"]["reason_for_call"].strip()},
         "records": {"offer": capsule_id(case_dir / "offer.json"), "agreement": capsule_id(case_dir / "agree.json")},
         "turns": load(case_dir / "transcript.json", []),
