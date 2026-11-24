@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills 4660e4e · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 613a8a9 (receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills 6462cbc · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 613a8a9 (receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -106,34 +106,43 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
 ## Set up, once
 
-1. Clone and build everything under ~/ard-demo (about 5 minutes). Everything goes under `~/ard-demo`. Another folder works if you change the paths in the next section to match.
+1. Clone and build everything under `~/ard-demo` (about 5 minutes). Another folder works if you change the paths in the next section to match. Paste each of the four blocks below into the same terminal window, one block at a time, and wait for each to finish before pasting the next.
 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q 4660e4e879651edf6c5b8761e7a381d1f583007f
+   git -C evidencebook-skills checkout -q 6462cbc7872ca35209414a63d6cc75e00c3721b7
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/capsule-engine
    git -C capsule-engine checkout -q b84d7d0f2d48f9acdf79880dc1e3fa059aba1355
    (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
+   ```
+
+   ```
    mkdir -p $HOME/ard-demo/dl && cd $HOME/ard-demo/dl
    curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc50/SHA256SUMS
    curl -fsSLO https://github.com/action-state-group/evidencebook/releases/download/capsulectl%2Fv0.1.0-rc50/capsulectl-deal-v0.1.0-rc50-darwin-arm64
    cd $HOME/ard-demo
-   (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc50-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - \
-     && install -m 755 capsulectl-deal-v0.1.0-rc50-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
-   cd evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" \
-     "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
    ```
 
-   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
+   ```
+   (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc50-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - && install -m 755 capsulectl-deal-v0.1.0-rc50-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
+   ```
+
+   **Check before the next block:** this must print `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK`. On `FAILED`, nothing was installed: stop here.
+
+   ```
+   cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
+   .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
+   ```
+
+   **Expect:** pip ends with no error.
 
 2. Already cloned? Move the checkout to this pin instead.
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 4660e4e879651edf6c5b8761e7a381d1f583007f
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach 6462cbc7872ca35209414a63d6cc75e00c3721b7
    ```
 
 3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
@@ -290,7 +299,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 4660e4e.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at 6462cbc.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
