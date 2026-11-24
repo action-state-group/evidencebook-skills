@@ -87,7 +87,15 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
    **Expect:** `claude auth status` says you are signed in.
 
-9. [Real] Real rail only: Rust. Check, and install if missing. A real payment also needs a small amount of bitcoin on Lightning.
+9. lsof. macOS ships it; check that it is there. `demo.py reset` stops with an error without it.
+
+   ```
+   command -v lsof
+   ```
+
+   **Expect:** a path such as `/usr/sbin/lsof`.
+
+10. [Real] Real rail only: Rust. Check, and install if missing. A real payment also needs a small amount of bitcoin on Lightning.
 
    ```
    cargo --version
