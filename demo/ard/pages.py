@@ -209,7 +209,7 @@ def _witnessed(node, sh: dict) -> dict | None:
 
 def _receipt_links(node, name: str, label: str, deal_ids: list[str], *, rail: str, seller: bool) -> dict[str, str]:
     """A receipt page for each counted deal that has one (the deal closed on this party's book and the other party's
-    closing half arrived: the sample history has none), by deal id; the pages sit beside the card page."""
+    closing half arrived: the live deal and the sample deals alike), by deal id; the pages sit beside the card page."""
     import receipt
 
     links = {}

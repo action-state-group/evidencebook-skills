@@ -232,4 +232,5 @@ def test_the_screen_notes_name_no_demo_and_keep_their_facts():
     for note in (screens.PACK_NOTE, screens.OPERATOR_NOTE, screens.SELECTION_NOTE, screens.ASSESSMENT_NOTE, screens.CLAIMS_NOTE):
         assert "demo" not in note.lower(), note
     assert "placeholder thresholds" in screens.PACK_NOTE and "not published" in screens.PACK_NOTE
+    assert "no witness ran" not in screens.OPERATOR_NOTE  # the hosted witness runs since #222 (#244)
     assert "not checked" in screens.OPERATOR_NOTE and "no inclusion proofs" in screens.SELECTION_NOTE
