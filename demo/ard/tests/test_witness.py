@@ -89,3 +89,23 @@ def test_two_nodes_each_get_a_second_checkpoint_witnessed_when_their_ticks_inter
     finally:
         for n in nodes:
             n.close()
+
+
+def test_a_home_made_before_the_per_node_id_keeps_working_under_the_new_id(tmp_path):
+    """A leftover demo home (cadence ticks under the reference's shared id) reopens, ticks on and builds its card."""
+    from datetime import datetime, timedelta, timezone
+
+    class Before(DemoNode):  # what the code before this change did: the reference's own open
+        @classmethod
+        def open(cls, home, *, operator, **kw):
+            return gn.Node.open.__func__(cls, home, operator=operator, **kw)
+
+    t0 = datetime.now(timezone.utc)
+    with Before.open(tmp_path / "n", operator="ard-n") as node:
+        node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id})
+        assert node.tick(t0).ticked and node.cadence._cfg.log_id == "goose/cadence"
+    with DemoNode.open(tmp_path / "n", operator="ard-n") as node:
+        node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id + "2"})
+        result = node.tick(t0 + timedelta(minutes=2))
+        assert result.ticked and result.tick.n == 2 and node.cadence._cfg.log_id.startswith("goose/cadence/")
+        assert node.standard_history()["tick"] == 2
