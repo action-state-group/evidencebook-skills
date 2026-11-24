@@ -112,6 +112,13 @@ class DemoNode(gn.Node):
                 found.append(deal.HistoryResult(json.dumps(doc, sort_keys=True).encode(), True))
         return tuple(found)
 
+    def profile_payee(self, peer: str) -> dict:
+        """The counterparty block of ``peer`` keyed per profile (``counterparty_profile`` of the ``guard check`` input):
+        one seller has the same fingerprint across all this node's deals, so the Everyday Rules recognise a seller paid
+        in an earlier deal. The key stays in this node: only the fingerprint leaves."""
+        key = deal.profile_key(self._store_secret)
+        return {"fp_alg": deal.PROFILE_FP_ALG, "ids": {"payee": deal.fingerprint(key, "payee", peer)}}
+
     def deal_payloads(self, deal_id: str) -> list[bytes]:
         """The JCS payloads of this node's own deal book, in order."""
         return self._payloads(self.shelf.open(f"deal/{deal_id}"))

@@ -60,6 +60,7 @@ class Outcome:
     reasons: list[str] = field(default_factory=list)  # the failing caps findings: the rule's reason with its numbers
     asks: list[str] = field(default_factory=list)  # the pack's other failing rules: the presenter's dialog covers these
     ruleset: str = ""
+    findings: list[dict] = field(default_factory=list)  # every finding the engine returned: id, check, verdict, reason
     decision: str = ""  # "approved" or "declined" when the order was held and the person was asked, else ""
 
 
@@ -118,10 +119,15 @@ def pay_after_check(chain: dr.DealChain, at: datetime, reference: str) -> list[d
 
 # -- the Everyday Rules over it --------------------------------------------------------------------------------
 
-def _record(node, book, payloads: list[bytes], i: int) -> dict:
-    """A sealed record as ``guard check`` reads it: its capsule, with the body it seals beside it."""
+def _record(node, book, payloads: list[bytes], i: int, peer: str | None = None) -> dict:
+    """A sealed record as ``guard check`` reads it: its capsule, with the body it seals beside it and, when the deal's
+    ``peer`` is given, the seller keyed per profile, so a seller paid in an earlier deal is not a new merchant (rules 2
+    and 6)."""
     capsule = node.capsule(book.records()[i].record_id)
-    return {**capsule, "agent_input": json.loads(payloads[i])}
+    out = {**capsule, "agent_input": json.loads(payloads[i])}
+    if peer is not None:
+        out["counterparty_profile"] = node.profile_payee(peer)
+    return out
 
 
 WINDOW_DAYS = 7
@@ -143,7 +149,7 @@ def _paid_acts(node, skip_deal: str, now: datetime | None = None) -> list[dict]:
             if (j.get("x-deal-v0") or {}).get("record_type") == deal.TYPE_ACTION and j.get("body", {}).get("action") == "pay":
                 at = j["x-deal-v0"]["at"]
                 if datetime.fromisoformat(at.replace("Z", "+00:00")) >= since:
-                    acts.append((at, _record(node, book, payloads, i)))
+                    acts.append((at, _record(node, book, payloads, i, node.deal(book_id[len("deal/"):]).peer)))
     return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)][:MAX_HISTORY]
 
 
@@ -167,7 +173,7 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     book = node.shelf.open(f"deal/{chain.deal_id}")
     payloads = node.deal_payloads(chain.deal_id)
     inp = {"schema": "external-check-input/v0", "party_role": "buyer",
-           "record": _record(node, book, payloads, check_step_index), "history": _paid_acts(node, chain.deal_id),
+           "record": _record(node, book, payloads, check_step_index, chain.peer), "history": _paid_acts(node, chain.deal_id),
            "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": True}}
     try:
         with tempfile.TemporaryDirectory(prefix="ard-rules-") as tmp:
@@ -190,7 +196,9 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     caps = [f for f in failing if str(f.get("check", "")).startswith("caps/")]
     reasons = [_words(f) for f in caps]
     asks = [f["reason"] for f in failing if f not in caps and f.get("reason")]
-    return Outcome(result["verdict"], bool(caps), limit, chain.terms.price_minor, reasons, asks, result["ruleset_id"])
+    seen = [{k: f[k] for k in ("id", "check", "verdict", "reason", "limit", "value") if f.get(k) is not None}
+            for f in result["findings"]]
+    return Outcome(result["verdict"], bool(caps), limit, chain.terms.price_minor, reasons, asks, result["ruleset_id"], seen)
 
 
 def _words(finding: dict) -> str:
@@ -205,7 +213,8 @@ def seal_note(node, deal_id: str, outcome: Outcome) -> None:
     ``not_configured``)."""
     node.note(CHECKED, {"deal_id": deal_id, "ruleset": outcome.ruleset, "verdict": outcome.verdict,
                         "held": outcome.held, "decision": outcome.decision, "limit_msat": outcome.limit_msat,
-                        "amount_msat": outcome.amount_msat, "reasons": outcome.reasons}, subject_ref=deal_id)
+                        "amount_msat": outcome.amount_msat, "reasons": outcome.reasons, "asks": outcome.asks,
+                        "findings": outcome.findings}, subject_ref=deal_id)
 
 
 def gate(node, chain: dr.DealChain, limit: int, at: datetime,

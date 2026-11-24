@@ -44,7 +44,8 @@ argv = sys.argv[1:]
 inp = json.load(sys.stdin)
 limits = json.load(open(argv[argv.index("--limits") + 1])) if "--limits" in argv else None
 open({str(log)!r}, "a").write(json.dumps({{"argv": argv, "limits": limits, "history": len(inp["history"]),
-    "record_type": inp["record"]["agent_input"]["x-deal-v0"]["record_type"]}}) + "\\n")
+    "record_type": inp["record"]["agent_input"]["x-deal-v0"]["record_type"],
+    "profile": inp["record"].get("counterparty_profile"), "history_profiles": [h.get("counterparty_profile") for h in inp["history"]]}}) + "\\n")
 if {rc!r}:
     sys.stderr.write({err!r}); sys.exit({rc!r})
 findings = []
@@ -202,4 +203,49 @@ def test_only_acts_in_the_last_seven_days_are_the_history_and_any_failure_of_the
     monkeypatch.setenv("CAPSULE_ENGINE", str(garbage))
     with pytest.raises(rules.RulesError, match="could not run"):
         deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    maya.close(); alder.close()
+
+
+def test_the_seller_is_sent_keyed_per_profile_so_one_seller_is_the_same_across_deals(tmp_path, monkeypatch):
+    engine, log = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000, approve=lambda o: True)
+    first, second = [json.loads(line) for line in log.read_text().splitlines()]
+    block = maya.profile_payee(alder.key_id)
+    assert block["fp_alg"] == "hmac-sha256-profile-key" and len(block["ids"]["payee"]) == 64
+    assert first["profile"] == second["profile"] == block, "the same seller, the same fingerprint in every deal"
+    assert second["history_profiles"] == [block], "the earlier paid act names the seller the same way"
+    assert maya.profile_payee(alder.key_id) != maya.profile_payee(maya.key_id), "another seller is another fingerprint"
+    maya.close(); alder.close()
+
+
+def test_every_finding_the_engine_returns_is_kept_and_sealed_in_the_note(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    chain = maya.new_deal("deal-00000000000000a6", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    outcome = rules.gate(maya, chain, 2000, AT)
+    assert [f["id"] for f in outcome.findings] == ["r06-new-merchant"] and outcome.findings[0]["verdict"] == "fail"
+    note = [p for _, p in maya.notes(rules.CHECKED)][-1]
+    assert note["findings"] == outcome.findings and note["asks"] == ["no earlier payment to this merchant"]
+    maya.close(); alder.close()
+
+
+@engine_only
+@pytest.mark.skipif(not has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
+def test_the_real_rules_know_a_seller_paid_before_and_flag_the_repeated_payment(tmp_path):
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=5000)
+    chain = maya.new_deal("deal-00000000000000b2", "buyer", alder.key_id, t)
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    outcome = rules.gate(maya, chain, 5000, AT)
+    by_id = {f["id"]: f["verdict"] for f in outcome.findings}
+    assert by_id["r02-ordinary-purchase"] == "pass" and by_id["r06-new-merchant"] == "pass", "a seller paid before is not new"
+    assert by_id["r27-no-commitment-beyond-task-bounds"] == "fail", "the same act in another deal is flagged"
+    assert by_id["r08-non-refundable-or-hard-to-undo"] == "fail" and outcome.held is False
     maya.close(); alder.close()
