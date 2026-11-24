@@ -223,10 +223,11 @@ def test_the_checkpoint_sentence_needs_a_witnessed_newest_tick_that_covers_the_w
     node.tick(datetime.now(timezone.utc) + timedelta(minutes=2))
     n = node.cadence.standard_history_anchor().tick.n
     assert receipt.witnessed_checkpoint(node, deal_id) is None  # tests run with the witness off: no receipt held
-    stamped = SimpleNamespace(at=datetime.now(timezone.utc))
+    at = datetime(2026, 11, 24, 6, 30, 5, tzinfo=timezone.utc)
+    stamped = SimpleNamespace(at=at)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(node, "witnessed_tick", lambda k: stamped if k == n else None)
-        assert receipt.witnessed_checkpoint(node, deal_id) == n
+        assert receipt.witnessed_checkpoint(node, deal_id) == (n, "2026-11-24 06:30:05")
         mp.setattr(node, "witnessed_tick", lambda k: None)
         assert receipt.witnessed_checkpoint(node, deal_id) is None
         mp.setattr(node, "witnessed_tick", lambda k: stamped)
@@ -240,8 +241,10 @@ def test_the_checkpoint_sentence_needs_a_witnessed_newest_tick_that_covers_the_w
 def test_the_witness_line_points_at_the_card_only_when_asked():
     bundle = {"extensions": {}}
     plain = json.loads(receipt.wording_pack(bundle))["entries"]["rung.unwitnessed"]
-    on_card = json.loads(receipt.wording_pack(bundle, on_card=True))["entries"]["rung.unwitnessed"]
-    assert plain == receipt.WITNESS_NONE and on_card == receipt.WITNESS_NONE + receipt.WITNESS_ON_CARD
+    on_card = json.loads(receipt.wording_pack(bundle, on_card=(4, "2026-11-24 06:30:05")))["entries"]["rung.unwitnessed"]
+    assert plain == receipt.WITNESS_NONE
+    assert on_card == (receipt.WITNESS_NONE + " The hosted witness stamped the History checkpoint taken at 2026-11-24 06:30:05 UTC "
+                       "(checkpoint 4), which covers this deal as of that checkpoint; the card shows the newest checkpoint.")
 
 
 @pages_only
@@ -255,7 +258,8 @@ def test_a_covered_deal_s_receipt_page_says_where_the_witness_stamp_is(seeded):
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(node, "witnessed_tick", lambda k: stamped)
         page = receipt.receipt_page(node, "maya", "Maya", deal_id, rail="fake", seller=False).read_text()
-    assert "This copy carries no witness receipt. The hosted witness stamps the History checkpoint shown on the card, which covers this deal." in page
+    assert "This copy carries no witness receipt. The hosted witness stamped the History checkpoint taken at " in page
+    assert "which covers this deal as of that checkpoint; the card shows the newest checkpoint." in page
 
 
 @pages_only
