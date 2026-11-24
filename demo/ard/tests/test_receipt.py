@@ -194,7 +194,7 @@ def test_the_real_rail_sellers_line_names_the_rail_and_keeps_the_credit_note():
     assert "simulated" not in line
 
 
-def test_a_sample_deals_seller_line_says_sample_names_the_sample_rail_and_no_money_moved():
+def test_a_sample_deals_seller_line_says_sample_names_no_rail_and_no_money_moved():
     line = receipt.seller_payment(_book("received", rail="lightning"), real=True, sample=True)
     assert line == ("Sample history: Agreed 2,000 msat for badges. Payment: received, as this seller's own outcome record "
                     "states it (sample deal made up for this demo: no money moved).")
