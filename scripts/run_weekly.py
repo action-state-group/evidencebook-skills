@@ -334,7 +334,9 @@ def main(argv):
         closed = run(ctl, *close_args)
         log["close"] = {"record_id": closed["record_id"], "already_closed": closed["already_closed"],
                         "unilateral": not closed.get("peer_bundle"),
-                        "window": [closed["reconciliation"]["from_seq"], closed["reconciliation"]["to_seq"]],
+                        # capsulectl rc52 returns the reconciliation only on the call that closes the period.
+                        "window": ([closed["reconciliation"]["from_seq"], closed["reconciliation"]["to_seq"]]
+                                   if closed.get("reconciliation") else None),
                         "capsule": str(capsule_out), "bundle": str(bundle_out)}
     except EvidenceUnavailable as e:
         log["evidence_unavailable"] = str(e)
