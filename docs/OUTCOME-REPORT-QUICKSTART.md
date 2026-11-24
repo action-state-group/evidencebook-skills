@@ -159,9 +159,10 @@ $ scripts/report.sh --spec demo/airline-support-outcomes/compiled.json \
     --attach-input-originals
 ```
 
-Run it once per book and day. `run_daily.py` closes the day it judges, and a
-second run of the same day, by hand or through `report.sh`, stops with
-`missing or mistyped 'reconciliation'`. To judge again, redo steps 4 and 5 for
+Run it once per book and day. `run_daily.py` closes the day it judges, and at
+the pinned commit a second run of the same day, by hand or through `report.sh`,
+stops with `missing or mistyped 'reconciliation'` (later commits tolerate the
+closed day). To judge again, redo steps 4 and 5 for
 a fresh book.
 
 The last lines show `"verification":"pass"`, `"verdict":"VALID"` and

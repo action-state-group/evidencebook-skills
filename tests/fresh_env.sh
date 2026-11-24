@@ -28,6 +28,7 @@ work=$(mktemp -d)
 log=${1:-$work/fresh-env.log}
 exec > >(tee "$log") 2>&1
 start=$(date +%s)
+sha_check() { if command -v sha256sum >/dev/null; then sha256sum -c -; else shasum -a 256 -c -; fi; }
 step() { printf '\n== %s ==\n' "$*"; }
 fail() { printf 'FRESH-ENV: FAIL -- %s\n' "$*"; exit 1; }
 
@@ -49,9 +50,9 @@ esac
 v=$CAPSULECTL_VERSION
 mkdir -p "$work/dl/cli" "$work/dl/eb"
 gh release download "$v" -R action-state-group/capsule-cli -D "$work/dl/cli" -p SHA256SUMS -p "capsulectl-$v-$plat"
-(cd "$work/dl/cli" && grep " capsulectl-$v-$plat\$" SHA256SUMS | shasum -a 256 -c -)
+(cd "$work/dl/cli" && grep " capsulectl-$v-$plat\$" SHA256SUMS | sha_check)
 gh release download "capsulectl/$v" -R action-state-group/evidencebook -D "$work/dl/eb" -p SHA256SUMS -p "capsulectl-book-$v-$plat"
-(cd "$work/dl/eb" && grep " capsulectl-book-$v-$plat\$" SHA256SUMS | shasum -a 256 -c -)
+(cd "$work/dl/eb" && grep " capsulectl-book-$v-$plat\$" SHA256SUMS | sha_check)
 install -m 0755 "$work/dl/cli/capsulectl-$v-$plat" "$work/bin/capsulectl"
 ctl=$work/bin/capsulectl
 "$ctl" plugin install "$work/dl/eb/capsulectl-book-$v-$plat"
