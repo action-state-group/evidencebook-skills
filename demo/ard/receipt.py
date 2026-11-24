@@ -41,6 +41,18 @@ _KIND = {"baseline": "open", "check": "check", "verdict": "check", "approval": "
          "task_authority": "open", "outcome": "outcome", "close": "close", OUTCOME_NOTE: "outcome"}
 
 
+#: A later ``outcome_note`` saying the deal did not hold, on the step list and as the closing line (hand run 2026-11-24:
+#: the step read the bare record type and the headline still said the deal matched what was agreed).
+NOTE_LINE = "Later marked as not held up by the seller's owner (reason: {reason})"
+#: This demo's plainer words for capsule-viewer's example wording (hand run 2026-11-24).
+PLAIN = {
+    "page.title": "Order receipt",
+    "sides.missing.none": "Only this side's records are in this receipt: the other party keeps its own copy.",
+    "seller.handover.none": "Not tracked in this demo",
+}
+NOT_HELD = "Closed, then later marked as not held up by the seller's owner"
+
+
 class ReceiptError(RuntimeError):
     """No receipt page: the deal is not closed yet, or the copy did not verify or render."""
 
@@ -80,7 +92,10 @@ def _line(kind: str, body: dict, simulated: bool) -> str:
     if kind == "approval":
         if body.get("kind") == "counterparty-acceptance-observation":
             return "The buyer accepted the offer"
-        return f"Went ahead: {body.get('approver', 'approved')}"
+        return {"user": "Approved by you",
+                "standing_intent": ("Went ahead under the instructions you gave your agent (a Pay or Approve click "
+                                    "you made is not recorded in this receipt)"),
+                "agent_card": "Went ahead on the agent's card"}.get(body.get("approver"), "Approved")
     if kind == "action":
         if action == "pay":
             return (f"Simulated payment of {screens.msat(amount)}: no money moved" if simulated
@@ -91,6 +106,8 @@ def _line(kind: str, body: dict, simulated: bool) -> str:
         return f"Outcome: {body.get('status') or body.get('outcome')}"
     if kind == "close":
         return f"Closed: {body.get('outcome')}"
+    if kind == OUTCOME_NOTE:
+        return NOTE_LINE.format(reason=body.get("reason", "not given")) if body.get("outcome") == "did_not_hold" else "Later note"
     return kind
 
 
@@ -132,6 +149,7 @@ def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of:
              for i, (r, p) in enumerate(zip(records, payloads))]
     acts = [(r, p) for r, p in zip(records, payloads) if _kind(p) == "action"]
     close = next(p for p in reversed(payloads) if _kind(p) == "close")
+    not_held = any(_kind(p) == OUTCOME_NOTE and p.get("body", {}).get("outcome") == "did_not_hold" for p in payloads)
     did = [{"kind": "act", "at": _at(p), "steps": [r.record_id], "text": _line("action", p["body"], simulated)} for r, p in acts]
     rail_note = "simulated rail: no money moved" if simulated else f"rail {first['recourse']['rail']}"
     if seller:
@@ -143,7 +161,7 @@ def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of:
     body = {
         "audience": AUDIENCE, "deal_id": deal_id, "steps": steps, "did": did,
         "money": {"currency": first["terms"]["currency"], "text": money},
-        "lifecycle": {"state": "closed", "as_of": as_of, "later": [], "text": f"Closed: {close['body'].get('outcome')}.",
+        "lifecycle": {"state": "closed", "as_of": as_of, "later": [], "text": f"{NOT_HELD}." if not_held else f"Closed: {close['body'].get('outcome')}.",
                       "may_change": "Records sealed on this deal after this receipt was made are not in it; open the page "
                                     "again to see them."},
         "scope": "This receipt covers this one deal, from this party's own records. It is not a record of everything "
@@ -195,7 +213,9 @@ def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool, sample: 
         # A report sealed before the demo's words changed is sealed again: the page must not mix old and new words.
         if (block is None or block["agent_input"].get("deal_checkpoint") != bound
                 or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]
-                or block["agent_input"]["report"]["money"] != body["money"]):
+                or block["agent_input"]["report"]["money"] != body["money"]
+                or block["agent_input"]["report"]["steps"] != body["steps"]
+                or block["agent_input"]["report"]["lifecycle"]["text"] != body["lifecycle"]["text"]):
             payload = rp.report_payload(rp.Report(deal_id, AUDIENCE, secrets.token_hex(32), body,
                                                   checkpoint=rp.Checkpoint(**bound)))
             at = datetime.now(timezone.utc).replace(microsecond=0)
@@ -268,6 +288,10 @@ def wording_pack(bundle: dict, *, on_card: tuple[int, str] | None = None) -> byt
 
     pack = json.loads(example_wording_pack())
     pack["id"] = "evidencebook.receipt-wording.ard/v0"
+    pack["entries"].update(PLAIN)
+    report = bundle.get("extensions", {}).get(REPORT_EXTENSION, {}).get("agent_input", {}).get("report", {})
+    if report.get("lifecycle", {}).get("text", "").startswith(NOT_HELD):
+        pack["entries"]["seller.outcome.completed"] = NOT_HELD
     pack["entries"].update({"rung.unwitnessed": WITNESS_NONE + (WITNESS_ON_CARD.format(n=on_card[0], at=on_card[1]) if on_card else ""), "countersign.none": COUNTERSIGN_NONE})
     if "x-deal-seller/v0" in bundle["extensions"]:
         sealed = bundle["extensions"][REPORT_EXTENSION]["agent_input"]["report"]["money"]["text"]

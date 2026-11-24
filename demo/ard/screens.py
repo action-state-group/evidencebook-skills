@@ -104,6 +104,19 @@ def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
 
 
+def rules_ask(reasons: list[str]) -> str:
+    """The question the approval dialog asks when the Everyday Rules hold an order (hand run 2026-11-24: the answer was
+    asked after the screen already said "held ... nothing paid", and nothing said what happened after Approve)."""
+    return ("This order is over a spending limit you set: " + "; ".join(reasons)
+            + ". Nothing has been paid yet. Approve this order anyway, or decline?")
+
+
+def rules_approved(reasons: list[str]) -> str:
+    """What the screen says after the person approves a held order."""
+    return ("You approved this order over your limit (" + "; ".join(reasons) + "). Paying now. Your approval is "
+            "noted in your own records; the deal receipt shows the payment.")
+
+
 def rules_held(reasons: list[str]) -> str:
     """What the screen says when the deal check holds an order over the spending limit the person set (Sherlock2,
     2026-11-23, after Steven's ruling that a failing caps check on a person-set limit escalates, ops u325)."""

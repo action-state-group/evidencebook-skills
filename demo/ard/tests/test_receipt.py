@@ -320,3 +320,22 @@ def test_a_copy_that_does_not_verify_draws_no_page(seeded, tmp_path, monkeypatch
     monkeypatch.delenv("CAPSULECTL_DEAL")
     with pytest.raises(receipt.ReceiptError, match="set CAPSULECTL_DEAL"):
         receipt.verify(bad)
+
+
+@pages_only
+def test_a_sample_deal_its_owner_marked_did_not_hold_says_so_on_its_receipt(seeded):
+    """Hand run 2026-11-24: Kestrel's receipt for a deal with a did_not_hold note still led with "Closed: matches what
+    was agreed" and listed the note's step as its bare record type."""
+    import deals
+
+    world, _ = seeded
+    kestrel = world.nodes["kestrel"]
+    noted = [d for d in (b.split("/")[1] for b in kestrel.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
+             if any(receipt._kind(json.loads(p)) == deals.OUTCOME_NOTE for p in kestrel.deal_payloads(d))]
+    if not noted:
+        pytest.skip("this seed carries no outcome note")
+    import html
+
+    page = html.unescape(receipt.receipt_page(kestrel, "kestrel", "Kestrel Print", noted[0], rail="fake", seller=True).read_text())
+    assert receipt.NOT_HELD in page and "not held up by the seller's owner (reason:" in page
+    assert "matches what was agreed" not in page

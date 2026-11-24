@@ -151,8 +151,10 @@ def approve_hold(summary: str) -> bool:
 
 
 def _ask_about_hold(outcome: "rules.Outcome") -> bool:
-    print(screens.rules_held(outcome.reasons))
-    return approve_hold(screens.rules_held(outcome.reasons) + " Approve this order anyway, or decline?")
+    approved = approve_hold(screens.rules_ask(outcome.reasons))
+    if approved:
+        print(screens.rules_approved(outcome.reasons))
+    return approved
 
 
 _session: Session | None = None
