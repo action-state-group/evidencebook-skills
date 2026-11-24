@@ -51,3 +51,61 @@ def test_the_hosted_witness_receipt_verifies_under_its_published_key(tmp_path, m
         node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id})
         result = node.tick()
         assert node.witness_error is None and node.witnessed_tick(result.tick.n) is not None
+
+
+def test_each_node_has_a_cadence_log_of_its_own_so_the_witness_keeps_one_chain_per_node(tmp_path):
+    """The witness keeps one chain per log id (HTTP 409 on a second checkpoint whose predecessor is not its last for
+    that id, 2026-11-23): nodes must not share the reference's ``goose/cadence``."""
+    ids = []
+    for name in ("a", "b"):
+        with DemoNode.open(tmp_path / name, operator=f"ard-{name}") as node:
+            node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id})
+            node.tick()
+            ids.append(node.cadence._cfg.log_id)
+            assert node.key_id and gn.CADENCE_LOG == "goose/cadence", "the module constant is put back"
+    assert ids[0] != ids[1] and all(i.startswith("goose/cadence/") and len(i) == len("goose/cadence/") + 16 for i in ids)
+    with DemoNode.open(tmp_path / "a", operator="ard-a") as again:  # reopened: the same id
+        assert again.cadence._cfg.log_id == ids[0]
+
+
+@pytest.mark.skipif(os.environ.get("ARD_WITNESS_LIVE") != "1", reason="reaches witness.agentactioncapsule.org: set ARD_WITNESS_LIVE=1")
+def test_two_nodes_each_get_a_second_checkpoint_witnessed_when_their_ticks_interleave(tmp_path, monkeypatch):
+    """The failure of 2026-11-23: with a shared log id the second node's tick 2 was refused (HTTP 409)."""
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    t0 = datetime.now(timezone.utc)
+    nodes = [DemoNode.open(tmp_path / n, operator=f"ard-{n}") for n in ("a", "b")]
+    try:
+        for n in nodes:
+            n.note(gn.JOINED, {"operator": n.operator, "key_id": n.key_id})
+        for step in (0, 1):  # tick 1 of both, then a new record each and tick 2 of both
+            for i, n in enumerate(nodes):
+                if step:
+                    n.note(gn.JOINED, {"operator": n.operator, "key_id": f"{n.key_id}-again"})
+                r = n.tick(t0 + timedelta(minutes=2 * step))
+                assert r.ticked and n.witness_error is None, (step, i, n.witness_error)
+                assert n.witnessed_tick(r.tick.n) is not None
+    finally:
+        for n in nodes:
+            n.close()
+
+
+def test_a_home_made_before_the_per_node_id_keeps_working_under_the_new_id(tmp_path):
+    """A leftover demo home (cadence ticks under the reference's shared id) reopens, ticks on and builds its card."""
+    from datetime import datetime, timedelta, timezone
+
+    class Before(DemoNode):  # what the code before this change did: the reference's own open
+        @classmethod
+        def open(cls, home, *, operator, **kw):
+            return gn.Node.open.__func__(cls, home, operator=operator, **kw)
+
+    t0 = datetime.now(timezone.utc)
+    with Before.open(tmp_path / "n", operator="ard-n") as node:
+        node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id})
+        assert node.tick(t0).ticked and node.cadence._cfg.log_id == "goose/cadence"
+    with DemoNode.open(tmp_path / "n", operator="ard-n") as node:
+        node.note(gn.JOINED, {"operator": node.operator, "key_id": node.key_id + "2"})
+        result = node.tick(t0 + timedelta(minutes=2))
+        assert result.ticked and result.tick.n == 2 and node.cadence._cfg.log_id.startswith("goose/cadence/")
+        assert node.standard_history()["tick"] == 2

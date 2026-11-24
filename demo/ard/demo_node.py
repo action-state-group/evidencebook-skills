@@ -13,10 +13,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
+from pathlib import Path
 from datetime import timedelta
 from typing import Any
 
 from agent_action_capsule.canonical import jcs
+from evidencebook import Ed25519Signer
 
 import goose_node as gn
 from evidencebook import deal
@@ -28,6 +31,8 @@ RECONCILED = "ard_deal_reconciled"
 #: default witness of ``capsulectl deal init``. It is the demo operator's own service, so a witnessed card here
 #: shows a hosted witness, not one independent of us (coordinator, 2026-11-23). It receives checkpoint hashes only.
 #: The key is the one the service publishes at /.well-known/did.json (its Ed25519 ``x``, as hex).
+CADENCE_LOG_PREFIX = "goose/cadence"
+_LOG_ID_LOCK = threading.Lock()
 WITNESS_NAME = "Action State's hosted witness"
 WITNESS_DIRECTORY = {"witnesses": [{"name": WITNESS_NAME, "endpoint": "https://witness.agentactioncapsule.org",
                                     "key_ids": ["39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"]}]}
@@ -45,10 +50,25 @@ class DemoNode(gn.Node):
 
     @classmethod
     def open(cls, home, *, operator: str, **kw):
-        """As :meth:`goose_node.Node.open`, with the demo's witness directory unless ``ARD_WITNESS=off``."""
+        """As :meth:`goose_node.Node.open`, with the demo's witness directory unless ``ARD_WITNESS=off``, and a cadence
+        log id of this node's own.
+
+        The witness keeps one chain per log id. The Goose reference names every node's cadence log ``goose/cadence``, so
+        the demo's nodes (and every earlier run) share one chain there: a node's second checkpoint then names a
+        predecessor the witness does not hold as its last and is refused with HTTP 409 ("fork or misordered
+        checkpoint"), and the card reads unwitnessed. The id carries the first 16 hex of this node's checkpoint key,
+        which is made here if the home is new and never changes after (a reset makes new keys, so a new chain)."""
         if witnessing():
             kw.setdefault("witnesses", WITNESS_DIRECTORY)
-        return super().open(home, operator=operator, **kw)
+        path = Path(home).expanduser()
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        key = Ed25519Signer(gn._key(path / "checkpoint.key")).public_key().hex()
+        with _LOG_ID_LOCK:
+            was, gn.CADENCE_LOG = gn.CADENCE_LOG, f"{CADENCE_LOG_PREFIX}/{key[:16]}"
+            try:
+                return super().open(home, operator=operator, **kw)
+            finally:
+                gn.CADENCE_LOG = was
 
     def tick(self, now=None):
         """As :meth:`goose_node.Node.tick`; a tick that was cut is then offered to the witness. A witness that cannot
