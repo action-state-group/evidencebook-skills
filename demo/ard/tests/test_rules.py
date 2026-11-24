@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 import pytest
 
 import deals
+from evidencebook import deal
 import goose_node as gn
 import rules
 from conftest import engine_only
@@ -219,6 +220,25 @@ def test_the_seller_is_sent_keyed_per_profile_so_one_seller_is_the_same_across_d
     assert first["profile"] == second["profile"] == block, "the same seller, the same fingerprint in every deal"
     assert second["history_profiles"] == [block], "the earlier paid act names the seller the same way"
     assert maya.profile_payee(alder.key_id) != maya.profile_payee(maya.key_id), "another seller is another fingerprint"
+    # the profile key itself never reaches the engine or the sealed note: only the fingerprint does
+    secret = deal.profile_key(maya._store_secret).hex()
+    sealed = json.dumps([p for _, p in maya.notes(rules.CHECKED)])
+    assert secret not in log.read_text() and secret not in sealed and "payee-fp:" not in sealed
+    maya.close(); alder.close()
+
+
+def test_a_seller_id_that_cannot_be_fingerprinted_is_a_rules_error_and_nothing_is_paid(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+
+    def refuse(peer):
+        raise deal.NotNormalizable()
+
+    monkeypatch.setattr(maya, "profile_payee", refuse)
+    with pytest.raises(rules.RulesError, match="could not run"):
+        deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "",
+                       pay=lambda: pytest.fail("not paid"), limit=2000)
     maya.close(); alder.close()
 
 

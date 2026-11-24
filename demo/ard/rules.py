@@ -60,7 +60,7 @@ class Outcome:
     reasons: list[str] = field(default_factory=list)  # the failing caps findings: the rule's reason with its numbers
     asks: list[str] = field(default_factory=list)  # the pack's other failing rules: the presenter's dialog covers these
     ruleset: str = ""
-    findings: list[dict] = field(default_factory=list)  # every finding the engine returned: id, check, verdict, reason
+    findings: list[dict] = field(default_factory=list)  # every finding the engine returned: id, check, verdict, reason (and limit, value when it names them)
     decision: str = ""  # "approved" or "declined" when the order was held and the person was asked, else ""
 
 
@@ -119,15 +119,12 @@ def pay_after_check(chain: dr.DealChain, at: datetime, reference: str) -> list[d
 
 # -- the Everyday Rules over it --------------------------------------------------------------------------------
 
-def _record(node, book, payloads: list[bytes], i: int, peer: str | None = None) -> dict:
-    """A sealed record as ``guard check`` reads it: its capsule, with the body it seals beside it and, when the deal's
-    ``peer`` is given, the seller keyed per profile, so a seller paid in an earlier deal is not a new merchant (rules 2
-    and 6)."""
+def _record(node, book, payloads: list[bytes], i: int, peer: str) -> dict:
+    """A sealed record as ``guard check`` reads it: its capsule, with the body it seals beside it and the deal's ``peer``
+    (the seller) keyed per profile, so a seller paid in an earlier deal is not a new merchant (rules 2 and 6). ``peer``
+    is required: a caller that left it out would silently lose that link."""
     capsule = node.capsule(book.records()[i].record_id)
-    out = {**capsule, "agent_input": json.loads(payloads[i])}
-    if peer is not None:
-        out["counterparty_profile"] = node.profile_payee(peer)
-    return out
+    return {**capsule, "agent_input": json.loads(payloads[i]), "counterparty_profile": node.profile_payee(peer)}
 
 
 WINDOW_DAYS = 7
@@ -144,12 +141,14 @@ def _paid_acts(node, skip_deal: str, now: datetime | None = None) -> list[dict]:
             continue
         book = node.shelf.open(book_id)
         payloads = node.deal_payloads(book_id[len("deal/"):])
+        peer = None  # the deal's seller, read once per book and only when it holds a pay act in the window
         for i, p in enumerate(payloads):
             j = json.loads(p)
             if (j.get("x-deal-v0") or {}).get("record_type") == deal.TYPE_ACTION and j.get("body", {}).get("action") == "pay":
                 at = j["x-deal-v0"]["at"]
                 if datetime.fromisoformat(at.replace("Z", "+00:00")) >= since:
-                    acts.append((at, _record(node, book, payloads, i, node.deal(book_id[len("deal/"):]).peer)))
+                    peer = peer or node.deal(book_id[len("deal/"):]).peer
+                    acts.append((at, _record(node, book, payloads, i, peer)))
     return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)][:MAX_HISTORY]
 
 
@@ -172,9 +171,13 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     person's ``limit``. Raises :class:`RulesError` when the engine could not answer."""
     book = node.shelf.open(f"deal/{chain.deal_id}")
     payloads = node.deal_payloads(chain.deal_id)
-    inp = {"schema": "external-check-input/v0", "party_role": "buyer",
-           "record": _record(node, book, payloads, check_step_index, chain.peer), "history": _paid_acts(node, chain.deal_id),
-           "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": True}}
+    try:
+        inp = {"schema": "external-check-input/v0", "party_role": "buyer",
+               "record": _record(node, book, payloads, check_step_index, chain.peer),
+               "history": _paid_acts(node, chain.deal_id),
+               "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": True}}
+    except ValueError as exc:  # a seller id that cannot be fingerprinted (deal.NotNormalizable)
+        raise RulesError(f"the deal check could not run: {type(exc).__name__}: {exc}") from None
     try:
         with tempfile.TemporaryDirectory(prefix="ard-rules-") as tmp:
             limits = Path(tmp) / "limits.json"
