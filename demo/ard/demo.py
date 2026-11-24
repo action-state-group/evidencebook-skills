@@ -63,6 +63,7 @@ _paths.setup()
 import ard  # noqa: E402
 import buyer  # noqa: E402
 import deals  # noqa: E402
+import hf_search  # noqa: E402
 import pack as packs  # noqa: E402
 import pay  # noqa: E402
 import screens  # noqa: E402
@@ -110,6 +111,8 @@ class Run:
                   f"{'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
             for line in e.get("checks", []):
                 print(f"         {line}")
+        if hf_search.enabled():  # opt-in, display only: never part of lookup or the deal
+            print("\n".join(hf_search.report(self.srv.query)))
 
     # -- 3 evidence -----------------------------------------------------------------------
 
