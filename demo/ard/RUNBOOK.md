@@ -97,10 +97,10 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
 10. [Real] Real rail only: Rust. Check, and install if missing. A real payment also needs a small amount of bitcoin on Lightning.
 
-   ```
-   cargo --version
-   brew install rust
-   ```
+    ```
+    cargo --version
+    brew install rust
+    ```
 
 ## If you used this guide before 2026-11-19
 
