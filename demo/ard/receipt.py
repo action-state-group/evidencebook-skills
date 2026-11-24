@@ -9,7 +9,7 @@ card and a seller's re-entry read the same records after it as before. It binds 
 at, so a book that grew since (an outcome note, say) gets a new report.
 
 The report's lines are this demo's own words, read from the party's own records: a seller's payment line says what
-its own outcome record states, and on a simulated rail nothing says money moved. ``capsulectl verify --bundle`` (the
+its own outcome record states, and on a simulated rail, or for a seeded sample deal, nothing says money moved. ``capsulectl verify --bundle`` (the
 binary ``CAPSULECTL_DEAL`` names) checks the copy, and capsule-viewer's receipt module renders it from that report."""
 from __future__ import annotations
 
@@ -301,8 +301,9 @@ def render(bundle: dict, output: dict, *, on_card: tuple[int, str] | None = None
 
 
 def sealed_real(node: gn.Node, deal_id: str) -> bool:
-    """Whether the deal was paid on a real rail, read from its own sealed terms (``pay.Rail.SEALED``): a deal
-    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173)."""
+    """Whether the deal's own sealed rail is a real one, read from its own sealed terms (``pay.Rail.SEALED``): a deal
+    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173). A seeded sample deal seals
+    ``lightning`` yet moved no money: see :func:`is_sample`."""
     first = json.loads(node.deal_payloads(deal_id)[0])["body"]
     return first["recourse"]["rail"] != "simulated"
 

@@ -226,7 +226,6 @@ def test_a_sample_deals_seller_page_says_sample_history_with_no_money_moved(seed
     alder = world.nodes["alder"]
     sample_id = next(d for d in deals.deal_ids(alder) if d != live_id)
     page = receipt.receipt_page(alder, "alder", "Alder Print Co.", sample_id, rail="lightning", seller=True).read_text()
-    page = page.replace("&#39;", "&#x27;")
     assert "Sample history: Agreed 2,000 msat" in page and "sample deal made up for this demo: no money moved" in page
     assert "lightning" not in page.lower() and "wallet provider" not in page and "paid" not in page.lower().split("payment proof")[1].split("</p>")[0]
 
