@@ -104,15 +104,16 @@ def is_sample(node: gn.Node, deal_id: str) -> bool:
 def seller_payment(payloads: list[dict], real: bool, sample: bool = False) -> str:
     """A seller's payment line, from its own records: the outcome its own outcome record states (a seller's book
     holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved. A sample
-    deal is said to be sample history, names the rail as its sample record states it, and says no money moved."""
+    deal is said to be sample history made up for the demo, with no money moved, and names no rail. Only a seller's
+    page can be of a sample deal: the sample buyer has no window or card, and Maya's book holds only her live deal."""
     first = payloads[0]["body"]
     price, item = first["terms"]["price_minor"], first["terms"]["item"]
     status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None)
     stated = f"{status}, as this seller's own outcome record states it" if status else "not stated in this seller's records"
     line = f"Agreed {screens.msat(price)} for {item}. Payment: {stated}"
     if sample:
-        return (f"Sample history: {line} (the sample record names rail {first['recourse']['rail']}; "
-                "sample deals are fictional: no money moved).")
+        # Sherlock2's wording (#256): the sealed rail is left out, since "lightning" is what made this read as real.
+        return f"Sample history: {line} (sample deal made up for this demo: no money moved)."
     if not real:
         return line + " (simulated rail: no money moved)."
     return f"{line} (rail {first['recourse']['rail']}). {screens.seller_credit_note(price)}"
