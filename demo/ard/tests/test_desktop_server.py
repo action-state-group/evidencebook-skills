@@ -148,6 +148,7 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
     assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second and "limit you set" in second
     assert "limit 2,000 msat" in second and "4,000 msat" in second and "declined" in second
     assert len(asked) == 1 and "Approve this order anyway, or decline?" in asked[0]
+    assert asked[0].startswith("This order is over a spending limit you set")
     assert tools._session.run.rail.paid == [2000]
     # a held order the person declines is not an attempted payment, and the earlier order stays paid
     assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
@@ -173,7 +174,8 @@ def test_a_declined_payment_dialog_on_a_second_order_keeps_the_seller_paid_and_a
     # now the person clicks Pay, the rules hold the order, and the person approves: the payment goes on
     monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
     monkeypatch.setattr(tools, "approve_hold", lambda summary: True)
-    tools.ard_pay("alder")
+    approved = tools.ard_pay("alder")
+    assert "You approved this order over your limit" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
 
 

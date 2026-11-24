@@ -6,7 +6,7 @@ evidencebook-skills 859c27b · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at these pins (the first hand-run of the witnessed card, the Open receipt link and the spending-limit hold is open), on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT), with the adapter found through GOOSE_SEARCH_PATHS, has not been run by hand. The demo's automated tests pass at these pins in CI.
+Status: run by hand once at these pins on the simulated rail (2026-11-24, Goose Desktop 1.59.2, macOS: setup from a clean Goose, the three windows, the pick, the deal, the receipt pages and the spending-limit hold on its Approve path); that run started Goose on its own settings folder (GOOSE_PATH_ROOT) with the pinned adapter found through GOOSE_SEARCH_PATHS. The Decline path has not been run by hand, and the real-payment steps have not been run at these pins at all. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -85,7 +85,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    claude auth status
    ```
 
-   **Expect:** `claude auth status` says you are signed in.
+   **Expect:** `claude auth status` prints JSON with `"loggedIn": true`.
 
 9. lsof. macOS ships it; check that it is there. `demo.py reset` stops with an error without it.
 
@@ -170,10 +170,10 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
    **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
 
-6. In that Goose: on the welcome screen choose Other Providers, then Claude Code ACP, Configure, Submit. Later this lives in Settings, Models.
+6. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider, type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
    **Expect:** a chat opens and answers a short message.
 
-7. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Settings, Extensions, turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own.
+7. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
 
 8. Quit that Goose.
 
@@ -312,7 +312,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
 
-9. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on. Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools.
+9. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools.
 
 10. Keep the screen awake and unlocked: the payment dialog appears on it.
 
@@ -386,7 +386,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Pick Kestrel Print, the cheaper one.
    ```
 
-   **Expect:** LIMIT: 1,000 msat is at or over this seller's limit; no deal opens and nothing is paid.
+   **Expect:** the pick is sealed first ("pick sealed before any payment"), then LIMIT: 1,000 msat is at or over this seller's limit; no deal opens and nothing is paid.
 
 10. Type.
 
@@ -452,7 +452,8 @@ Before the run, in the shell that starts the windows, set the limit to the first
    Order 200 more badges from Alder Print Co.
    ```
 
-   **Expect:** a second payment dialog; click Pay. Then a second dialog, "Held for your OK" (default Decline), and on screen: "Held for your OK at deal check, nothing paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat)." Say aloud at the first click: the dialog is the person's yes; the rule can still hold it, and nothing is paid until the second answer. Click Decline: nothing is paid, Maya tells you which rule held the order, the wallet balances do not change and Maya's History card still counts 1 deal. (Approve instead and the payment goes on and the card counts 2.) Not yet run by hand with Goose Desktop at these pins.
+   **Expect:** a second payment dialog; click Pay. Then a second dialog, "Held for your OK" (default Decline): "This order is over a spending limit you set: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat). Nothing has been paid yet. Approve this order anyway, or decline?" Say aloud at the first click: the dialog is the person's yes; the rule can still hold it, and nothing is paid until the second answer. Click Decline: nothing is paid, Maya tells you which rule held the order ("Held for your OK at deal check, nothing paid. …"), the wallet balances do not change and Maya's History card still counts 1 deal.
+   Click Approve instead: the screen says "You approved this order over your limit (…). Paying now." and the payment goes on. The approval is sealed as a note in Maya's own book; the deal receipt shows the payment and reads "Went ahead under the instructions you gave your agent": it does not record the Pay or Approve click, or that the rules held the order (an open gap). The Approve path was run by hand with Goose Desktop 1.59.2 on the simulated rail on 2026-11-24, before this wording; the Decline path has not been run by hand.
 
 19. Open Maya's History page again (`Show your History card, then open your History card as a page.`).
    **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.
@@ -513,7 +514,7 @@ Before the run, in the shell that starts the windows, set the limit to the first
 
 ## Troubleshooting
 
-1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses.
+1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too: on 2026-11-24 a Claude chat with `~/.config/ard-commerce-demo` connected as a folder held it (the process named was Claude's VM). Remove the folder from that chat, or quit the app, then reset. A `stage.py` left from an earlier run is stopped by reset itself.
 
 2. **Seed refuses with "sample history was made at … msat".** The home was seeded at older prices. Run reset, then seed.
 
