@@ -7,7 +7,7 @@ ending in two bundles that capsulectl deal verify accepts.
 
 Needs capsulectl with the deal and book plugins, and capsule-engine, on PATH (or
 CAPSULECTL_PLUGIN_ROOTS for the plugins). Exits non-zero on the first failed check.
-The report step waits for the book's checkpoint tick (about five minutes).
+The report step waits for the store's checkpoint tick (about five minutes).
 """
 from __future__ import annotations
 
@@ -169,7 +169,9 @@ def main() -> None:
     # real-time run (evidencebook#852 tracks a fixture): the CLI refuses a range on an open window.
     chain = store.capsulectl, "--profile", case.book, "deal", "window", "chain", "--from", month, "--to", month, "--out", str(case.dir / "chain.json")
     refused = subprocess.run(chain, capture_output=True, text=True, env=store.env(), stdin=subprocess.DEVNULL)
-    check(refused.returncode != 0 and not (case.dir / "chain.json").exists(),
+    # capsulectl suppresses the reason in its output ("operation failed ... sensitive details
+    # suppressed"), so the check pairs the refusal with the window list showing the window open.
+    check(refused.returncode != 0 and not (case.dir / "chain.json").exists() and not windows["windows"][0]["closed"],
           "deal window chain refuses a range that ends on an open window")
     print(f"case: {case.dir}")
 
