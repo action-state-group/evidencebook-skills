@@ -13,14 +13,14 @@ repository.
 
 | Piece | Version | Where |
 | --- | --- | --- |
-| `capsulectl` | `v0.1.0-rc31` | [capsule-cli releases](https://github.com/action-state-group/capsule-cli/releases/tag/v0.1.0-rc31) |
-| `capsulectl-book` plugin | `v0.1.0-rc31` | [evidencebook release `capsulectl/v0.1.0-rc31`](https://github.com/action-state-group/evidencebook/releases/tag/capsulectl%2Fv0.1.0-rc31) |
-| `evidencebook-skills` (pack compiler, `report.sh`, skill scripts) | commit `97d72d0` | this repository; it has no tags |
+| `capsulectl` | `v0.1.0-rc52` | [capsule-cli releases](https://github.com/action-state-group/capsule-cli/releases/tag/v0.1.0-rc52) |
+| `capsulectl-book` plugin | `v0.1.0-rc52` | [evidencebook release `capsulectl/v0.1.0-rc52`](https://github.com/action-state-group/evidencebook/releases/tag/capsulectl%2Fv0.1.0-rc52) |
+| `evidencebook-skills` (pack compiler, `report.sh`, skill scripts) | commit `b972d67` | this repository; it has no tags |
 
 `capsulectl` and the plugin must be the same release: `plugin install` refuses
-a mismatch. `capsulectl v0.1.0-rc32` is out, but no plugin is built for it
-yet, so this page pins the matching rc31 pair. When a newer pair exists, use
-it (the commands do not change) and re-check that step 6's report says
+a mismatch. The checkout pin is the commit whose `tests/bookfixture` writes the
+book log that rc52 reads. When a newer pair exists, use it (the commands do not
+change, but move the checkout pin too) and re-check that step 6's report says
 `"verification":"pass"`.
 
 ## Prerequisites
@@ -36,23 +36,24 @@ and checksum command.
 ## 1. Install `capsulectl` and the book plugin
 
 Download both binaries for your platform (`darwin-arm64`, `linux-amd64` or
-`linux-arm64`), check them against the release's `SHA256SUMS`, and install the
+`linux-arm64`), check them against the release's `SHA256SUMS` (the plugin's
+lists other binaries too, so the check names the one file), and install the
 plugin:
 
 ```console
-$ gh release download v0.1.0-rc31 --repo action-state-group/capsule-cli \
-    -p 'capsulectl-v0.1.0-rc31-darwin-arm64' -p SHA256SUMS
+$ gh release download v0.1.0-rc52 --repo action-state-group/capsule-cli \
+    -p 'capsulectl-v0.1.0-rc52-darwin-arm64' -p SHA256SUMS
 $ grep darwin-arm64 SHA256SUMS | shasum -a 256 -c
 $ mkdir -p ~/.local/bin && export PATH="$HOME/.local/bin:$PATH"
-$ install -m 0755 capsulectl-v0.1.0-rc31-darwin-arm64 ~/.local/bin/capsulectl
-$ gh release download capsulectl/v0.1.0-rc31 --repo action-state-group/evidencebook \
-    -p 'capsulectl-book-v0.1.0-rc31-darwin-arm64' -p SHA256SUMS --clobber
-$ grep darwin-arm64 SHA256SUMS | shasum -a 256 -c
-$ install -m 0755 capsulectl-book-v0.1.0-rc31-darwin-arm64 ./capsulectl-book
+$ install -m 0755 capsulectl-v0.1.0-rc52-darwin-arm64 ~/.local/bin/capsulectl
+$ gh release download capsulectl/v0.1.0-rc52 --repo action-state-group/evidencebook \
+    -p 'capsulectl-book-v0.1.0-rc52-darwin-arm64' -p SHA256SUMS --clobber
+$ grep ' capsulectl-book-v0.1.0-rc52-darwin-arm64$' SHA256SUMS | shasum -a 256 -c
+$ install -m 0755 capsulectl-book-v0.1.0-rc52-darwin-arm64 ./capsulectl-book
 $ capsulectl plugin install ./capsulectl-book
 ```
 
-`plugin install` prints `"version_check":"matches capsulectl v0.1.0-rc31"`.
+`plugin install` prints `"version_check":"matches capsulectl v0.1.0-rc52"`.
 The release notes of each give a `gh attestation verify` command to check the
 build attestation too. `capsulectl book --help` now lists the book verbs
 (`book result build`, `book report build`, ...) that `report.sh` calls.
@@ -62,7 +63,7 @@ build attestation too. `capsulectl book --help` now lists the book verbs
 ```console
 $ git clone https://github.com/action-state-group/evidencebook-skills.git
 $ cd evidencebook-skills
-$ git checkout 97d72d0
+$ git checkout b972d67
 $ python3 -m venv .venv && . .venv/bin/activate
 $ pip install --quiet jevals
 ```
@@ -110,8 +111,11 @@ $ capsulectl profile create --name tau2 --type jsonl --jsonl-path ./store \
     --namespace tau2 --log-id tau2-airline --log book --operator tau2-demo \
     --signing-key-file producer.seed --trusted-key "$(jq -r .public_key producer.json)" \
     --checkpoint-signing-key-file checkpoint.seed --checkpoint-trusted-key "$(jq -r .public_key checkpoint.json)"
-$ capsulectl store init --profile tau2
 ```
+
+`store init` comes after the cases are seeded (step 5): on rc52 it makes a new
+store a windowed shelf, and the fixture writes the single book log that
+`store init` then reads.
 
 ## 5. Seal the 50 tau2 scenarios
 
@@ -135,6 +139,7 @@ $ DAY=$(python3 -c 'import datetime as d; t=d.date.today(); m=t-d.timedelta(days
 $ ./bookfixture seed --store ./store --log-id tau2-airline --operator tau2-demo --namespace tau2 \
     --signing-key-file producer.seed --checkpoint-key-file checkpoint.seed \
     --at "${DAY}T12:00:00Z" ./cases/*.json
+$ capsulectl store init --profile tau2
 $ capsulectl book cll list --profile tau2 --limit 1000 | jq '[.entries[] | select(.record_type=="published_capsule")] | length'
 50
 ```
