@@ -99,8 +99,9 @@ def seller_payment(payloads: list[dict], real: bool) -> str:
     holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved."""
     first = payloads[0]["body"]
     price, item = first["terms"]["price_minor"], first["terms"]["item"]
-    status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None) or "not stated in this seller's records"
-    line = f"Agreed {screens.msat(price)} for {item}. Payment: {status}, as this seller's own outcome record states it"
+    status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None)
+    stated = f"{status}, as this seller's own outcome record states it" if status else "not stated in this seller's records"
+    line = f"Agreed {screens.msat(price)} for {item}. Payment: {stated}"
     if not real:
         return line + " (simulated rail: no money moved)."
     return f"{line} (rail {first['recourse']['rail']}). {screens.seller_credit_note(price)}"
@@ -178,9 +179,11 @@ def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool) -> dict:
         path = _stored(node, deal_id)
         block = json.loads(path.read_text()) if path.exists() else None
         # The verifier holds the report to this checkpoint and its signed time (capsule-cli#294).
+        body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+        # A report sealed before the demo's words changed is sealed again: the page must not mix old and new words.
         if (block is None or block["agent_input"].get("deal_checkpoint") != bound
-                or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]):
-            body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+                or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]
+                or block["agent_input"]["report"]["money"] != body["money"]):
             payload = rp.report_payload(rp.Report(deal_id, AUDIENCE, secrets.token_hex(32), body,
                                                   checkpoint=rp.Checkpoint(**bound)))
             at = datetime.now(timezone.utc).replace(microsecond=0)
