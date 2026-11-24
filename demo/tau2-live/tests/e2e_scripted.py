@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -62,6 +63,13 @@ def main() -> None:
     store = records.Store(state=state)
     task = next(t for t in json.loads(SCENARIOS.read_text())["tasks"] if t["id"] == "40")
     case = records.open_case(store, "40", evaluate.ensure_evaluator(store))
+    meta = json.loads((case.dir / "case.json").read_text())
+    month = meta["window"]  # read once: the run spans minutes and may cross a month end
+    windows = store.run("deal", "window", "list", profile=case.book)
+    check(windows["window"] == "month" and [w["label"] for w in windows["windows"]] == [month],
+          "one store, split by month: its one window is the case's window")
+    check(meta["deal_book"] in windows["windows"][0]["placed"],
+          "the case's deal book is placed in the window case.json names, read from deal window list")
     shutil.copy(AIRLINE / "db.json", case.dir / "db.json")
     (case.dir / "task.json").write_text(json.dumps(task))
     tracer = telemetry.tracer("tau2-roleplay", case.dir / "spans.jsonl")
@@ -155,6 +163,14 @@ def main() -> None:
     keep_rows = summary["bundles"]["keep"]["report"].get("rows") or []
     check({r.get("status") for r in keep_rows} == {"not_due"}, "the airline's rows are not yet due")
     check((case.dir / "report" / "report.html").exists(), "report.html written")
+    rolled = store.run("deal", "window", "roll", profile=case.book)
+    check(rolled["current"]["label"] >= month, "deal window roll opens no window before the case's")
+    # The chain covers ended windows only, and capsulectl has no external clock to end one in a
+    # real-time run (evidencebook#852 tracks a fixture): the CLI refuses a range on an open window.
+    chain = store.capsulectl, "--profile", case.book, "deal", "window", "chain", "--from", month, "--to", month, "--out", str(case.dir / "chain.json")
+    refused = subprocess.run(chain, capture_output=True, text=True, env=store.env(), stdin=subprocess.DEVNULL)
+    check(refused.returncode != 0 and not (case.dir / "chain.json").exists(),
+          "deal window chain refuses a range that ends on an open window")
     print(f"case: {case.dir}")
 
 

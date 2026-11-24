@@ -149,6 +149,7 @@ def run(args: argparse.Namespace) -> Path:
         root.set_attribute("tau2.task_id", str(args.task))
         root.set_attribute("deal.id", case.deal_id)
         root.set_attribute("evidencebook.book", case.book)
+        root.set_attribute("evidencebook.window", case.window)
         with tracer.start_as_current_span("turn 0 airline greeting") as span:
             telemetry.stamp(span, seal("assistant", GREETING))
         reply = customer.say(CUSTOMER_BRIEF.format(guidelines=guidelines, scenario=json.dumps(task["user_scenario"]["instructions"], indent=1), first=GREETING))
@@ -176,7 +177,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--task", default="0", help="tau2 airline task id (0-49)")
     p.add_argument("--state", type=Path, default=HERE / "state", help="where the demo keeps books and cases")
-    p.add_argument("--window", default="month", choices=("day", "month", "year"))
+    p.add_argument("--window", default="month", choices=records.WINDOWS)
     p.add_argument("--max-turns", type=int, default=20)
     try:
         run(p.parse_args())

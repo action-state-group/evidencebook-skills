@@ -44,9 +44,9 @@
   step("Case", "A live support case", "Two agents talk in real time: a Goose airline agent with the tau2 airline policy and tools, and a simulated customer given one tau2 scenario. Nothing is replayed from a benchmark transcript.", function () {
     stage.detail = kv([["scenario", D.case.reason_for_call.split("\n")[0]], ["tau2 task", D.case.task_id], ["opened", D.case.opened_at]]);
   });
-  step("Window book", "The airline's book for this window", "The airline keeps its records in one book per window: this month's book. A report on the month cites only this book, so its proofs stay bounded by the window.", function () {
-    book(air, air, "the airline's book for " + air.replace(/^.*?-/, ""));
-    stage.detail = kv([["book", air], ["window", "month (configurable: day, month, year)"]]);
+  step("Window", "The airline's deal store, split into windows", "The airline keeps one deal store. capsulectl splits its journal into calendar windows in UTC, and each case's deal book stays whole in the window its agreement is sealed in, even if the case runs past the window's end, and `deal window list` says which window that is. The conversation, the check and the citation are journal records, each in the window it was sealed in.", function () {
+    book(air, air, "the airline's deal store; this case is placed in window " + (D.case.window || "?"));
+    stage.detail = kv([["store", air], ["window", (D.case.window || "?") + " (the store's period is chosen when it is created: day, week, month, quarter or year)"]]);
   }, true);
   step("Deal", "One case, one deal", "The airline offers to a customer who keeps no signed records of its own and agrees alone. The deal's rows are the three checks of the tau2 airline rubric, owed by the airline.", function () {
     strip(air, "journal", "offer (to: null)", D.records.offer);
@@ -117,7 +117,7 @@
   }
   step("Not here", "What this demo does not show", "Kept honest on purpose.", function () {
     var ul = el("ul");
-    ["The link from one window's book to the next, and coverage across windows (evidencebook#689).",
+    ["A report over a range of windows with its coverage check. capsulectl can build one (deal window chain, book report derive --chain); this demo reports on one case.",
       "A person's own signature on each act: every act shows person_signature: missing (agent-action-capsule#627).",
       "A witness: checkpoints and as_of are the airline's own word.",
       "Proof that the database change matches the act: the records show the gate's order, not its effect.",

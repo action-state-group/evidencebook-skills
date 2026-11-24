@@ -15,37 +15,35 @@ sys.path.insert(0, str(HERE))
 import airline_mcp  # noqa: E402
 import evaluate  # noqa: E402
 import records  # noqa: E402
-import window  # noqa: E402
 
 UTC = timezone.utc
 
 
-@pytest.mark.parametrize("at,win,want", [
-    (datetime(2026, 11, 30, 23, 59, 59, tzinfo=UTC), "month", "2026-11"),
-    (datetime(2026, 12, 1, 0, 0, 0, tzinfo=UTC), "month", "2026-12"),
-    (datetime(2026, 12, 31, 23, 59, 59, tzinfo=UTC), "year", "2026"),
-    (datetime(2027, 1, 1, tzinfo=UTC), "year", "2027"),
-    (datetime(2026, 11, 23, 12, tzinfo=UTC), "day", "2026-11-23"),
-])
-def test_window_boundaries(at, win, want):
-    assert window.window_id(at, win) == want
+class FakeStore(records.Store):
+    """A store whose capsulectl answers come from a canned `deal window list`."""
+
+    def run(self, *args, profile=None):
+        assert args == ("deal", "window", "list") and profile == self.holder
+        return {"window": "month", "windows": [
+            {"label": "2026-10", "closed": True, "placed": ["deal/aaa"]},
+            {"label": "2026-11", "closed": False, "placed": ["deal/bbb", "deal/ccc"]},
+            {"label": "2026-12", "closed": False, "placed": []}]}
 
 
-def test_window_reads_utc_not_local_time():
-    # 2026-11-30 20:00 in Chicago is already December in UTC.
-    chicago = timezone(timedelta(hours=-6))
-    assert window.window_id(datetime(2026, 11, 30, 20, tzinfo=chicago), "month") == "2026-12"
+def test_a_case_window_is_read_from_the_window_list(tmp_path):
+    store = FakeStore(state=tmp_path)
+    assert store.window_of("deal/aaa") == "2026-10"
+    assert store.window_of("deal/ccc") == "2026-11"
 
 
-def test_window_refuses_naive_time_and_unknown_window():
-    with pytest.raises(ValueError):
-        window.window_id(datetime(2026, 11, 1), "month")
-    with pytest.raises(ValueError):
-        window.window_id(datetime(2026, 11, 1, tzinfo=UTC), "week")
+def test_a_deal_book_placed_in_no_window_is_refused(tmp_path):
+    with pytest.raises(records.RecordError, match="placed in no window"):
+        FakeStore(state=tmp_path).window_of("deal/zzz")
 
 
-def test_book_name():
-    assert window.book_name("airline", datetime(2026, 11, 2, tzinfo=UTC), "month") == "airline-2026-11"
+def test_the_store_window_must_be_one_capsulectl_takes(tmp_path):
+    with pytest.raises(ValueError, match="window must be one of"):
+        records.Store(state=tmp_path, window="fortnight").book()
 
 
 @pytest.mark.parametrize("text,ok", [
@@ -95,3 +93,11 @@ def test_rollup_needs_every_criterion():
     got = evaluate.rollup({"a.1": {"verdict": "met"}, "a.2": {"verdict": "not_met"}, "b.1": {"verdict": "met"}}, spec)
     assert got == {"a": "not_met", "b": "met"}
     assert evaluate.rollup({"a.1": {"verdict": "met"}}, spec)["a"] == "not_evaluable"
+
+
+def test_a_window_that_differs_from_the_existing_store_is_refused(tmp_path):
+    (tmp_path / "books" / "airline").mkdir(parents=True)
+    (tmp_path / "books" / "airline" / "deal.db").write_text("")
+    assert FakeStore(state=tmp_path, window="month").book() == "airline"
+    with pytest.raises(records.RecordError, match="has window 'month', fixed"):
+        FakeStore(state=tmp_path, window="day").book()

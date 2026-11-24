@@ -1,5 +1,5 @@
 {
- "bundle_digest": "940e9672a8822cd1cc4a8e7b78d88f82a6542cbbe5960bc09a2dc6270da7556e",
+ "bundle_digest": "069818f2a6c42d4fd864b06592683cad44c70c59a3e93d7c21e5b2ad8715f09f",
  "checked_against": {
   "bundle_draft": "draft-mih-zhang-agent-disclosure-bundle-01",
   "checks": "aac-strict"
@@ -11,12 +11,12 @@
  "countersignatures": [],
  "disclosures": [
   {
-   "capsule_id": "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a",
+   "capsule_id": "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004",
    "member": "agent_input",
    "status": "disclosure_match"
   },
   {
-   "capsule_id": "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c",
+   "capsule_id": "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15",
    "member": "agent_input",
    "status": "disclosure_match"
   }
@@ -31,10 +31,12 @@
    "status": "uninterpreted"
   },
   {
-   "as_of": "as of 2026-11-23T18:23:44Z (the holder's time, when it computed the report; no witness attests it)",
+   "as_of": "as of 2026-11-24T07:34:26Z (the holder's time, when it computed the report; no witness attests it)",
+   "claims": [],
    "kind": "x-deal-v1",
+   "read_by": "capsulectl-deal",
    "report": "standalone",
-   "sealed_report": "0d5e34f0fa60368eb7a3be6238b05555a2e350266748aec3da921ac5a1121447",
+   "sealed_report": "5dc797ac8fcbea09bd5a0637783d60b3c5e8c6ca1cf0f6b8906a82012d7f5c6e",
    "status": "pass"
   }
  ],
@@ -55,12 +57,12 @@
   "findings": []
  },
  "record_identity": {
-  "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "passed",
-  "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "passed"
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "passed",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "passed"
  },
  "record_signatures": {
-  "33e24ca388877a2cafe6b08ab120098602b593ed299351229298abeca821eb4a": "authored",
-  "71ffe06b1fe6a9fbec6c8be631a376252d1a2c107cf44d2a9335353b61b4d22c": "authored"
+  "6b874db0159ebb4cc487b842e8ecd2f51ade6d28549510bdd2e70cd240da7004": "authored",
+  "e38364a9b02df06683bd8e2d94591d29f609c1806654bcbdd41305ad3a8a2e15": "authored"
  },
  "spec_version": "capsule-cli-result/v1",
  "verdict": "VALID",
@@ -71,8 +73,6 @@
   "receipts": [],
   "status": "withheld"
  },
- "voice": "report",
- "say": "Checked: unchanged since it was locked.",
  "exit_code": 0,
  "command": "deal verify --bundle"
 }

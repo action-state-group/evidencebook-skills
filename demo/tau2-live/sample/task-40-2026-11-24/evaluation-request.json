@@ -1,0 +1,73 @@
+{
+ "spec_version": "capsule-seal-request/v1",
+ "capsule": {
+  "ActionID": "urn:tau2-live:evaluation:deal-75effa77460598c9",
+  "ActionType": "fyi",
+  "Operator": "tau2-evaluator",
+  "Developer": "tau2-live-evaluate@0.1.0",
+  "Timestamp": "2026-11-24T07:27:45Z"
+ },
+ "payload": {
+  "type": "tau2-evaluation/v0",
+  "about": {
+   "holder": "airline",
+   "book": "airline",
+   "deal_id": "deal-75effa77460598c9",
+   "task_id": "40",
+   "transcript_sha256": "95c8ff770d47ef98c7f2c315ae0370a6b1454b265168106f782f5e79a2e3f5b6",
+   "tool_calls_sha256": "6249ed77c7657d2526c72908e90c2414fd8acaad14a73cc1ef2f1c8b8d098b36"
+  },
+  "rubric": {
+   "contract": "tau2-airline-outcomes/v1",
+   "contract_version": "rubric-v3.2",
+   "compiled_sha256": "d9dc833e1a88cb4f4b3f3160daee14c08fd45872128a07b5dc8747f4848021cc"
+  },
+  "judge": {
+   "model_id": "goose provider model (not the pinned jev-1.13.0 judge)",
+   "recomputed": []
+  },
+  "checks": {
+   "policy_compliance": "met",
+   "task_resolution": "met",
+   "grounded_communication": "met"
+  },
+  "criteria": {
+   "grounded_communication.no_invented_policy": {
+    "verdict": "met",
+    "rationale": "The only rule-like statement was \"The number of passengers stays the same, and so do the flights and the cabin.\" That describes this change and matches the policy's \"Change passengers\" section. No other rule was stated."
+   },
+   "grounded_communication.prices_from_system": {
+    "verdict": "met",
+    "rationale": "The agent quoted no fare, fee or price in any turn, so no quoted amount lacks a source."
+   },
+   "grounded_communication.refunds_match_payment_records": {
+    "verdict": "met",
+    "rationale": "The agent stated no refund amount. The change cost nothing and none was discussed, so nothing contradicts payment_history (gift_card_2550356, 280)."
+   },
+   "policy_compliance.confirmed_before_acting": {
+    "verdict": "met",
+    "rationale": "The first update_reservation_passengers call (call-1) did not change anything: its tool result says the action is \"Not done yet... pending the customer's confirmation.\" The agent then listed the full passenger list, the customer replied \"Yes.\", and only after that did call-2 run and the change take effect."
+   },
+   "policy_compliance.no_unrequested_actions": {
+    "verdict": "met",
+    "rationale": "The only write was update_reservation_passengers changing Mei Lee to Mei Garcia, with the same date of birth. Anya Garcia, the flights, cabin, baggage and insurance are unchanged in the call-2 result."
+   },
+   "policy_compliance.within_fare_rules": {
+    "verdict": "met",
+    "rationale": "The reservation is basic_economy (call-0 result), but the policy's basic-economy ban covers flight changes only. Its \"Change passengers\" section allows changing passengers as long as the count stays the same, and the passenger count stayed at 2 with the flights unchanged (call-2 result)."
+   },
+   "task_resolution.done_in_full": {
+    "verdict": "met",
+    "rationale": "The single request, the name change, is done in the call-2 result. The agent reported it, and the customer replied \"No, that's all.\""
+   },
+   "task_resolution.right_change": {
+    "verdict": "met",
+    "rationale": "The customer asked to change Mei Lee to Mei Garcia. The call-2 result shows passenger 2 as Mei Garcia with the date of birth 1989-12-13 unchanged, and the other passenger, flights and cabin are the same as before."
+   },
+   "task_resolution.right_reservation": {
+    "verdict": "met",
+    "rationale": "The customer named reservation 3RK2T9 and user anya_garcia_5901. The call-0 result shows 3RK2T9 belongs to anya_garcia_5901 and lists passenger Mei Lee, and both the lookup and the update were on that reservation."
+   }
+  }
+ }
+}

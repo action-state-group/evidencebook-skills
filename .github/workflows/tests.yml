@@ -251,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      CAPSULECTL_VERSION: v0.1.0-rc50  # capsule-cli release and evidencebook release capsulectl/v0.1.0-rc50
+      CAPSULECTL_VERSION: v0.1.0-rc53  # capsule-cli release and evidencebook release capsulectl/v0.1.0-rc53
       CAPSULE_ENGINE_REF: c9e72572a020d2b22a44d20f0aad7345033598da  # go/v0.6.0
     steps:
       - uses: actions/checkout@v4

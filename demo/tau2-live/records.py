@@ -7,7 +7,9 @@ buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=aa77b7d21f027f70c
 - the airline offers to a customer who keeps no signed records of its own (``to: null``)
   and agrees alone; the rows are the three checks of the tau2 airline rubric,
   owed by the airline and due a week after the case opens;
-- a case stays in the window book it opened in, even if it runs past the window's end;
+- the airline keeps one deal store, split into calendar windows by capsulectl (``deal init
+  --window``); a case's deal book stays whole in the window its agreement is sealed in, even if
+  the case runs past the window's end, and ``deal window list`` says which window that is;
 - every turn of the conversation is a ``message`` in the airline's journal;
 - a database-changing tool call is a ``perform`` resting on a passing ``deal
   check`` whose snapshot quotes the customer's sealed confirmation. The customer's
@@ -27,11 +29,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import window
-
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 RUBRIC = REPO / "demo" / "tau2-outcomes" / "compiled.json"
+WINDOWS = ("day", "week", "month", "quarter", "year")  # capsulectl deal init --window
 CHECKS = ("policy_compliance", "task_resolution", "grounded_communication")
 ADMISSION_PACK = HERE / "admission" / "pack-definition.json"
 
@@ -79,25 +80,39 @@ class Store:
             raise RecordError(result.get("error") or proc.stderr.strip() or f"{cmd[1:4]} exited {proc.returncode}")
         return result
 
-    def book(self, at: datetime) -> str:
-        """The window book (deal profile) for a time, created on first use."""
-        name = window.book_name(self.holder, at, self.window)
-        directory = self.state / "books" / name
+    def book(self) -> str:
+        """The airline's deal store (one capsulectl profile), created on first use with the
+        store's window. capsulectl fixes the window when the store is created."""
+        if self.window not in WINDOWS:
+            raise ValueError(f"window must be one of {', '.join(WINDOWS)}, not {self.window!r}")
+        directory = self.state / "books" / self.holder
         if not (directory / "deal.db").exists():
-            self.run("deal", "init", "--dir", str(directory), "--no-witness",
-                     "--materiality", "builtin:neutral", profile=name)
-            self.run("deal", "set-version", "x-deal-v1", "--migrate", profile=name)
-        return name
+            self.run("deal", "init", "--dir", str(directory), "--no-witness", "--window", self.window,
+                     "--materiality", "builtin:neutral", profile=self.holder)
+            self.run("deal", "set-version", "x-deal-v1", "--migrate", profile=self.holder)
+        have = self.run("deal", "window", "list", profile=self.holder)["window"]
+        if have != self.window:
+            raise RecordError(f"the store in {self.state / 'books' / self.holder} has window {have!r}, fixed when it was "
+                              f"created; asked for {self.window!r}. Use --window {have} or delete {self.state} to start over")
+        return self.holder
+
+    def window_of(self, log_id: str) -> str:
+        """The window a deal book is placed in, read from ``deal window list``."""
+        for w in self.run("deal", "window", "list", profile=self.holder)["windows"]:
+            if log_id in w.get("placed", []):
+                return w["label"]
+        raise RecordError(f"deal book {log_id} is placed in no window of the store")
 
 
 @dataclass
 class Case:
-    """One open support case: its deal and the book it is in."""
+    """One open support case: its deal, the store's profile, and the window the deal is placed in."""
 
     store: Store
     book: str
     deal_id: str
     dir: Path
+    window: str = ""
 
     def write(self, name: str, value: object) -> Path:
         path = self.dir / name
@@ -163,8 +178,8 @@ def admission_input(now: datetime) -> dict:
 def open_case(store: Store, task_id: str, judge_key: str, now: datetime | None = None) -> Case:
     """Offer, admit, intend and agree: the case's deal book opens with the agreement."""
     now = now or datetime.now(timezone.utc)
-    book = store.book(now)
-    case_dir = store.state / "cases" / f"{book}-task-{task_id}-{now.strftime('%H%M%S')}-{os.urandom(2).hex()}"
+    book = store.book()
+    case_dir = store.state / "cases" / f"{now.strftime('%Y%m%d')}-task-{task_id}-{now.strftime('%H%M%S')}-{os.urandom(2).hex()}"
     case_dir.mkdir(parents=True)
     case = Case(store, book, "", case_dir)
     offer = store.run("deal", "offer", "--input", str(case.write("offer-in.json", offer_input(task_id, judge_key, now))),
@@ -184,8 +199,10 @@ def open_case(store: Store, task_id: str, judge_key: str, now: datetime | None =
                                                                     "recourse": {"rail": "none", "refundable": False}})),
                        profile=book)
     store.run("deal", "agree", offer["offer"], "--intent", intent["intent"], "--out", str(case_dir / "agree.json"), profile=book)
-    case.write("case.json", {"book": book, "deal_id": case.deal_id, "task_id": task_id, "opened_at": utc(now),
-                             "status": "open"})
+    agreement = json.loads((case_dir / "agree.json").read_text())["record"]["header"]["book_id"]
+    case.window = store.window_of(agreement)
+    case.write("case.json", {"book": book, "window": case.window, "deal_book": agreement, "deal_id": case.deal_id,
+                             "task_id": task_id, "opened_at": utc(now), "status": "open"})
     return case
 
 
@@ -208,4 +225,4 @@ def require_complete(case_dir: Path, allow_incomplete: bool) -> None:
 
 def load_case(store: Store, case_dir: Path) -> Case:
     meta = json.loads((case_dir / "case.json").read_text())
-    return Case(store, meta["book"], meta["deal_id"], case_dir)
+    return Case(store, meta["book"], meta["deal_id"], case_dir, meta.get("window", ""))
