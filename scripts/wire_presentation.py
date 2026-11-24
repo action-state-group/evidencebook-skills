@@ -16,7 +16,7 @@ The report renderer (capsulectl book report build, agent-action-capsule's
 built-in manifests) picks its view by that same key on the bundle's `extensions`:
 
   outcome-report/v1        -> the outcome card      (--card outcome)
-  eu-ai-act-compliance/v1  -> the obligation card   (--card obligation)
+  eu-ai-act-obligations-report/v2  -> the obligation card   (--card obligation)
 
 This copies the block onto `bundle.extensions` and prints the card it selects.
 The block is the producer's own mapping (check questions, criterion labels and
@@ -41,10 +41,10 @@ So the page says so, through a channel the renderer already labels:
     instead: the Result's digest covers the whole block, the pack's wording
     included, which is still not evidence and still not drawn on the page. A
     note the block already carries is kept, with these lines appended.
-  - eu-ai-act-compliance/v1: the renderer reads no note from this block, and
+  - eu-ai-act-obligations-report/v2: the renderer reads no note from this block, and
     it does show the producer's titles and summaries. It labels them itself:
-    its header says the article, applicability, method and finding
-    recommendations are the producer's mapping outside the signed records, and
+    its header says the article, applicability, method and findings
+    are the producer's mapping outside the signed records, and
     each obligation's detail says "Article, summary and method: the producer's
     mapping, not a sealed record." The block is copied verbatim. (The header
     sentence does not yet name the obligation titles, test names, not-evaluable
@@ -96,7 +96,7 @@ import sys
 # template key -> the capsulectl book report build --card that renders it
 CARD_FOR_TEMPLATE = {
     "outcome-report/v1": "outcome",
-    "eu-ai-act-compliance/v1": "obligation",
+    "eu-ai-act-obligations-report/v2": "obligation",
 }
 
 # agent-action-capsule spec/contract-report-v1.md section 1: a producer's opt-in

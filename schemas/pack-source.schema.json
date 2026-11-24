@@ -1771,7 +1771,7 @@
             "template": {
               "enum": [
                 "outcome-report/v1",
-                "eu-ai-act-compliance/v1"
+                "eu-ai-act-obligations-report/v2"
               ]
             },
             "percentages": {

@@ -129,7 +129,7 @@ class EUContract(unittest.TestCase):
             self.assertNotIn(check["plain"], text)
             for crit in check["criteria"]:
                 if crit.get("finding"):
-                    self.assertNotIn(crit["finding"]["recommendation"], text)
+                    self.assertNotIn(crit["finding"]["observed"], text)
         self.assertNotIn("Sample placeholder", text)
 
 

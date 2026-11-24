@@ -35,7 +35,7 @@ from wire_presentation import (  # noqa: E402
 
 AIRLINE = json.loads((ROOT / "demo/airline-support-outcomes/presentation.json").read_text())
 EVERYDAY = json.loads((ROOT / "packs/everyday-rules/compiled/presentation.json").read_text())
-EU_BLOCK = {"eu-ai-act-compliance/v1": {"enabled": True, "obligations": [
+EU_BLOCK = {"eu-ai-act-obligations-report/v2": {"enabled": True, "obligations": [
     {"id": "art-50", "title": "Transparency to the people using it", "summary": "Tell people it is an AI."}]}}
 
 CLAUSES = [{"id": "a.one", "check_id": "a"}, {"id": "a.two", "check_id": "a"}]
@@ -197,7 +197,7 @@ class Tamper(unittest.TestCase):
     def test_a_digest_for_a_different_template_reads_as_unsigned(self):
         sealed, wired, template = sealed_and_wired(AIRLINE)
         wired["disclosures"][ROOT_ID]["agent_input"]["statement"][DIGEST_MEMBER]["template"] = \
-            "eu-ai-act-compliance/v1"
+            "eu-ai-act-obligations-report/v2"
         self.assertEqual(presentation_label(wired), (LABEL_UNSIGNED, template))
 
     def test_no_block_and_no_digest_has_no_label(self):

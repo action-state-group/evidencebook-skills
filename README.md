@@ -157,7 +157,7 @@ Both converge on the same tail (`capsulectl book result build` → checkpoint �
 (`scripts/wire_presentation.py`), with the empty `contract-report/v1` opt-in
 beside it for `eu-ai-act-obligations` and `airline-support-outcomes`. Current
 viewers open such a bundle as the contract-report page. The older block picks a
-card only on viewers that predate that page: `eu-ai-act-compliance/v1` →
+card only on viewers that predate that page: `eu-ai-act-obligations-report/v2` →
 `obligation`, `outcome-report/v1` → `outcome`. That block is the producer's
 own text (check questions, criterion wording, obligation titles and
 plain-language summaries), added after `disclose`, outside the signed records.
