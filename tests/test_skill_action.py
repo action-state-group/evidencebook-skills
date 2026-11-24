@@ -205,7 +205,7 @@ class AgainstCapsulectl(unittest.TestCase):
 
         keys = {n: ctl_run("key", "generate", "--output", str(tmp / f"{n}.seed")) for n in ("p", "c")}
         ctl_run("profile", "create", "--name", "t", "--type", "jsonl", "--jsonl-path", str(tmp / "store"),
-                "--namespace", "t", "--log-id", "t", "--operator", "example-operator",
+                "--namespace", "t", "--log-id", "t", "--log", "cll", "--operator", "example-operator",
                 "--signing-key-file", str(tmp / "p.seed"), "--trusted-key", keys["p"]["public_key"],
                 "--checkpoint-signing-key-file", str(tmp / "c.seed"),
                 "--checkpoint-trusted-key", keys["c"]["public_key"])
