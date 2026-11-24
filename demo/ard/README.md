@@ -1,6 +1,6 @@
 # ARD two-seller demo
 
-To install and run this demo on your own Mac with Goose Desktop, start at [RUNBOOK.md, "Set up, once"](RUNBOOK.md#set-up-once): it clones every checkout, builds `capsule-engine` and installs the rest, step by step. The Run sheet below is for running `demo.py` directly.
+To install and run this demo on your own Mac with Goose Desktop, start at [RUNBOOK.md, "What you need"](RUNBOOK.md#what-you-need), then follow [Set up, once](RUNBOOK.md#set-up-once): it clones every checkout, builds `capsule-engine` and installs the rest, step by step. The Run sheet below is for running `demo.py` directly.
 
 Maya asks her agent for 200 conference badges by Friday, under 3,000 msat. Two sellers are found
 through ARD: **Alder Print Co.** at 2,000 msat (2 sats) and **Kestrel Print** at 1,000 msat (1 sat). Maya's library asks
