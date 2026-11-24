@@ -106,7 +106,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
 ## Set up, once
 
-1. Clone and build everything under ~/ard-demo (about 5 minutes). Everything goes under `~/ard-demo`. Another folder works if you change the paths in the next section to match. Run each block below as a whole, one after the other, in the same terminal window: every block pastes whole into zsh.
+1. Clone and build everything under `~/ard-demo` (about 5 minutes). Another folder works if you change the paths in the next section to match. Paste each of the four blocks below into the same terminal window, one block at a time, and wait for each to finish before pasting the next.
 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
@@ -135,7 +135,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
    ```
 
-   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error. Each checkout prints a detached HEAD note; that is expected.
+   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error.
 
 2. Already cloned? Move the checkout to this pin instead.
 
