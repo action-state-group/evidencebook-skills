@@ -8,7 +8,7 @@ from __future__ import annotations
 import html
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -197,7 +197,7 @@ def test_the_real_rail_sellers_line_names_the_rail_and_keeps_the_credit_note():
 @pages_only
 def test_a_refused_wording_pack_raises_instead_of_drawing_bare_keys(seeded, monkeypatch):
     world, deal_id = seeded
-    monkeypatch.setattr(receipt, "wording_pack", lambda bundle: b"{}")
+    monkeypatch.setattr(receipt, "wording_pack", lambda bundle, **kw: b"{}")
     with pytest.raises(receipt.ReceiptError, match="refused this demo's receipt wording pack"):
         receipt.receipt_page(world.nodes["maya"], "maya", "Maya", deal_id, rail="fake", seller=False)
 
@@ -213,6 +213,49 @@ def test_a_report_sealed_with_older_words_is_sealed_again(seeded):
     path.write_text(json.dumps(block, sort_keys=True))
     again = receipt.keep_copy(node, deal_id, seller=True, real=False)["extensions"]["x-deal-report/v0"]
     assert again["agent_input"]["report"]["money"]["text"].startswith("Agreed 2,000 msat")
+
+
+def test_the_checkpoint_sentence_needs_a_witnessed_newest_tick_that_covers_the_whole_deal_book(seeded):
+    from types import SimpleNamespace
+
+    world, deal_id = seeded
+    node = world.nodes["alder"]
+    node.tick(datetime.now(timezone.utc) + timedelta(minutes=2))
+    n = node.cadence.standard_history_anchor().tick.n
+    assert receipt.witnessed_checkpoint(node, deal_id) is None  # tests run with the witness off: no receipt held
+    stamped = SimpleNamespace(at=datetime.now(timezone.utc))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(node, "witnessed_tick", lambda k: stamped if k == n else None)
+        assert receipt.witnessed_checkpoint(node, deal_id) == n
+        mp.setattr(node, "witnessed_tick", lambda k: None)
+        assert receipt.witnessed_checkpoint(node, deal_id) is None
+        mp.setattr(node, "witnessed_tick", lambda k: stamped)
+        book = node.shelf.open(f"deal/{deal_id}")
+        real_records = book.records
+        mp.setattr(type(book), "records", lambda self: real_records() + [object()], raising=False)  # a record the tick lacks
+        assert receipt.witnessed_checkpoint(node, deal_id) is None
+    assert receipt.witnessed_checkpoint(SimpleNamespace(), deal_id) is None  # a node that never witnesses
+
+
+def test_the_witness_line_points_at_the_card_only_when_asked():
+    bundle = {"extensions": {}}
+    plain = json.loads(receipt.wording_pack(bundle))["entries"]["rung.unwitnessed"]
+    on_card = json.loads(receipt.wording_pack(bundle, on_card=True))["entries"]["rung.unwitnessed"]
+    assert plain == receipt.WITNESS_NONE and on_card == receipt.WITNESS_NONE + receipt.WITNESS_ON_CARD
+
+
+@pages_only
+def test_a_covered_deal_s_receipt_page_says_where_the_witness_stamp_is(seeded):
+    from types import SimpleNamespace
+
+    world, deal_id = seeded
+    node = world.nodes["maya"]
+    node.tick(datetime.now(timezone.utc) + timedelta(minutes=3))
+    stamped = SimpleNamespace(at=datetime.now(timezone.utc))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(node, "witnessed_tick", lambda k: stamped)
+        page = receipt.receipt_page(node, "maya", "Maya", deal_id, rail="fake", seller=False).read_text()
+    assert "This copy carries no witness receipt. The hosted witness stamps the History checkpoint shown on the card, which covers this deal." in page
 
 
 @pages_only
