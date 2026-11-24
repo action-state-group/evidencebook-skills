@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -230,6 +231,22 @@ def test_kestrels_own_page_from_a_seeded_node(tmp_path, monkeypatch, seeded_home
     if NODE:
         out = draw(view)
         assert f"{DEALS_EACH} deals, newest first" in out and pages.OWN_NOTE in out
+
+
+@engine_only
+@pytest.mark.skipif(not os.environ.get("CAPSULECTL_DEAL"), reason="CAPSULECTL_DEAL names the verifier that checks each receipt copy")
+def test_every_counted_sample_deal_has_a_receipt_link(tmp_path, monkeypatch, seeded_home):
+    """The sample deals are closed two-party deals, so each has a receipt page and a link (#245): the run sheet says so."""
+    pytest.importorskip("capsule_viewer")
+    from world import DEALS_EACH, World
+
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+    monkeypatch.setenv("ARD_OPEN_PAGES", "0")
+    with World(seeded_home(tmp_path / "home")) as world:
+        node = world.nodes["alder"]
+        ids = [d["deal"] for d in node.standard_history()["deals"]]
+        links = pages._receipt_links(node, "alder", "Alder", ids, rail="fake", seller=True)
+        assert len(ids) == DEALS_EACH and set(links) == set(ids)
 
 
 @engine_only

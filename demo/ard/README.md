@@ -171,8 +171,8 @@ unwitnessed and nothing else changes. The assessment's witness row (`buyer.OPERA
 still the operator's and not checked, as the screen says; the witnessed card page is what shows a real receipt.
 
 An Open receipt link on the deal line. The History page's deal rows have no link to a receipt in capsule-viewer's History
-view. This demo adds its own: under each deal line whose party holds a receipt page (the live deal; the sample deals have
-none), `ard_open_card_page` writes that receipt page beside the card page and puts an "Open receipt" link under the line,
+view. This demo adds its own: under each deal line whose party holds a receipt page (every closed deal whose other half arrived: the live
+deal and the sample deals alike), `ard_open_card_page` writes that receipt page beside the card page and puts an "Open receipt" link under the line,
 labelled "Demo link to this party's receipt page; the History card itself carries no link." The viewer's own control for this is on its contract report
 page (`book report build --receipts`, capsule-viewer 0.22.0); building a report for these deals is the follow-up
 [evidencebook-skills#221](https://github.com/action-state-group/evidencebook-skills/issues/221).
