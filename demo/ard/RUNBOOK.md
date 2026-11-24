@@ -370,7 +370,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Open my History card as a page.
    ```
 
-   **Expect:** the browser opens that seller's History card page; every deal row, the sample deals included, has an "Open receipt" link (each is a closed two-party deal, so each has a receipt page). A sample deal's receipt says "Sample history: ... (sample deal made up for this demo: no money moved)."; only the live deal's receipt describes a real or simulated payment. Then Cmd+` back to Maya's window.
+   **Expect:** the browser opens that seller's History card page; every deal row, the sample deals included, has an "Open receipt" link (each is a closed two-party deal, so each has a receipt page). A sample deal's receipt says "Sample history: ... (sample deal made up for this demo: no money moved).". Then Cmd+` back to Maya's window.
 
 8. Type. The assessment's inputs come from a demo adapter, and the screen says what it counted, for example "selection: signed answer, no inclusion proofs; this pack counts it". Maya's agent recommends; Maya picks.
 
