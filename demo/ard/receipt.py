@@ -220,11 +220,34 @@ def verify(bundle_path: Path) -> dict:
 #: limited to this copy and saying where the proof is (Sherlock2's rulings on #242 and #243, 2026-11-23). The viewer
 #: reads a caller's pack (bytes and sha256); nothing else of the page changes.
 WITNESS_NONE = "This copy carries no witness receipt."
+#: Added only when the History checkpoint the card is anchored on is witnessed and covers every record of this deal
+#: (:func:`witnessed_checkpoint`); the stamp itself is on the card, not in this copy (Sherlock2, #242).
+WITNESS_ON_CARD = (" The hosted witness stamped the History checkpoint taken at {at} UTC (checkpoint {n}), which covers this deal "
+                   "as of that checkpoint; the card shows the newest checkpoint.")
 COUNTERSIGN_NONE = "Not countersigned in this copy: the other party's signed half is in their own copy, not this one."
 PAYMENT_PROOF = "The payment proof is in the buyer's records, not this copy."
 
 
-def wording_pack(bundle: dict) -> bytes:
+def witnessed_checkpoint(node: gn.Node, deal_id: str) -> tuple[int, str] | None:
+    """The tick number and time (UTC, to the second) of the node's newest History checkpoint when a verified witness
+    receipt covers it and its extent for this deal's book is the whole book, else ``None``: a record sealed on the deal
+    after that tick is not covered. The sentence built from it names the tick, so a page kept past a newer tick still
+    says which checkpoint it means."""
+    witnessed_tick = getattr(node, "witnessed_tick", None)
+    if witnessed_tick is None:
+        return None
+    with node._lock:
+        anchor = node.cadence.standard_history_anchor()
+        stamped = witnessed_tick(anchor.tick.n)
+        if stamped is None:
+            return None
+        whole = len(node.shelf.open(f"deal/{deal_id}").records())
+    if anchor.extents.get(f"deal/{deal_id}", 0) < whole:
+        return None
+    return anchor.tick.n, stamped.at.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def wording_pack(bundle: dict, *, on_card: tuple[int, str] | None = None) -> bytes:
     """The example English wording pack with this demo's lines. On a seller's copy the payment line also carries the
     seller's own sealed ``money.text``, read from the sealed report in the copy and never composed here."""
     with warnings.catch_warnings():
@@ -233,14 +256,14 @@ def wording_pack(bundle: dict) -> bytes:
 
     pack = json.loads(example_wording_pack())
     pack["id"] = "evidencebook.receipt-wording.ard/v0"
-    pack["entries"].update({"rung.unwitnessed": WITNESS_NONE, "countersign.none": COUNTERSIGN_NONE})
+    pack["entries"].update({"rung.unwitnessed": WITNESS_NONE + (WITNESS_ON_CARD.format(n=on_card[0], at=on_card[1]) if on_card else ""), "countersign.none": COUNTERSIGN_NONE})
     if "x-deal-seller/v0" in bundle["extensions"]:
         sealed = bundle["extensions"][REPORT_EXTENSION]["agent_input"]["report"]["money"]["text"]
         pack["entries"]["seller.payment.not_recorded"] = f"{PAYMENT_PROOF} {sealed}"
     return json.dumps(pack, sort_keys=True).encode()
 
 
-def render(bundle: dict, output: dict) -> str:
+def render(bundle: dict, output: dict, *, on_card: tuple[int, str] | None = None) -> str:
     """capsule-viewer's receipt page for the keep copy, from what the verifier reported for it."""
     with warnings.catch_warnings():
         # The Python receipt modules are deprecated in favour of the TypeScript build (capsule-viewer#71); this demo
@@ -255,7 +278,7 @@ def render(bundle: dict, output: dict) -> str:
         composition = composition_from_capsulectl(bundle, output)
     except VerifierReportError as exc:
         raise ReceiptError(f"the verifier's report does not fit this copy: {exc}") from None
-    pack = wording_pack(bundle)
+    pack = wording_pack(bundle, on_card=on_card)
     page = receipt_page(context, assurance, pack, hashlib.sha256(pack).hexdigest(), audience=AUDIENCE,
                         composition=composition)
     if "wording-refused" in page:  # a refused pack would draw the page with bare keys
@@ -284,4 +307,5 @@ def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: st
     # DEMO badge): the presenter says "sample history, simulated payment" once at the start (Ethan, 2026-11-17).
     # A seller's page says where the payment proof is and gives the seller's own sealed payment sentence, attributed
     # to the seller and never as verified (Sherlock2, #243, narrowing #173). The buyer's page shows the payment.
-    return pages.write(name, "receipt", render(bundle, verify(bundle_path)))
+    return pages.write(name, "receipt", render(bundle, verify(bundle_path),
+                                               on_card=witnessed_checkpoint(node, deal_id)))

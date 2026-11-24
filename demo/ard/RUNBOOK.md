@@ -407,7 +407,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Show your History card, then open your History card and your receipt as pages.
    ```
 
-   **Expect:** 1 deal, held; the receipt page says Verified, 2,000 msat, Closed; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy (the witness stamp is on the History card, not on this copy).
+   **Expect:** 1 deal, held; the receipt page says Verified, 2,000 msat, Closed; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy; once the card's checkpoint is witnessed and covers the deal, it adds that the hosted witness stamped the History checkpoint taken at a named time (checkpoint number and UTC time), which covers this deal as of that checkpoint, not records sealed after it; the stamp itself is on the card, not in this copy.
 
 16. Cmd+` to Alder's window, same message.
    **Expect:** 25 deals, all held; receipt page Verified, Sale receipt, 2,000 msat agreed, with "The payment proof is in the buyer's records, not this copy." and Alder's own sentence about the payment, tagged simulated rail. If it shows 24, ask again in a few seconds.
