@@ -34,8 +34,8 @@ def seed(world: World, say=print, kestrel_card: str = "sample") -> None:
             say(f"{name}: sample history already there ({have} deals)")
         else:
             if have == 0:
-                deals.admit(buyer, node, reason="sample buyer, run by the operator")
-                deals.admit(node, buyer, reason="sample buyer, run by the operator")
+                deals.admit(buyer, node, reason=deals.SAMPLE_REASON)
+                deals.admit(node, buyer, reason=deals.SAMPLE_REASON)
             terms = world_terms(ITEM, seller["price_msat"], CURRENCY, RAIL)
             for i in range(have, DEALS_EACH):
                 deals.run_deal(buyer, node, terms, "sample deal", deals.SAMPLE_PAYMENT)
