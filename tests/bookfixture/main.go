@@ -173,8 +173,10 @@ func aacVerify(args []string) error {
 	if err != nil {
 		return err
 	}
-	var decoded any
-	if err = json.Unmarshal(raw, &decoded); err != nil {
+	// Decode keeps integers as json.Number: the verifier's JCS refuses the float64 a plain
+	// json.Unmarshal gives the evidence_record_header's integers (v, seq).
+	decoded, err := aacbundle.Decode(raw)
+	if err != nil {
 		return err
 	}
 	result := aacbundle.VerifyBundle(decoded)
