@@ -108,6 +108,43 @@ evaluator's signed verdict, the two disclosure levels, and both verify results. 
 checks nothing itself: `capsulectl deal verify` is the check. Keys: Right and Left arrows to step,
 Space to play, Home to restart.
 
+## A report over a range of windows
+
+capsulectl has no external clock, so a store made today has one open window. `range_report.py`
+instead runs on a fixture store with two ended months and one deal placed in each
+(`range/fixture`, copied unchanged from evidencebook#853: `git archive
+3d55909f860e166f065ae854eb4cf2ec57627a3a capsulectl/internal/deal/testdata/deal/window-store`;
+its `PROVENANCE.md` says how it was made). It follows evidencebook's
+`capsulectl/cmd/window_store_cli_test.go` with the released rc53 binaries only, on a copy of the
+store. From `demo/tau2-live`, in a shell with the `export` line above:
+
+```sh
+uv run python range_report.py "$(mktemp -d)/range"
+```
+
+It runs `deal window chain` over 2026-09 to 2026-10, then for each window and each placed deal a
+`book request`, `deal window respond` and `book request --response`, then `book report derive
+--chain` and `book report coverage`, and prints the chain and one line per placed deal:
+
+```
+chain: 2 windows, 2026-09 to 2026-10
+covered: True
+   deal/…, placed in window 2026-09, is answered over its whole book, through its checkpoint of 1 records issued 2026-09-14T15:00:00Z, records after the window included
+   deal/…, placed in window 2026-10, is answered over its whole book, …
+```
+
+`--without-deal-answers` answers the windows only: `derive` refuses, names each deal with no
+answer (`deal/… of window 2026-09 has no answer`) and writes no bundle. `tests/e2e_range.py`
+checks both. What it does not show:
+
+- The fixture's two deals are synthetic, not tau² cases, and its seeds protect nothing.
+- The Evidence Result `derive` signs is written by the script (one claim, `has-records`, citing
+  the answers), as evidencebook's test does; no evaluator ran. The requester is a throwaway book
+  with fresh keys.
+- The checkpoint key that `coverage` trusts is the holder's, read from the fixture's profile. With
+  no witness, the windows' continuity is as the holder signed it, and a deal's answer covers its
+  whole book, records after its window included.
+
 ## What this demo does not do
 
 - **No witness.** The book's checkpoints and a report's `as_of` are the airline's own word. A
@@ -129,14 +166,12 @@ Space to play, Home to restart.
 - **The report's rows are not due yet.** Each row falls due a week after the case opens, so a
   report cut right after the case reads `not_due`, beside the evaluator's verdict. The verdict is
   cited, not applied to the rows.
-- **No report over a range of windows.** capsulectl links each window to the next and can check
-  that a range of windows is covered (`deal window chain`, then `book report derive --chain` and
-  `book report coverage`, which names any window or placed deal with no answer). This demo's
-  report is about one case, in one window. It does not build a range report, and the chain needs
-  windows that have ended, so a run on the same day shows only the open window (the chain command
-  refuses it; a fixture store with ended windows is evidencebook#852). The demo has not run `deal
-  report` on a deal placed in a window that has since closed. A store made by
-  an earlier version of this demo (one profile per window) is not converted: delete `state/`.
+- **No range report over the demo's own cases.** The report in "Run it" is about one case, in one
+  window. A report over a range of windows needs windows that have ended, so a run on the same
+  day has only the open window (`deal window chain` refuses it). "A report over a range of
+  windows" below runs that report on a fixture store, not on a tau² case. The demo has not run
+  `deal report` on a deal placed in a window that has since closed. A store made by an earlier
+  version of this demo (one profile per window) is not converted: delete `state/`.
 - **No person's signature.** Every act shows `person_signature: missing`. No format exists
   yet for a person to sign an act (agent-action-capsule#627).
 - **Core verify does not run the deal rule.** `capsulectl deal verify --bundle` runs core's checks

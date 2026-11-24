@@ -292,3 +292,6 @@ jobs:
       - name: a scripted case, end to end
         working-directory: demo/tau2-live
         run: CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" uv run python tests/e2e_scripted.py "$RUNNER_TEMP/tau2-live"
+      - name: the range report on the ended-window fixture, through the released binaries
+        working-directory: demo/tau2-live
+        run: CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" python3 tests/e2e_range.py "$RUNNER_TEMP/tau2-range"
