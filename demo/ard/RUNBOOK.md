@@ -6,7 +6,7 @@ evidencebook-skills 859c27b · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at %s (the first hand-run of the witnessed card, the Open receipt link and the spending-limit hold is open), on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT), with the adapter found through GOOSE_SEARCH_PATHS, has not been run by hand. The demo's automated tests pass at these pins in CI.
+Status: not yet run by hand at these pins (the first hand-run of the witnessed card, the Open receipt link and the spending-limit hold is open), on either rail; the real-payment steps have not been run at these pins at all, and starting Goose on its own settings folder (GOOSE_PATH_ROOT), with the adapter found through GOOSE_SEARCH_PATHS, has not been run by hand. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -370,7 +370,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Open my History card as a page.
    ```
 
-   **Expect:** the browser opens that seller's History card page; every deal row, the sample deals included, has an "Open receipt" link (each is a closed two-party deal, so each has a receipt page). Then Cmd+` back to Maya's window.
+   **Expect:** the browser opens that seller's History card page; every deal row, the sample deals included, has an "Open receipt" link (each is a closed two-party deal, so each has a receipt page). A sample deal's receipt says "Sample history: ... (sample deal made up for this demo: no money moved)."; only the live deal's receipt describes a real or simulated payment. Then Cmd+` back to Maya's window.
 
 8. Type. The assessment's inputs come from a demo adapter, and the screen says what it counted, for example "selection: signed answer, no inclusion proofs; this pack counts it". Maya's agent recommends; Maya picks.
 
@@ -424,10 +424,10 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Show your History card, then open your History card and your receipt as pages.
    ```
 
-   **Expect:** 1 deal, held; the receipt page says Verified, 2,000 msat, Closed; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy; once the card's checkpoint is witnessed and covers the deal, it adds that the hosted witness stamped the History checkpoint taken at a named time (checkpoint number and UTC time), which covers this deal as of that checkpoint, not records sealed after it; the stamp itself is on the card, not in this copy.
+   **Expect:** 1 deal, held; the receipt page says Verified, 2,000 msat, Closed; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy; once the card's checkpoint is witnessed and covers the deal, it adds that the hosted witness stamped the History checkpoint taken at a named time (checkpoint number and UTC time), which covers this deal as of that checkpoint, and that the card shows the newest checkpoint.
 
 16. Cmd+` to Alder's window, same message.
-   **Expect:** 25 deals, all held; receipt page Verified, Sale receipt, 2,000 msat agreed, with "The payment proof is in the buyer's records, not this copy." and Alder's own sentence about the payment, tagged simulated rail. If it shows 24, ask again in a few seconds.
+   **Expect:** 25 deals, all held; receipt page Verified, Sale receipt, 2,000 msat agreed, with "The payment proof is in the buyer's records, not this copy." and Alder's own sentence about the payment: on the simulated rail it is tagged "simulated rail: no money moved"; on the real rail it names rail lightning and adds the credit note. If it shows 24, ask again in a few seconds.
 
 17. [Real] Wallets after.
 
