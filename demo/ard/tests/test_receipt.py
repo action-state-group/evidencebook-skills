@@ -332,8 +332,7 @@ def test_a_sample_deal_its_owner_marked_did_not_hold_says_so_on_its_receipt(seed
     kestrel = world.nodes["kestrel"]
     noted = [d for d in (b.split("/")[1] for b in kestrel.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
              if any(receipt._kind(json.loads(p)) == deals.OUTCOME_NOTE for p in kestrel.deal_payloads(d))]
-    if not noted:
-        pytest.skip("this seed carries no outcome note")
+    assert noted, "the sentinel seed should carry a did_not_hold note on Kestrel"
     import html
 
     page = html.unescape(receipt.receipt_page(kestrel, "kestrel", "Kestrel Print", noted[0], rail="fake", seller=True).read_text())
