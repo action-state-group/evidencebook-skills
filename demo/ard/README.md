@@ -81,6 +81,10 @@ balance difference. On a real rail Maya's line shows the routing fee as her wall
 the seller's receipt says that what its wallet was credited is not in its records: the seller's
 wallet provider may deduct a receiving fee. Preimages are never printed or kept. You need `gcloud` signed in to the project.
 
+### Optional live search (Hugging Face)
+
+`ARD_HF_SEARCH=1 python3 demo.py ...` adds one read-only `POST https://huggingface-hf-discover.hf.space/search` to step 2, the same body the stand-in gets, and prints the raw results. It is off by default, needs no account, and is shown only: the deal still uses the local stand-in registry (no Alder or Kestrel entry is on Hugging Face), and with no network the step prints one line saying so. Alone: `python3 hf_search.py "conference badges print"`.
+
 ### The local rail
 
 `--rail local` (script) or `ARD_RAIL=local` (Goose windows) pays between two local Lexe wallets with
