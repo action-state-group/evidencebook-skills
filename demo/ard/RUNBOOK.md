@@ -130,12 +130,14 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    (cd $HOME/ard-demo/dl && grep ' capsulectl-deal-v0.1.0-rc50-darwin-arm64$' SHA256SUMS | shasum -a 256 -c - && install -m 755 capsulectl-deal-v0.1.0-rc50-darwin-arm64 $HOME/ard-demo/bin/capsulectl-deal)
    ```
 
+   **Check before the next block:** this must print `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK`. On `FAILED`, nothing was installed: stop here.
+
    ```
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
    .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
    ```
 
-   **Expect:** the checksum line prints `capsulectl-deal-v0.1.0-rc50-darwin-arm64: OK` (on `FAILED` nothing is installed: stop and do not continue); pip ends with no error.
+   **Expect:** pip ends with no error.
 
 2. Already cloned? Move the checkout to this pin instead.
 
