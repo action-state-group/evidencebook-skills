@@ -159,8 +159,13 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     assert html.escape(ITEM) in page and "2,000 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page
-    if seller:  # one payment line only, the viewer's: the copy records no payment the seller received
-        assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
+    assert "no witness receipt is in this report" not in page and "no other party has signed" not in page
+    assert "This copy carries no witness receipt." in page and "the other party&#x27;s signed half is in their own copy" in page.replace("&#39;", "&#x27;")
+    if seller:  # where the proof is, then the seller's own sealed sentence, attributed and tagged simulated (#243)
+        assert "Not recorded in this copy" not in page
+        assert "The payment proof is in the buyer&#x27;s records, not this copy." in page.replace("&#39;", "&#x27;")
+        assert "as this seller&#x27;s own outcome record states it (simulated rail: no money moved)" in page.replace("&#39;", "&#x27;")
+        assert "paid" not in page.lower().split("payment proof")[1].split("</p>")[0]
     else:
         assert "Simulated payment of 2,000 msat: no money moved" in page
     assert _reads(world, deal_id, now) == before
