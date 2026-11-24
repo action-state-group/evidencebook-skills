@@ -22,7 +22,7 @@ def banner(rail: str) -> str:
 PACK_NOTE = "a copy, not published · placeholder thresholds"
 #: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
 OPERATOR_NOTE = ("filled in by the operator, not checked: the platform, the allow-list, the card's witness and "
-                 "controller; the card's own time-stamp, when the witness ran, is a separate receipt")
+                 "controller; this assessment does not read the card's witness time-stamp")
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
 #: The demo adapter reads the seller's selection as verified although it carries no inclusion proofs; the screen says so
 #: (design note §3.6 item 6). The buyer skill's own rule is that an unproven selection is never a pass.
