@@ -243,10 +243,11 @@ def test_every_counted_sample_deal_has_a_receipt_link(tmp_path, monkeypatch, see
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
     monkeypatch.setenv("ARD_OPEN_PAGES", "0")
     with World(seeded_home(tmp_path / "home")) as world:
-        node = world.nodes["alder"]
-        ids = [d["deal"] for d in node.standard_history()["deals"]]
-        links = pages._receipt_links(node, "alder", "Alder", ids, rail="fake", seller=True)
-        assert len(ids) == DEALS_EACH and set(links) == set(ids)
+        for name, label in (("alder", "Alder"), ("kestrel", "Kestrel")):  # Kestrel's two noted deals carry an extra record
+            node = world.nodes[name]
+            ids = [d["deal"] for d in node.standard_history()["deals"]]
+            links = pages._receipt_links(node, name, label, ids, rail="fake", seller=True)
+            assert len(ids) == DEALS_EACH and set(links) == set(ids), name
 
 
 @engine_only

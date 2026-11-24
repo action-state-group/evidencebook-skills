@@ -353,7 +353,7 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Open my History card as a page.
    ```
 
-   **Expect:** the browser opens that seller's History card page. Then Cmd+` back to Maya's window.
+   **Expect:** the browser opens that seller's History card page; every deal row, the sample deals included, has an "Open receipt" link (each is a closed two-party deal, so each has a receipt page). Then Cmd+` back to Maya's window.
 
 8. Type. The assessment's inputs come from a demo adapter, and the screen says what it counted, for example "selection: signed answer, no inclusion proofs; this pack counts it". Maya's agent recommends; Maya picks.
 
@@ -438,7 +438,7 @@ Before the run, in the shell that starts the windows, set the limit to the first
    **Expect:** a second payment dialog; click Pay. Then a second dialog, "Held for your OK" (default Decline), and on screen: "Held for your OK at deal check, nothing paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat)." Say aloud at the first click: the dialog is the person's yes; the rule can still hold it, and nothing is paid until the second answer. Click Decline: nothing is paid, Maya tells you which rule held the order, the wallet balances do not change and Maya's History card still counts 1 deal. (Approve instead and the payment goes on and the card counts 2.) Not yet run by hand with Goose Desktop at these pins.
 
 19. Open Maya's History page again (`Show your History card, then open your History card as a page.`).
-   **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. The sample deals have the same link on their rows: each is a closed two-party deal, so each has a receipt page. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.
+   **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.
 
 ## Quit and re-entry
 
