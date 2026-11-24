@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Fresh-environment test: run both cron skills end to end on the tau2 airline book
 # from a clean machine state -- a new temporary HOME (no profiles, no Go caches), a
-# fresh clone of this repository and of capsule-cli, and capsulectl built from source.
+# fresh clone of this repository, and the released capsulectl and capsulectl-book.
 #
 #   tests/fresh_env.sh [LOG_FILE]
 #
 # Environment (all optional):
 #   SKILLS_REPO  this repository to clone (default: its GitHub URL); a local path works
 #   SKILLS_REF   branch or commit of it to test (default: main)
-#   CLI_REPO     capsule-cli to clone (default: its GitHub URL)
-#   CLI_REF      capsule-cli commit to build capsulectl from
+#   CAPSULECTL_VERSION  the capsule-cli release and the evidencebook release capsulectl/<version>
+#                (capsulectl and its capsulectl-book plugin; default: v0.1.0-rc52). Needs gh signed in.
 #   CASES        how many tau2 airline tasks to put in the book (default: 12)
 #
 # No model runs anywhere: the judge is tests/stub_judge.py and the human expert is
@@ -19,10 +19,11 @@ set -euo pipefail
 
 SKILLS_REPO=${SKILLS_REPO:-https://github.com/action-state-group/evidencebook-skills.git}
 SKILLS_REF=${SKILLS_REF:-main}
-CLI_REPO=${CLI_REPO:-https://github.com/action-state-group/capsule-cli.git}
-CLI_REF=${CLI_REF:-6dadefd}
+CAPSULECTL_VERSION=${CAPSULECTL_VERSION:-v0.1.0-rc52}
 CASES=${CASES:-12}
 
+# gh keeps its sign-in under the real HOME, which the clean HOME below hides.
+export GH_TOKEN=${GH_TOKEN:-$(gh auth token)}
 work=$(mktemp -d)
 log=${1:-$work/fresh-env.log}
 exec > >(tee "$log") 2>&1
@@ -38,14 +39,23 @@ printf 'work dir: %s\nclean HOME: %s\nstarted: %s\n' "$work" "$HOME" "$(date -u 
 step "fresh clones"
 git clone --quiet "$SKILLS_REPO" "$work/skills"
 git -C "$work/skills" checkout --quiet "$SKILLS_REF"
-git clone --quiet "$CLI_REPO" "$work/capsule-cli"
-git -C "$work/capsule-cli" checkout --quiet "$CLI_REF"
-printf 'skills  %s @ %s\ncapsule-cli %s @ %s\n' "$SKILLS_REPO" "$(git -C "$work/skills" rev-parse HEAD)" "$CLI_REPO" "$(git -C "$work/capsule-cli" rev-parse HEAD)"
+printf 'skills  %s @ %s\n' "$SKILLS_REPO" "$(git -C "$work/skills" rev-parse HEAD)"
 
-step "build capsulectl and the test fixture from source"
-(cd "$work/capsule-cli" && go build -o "$work/bin/capsulectl" ./cmd/capsulectl)
-(cd "$work/skills/tests/bookfixture" && go build -o "$work/bin/bookfixture" .)
+step "fetch capsulectl and the capsulectl-book plugin $CAPSULECTL_VERSION (released binaries, checked against SHA256SUMS)"
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) plat=darwin-arm64 ;; Linux-x86_64) plat=linux-amd64 ;; Linux-aarch64|Linux-arm64) plat=linux-arm64 ;;
+  *) fail "no released capsulectl for $(uname -s)-$(uname -m)" ;;
+esac
+v=$CAPSULECTL_VERSION
+mkdir -p "$work/dl/cli" "$work/dl/eb"
+gh release download "$v" -R action-state-group/capsule-cli -D "$work/dl/cli" -p SHA256SUMS -p "capsulectl-$v-$plat"
+(cd "$work/dl/cli" && grep " capsulectl-$v-$plat\$" SHA256SUMS | shasum -a 256 -c -)
+gh release download "capsulectl/$v" -R action-state-group/evidencebook -D "$work/dl/eb" -p SHA256SUMS -p "capsulectl-book-$v-$plat"
+(cd "$work/dl/eb" && grep " capsulectl-book-$v-$plat\$" SHA256SUMS | shasum -a 256 -c -)
+install -m 0755 "$work/dl/cli/capsulectl-$v-$plat" "$work/bin/capsulectl"
 ctl=$work/bin/capsulectl
+"$ctl" plugin install "$work/dl/eb/capsulectl-book-$v-$plat"
+(cd "$work/skills/tests/bookfixture" && go build -o "$work/bin/bookfixture" .)
 "$ctl" --version
 
 step "a venv with the scripts' requirements (rfc8785 for JSON-DIGESTs)"
@@ -68,14 +78,13 @@ contract=$(jq -r .path "$work/contract.json")
   | jq -e .valid >/dev/null || fail "capsulectl contract validate refuses $contract"
 printf '%s: valid Evidence Contract v0\n' "$contract"
 
-step "a tau2 book: profile, keys, store"
+step "a tau2 book: keys and profile"
 "$ctl" key generate --output "$work/producer.seed" >"$work/producer.json"
 "$ctl" key generate --output "$work/checkpoint.seed" >"$work/checkpoint.json"
 "$ctl" profile create --name tau2 --type jsonl --jsonl-path "$work/store" \
-  --namespace tau2 --log-id tau2-airline --operator tau2-demo \
+  --namespace tau2 --log-id tau2-airline --log book --operator tau2-demo \
   --signing-key-file "$work/producer.seed" --trusted-key "$(jq -r .public_key "$work/producer.json")" \
   --checkpoint-signing-key-file "$work/checkpoint.seed" --checkpoint-trusted-key "$(jq -r .public_key "$work/checkpoint.json")"
-"$ctl" store init --profile tau2
 
 # The cases go into the previous ISO week's Wednesday: a day and a week that have ended.
 day=$(python3 -c 'import datetime as d; t=d.date.today(); m=t-d.timedelta(days=t.weekday()+7); print(m+d.timedelta(days=2))')
@@ -89,6 +98,8 @@ for request in $(ls "$work/requests"/task-*.json | sort | head -n "$CASES"); do
 done
 "$work/bin/bookfixture" seed --store "$work/store" --log-id tau2-airline --operator tau2-demo --namespace tau2 \
   --signing-key-file "$work/producer.seed" --checkpoint-key-file "$work/checkpoint.seed" --at "${day}T12:00:00Z" "$work/cases"/*.json
+# capsulectl-book rc52: store init makes a new store a windowed shelf, so the seeded book log comes first.
+"$ctl" store init --profile tau2
 listed=$("$ctl" cll list --profile tau2 --limit 1000 | jq '[.entries[] | select(.record_type=="published_capsule")] | length')
 [[ "$listed" -eq "$CASES" ]] || fail "capsulectl lists $listed cases, not $CASES: the seeded records do not match what capsulectl writes"
 printf '%s cases in the book, as capsulectl lists them\n' "$listed"
