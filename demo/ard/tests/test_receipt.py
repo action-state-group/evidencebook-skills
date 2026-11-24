@@ -159,11 +159,60 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     assert html.escape(ITEM) in page and "2,000 msat" in page
     assert ("Sale receipt" in page) == seller and 'data-level="L0"' in page
     assert "Paid by lightning" not in page and "over lightning" not in page
-    if seller:  # one payment line only, the viewer's: the copy records no payment the seller received
-        assert page.count("Payment:") == 1 and "Not recorded in this copy" in page and "own outcome record" not in page
+    assert "no witness receipt is in this report" not in page and "no other party has signed" not in page
+    assert "This copy carries no witness receipt." in page and "the other party&#x27;s signed half is in their own copy" in page.replace("&#39;", "&#x27;")
+    if seller:  # where the proof is, then the seller's own sealed sentence, attributed and tagged simulated (#243)
+        assert "Not recorded in this copy" not in page
+        assert "The payment proof is in the buyer&#x27;s records, not this copy." in page.replace("&#39;", "&#x27;")
+        assert "as this seller&#x27;s own outcome record states it (simulated rail: no money moved)" in page.replace("&#39;", "&#x27;")
+        assert "paid" not in page.lower().split("payment proof")[1].split("</p>")[0]
     else:
         assert "Simulated payment of 2,000 msat: no money moved" in page
     assert _reads(world, deal_id, now) == before
+
+
+def _book(status: str | None, rail: str = "simulated") -> list[dict]:
+    first = {"body": {"terms": {"item": "badges", "price_minor": 2000}, "recourse": {"rail": rail}}}
+    return [first] + ([{"type": "action-outcome/v0", "body": {"status": status}}] if status else [])
+
+
+def test_the_sellers_payment_line_attributes_the_status_and_tags_the_simulated_rail():
+    line = receipt.seller_payment(_book("received"), real=False)
+    assert line == ("Agreed 2,000 msat for badges. Payment: received, as this seller's own outcome record states it "
+                    "(simulated rail: no money moved).")
+    assert "paid" not in line.lower() and "verified" not in line.lower()
+
+
+def test_a_seller_with_no_outcome_record_does_not_cite_one():
+    line = receipt.seller_payment(_book(None), real=False)
+    assert "Payment: not stated in this seller's records (simulated rail" in line and "outcome record" not in line
+
+
+def test_the_real_rail_sellers_line_names_the_rail_and_keeps_the_credit_note():
+    line = receipt.seller_payment(_book("received", rail="lightning"), real=True)
+    assert "as this seller's own outcome record states it (rail lightning). " in line and screens.seller_credit_note(2000) in line
+    assert "simulated" not in line
+
+
+@pages_only
+def test_a_refused_wording_pack_raises_instead_of_drawing_bare_keys(seeded, monkeypatch):
+    world, deal_id = seeded
+    monkeypatch.setattr(receipt, "wording_pack", lambda bundle: b"{}")
+    with pytest.raises(receipt.ReceiptError, match="refused this demo's receipt wording pack"):
+        receipt.receipt_page(world.nodes["maya"], "maya", "Maya", deal_id, rail="fake", seller=False)
+
+
+@pages_only
+def test_a_report_sealed_with_older_words_is_sealed_again(seeded):
+    world, deal_id = seeded
+    node = world.nodes["alder"]
+    receipt.keep_copy(node, deal_id, seller=True, real=False)
+    path = receipt._stored(node, deal_id)
+    block = json.loads(path.read_text())
+    block["agent_input"]["report"]["money"]["text"] = "Payment: the buyer's payment, as this seller's own outcome record states it: received"
+    path.write_text(json.dumps(block, sort_keys=True))
+    again = receipt.keep_copy(node, deal_id, seller=True, real=False)["extensions"]["x-deal-report/v0"]
+    assert again["agent_input"]["report"]["money"]["text"].startswith("Agreed 2,000 msat")
 
 
 @pages_only

@@ -99,9 +99,9 @@ def seller_payment(payloads: list[dict], real: bool) -> str:
     holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved."""
     first = payloads[0]["body"]
     price, item = first["terms"]["price_minor"], first["terms"]["item"]
-    status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None) or "not recorded"
-    line = (f"Agreed {screens.msat(price)} for {item}. Payment: the buyer's payment, as this seller's own outcome "
-            f"record states it: {status}")
+    status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None)
+    stated = f"{status}, as this seller's own outcome record states it" if status else "not stated in this seller's records"
+    line = f"Agreed {screens.msat(price)} for {item}. Payment: {stated}"
     if not real:
         return line + " (simulated rail: no money moved)."
     return f"{line} (rail {first['recourse']['rail']}). {screens.seller_credit_note(price)}"
@@ -179,9 +179,11 @@ def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool) -> dict:
         path = _stored(node, deal_id)
         block = json.loads(path.read_text()) if path.exists() else None
         # The verifier holds the report to this checkpoint and its signed time (capsule-cli#294).
+        body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+        # A report sealed before the demo's words changed is sealed again: the page must not mix old and new words.
         if (block is None or block["agent_input"].get("deal_checkpoint") != bound
-                or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]):
-            body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+                or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]
+                or block["agent_input"]["report"]["money"] != body["money"]):
             payload = rp.report_payload(rp.Report(deal_id, AUDIENCE, secrets.token_hex(32), body,
                                                   checkpoint=rp.Checkpoint(**bound)))
             at = datetime.now(timezone.utc).replace(microsecond=0)
@@ -214,6 +216,30 @@ def verify(bundle_path: Path) -> dict:
     return output
 
 
+#: The receipt wording this demo gives capsule-viewer's receipt module in place of three of its example lines, each
+#: limited to this copy and saying where the proof is (Sherlock2's rulings on #242 and #243, 2026-11-23). The viewer
+#: reads a caller's pack (bytes and sha256); nothing else of the page changes.
+WITNESS_NONE = "This copy carries no witness receipt."
+COUNTERSIGN_NONE = "Not countersigned in this copy: the other party's signed half is in their own copy, not this one."
+PAYMENT_PROOF = "The payment proof is in the buyer's records, not this copy."
+
+
+def wording_pack(bundle: dict) -> bytes:
+    """The example English wording pack with this demo's lines. On a seller's copy the payment line also carries the
+    seller's own sealed ``money.text``, read from the sealed report in the copy and never composed here."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)  # as in render
+        from capsule_viewer.receipt import example_wording_pack
+
+    pack = json.loads(example_wording_pack())
+    pack["id"] = "evidencebook.receipt-wording.ard/v0"
+    pack["entries"].update({"rung.unwitnessed": WITNESS_NONE, "countersign.none": COUNTERSIGN_NONE})
+    if "x-deal-seller/v0" in bundle["extensions"]:
+        sealed = bundle["extensions"][REPORT_EXTENSION]["agent_input"]["report"]["money"]["text"]
+        pack["entries"]["seller.payment.not_recorded"] = f"{PAYMENT_PROOF} {sealed}"
+    return json.dumps(pack, sort_keys=True).encode()
+
+
 def render(bundle: dict, output: dict) -> str:
     """capsule-viewer's receipt page for the keep copy, from what the verifier reported for it."""
     with warnings.catch_warnings():
@@ -221,7 +247,7 @@ def render(bundle: dict, output: dict) -> str:
         # uses them until the page is drawn there.
         warnings.simplefilter("ignore", DeprecationWarning)
         from capsule_viewer.composed import composition_from_capsulectl
-        from capsule_viewer.receipt import example_wording_pack, receipt_page
+        from capsule_viewer.receipt import receipt_page
         from capsule_viewer.verifier_report import VerifierReportError, context_from_capsulectl
 
     try:
@@ -229,9 +255,11 @@ def render(bundle: dict, output: dict) -> str:
         composition = composition_from_capsulectl(bundle, output)
     except VerifierReportError as exc:
         raise ReceiptError(f"the verifier's report does not fit this copy: {exc}") from None
-    pack = example_wording_pack()
+    pack = wording_pack(bundle)
     page = receipt_page(context, assurance, pack, hashlib.sha256(pack).hexdigest(), audience=AUDIENCE,
                         composition=composition)
+    if "wording-refused" in page:  # a refused pack would draw the page with bare keys
+        raise ReceiptError("capsule-viewer refused this demo's receipt wording pack")
     if 'data-level="L0"' not in page:
         raise ReceiptError("capsule-viewer's receipt module declined this copy")
     return page
@@ -254,6 +282,6 @@ def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: st
     bundle_path.write_text(json.dumps(bundle, sort_keys=True))
     # The page is capsule-viewer's own, with nothing added (no banner, and the baseline seals no demo flag, so no
     # DEMO badge): the presenter says "sample history, simulated payment" once at the start (Ethan, 2026-11-17).
-    # Nor a payment line of ours on a seller's page: the viewer's "Payment: Not recorded in this copy" is true
-    # (Sherlock2, #173). The buyer's page shows the payment.
+    # A seller's page says where the payment proof is and gives the seller's own sealed payment sentence, attributed
+    # to the seller and never as verified (Sherlock2, #243, narrowing #173). The buyer's page shows the payment.
     return pages.write(name, "receipt", render(bundle, verify(bundle_path)))
