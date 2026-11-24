@@ -140,7 +140,7 @@ before=$("$ctl" cll list --profile tau2 --all --limit 1000 | jq '.entries | leng
 python3 tests/stub_rater.py "$packets" | jq '. + [.[0]]' >"$work/ratings-duplicated.json"
 set +e
 python3 scripts/run_weekly.py --profile tau2 --spec demo/tau2/compiled.json --capsulectl "$ctl" \
-  --date "$day" --out "$work/runs" --ratings "$work/ratings-duplicated.json" >"$work/weekly-duplicated.json"
+  --date "$day" --out "$work/runs" --ratings "$work/ratings-duplicated.json" --rater-ref "rater:stub-expert" >"$work/weekly-duplicated.json"
 refused=$?
 set -e
 [[ "$refused" -eq 2 ]] && jq -e '.evidence_unavailable | contains("more than one rating")' "$work/weekly-duplicated.json" >/dev/null || fail "a duplicated rating was not refused (exit $refused)"
