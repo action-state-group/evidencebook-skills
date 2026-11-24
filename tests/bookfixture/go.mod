@@ -3,14 +3,13 @@ module github.com/action-state-group/evidencebook-skills/tests/bookfixture
 go 1.27.0
 
 require (
-	github.com/action-state-group/agent-action-capsule/go v0.21.0
-	github.com/action-state-group/capsule-emit-go v0.2.0
-	github.com/action-state-group/evidencebook v0.0.0-20260926225933-d4e89f95a1ec
+	github.com/action-state-group/agent-action-capsule/go v0.24.0
+	github.com/action-state-group/capsule-emit/go v0.3.1-0.20261027234055-9defe98af14b
+	github.com/action-state-group/evidencebook v0.26.1-0.20261124003259-96853a11fa36
 )
 
 require (
-	github.com/action-state-group/checkpointed-local-log/go v0.1.0 // indirect
-	github.com/action-state-group/cll-go v0.0.0-20260926202724-9741da3d4ace // indirect
+	github.com/action-state-group/checkpointed-local-log/go v0.4.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.5.1 // indirect
 	github.com/btcsuite/btcd/chainhash/v2 v2.0.0 // indirect
 	github.com/datatrails/go-datatrails-merklelog/mmr v0.4.2-0.20250428132117-275103a34a08 // indirect
@@ -22,9 +21,11 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/veraison/go-cose v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

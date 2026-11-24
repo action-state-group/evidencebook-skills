@@ -7,7 +7,11 @@
 //     test that runs in one sitting needs its cases in an earlier, ended
 //     week. The records it writes are the ones capsulectl writes for a
 //     published capsule; if the two ever drift, `capsulectl cll list` stops
-//     showing the seeded cases and the test fails.
+//     showing the seeded cases and the test fails. The book is a single JSONL
+//     book (book/log.jsonl) on the library versions of capsulectl-book
+//     v0.1.0-rc52 (go.mod). It must be seeded before `capsulectl store init`,
+//     which makes a new store a windowed shelf (book/shelf.db) that this
+//     fixture does not write.
 //   - aac-verify: check an Evidence Bundle with the neutral
 //     agent-action-capsule bundle verifier alone, independent of capsulectl.
 package main
@@ -26,8 +30,8 @@ import (
 	"time"
 
 	aacbundle "github.com/action-state-group/agent-action-capsule/go/bundle"
-	"github.com/action-state-group/capsule-emit-go/artifact"
-	artifactjsonl "github.com/action-state-group/capsule-emit-go/artifact/jsonl"
+	"github.com/action-state-group/capsule-emit/go/artifact"
+	artifactjsonl "github.com/action-state-group/capsule-emit/go/artifact/jsonl"
 	"github.com/action-state-group/evidencebook"
 )
 
@@ -66,7 +70,7 @@ func seedKey(path string) (ed25519.PrivateKey, error) {
 // seed appends one published-capsule record per artifact.Record file.
 func seed(args []string) (err error) {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
-	store := fs.String("store", "", "the jsonl profile's store directory (after capsulectl store init)")
+	store := fs.String("store", "", "the jsonl profile's store directory (before capsulectl store init; the fixture creates it)")
 	logID := fs.String("log-id", "", "the profile's log_id")
 	operator := fs.String("operator", "", "the profile's operator")
 	namespace := fs.String("namespace", "", "the profile's artifact namespace")
@@ -93,8 +97,20 @@ func seed(args []string) (err error) {
 		return errors.New("signing key has no Ed25519 public key")
 	}
 	ctx := context.Background()
+	// capsulectl store init makes a new store a windowed shelf (book/shelf.db), and
+	// then reads only that, so records written to book/log.jsonl would be silently
+	// ignored. Seed first; store init then keeps the single-book store seeded here.
+	if _, err = os.Stat(filepath.Join(*store, "book", "shelf.db")); err == nil {
+		return errors.New("the store is a windowed shelf (book/shelf.db), which this fixture does not write: run seed before capsulectl store init")
+	}
+	if err = os.MkdirAll(*store, 0o700); err != nil {
+		return err
+	}
 	artifacts, err := artifactjsonl.New(filepath.Join(*store, "artifacts.jsonl"), *namespace, []ed25519.PublicKey{public})
 	if err != nil {
+		return err
+	}
+	if err = artifacts.Init(ctx); err != nil {
 		return err
 	}
 	signer, err := evidencebook.NewEd25519Signer(recordKey)
@@ -102,6 +118,9 @@ func seed(args []string) (err error) {
 		return err
 	}
 	dir := filepath.Join(*store, "book")
+	if err = os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
 	substrate, err := evidencebook.OpenCLL(filepath.Join(dir, "log.jsonl"), *logID, checkpointKey)
 	if err != nil {
 		return err
@@ -110,12 +129,8 @@ func seed(args []string) (err error) {
 	if err != nil {
 		return errors.Join(err, substrate.Release())
 	}
-	payloads, err := evidencebook.OpenPayloadDir(filepath.Join(dir, "payloads"))
-	if err != nil {
-		return errors.Join(err, records.Release(), substrate.Release())
-	}
 	book, err := evidencebook.Open(ctx, evidencebook.Config{
-		BookID: *logID, Operator: *operator, Store: records, Substrate: substrate, Payloads: payloads, Signer: signer,
+		BookID: *logID, Operator: *operator, Store: records, Substrate: substrate, Originals: evidencebook.SyncedFile(artifacts, filepath.Join(*store, "artifacts.jsonl")), Signer: signer,
 		Now: func() time.Time { return when },
 	})
 	if err != nil {

@@ -201,6 +201,48 @@ jobs:
           CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
             bash tests/fresh_env_deals.sh
 
+  obligations-report:
+    # The eu-ai-act-obligations report path end to end (tests/fresh_env_obligations.sh):
+    # tests/bookfixture seeds a closed day into a book, report.sh builds the
+    # eu-ai-act-obligations-report/v2 page with the mock judge, and headless Chrome shows its
+    # finding rows. Pinned to the released capsulectl and capsulectl-book the fixture's book
+    # log format is written for (tests/bookfixture/go.mod holds the library versions of that
+    # release).
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CAPSULECTL_VERSION: v0.1.0-rc52  # capsule-cli release and evidencebook release capsulectl/v0.1.0-rc52
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tests/bookfixture/go.mod
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: fetch capsulectl and the capsulectl-book plugin (released binaries, checked against SHA256SUMS)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="$CAPSULECTL_VERSION"; P=linux-amd64
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins" "$RUNNER_TEMP/dl/cli" "$RUNNER_TEMP/dl/eb"
+          chmod 755 "$RUNNER_TEMP/plugins"
+          gh release download "$V" -R action-state-group/capsule-cli -D "$RUNNER_TEMP/dl/cli" \
+            -p SHA256SUMS -p "capsulectl-$V-$P"
+          (cd "$RUNNER_TEMP/dl/cli" && grep " capsulectl-$V-$P\$" SHA256SUMS | sha256sum -c -)
+          gh release download "capsulectl/$V" -R action-state-group/evidencebook -D "$RUNNER_TEMP/dl/eb" \
+            -p SHA256SUMS -p "capsulectl-book-$V-$P"
+          (cd "$RUNNER_TEMP/dl/eb" && grep " capsulectl-book-$V-$P\$" SHA256SUMS | sha256sum -c -)
+          install -m 755 "$RUNNER_TEMP/dl/cli/capsulectl-$V-$P" "$RUNNER_TEMP/bin/capsulectl"
+          install -m 755 "$RUNNER_TEMP/dl/eb/capsulectl-book-$V-$P" "$RUNNER_TEMP/plugins/capsulectl-book"
+      - name: the eu-ai-act-obligations report, seeded, closed, built and drawn
+        run: |
+          CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$RUNNER_TEMP/plugins" \
+            bash tests/fresh_env_obligations.sh
+
   tau2-live:
     # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,
     # no model: a canned two-party script and the mock judge) through the real records, tool
