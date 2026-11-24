@@ -17,6 +17,8 @@ from demo_node import RECONCILED
 import rules
 
 SAMPLE_PAYMENT = "sample:no-payment"
+#: The reason the seed seals on each side's admission of the sample buyer; a receipt reads it to tell a sample deal.
+SAMPLE_REASON = "sample buyer, run by the operator"
 
 
 def admit(node: gn.Node, peer: gn.Node, decision: str = "GO", reason: str = "", **members: Any) -> Any:

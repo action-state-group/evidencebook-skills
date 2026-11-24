@@ -9,7 +9,7 @@ card and a seller's re-entry read the same records after it as before. It binds 
 at, so a book that grew since (an outcome note, say) gets a new report.
 
 The report's lines are this demo's own words, read from the party's own records: a seller's payment line says what
-its own outcome record states, and on a simulated rail nothing says money moved. ``capsulectl verify --bundle`` (the
+its own outcome record states, and on a simulated rail, or for a seeded sample deal, nothing says money moved. ``capsulectl verify --bundle`` (the
 binary ``CAPSULECTL_DEAL`` names) checks the copy, and capsule-viewer's receipt module renders it from that report."""
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from evidencebook.deal.names import REPORT_EXTENSION, REPORT_POINTER
 
 import pages
 import screens
-from deals import OUTCOME_NOTE
+from deals import OUTCOME_NOTE, SAMPLE_REASON
 
 AUDIENCE = "keep"
 #: The step kinds the typed records (a seller's chain) stand for.
@@ -94,20 +94,32 @@ def _line(kind: str, body: dict, simulated: bool) -> str:
     return kind
 
 
-def seller_payment(payloads: list[dict], real: bool) -> str:
+def is_sample(node: gn.Node, deal_id: str) -> bool:
+    """Whether this deal is one of the seeded sample deals: the deal's peer is a buyer this node admitted for the
+    sample history (the seed's admission reason). A sample deal seals ``lightning`` as its rail but no money moved."""
+    admission = node.admission(node.deal(deal_id).peer)
+    return bool(admission) and admission.get("reason") == SAMPLE_REASON
+
+
+def seller_payment(payloads: list[dict], real: bool, sample: bool = False) -> str:
     """A seller's payment line, from its own records: the outcome its own outcome record states (a seller's book
-    holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved."""
+    holds no payment step; the payment is the buyer's act), and on a simulated rail that no money moved. A sample
+    deal is said to be sample history made up for the demo, with no money moved, and names no rail. Only a seller's
+    page can be of a sample deal: the sample buyer has no window or card, and Maya's book holds only her live deal."""
     first = payloads[0]["body"]
     price, item = first["terms"]["price_minor"], first["terms"]["item"]
     status = next((p["body"].get("status") for p in reversed(payloads) if _kind(p) == "outcome"), None)
     stated = f"{status}, as this seller's own outcome record states it" if status else "not stated in this seller's records"
     line = f"Agreed {screens.msat(price)} for {item}. Payment: {stated}"
+    if sample:
+        # Sherlock2's wording (#256): the sealed rail is left out, since "lightning" is what made this read as real.
+        return f"Sample history: {line} (sample deal made up for this demo: no money moved)."
     if not real:
         return line + " (simulated rail: no money moved)."
     return f"{line} (rail {first['recourse']['rail']}). {screens.seller_credit_note(price)}"
 
 
-def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of: str) -> dict:
+def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of: str, sample: bool = False) -> dict:
     """The keep copy's report, in this demo's own words, from this party's own deal book."""
     book = node.shelf.open(f"deal/{deal_id}")
     records = list(book.records())
@@ -123,7 +135,7 @@ def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of:
     did = [{"kind": "act", "at": _at(p), "steps": [r.record_id], "text": _line("action", p["body"], simulated)} for r, p in acts]
     rail_note = "simulated rail: no money moved" if simulated else f"rail {first['recourse']['rail']}"
     if seller:
-        money = seller_payment(payloads, real)
+        money = seller_payment(payloads, real, sample)
     else:
         paid = next((p["body"]["amount_minor"] for _, p in acts if p["body"].get("action") == "pay"), None)
         money = (f"Simulated payment of {screens.msat(paid)} for {item}: no money moved." if simulated and paid is not None
@@ -166,7 +178,7 @@ def _stored(node: gn.Node, deal_id: str) -> Path:
     return node.home / "receipts" / f"{deal_id}.{AUDIENCE}.json"
 
 
-def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool) -> dict:
+def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool, sample: bool = False) -> dict:
     """The party's keep copy of a closed deal: its deal book's bundle carrying its sealed report. The report is sealed
     once per deal checkpoint and kept under the party's home (``receipts/``); a copy at a newer checkpoint seals a new
     one."""
@@ -179,7 +191,7 @@ def keep_copy(node: gn.Node, deal_id: str, *, seller: bool, real: bool) -> dict:
         path = _stored(node, deal_id)
         block = json.loads(path.read_text()) if path.exists() else None
         # The verifier holds the report to this checkpoint and its signed time (capsule-cli#294).
-        body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"])
+        body = report_body(node, deal_id, seller=seller, real=real, as_of=cp["timestamp"], sample=sample)
         # A report sealed before the demo's words changed is sealed again: the page must not mix old and new words.
         if (block is None or block["agent_input"].get("deal_checkpoint") != bound
                 or block["agent_input"]["report"]["lifecycle"]["as_of"] != cp["timestamp"]
@@ -289,8 +301,9 @@ def render(bundle: dict, output: dict, *, on_card: tuple[int, str] | None = None
 
 
 def sealed_real(node: gn.Node, deal_id: str) -> bool:
-    """Whether the deal was paid on a real rail, read from its own sealed terms (``pay.Rail.SEALED``): a deal
-    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173)."""
+    """Whether the deal's own sealed rail is a real one, read from its own sealed terms (``pay.Rail.SEALED``): a deal
+    sealed "simulated" stays simulated whatever rail the window was reopened on (Codex, #173). A seeded sample deal seals
+    ``lightning`` yet moved no money: see :func:`is_sample`."""
     first = json.loads(node.deal_payloads(deal_id)[0])["body"]
     return first["recourse"]["rail"] != "simulated"
 
@@ -299,7 +312,7 @@ def receipt_page(node: gn.Node, name: str, party: str, deal_id: str, *, rail: st
     """Write the party's receipt page for a closed deal, and return its path. Whether money moved is the
     deal's own sealed rail, not this run's ``rail`` (``ARD_RAIL``)."""
     real = sealed_real(node, deal_id)
-    bundle = keep_copy(node, deal_id, seller=seller, real=real)
+    bundle = keep_copy(node, deal_id, seller=seller, real=real, sample=seller and is_sample(node, deal_id))
     bundle_path = pages.home() / "pages" / f"{name}-receipt-{deal_id}.bundle.json"
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
     bundle_path.write_text(json.dumps(bundle, sort_keys=True))

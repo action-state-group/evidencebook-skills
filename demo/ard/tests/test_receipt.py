@@ -194,6 +194,42 @@ def test_the_real_rail_sellers_line_names_the_rail_and_keeps_the_credit_note():
     assert "simulated" not in line
 
 
+def test_a_sample_deals_seller_line_says_sample_names_the_sample_rail_and_no_money_moved():
+    line = receipt.seller_payment(_book("received", rail="lightning"), real=True, sample=True)
+    assert line == ("Sample history: Agreed 2,000 msat for badges. Payment: received, as this seller's own outcome record "
+                    "states it (sample deal made up for this demo: no money moved).")
+    assert "paid" not in line.lower() and "verified" not in line.lower() and "credited" not in line and "lightning" not in line
+
+
+def test_a_seeded_sample_deal_receipt_is_sample_history_and_a_live_deal_is_not(seeded):
+    import deals
+
+    world, live_id = seeded
+    alder = world.nodes["alder"]
+    sample_id = next(d for d in deals.deal_ids(alder) if d != live_id)
+    assert receipt.is_sample(alder, sample_id) and not receipt.is_sample(alder, live_id)
+    first = json.loads(alder.deal_payloads(sample_id)[0])["body"]
+    assert first["recourse"]["rail"] == "lightning"  # the sample record seals lightning; the page must not read it as money
+    assert receipt.sealed_real(alder, sample_id)
+    sealed = receipt.keep_copy(alder, sample_id, seller=True, real=True, sample=True)["extensions"]["x-deal-report/v0"]
+    text = sealed["agent_input"]["report"]["money"]["text"]
+    assert text.startswith("Sample history: ") and "sample deal made up for this demo: no money moved" in text
+    assert "credited" not in text and "paid" not in text.lower() and "lightning" not in text
+    assert deals.deal_ids(world.nodes["maya"]) == [live_id]  # no buyer page for a sample deal can exist: Maya holds only her live deal
+
+
+@pages_only
+def test_a_sample_deals_seller_page_says_sample_history_with_no_money_moved(seeded):
+    import deals
+
+    world, live_id = seeded
+    alder = world.nodes["alder"]
+    sample_id = next(d for d in deals.deal_ids(alder) if d != live_id)
+    page = receipt.receipt_page(alder, "alder", "Alder Print Co.", sample_id, rail="lightning", seller=True).read_text()
+    assert "Sample history: Agreed 2,000 msat" in page and "sample deal made up for this demo: no money moved" in page
+    assert "lightning" not in page.lower() and "wallet provider" not in page and "paid" not in page.lower().split("payment proof")[1].split("</p>")[0]
+
+
 @pages_only
 def test_a_refused_wording_pack_raises_instead_of_drawing_bare_keys(seeded, monkeypatch):
     world, deal_id = seeded
