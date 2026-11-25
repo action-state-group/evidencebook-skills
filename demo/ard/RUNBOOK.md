@@ -375,7 +375,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** invoice 2,000 msat succeeded, "Alder Print Co.'s delivery record says 200 of 200 badges were shipped." and "Maya's statement sent: she received what she paid for."
 
 15. Type `Show your History card, then your receipt.`
-    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends) and "Test money: this deal's payment was on a simulated rail. No real money moved."
+    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Asked for the receipt as a page, Maya says it can't be drawn yet for this kind of deal; the receipt in words is complete.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 
