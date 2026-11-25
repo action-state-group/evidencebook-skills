@@ -187,12 +187,14 @@ she may spend in a rolling 7 days and on one order, in msat; set it to the first
 (rules 5 to 22, 26 and 27 of the Everyday Rules) makes the order **held for the person's OK**, not refused (Steven, ops
 u325 for the caps rule; Sherlock2, 2026-11-23, the rules doc section 4.5 for the rest): one ask that lists every reason,
 one line per rule in the rule's own words. The one dialog comes after the deal check, so under a limit the payment dialog
-is that ask: "Held for your OK" (default Decline), naming the payment and then, for a first order to a seller not paid
-before, "The Everyday Rules held this order for your OK: no earlier payment to this merchant from this profile; the
-payment is not refundable; the up-front amount 2000 is above the share limit. Nothing has been paid yet. Approve this
-order anyway, or decline?"; a second order adds "the 7-day total with this purchase is over the 7-day limit you set
-(limit 2,000 msat, this order would bring it to 4,000 msat)" and "the same act was taken in another deal inside the
-window". When every reason is a spending limit the ask opens "This order is over a spending limit you set: " instead. An
+is that ask, in Steven's design (evidencebook-skills#270): titled "The Everyday Rules held this order for your OK", the
+item, seller, price and rail with "Nothing has been paid yet.", then one line per reason, for a first order to a seller
+not paid before "No earlier payment to this merchant from this profile", "The payment is not refundable" and "More than
+a quarter of the price paid up front (2,000 msat)"; a second order adds "Over your weekly limit: 4,000 msat with this
+order, limit 2,000 msat" and "The same act was taken in another deal inside the window". The buttons are Don't buy
+(the default) and Buy anyway. When one spending limit is the only reason, the question is titled "This order goes over your
+weekly limit" (or "per-order limit") and shows the figures from the sealed caps finding ("Spent this week", "With this
+order", "Your weekly limit") in place of the reasons. An
 order nothing holds gets the payment dialog as before (rare with this demo's terms: rules 8 and 22 ask on every order).
 Rule 22 (the up-front part) is fed: the check states that the whole price is due first, which the demo does. A failing
 NEVER rule (23 to 25) is refused and not put to the person. Declining pays nothing and is sealed as a note in Maya's
@@ -201,7 +203,7 @@ approving says "You approved this held order (…). Paying now." and goes on to 
 seals what the rules said (x-deal-v0 section 8: `rules: evaluated`, the ruleset and its digest, the engine's sha256, the
 verdict, every finding without the engine's words, and the history it was given); an `escalate` pauses the check with
 one `rules_escalate` difference per failing finding. The approval names who answered: `user`, with a commitment to the
-dialog's words and the button, for the Approve click on a held order or the Pay click otherwise (also with no limit
+dialog's words and the button, for the Buy anyway click on a held order or the Pay click otherwise (also with no limit
 set); with the dialog off (`ARD_APPROVAL=none`, simulated rail, tests only) it is `standing_intent` on a passing check
 and `agent_card` on a paused one. The buyer's receipt says it in plain words: "Approved by you", "Held by your spending
 limit, then approved by you", or, for the rules' other asks, "Held for your approval, then approved by you"

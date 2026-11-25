@@ -141,33 +141,37 @@ def approve_payment(summary: str) -> bool:
     return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
 
 
-def approve_hold(summary: str) -> bool:
+def approve_hold(title: str, text: str) -> bool:
     """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
-    :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
+    :func:`approve_payment`, with :func:`screens.hold_question`'s title and text and Steven's buttons (#270); True only
+    for Buy anyway. Don't buy, a timeout, no screen or any error is a decline."""
     import subprocess
 
-    text = dialog_text(summary)
-    script = (f'display dialog "{text}" with title "Held for your OK" buttons {{"Decline", "Approve"}} '
-              'default button "Decline" cancel button "Decline" with icon caution giving up after 180')
+    script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" '
+              "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
+              "with icon caution giving up after 180")
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
     except (OSError, subprocess.SubprocessError):
         return False
-    return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
+    return run.returncode == 0 and "button returned:Buy anyway" in run.stdout and "gave up:true" not in run.stdout
 
 
-def _ask_order(summary: str, real: bool, rail_name: str):
+def _ask_order(summary: str, real: bool, rail_name: str, seller: str = "", rail: str = ""):
     """The one question that releases an order under the person's spending limit, put after the deal check so a hold
-    reason is part of it: an order the Everyday Rules hold is one dialog with the payment and every reason (Approve or
-    Decline); an order they do not hold is the payment dialog as before (``approval_gate``). For a yes it returns the
-    person's :class:`rules.Answer` (the words the dialog showed and the button), which the approval record commits to."""
+    reason is part of it: an order the Everyday Rules hold is one dialog (:func:`screens.hold_question`: over a limit
+    alone its figures, else every reason; Don't buy or Buy anyway); an order they do not hold is the payment dialog as
+    before (``approval_gate``). ``seller`` and ``rail`` name the payee and the rail clause on the question's item line.
+    For a yes it returns the person's :class:`rules.Answer` (the words the dialog showed and the button), which the
+    approval record commits to."""
     def ask(outcome: "rules.Outcome") -> "rules.Answer | bool | None":
         if outcome.held:
-            asked = f"{summary} {screens.rules_ask(outcome.reasons, outcome.over_limit)}"
-            if not approve_hold(asked):
+            title, text = screens.hold_question(outcome.item, outcome.amount_msat, outcome.limits, outcome.reasons,
+                                                outcome.over_limit, seller=seller, rail=rail)
+            if not approve_hold(title, text):
                 return None
             print(screens.rules_approved(outcome.reasons, outcome.over_limit))
-            return rules.Answer(dialog_text(asked), "Approve")
+            return rules.Answer(dialog_text(f"{title}\n{text}"), "Buy anyway")
         try:
             clicked = approval_gate(real, rail_name, summary)
         except NotApproved:
@@ -344,8 +348,9 @@ def ard_pay(seller: str) -> None:
             real = rail_name in ("lightning", "local")
             label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
             shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
-            summary = (f"Pay {label} {amount} over Lightning: this moves real money, to a wallet {shared} share." if real
-                       else f"Pay {label} {amount} on the simulated rail: no money moves.")
+            rail = (f"over Lightning: this moves real money, to a wallet {shared} share" if real
+                    else "on the simulated rail: no money moves")
+            summary = f"Pay {label} {amount} {rail}."
             if key in s.declined:
                 # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
                 # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
@@ -366,7 +371,7 @@ def ard_pay(seller: str) -> None:
                     s.declined.add(key)
                     raise
             else:  # under a spending limit the one dialog comes after the deal check, so it can carry the hold reasons
-                ask = _ask_order(summary, real, rail_name)
+                ask = _ask_order(summary, real, rail_name, label, rail)
         except BaseException:
             if was_paid:
                 s.paid.add(key)
