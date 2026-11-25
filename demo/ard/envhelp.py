@@ -29,20 +29,18 @@ class Var:
 
 
 VARS = (
-    Var("ARD_EVIDENCEBOOK", "the evidencebook checkout at the pinned commit (the Goose reference, the x-deal-v0 checker)",
+    Var("ARD_EVIDENCEBOOK", "the evidencebook checkout at the pinned commit (the Goose reference on capsulectl-deal)",
         "/path/to/evidencebook", ("seed", "run", "windows"), "checkout"),
+    Var("CAPSULECTL_DEAL", "the capsulectl-deal binary built from that checkout: every deal record is its",
+        "/path/to/capsulectl-deal", ("seed", "run", "windows"), "program"),
     Var("CAPSULE_ENGINE", "the capsule-engine binary (go build ./cmd/capsule-engine in capsule-engine/go)",
-        "/path/to/capsule-engine", ("run", "windows"), "program"),
-    Var("CAPSULECTL_DEAL", "the capsulectl-deal binary: it verifies each receipt page's copy",
-        "/path/to/capsulectl-deal", ("windows",), "program"),
+        "/path/to/capsule-engine", ("seed", "run", "windows"), "program"),
     Var("ARD_WALLET_BUYER", "the buyer's wallet directory (ln-pay-local init --wallet <dir>; fund it)",
         "/path/to/buyer-wallet", ("local",), "dir"),
     Var("ARD_WALLET_SELLER", "the sellers' wallet directory (ln-pay-local init --wallet <dir>)",
         "/path/to/seller-wallet", ("local",), "dir"),
     Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
-    Var("ARD_LIMIT_MSAT", "the most Maya may spend in a week and on one order, in msat: set it to the first order's price "
-        "and the second order is held for her OK at her deal check (needs capsule-engine go/v0.7.0, `guard check --limits`)", "2000", ()),
     Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); by default each checkpoint goes to "
         "Action State's hosted witness, witness.agentactioncapsule.org, which receives hashes only", "off", ()),
 )
@@ -63,7 +61,7 @@ def _bad(var: Var, value: str) -> str | None:
     ``~`` reaches the demo as it is)."""
     path = Path(value)
     if var.check == "checkout" and not _paths.is_checkout(path):
-        return f"{var.name}={value} is not an evidencebook checkout (no python/examples/goose/goose_node.py)"
+        return f"{var.name}={value} is not an evidencebook checkout with the Goose reference on capsulectl-deal (no python/examples/goose/ctl.py)"
     if var.check == "program" and not (path.is_file() and os.access(path, os.X_OK)):
         return f"{var.name}={value} is not an executable file"
     if var.check == "dir" and not path.is_dir():

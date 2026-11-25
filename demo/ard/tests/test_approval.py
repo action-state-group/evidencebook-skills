@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The approval dialog's reading of osascript's answer: only the Pay button approves; everything else refuses.
+"""The presenter's dialogs (the payment's and the ruling's): only the yes button approves; everything else refuses.
 osascript is stubbed here, so no dialog appears and no engine is needed."""
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ import types
 import pytest
 
 import desktop_server as ds
+
+
+def pay_dialog(summary: str) -> bool:
+    return ds.ask_person("Approve this payment", summary, "Pay")
 
 
 def answer(monkeypatch, returncode=0, stdout="", raises=None):
@@ -23,7 +27,7 @@ def answer(monkeypatch, returncode=0, stdout="", raises=None):
 
 def test_only_the_pay_button_approves(monkeypatch):
     answer(monkeypatch, stdout="button returned:Pay, gave up:false\n")
-    assert ds.approve_payment("Pay Alder 289 msat") is True
+    assert pay_dialog("Pay Alder 289 msat") is True
 
 
 @pytest.mark.parametrize("kw", [
@@ -36,21 +40,21 @@ def test_only_the_pay_button_approves(monkeypatch):
 ])
 def test_anything_else_refuses(monkeypatch, kw):
     answer(monkeypatch, **kw)
-    assert ds.approve_payment("Pay Alder 289 msat") is False
+    assert pay_dialog("Pay Alder 289 msat") is False
 
 
 def test_quotes_in_the_summary_cannot_break_out_of_the_script(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment('x" & (do shell script "id") & "')
+    pay_dialog('x" & (do shell script "id") & "')
     assert 'do shell script "id"' not in seen[0] and "x' & (do shell script 'id') & '" in seen[0]
 
 
 def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment("Pay X")
-    assert f"giving up after {ds.parties.DIALOG_GIVE_UP_S}" in seen[0]
+    pay_dialog("Pay X")
+    assert "giving up after 180" in seen[0]
 
 
 def test_summary_wording_names_the_rail():
@@ -64,7 +68,7 @@ def test_summary_wording_names_the_rail():
 def test_the_dialog_title_names_no_demo(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment("Pay Alder Print Co. 289 msat over Lightning: this moves real money.")
+    pay_dialog("Pay Alder Print Co. 289 msat over Lightning: this moves real money.")
     assert 'with title "Approve this payment"' in seen[0] and "demo" not in seen[0].lower()
 
 
@@ -73,76 +77,38 @@ def test_the_assess_tool_description_names_no_demo():
     assert "demo" not in (ds.ard_assess.__doc__ or "").lower()
 
 
-def hold_answer(monkeypatch, returncode=0, stdout="", raises=None):
-    def run(cmd, **kw):
-        if raises:
-            raise raises
-        assert cmd[0] == "osascript" and 'buttons {"Don\'t buy", "Buy anyway"}' in cmd[2]
-        assert 'default button "Don\'t buy"' in cmd[2] and 'cancel button "Don\'t buy"' in cmd[2]
-        assert 'with title "This order goes over your weekly limit"' in cmd[2]
-        return types.SimpleNamespace(returncode=returncode, stdout=stdout)
-
-    monkeypatch.setattr(subprocess, "run", run)
+def test_the_ruling_dialog_is_the_presenters_and_defaults_to_cancel(monkeypatch):
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(
+        returncode=0, stdout="button returned:Rule, gave up:false\n"))
+    assert ds.ask_person("Rule on this case", "Rule on deal x", "Rule") is True
+    assert 'buttons {"Cancel", "Rule"}' in seen[0] and 'default button "Cancel"' in seen[0]
 
 
-def test_only_the_buy_anyway_button_approves_a_held_order(monkeypatch):
-    hold_answer(monkeypatch, stdout="button returned:Buy anyway, gave up:false\n")
-    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is True
-
-
-@pytest.mark.parametrize("kw", [
-    {"returncode": 1, "stdout": ""},
-    {"stdout": "button returned:Don't buy, gave up:false\n"},
-    {"stdout": "button returned:Buy anyway, gave up:true\n"},
-    {"returncode": 1, "stdout": "button returned:Buy anyway"},
-    {"raises": OSError("no osascript")},
-    {"raises": subprocess.TimeoutExpired("osascript", 200)},
-])
-def test_anything_else_declines_a_held_order(monkeypatch, kw):
-    hold_answer(monkeypatch, **kw)
-    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is False
+def test_approval_none_is_refused_on_a_real_rail(monkeypatch):
+    monkeypatch.setenv("ARD_APPROVAL", "none")
+    monkeypatch.setenv("ARD_RAIL", "local")
+    with pytest.raises(RuntimeError, match="refused on the local rail"):
+        ds.gate_off()
 
 
 @pytest.mark.parametrize("returncode,stdout,stderr,raises,expected", [
-    (0, "button returned:Buy anyway, gave up:false\n", "", None, "yes"),
-    (0, "button returned:, gave up:true\n", "", None, ds.rules.NO_ANSWER),  # nobody clicked before it gave up
-    (1, "", "execution error: User canceled. (-128)", None, ds.rules.NO),  # Don't buy, the cancel button
-    (1, "", "execution error: no display", None, ds.rules.NOT_SHOWN),
-    (0, "", "", OSError("no osascript"), ds.rules.NOT_SHOWN),
-    (0, "", "", subprocess.TimeoutExpired("osascript", 200), ds.rules.NO_ANSWER),  # hung past its give-up (PM's nit)
+    (0, "button returned:Pay, gave up:false\n", "", None, "yes"),
+    (0, "button returned:, gave up:true\n", "", None, ds.NO_ANSWER),  # nobody clicked before it gave up
+    (1, "", "execution error: User canceled. (-128)", None, ds.NO),  # the cancel button
+    (0, "button returned:Cancel, gave up:false\n", "", None, ds.NO),  # a cancel button that returns instead of raising
+    (1, "", "execution error: no display", None, ds.NOT_SHOWN),
+    (0, "", "", OSError("no osascript"), ds.NOT_SHOWN),
+    (0, "", "", subprocess.TimeoutExpired("osascript", 200), ds.NO_ANSWER),  # hung past its own give-up
 ])
 def test_the_dialog_says_how_it_ended_so_a_timeout_is_never_called_a_decline(monkeypatch, returncode, stdout, stderr,
                                                                                raises, expected):
-    # #239 finding 11: a dialog that timed out was reported to Maya as "declined"
+    # #239 finding 11 (ported from #292): a dialog that timed out was reported as "declined"
     def run(cmd, **kw):
         if raises:
             raise raises
         return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
     monkeypatch.setattr(subprocess, "run", run)
-    assert ds.hold_answer("Held", "200 badges ...") == expected
-    assert ds.approve_hold("Held", "200 badges ...") is (expected == "yes")
-
-
-
-@pytest.mark.parametrize("returncode,stdout,stderr,expected", [
-    (0, "button returned:Pay, gave up:false\n", "", "yes"),
-    (0, "button returned:, gave up:true\n", "", ds.rules.NO_ANSWER),
-    (1, "", "execution error: User canceled. (-128)", ds.rules.NO),
-    (0, "button returned:Cancel, gave up:false\n", "", ds.rules.NO),  # a cancel button that returns instead of raising
-    (1, "", "execution error: no display", ds.rules.NOT_SHOWN),
-])
-def test_the_payment_dialog_says_how_it_ended_too(monkeypatch, returncode, stdout, stderr, expected):
-    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr))
-    assert ds.payment_answer("Pay X") == expected and ds.approve_payment("Pay X") is (expected == "yes")
-
-
-def test_no_answer_without_a_limit_puts_the_one_question_with_the_payment(monkeypatch):
-    monkeypatch.delenv("ARD_APPROVAL", raising=False)
-    monkeypatch.setattr(ds, "payment_answer", lambda summary: ds.rules.NO_ANSWER)
-    with pytest.raises(ds.NotApproved) as no:
-        ds.approval_gate(False, "fake", "Pay X 2,000 msat on the simulated rail: no money moves.",
-                         "Pay X 2,000 msat on the simulated rail, where no money moves?")
-    assert no.value.answer == ds.rules.NO_ANSWER
-    assert ('"No answer in time, so the order was not placed and nothing was paid. Want to try again? (Pay X 2,000 msat '
-            'on the simulated rail, where no money moves?)"') in str(no.value) and "declined" not in str(no.value).replace(
-            "Never say she declined it", "")
+    assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == expected
+    assert ds.ask_person("Approve this payment", "Pay X", "Pay") is (expected == "yes")
+    assert expected == "yes" or "declined" not in ds.NOT_YES[expected] or expected == ds.NO

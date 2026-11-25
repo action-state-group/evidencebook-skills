@@ -6,7 +6,7 @@ above it, or a symlink; refuse while Goose Desktop runs (its windows hold server
 recipes again); find who holds files under the home or listens on the stage's ports (``lsof``; refuse if that cannot
 be checked). The demo's own processes are Python running ``stage.py`` or ``desktop_server.py`` that either hold one of
 the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a ``stage.py`` holds
-``stage/.stage.lock``, :data:`parties.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
+``stage/.stage.lock``, :data:`stage.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
 under the home or listen on the stage's ports and either name this home in their arguments or run from this
 checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
 the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
@@ -34,7 +34,7 @@ from pathlib import Path
 SAVED_RECIPE = "maya-buys-conference-badges.yaml"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"  # demo.DEFAULT_HOME, kept here so reset needs no evidencebook checkout
 HERE = Path(__file__).resolve().parent  # this checkout's demo/ard: a stage or server run from here is ours
-STAGE_LOCK = ".stage.lock"  # parties.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
+STAGE_LOCK = ".stage.lock"  # stage.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
 #: The demo's own Goose root: Goose 1.59.2 keeps its config (provider, extensions), data and state under
 #: ``GOOSE_PATH_ROOT`` when it is set (crates/goose/src/config/paths.rs), and Goose Desktop reads it from its own
 #: environment at launch (ui/desktop/src/main.ts). So the demo starts Goose itself with this root and never writes the
@@ -357,9 +357,9 @@ def clear_recipe_trust(root: Path, user: Path | None = None) -> int:
 
 
 def demo_ports() -> list[int]:
-    """The ports the demo's stage listens on (parties: the relay, the stand-in registry and the two seller sites)."""
+    """The ports the demo's stage listens on (stage.py: the stand-in registry and the two seller sites)."""
     http = int(os.environ.get("ARD_STAGE_PORT", "47481"))
-    return [int(os.environ.get("ARD_RELAY_PORT", "47480")), http, http + 10, http + 11]
+    return [http, http + 10, http + 11]
 
 
 def _listeners() -> dict[int, int]:

@@ -1,0 +1,351 @@
+# SPDX-License-Identifier: Apache-2.0
+"""One party of the demo on its own capsulectl-deal profile: Maya, Alder, Kestrel or the sample buyer.
+
+Every operation is one verb of the ``capsulectl-deal`` plugin, run through the Goose reference's ``Ctl``
+(evidencebook ``python/examples/goose/ctl.py``, at the commit the run sheet pins), with the party's directory as
+the profile's ``HOME``. The node book (what the party did outside a deal: its assessments, its pick, the cards it
+read) is the Goose reference's ``goose/node`` book through its :class:`goose_node.Node`. Nothing here keeps a deal
+record of its own or computes a row's status: capsulectl seals, keeps and counts.
+
+The demo's deals are x-deal-v1 deals that name the demo's adjudicator and Action State's hosted witness in the
+agreement both sides sign (:func:`offer_members`). #833's own ``Node.open_deal`` names neither, so the offer is
+written here and every other step uses the same verbs the Goose reference does."""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import threading
+import time
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import _paths
+
+_paths.setup()
+
+import goose_node as gn  # noqa: E402
+from ctl import Ctl, Refused  # noqa: E402
+
+# The Goose reference's Ctl and engine read their binaries from these; the demo's own variables name them.
+os.environ.setdefault("GOOSE_CAPSULECTL_DEAL", os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"))
+os.environ.setdefault("GOOSE_CAPSULE_ENGINE", os.environ.get("CAPSULE_ENGINE", "capsule-engine"))
+
+__all__ = ["Party", "Refused", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "witnessed"]
+
+#: Action State's hosted witness, ``deal init``'s default (capsulectl ``DealDefaultWitness``, ``DealDefaultWitnessKey``,
+#: evidencebook ``capsulectl/internal/deal/deal_verify_names.go``). Run by Action State, so not independent of the demo's
+#: parties, all of which the demo operator runs. It receives checkpoint hashes only.
+WITNESS_URL = "https://witness.agentactioncapsule.org"
+WITNESS_KEY = "39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"
+WITNESS_NAME = "Action State's witness"
+#: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter, so a sale or a ruling
+#: counts on the card within a minute.
+CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
+#: The History card's derivation every party makes and every buyer accepts: the one constant a move to
+#: ``standard_history/4`` changes (AAC standard-history §12: /3 with one rule changed).
+CARD_DERIVATION = "standard_history/3"
+#: The one forum the demo's agreements accept: the demo adjudicator, an outside party to the deal.
+FORUM = "external:ard-demo"
+#: The two rows of every demo deal (the Goose reference's own, ``goose_node.ROW`` and ``DELIVERED``).
+PAID, DELIVERED = gn.ROW, gn.DELIVERED
+CURRENCY = "BTC"  # capsulectl reads a BTC amount_minor in msat (deal_rules.go msatCurrency)
+
+
+def witnessed() -> bool:
+    """True unless ``ARD_WITNESS=off``: a Mac with no network can still run, its records then timed locally only."""
+    return os.environ.get("ARD_WITNESS", "public") != "off"
+
+
+def witness_directory() -> dict:
+    """The witness directory ``verify --bundle --witness-directory`` and the adjudicator take: the one hosted witness."""
+    return {"witnesses": [{"name": WITNESS_NAME, "endpoint": WITNESS_URL, "key_ids": [WITNESS_KEY]}]}
+
+
+def _iso(at: datetime) -> str:
+    return at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+class Party:
+    """A party's directory under the demo home (its profile's ``HOME``)."""
+
+    def __init__(self, home: Path, name: str) -> None:
+        self.name = name
+        self.dir = Path(home).expanduser() / name
+        self.profile = f"ard-{name}"
+        self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.ctl = Ctl(self.dir, self.profile)
+        self.node = gn.Node(self.dir, self.profile, "ard-demo@v2", self.ctl)
+        self._lock = threading.RLock()
+
+    # -- set-up -----------------------------------------------------------------------------
+
+    @property
+    def exists(self) -> bool:
+        return (self.dir / "deal" / "signing.seed").is_file()
+
+    def create(self, holder_kind: str, key_file: str = "", neutral: bool = False) -> Party:
+        """Make the profile once: keys, the store, the hosted witness unless ``ARD_WITNESS=off``, a one-minute cadence,
+        and who holds the card (``person`` for a buyer, ``node`` for a shop). ``neutral`` pins capsulectl's
+        ``builtin:neutral`` materiality predicate, so a check pauses only on what the predicate finds material, not on
+        every attribute the agent picked: a seller's process delivers without a person at the keyboard."""
+        if self.exists:
+            return self
+        self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        args = ["init", "--dir", str(self.dir / "deal")]
+        if not witnessed():
+            args.append("--no-witness")
+        if key_file:
+            args += ["--signing-key-file", key_file, "--checkpoint-key-file", key_file]
+        if neutral:
+            args += ["--materiality", "builtin:neutral"]
+        self.run(*args)
+        prof = self.dir / ".config" / "capsule" / "profiles" / f"{self.profile}.yaml"
+        with open(prof, "a") as fh:
+            fh.write(CADENCE)
+        self.run("standard-history", "declare", "--holder-kind", holder_kind)
+        return self
+
+    def run(self, *args: str) -> Any:
+        with self._lock:
+            return self.ctl.run(*args)
+
+    def close(self) -> None:
+        self.node.close()
+
+    @property
+    def key_id(self) -> str:
+        return self.node.key_id
+
+    @property
+    def checkpoint_key_id(self) -> str:
+        return self.node.checkpoint_key_id
+
+    @property
+    def seed_file(self) -> Path:
+        """The record key's seed file (64 hex)."""
+        return self.dir / "deal" / "signing.seed"
+
+    def tmp(self, name: str) -> str:
+        """A new path under the party's own scratch folder for a file a verb writes."""
+        d = self.dir / "tmp"
+        d.mkdir(exist_ok=True, mode=0o700)
+        return str(d / f"{uuid.uuid4().hex[:12]}-{name}")
+
+    def write(self, name: str, content: Any) -> str:
+        path = self.tmp(name)
+        Path(path).write_text(content if isinstance(content, str) else json.dumps(content))
+        return path
+
+    # -- the node book ------------------------------------------------------------------------
+
+    def note(self, record_type: str, statement: dict, **kw: Any) -> dict:
+        with self._lock:
+            return self.node.note(record_type, statement, **kw)
+
+    def notes(self, record_type: str = "") -> list[dict]:
+        with self._lock:
+            return self.node.notes(record_type)
+
+    # -- the cadence and the card -------------------------------------------------------------
+
+    def tick(self) -> dict:
+        return self.run("tick")
+
+    def wait_checkpoint(self, seconds: float = 90, say=None) -> dict:
+        """Take the next checkpoint, waiting for it to fall due (up to a minute on the demo's cadence)."""
+        stop = time.monotonic() + seconds
+        while True:
+            t = self.tick()
+            if t.get("state") == "ticked":
+                return t
+            if time.monotonic() >= stop:
+                raise Refused(f"no checkpoint in {int(seconds)} s")
+            if say:
+                say("waiting for this party's next checkpoint (up to a minute)")
+                say = None
+            time.sleep(3)
+
+    def card_bundle(self, shared: bool) -> Path:
+        """The party's :data:`CARD_DERIVATION` card as a bundle, as of its newest checkpoint: the shared copy (the card,
+        its policy and its anchor) or its own copy (with the deal entries it counts)."""
+        out = self.tmp("card-shared.json" if shared else "card.json")
+        self.run("standard-history", "card", "--derivation", CARD_DERIVATION, "--out", out,
+                 *(["--shared"] if shared else []))
+        return Path(out)
+
+    # -- deals --------------------------------------------------------------------------------
+
+    def offer(self, to_key: str, item: str, price_msat: int, pack_digest: str, adjudicator: dict,
+              due_s: int = 86400, window_s: int = 7 * 86400) -> dict:
+        """As the buyer: the offer to ``to_key``, naming the adjudicator, the forum and (unless ``ARD_WITNESS=off``) the
+        hosted witness, written to a file for the seller to keep with ``deal receive``. The two rows are the Goose
+        reference's: the buyer owes the price, the seller owes delivery, both due ``due_s`` after now, contested up to
+        ``window_s`` after now."""
+        now = datetime.now(timezone.utc)
+        due, end = _iso(now + timedelta(seconds=due_s)), _iso(now + timedelta(seconds=window_s))
+        members = {
+            "role": "buyer", "to": to_key, "terms": {"item": item, "price_minor": price_msat, "currency": CURRENCY},
+            "pack_digest": pack_digest,
+            "agree_by": _iso(now + timedelta(days=2)),
+            "terms_rows": {"rows": [
+                {"id": PAID, "owed_by": "buyer", "owed": {"amount_minor": price_msat, "currency": CURRENCY},
+                 "due": {"at": due}, "window_end": {"at": end}},
+                {"id": DELIVERED, "owed_by": "seller", "owed": {}, "due": {"at": due}, "window_end": {"at": end}}],
+                "named": {}},
+            "adjudicator": adjudicator, "forums": [FORUM],
+            "witnesses": [{"key_id": WITNESS_KEY, "url": WITNESS_URL}] if witnessed() else [],
+        }
+        out = self.tmp("offer.json")
+        done = self.run("offer", "--input", self.write("offer-in.json", members), "--out", out)
+        return {"deal_id": done["deal_id"], "offer": done["offer"], "file": out}
+
+    def receive(self, file: str | Path, out: str = "") -> dict:
+        return self.run("receive", str(file), *(["--out", out] if out else []))
+
+    def admit(self, deal_id: str, decision: dict) -> str:
+        """Seal capsule-engine's admitting decision for the deal (``deal admit``); a retry finds it."""
+        try:
+            return self.run("admit", "--deal", deal_id, "--input", self.write("admit.json", decision))["admit"]
+        except Refused as exc:
+            if "already" not in str(exc):
+                raise
+            return ""
+
+    def intent(self, deal_id: str, words: str, kind: str, allowed: list[str], limit_msat: int | None,
+               who: str, refundable: bool = False, rail: str = "lightning", domain: str = "") -> str:
+        """Seal what the person asked for this deal (``deal note --kind intent``)."""
+        said: dict = {"verbatim": words, "allowed": allowed}
+        if limit_msat is not None:
+            said["max_total_minor"] = limit_msat
+        opening = {"type": kind, "who": {"name": who, "domain": domain or f"{who[:12]}.invalid"},
+                   "recourse": {"rail": rail, "refundable": refundable}}
+        try:
+            return self.run("note", "--deal", deal_id, "--kind", "intent", "--input", self.write("intent.json", said),
+                            "--opening", self.write("opening.json", opening))["intent"]
+        except Refused as exc:
+            if "already open" not in str(exc):
+                raise
+            return ""
+
+    def agree(self, offer_digest: str, intent: str = "") -> dict:
+        out = self.tmp("agree.json")
+        done = self.run("agree", offer_digest, *(["--intent", intent] if intent else []), "--out", out)
+        return {**done, "file": out}
+
+    def check(self, deal_id: str, action: str, item: str, price_msat: int, who: str, extra: dict | None = None,
+              rail: str = "lightning", domain: str = "") -> dict:
+        """The final review of an act (``deal check``): ``proceed``, or a pause with the card the person must see."""
+        body = {"action": action, "terms": {"item": item, "price_minor": price_msat, "currency": CURRENCY},
+                "who": {"name": who, "domain": domain or f"{who[:12]}.invalid"}, "recourse": {"rail": rail, "refundable": False},
+                **(extra or {})}
+        return self.run("check", "--deal", deal_id, "--input", self.write("check.json", body))
+
+    def approve(self, deal_id: str, check: dict, choice: str, said: str) -> dict:
+        """The person's answer to a check that paused, sealed with the card they were shown."""
+        return self.run("note", "--deal", deal_id, "--kind", "approval", "--check", check["check_id"], "--choice", choice,
+                        "--said", said, "--shown-card", self.write("card.txt", check["card"]))
+
+    def pay_leg(self, deal_id: str, check_id: str) -> str:
+        """The buyer's payment: counted as in flight, then the payer leg settled, written for the seller. The payment
+        reference is the one the check bound."""
+        try:
+            self.run("settle", "--deal", deal_id, "--sent", "--check", check_id, "--payment-ref-type", "ln.payment_hash")
+        except Refused as exc:
+            if not any(w in str(exc) for w in ("in flight", "is used")):
+                raise
+        out = self.tmp("payer-leg.json")
+        self.run("settle", "--deal", deal_id, "--check", check_id, "--status", "settled", "--out", out)
+        return out
+
+    def received_leg(self, deal_id: str, amount_msat: int, payment_ref: str) -> str:
+        out = self.tmp("payee-leg.json")
+        self.run("settle", "--deal", deal_id, "--received", str(amount_msat), "--receive-fee", "0", "--status", "settled",
+                 "--payment-ref-type", "ln.payment_hash", "--payment-ref", payment_ref, "--out", out)
+        return out
+
+    def perform(self, deal_id: str, check_id: str, observed: str) -> str:
+        out = self.tmp("act.json")
+        self.run("perform", "--deal", deal_id, "--act", "delivered", "--check", check_id, "--observed", observed, "--out", out)
+        return out
+
+    def statement(self, deal_id: str, rows: dict[str, str]) -> str:
+        out = self.tmp("statement.json")
+        args = ["statement", "--deal", deal_id, "--out", out]
+        for row, value in sorted(rows.items()):
+            args += ["--statement", f"{row}={value}"]
+        self.run(*args)
+        return out
+
+    def dispute(self, deal_id: str, row: str) -> dict:
+        out = self.tmp("dispute.json")
+        done = self.run("dispute", "--deal", deal_id, "--row", row, "--out", out)
+        return {**done, "file": out}
+
+    def report(self, deal_id: str) -> dict:
+        """The deal's report as it stands (``deal report --read-only``): each row's status, read from capsulectl."""
+        return self.run("report", "--deal", deal_id, "--read-only")
+
+    def bundle(self, deal_id: str, share: str = "keep", to: str = "", wait: float = 0, say=None) -> Path:
+        """The deal's report as an Evidence Bundle: the party's own copy (``keep``), or a copy shared with the
+        ``adjudicator`` or the ``counterparty`` (put on record first). A report rests on a checkpoint, so with ``wait``
+        it waits for the tick that covers the deal."""
+        stop = time.monotonic() + wait
+        while True:
+            out = self.tmp(f"{share}-copy.json")
+            args = ["report", "--deal", deal_id, "--bundle", out]
+            if share != "keep":
+                args += ["--share", share, "--to", to or share]
+            try:
+                self.run(*args)
+                return Path(out)
+            except Refused as exc:
+                if "after its last checkpoint" not in str(exc) or time.monotonic() >= stop:
+                    raise
+            self.wait_checkpoint(max(stop - time.monotonic(), 1), say)
+            say = None
+
+    def proof(self, deal_id: str, copy: Path) -> Path:
+        """The file of the stamp proof and witness receipts behind a copy, for the adjudicator's entry check."""
+        out = self.tmp("proof.json")
+        self.run("checkpoint", "proof", "--deal", deal_id, "--copy", str(copy), "--out", out)
+        return Path(out)
+
+    def deals(self) -> list[dict]:
+        return self.run("list", "--json")
+
+    def verify(self, bundle: Path) -> dict:
+        """``capsulectl verify --bundle`` on a file, with the hosted witness's directory so its receipts are checked."""
+        args = ["verify", "--bundle", str(bundle)]
+        if witnessed():
+            args += ["--witness-directory", self.write("witnesses.json", witness_directory())]
+        return self.run(*args)
+
+
+def decide(pack: Path, inputs: dict, admit_refs: dict | None = None) -> dict:
+    """``capsule-engine admission evaluate`` on ``inputs`` under ``pack``; with ``admit_refs`` the output carries the
+    x-deal-v1 admit body ``deal admit`` seals."""
+    files = []
+    try:
+        d = tempfile.mkdtemp(prefix="ard-engine-")
+        files.append(d)
+        inp = Path(d) / "input.json"
+        inp.write_text(json.dumps(inputs))
+        args = ["admission", "evaluate", "--pack", str(pack), "--input", str(inp)]
+        if admit_refs is not None:
+            refs = Path(d) / "refs.json"
+            refs.write_text(json.dumps(admit_refs))
+            args += ["--admit", str(refs)]
+        return gn.engine(*args)
+    finally:
+        for f in files:
+            shutil.rmtree(f, ignore_errors=True)
+
+
+def empty_refs() -> dict:
+    """The ``--admit`` refs of a decision made on no card and no asks (the digest of the empty document)."""
+    return {"asks": [], "answers": [], "card_digest": hashlib.sha256(b"{}").hexdigest()}

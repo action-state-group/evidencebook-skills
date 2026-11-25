@@ -96,7 +96,7 @@ def test_a_port_taken_by_something_else_is_not_taken_for_the_stage(disc, monkeyp
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    import parties
+    import stage
 
     class Old(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -106,23 +106,23 @@ def test_a_port_taken_by_something_else_is_not_taken_for_the_stage(disc, monkeyp
     threading.Thread(target=old.serve_forever, daemon=True).start()
     try:
         port = old.server_address[1]
-        monkeypatch.setattr(parties, "HTTP_PORT", port)
-        monkeypatch.setattr(parties, "REGISTRY_URL", f"http://127.0.0.1:{port}/search")
+        monkeypatch.setattr(stage, "HTTP_PORT", port)
+        monkeypatch.setattr(stage, "REGISTRY_URL", f"http://127.0.0.1:{port}/search")
         with pytest.raises(RuntimeError, match=f"port {port} is taken by something that is not this run's stage.py"):
-            parties.stage_up()
+            stage.stage_up()
     finally:
         old.shutdown()
         old.server_close()
     port = int(disc.registry.url.split(":")[2].split("/")[0])  # the demo's own stand-in registry
-    monkeypatch.setattr(parties, "HTTP_PORT", port)
-    monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
-    assert parties.stage_up()
+    monkeypatch.setattr(stage, "HTTP_PORT", port)
+    monkeypatch.setattr(stage, "REGISTRY_URL", disc.registry.url)
+    assert stage.stage_up()
 
 
 def test_the_stage_probe_fetches_no_seller(disc, monkeypatch):
     """The probe is a search with no query.text, answered before any seller is fetched: a slow seller never
     makes the demo's own stage look foreign (Codex, #173)."""
-    import parties
+    import stage
     fetched = []
     import discovery
     orig = discovery.urllib.request.urlopen
@@ -133,6 +133,6 @@ def test_the_stage_probe_fetches_no_seller(disc, monkeypatch):
 
     monkeypatch.setattr(discovery.urllib.request, "urlopen", spy)
     port = int(disc.registry.url.split(":")[2].split("/")[0])
-    monkeypatch.setattr(parties, "HTTP_PORT", port)
-    monkeypatch.setattr(parties, "REGISTRY_URL", disc.registry.url)
-    assert parties.stage_up() and not [u for u in fetched if "ard.json" in str(u)]
+    monkeypatch.setattr(stage, "HTTP_PORT", port)
+    monkeypatch.setattr(stage, "REGISTRY_URL", disc.registry.url)
+    assert stage.stage_up() and not [u for u in fetched if "ard.json" in str(u)]

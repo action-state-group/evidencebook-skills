@@ -109,9 +109,9 @@ def mac(tmp_path, monkeypatch):
 
 
 def test_the_stage_lock_name_is_the_stages_own():
-    import parties
+    import stage
 
-    assert reset.STAGE_LOCK == parties.STAGE_LOCK
+    assert reset.STAGE_LOCK == stage.STAGE_LOCK
 
 
 def test_refuses_while_goose_runs_and_changes_nothing(mac, monkeypatch):

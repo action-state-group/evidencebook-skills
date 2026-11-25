@@ -29,16 +29,18 @@ def test_demo_with_no_command_or_help_prints_the_commands_and_the_environment(ar
     assert run.returncode == (2 if not args else 0)
     out = run.stdout
     for text in ("seed", "run", "reset", "Environment:", "ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL",
-                 "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "needed by seed, run", "with --rail local", "reset needs none of them", "CAPSULECTL_DEAL   the capsulectl-deal binary: it verifies each receipt page's copy; not needed here; needed by goose/open-windows.py",
-                 "export ARD_EVIDENCEBOOK=/path/to/evidencebook CAPSULE_ENGINE=/path/to/capsule-engine"):
+                 "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "needed by seed, run", "with --rail local", "reset needs none of them",
+                 "export ARD_EVIDENCEBOOK=/path/to/evidencebook CAPSULECTL_DEAL=/path/to/capsulectl-deal "
+                 "CAPSULE_ENGINE=/path/to/capsule-engine"):
         assert text in out, text
     assert "Traceback" not in run.stderr
 
 
 @pytest.mark.parametrize("command,rail,missing", [
-    ("seed", "fake", ["ARD_EVIDENCEBOOK"]),
-    ("run", "fake", ["ARD_EVIDENCEBOOK", "CAPSULE_ENGINE"]),  # run makes no receipt page: no CAPSULECTL_DEAL
-    ("run", "local", ["ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "ARD_WALLET_BUYER", "ARD_WALLET_SELLER"]),
+    ("seed", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE"]),
+    ("run", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE"]),
+    ("run", "local", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_WALLET_BUYER",
+                      "ARD_WALLET_SELLER"]),
 ])
 def test_a_missing_variable_is_one_message_with_the_export_line_not_a_traceback(command, rail, missing):
     run = _run("demo.py", command, "--rail", rail)
@@ -60,17 +62,17 @@ def test_a_set_variable_that_points_nowhere_is_named(tmp_path, value):
 def test_a_set_environment_passes_the_check(tmp_path, monkeypatch):
     goose = tmp_path / "eb" / "python" / "examples" / "goose"
     goose.mkdir(parents=True)
-    (goose / "goose_node.py").write_text("")
+    (goose / "ctl.py").write_text("")
     exe = tmp_path / "bin"
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     monkeypatch.setenv("ARD_EVIDENCEBOOK", str(tmp_path / "eb"))
     monkeypatch.setenv("CAPSULE_ENGINE", str(exe))
     monkeypatch.delenv("CAPSULECTL_DEAL", raising=False)
-    assert envhelp.message("run") is None and envhelp.message("seed") is None
-    assert "CAPSULECTL_DEAL" in envhelp.message("windows")
+    for command in ("run", "seed", "windows"):  # every deal record is capsulectl-deal's
+        assert "CAPSULECTL_DEAL" in envhelp.message(command)
     monkeypatch.setenv("CAPSULECTL_DEAL", str(exe))
-    assert envhelp.message("windows") is None
+    assert envhelp.message("run") is None and envhelp.message("seed") is None and envhelp.message("windows") is None
     assert "ARD_WALLET_BUYER" in envhelp.message("run", "local")
     wallet = tmp_path / "w"
     wallet.mkdir()
@@ -100,8 +102,8 @@ def test_open_windows_help_and_missing_variables():
     assert help_run.returncode == 0 and "Environment:" in help_run.stdout and "needed by open-windows.py" in help_run.stdout
     run = _run("goose/open-windows.py", "--rail", "local")
     assert run.returncode == 2 and "Traceback" not in run.stderr
-    assert ("open-windows.py needs these environment variables, which are not set: ARD_EVIDENCEBOOK, CAPSULE_ENGINE, "
-            "CAPSULECTL_DEAL, ARD_WALLET_BUYER, ARD_WALLET_SELLER.") in run.stderr
+    assert ("open-windows.py needs these environment variables, which are not set: ARD_EVIDENCEBOOK, CAPSULECTL_DEAL, "
+            "CAPSULE_ENGINE, ARD_WALLET_BUYER, ARD_WALLET_SELLER.") in run.stderr
     assert "export ARD_EVIDENCEBOOK=/path/to/evidencebook" in run.stderr
 
 
@@ -124,7 +126,7 @@ def test_the_ln_pay_local_hint_is_the_pinned_install_everywhere(monkeypatch, tmp
 def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
     goose = tmp_path / "eb" / "python" / "examples" / "goose"
     goose.mkdir(parents=True)
-    (goose / "goose_node.py").write_text("")
+    (goose / "ctl.py").write_text("")
     exe = tmp_path / "bin"
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
@@ -134,7 +136,7 @@ def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
     assert "placeholder paths for ARD_WALLET_BUYER, ARD_WALLET_SELLER" in run.stderr
     import base64
     import json
-    maya = run.stdout.strip().splitlines()[2].split("config=", 1)[1]
+    maya = run.stdout.strip().splitlines()[3].split("config=", 1)[1]  # alder, kestrel, the adjudicator, then maya
     recipe = json.loads(base64.urlsafe_b64decode(maya + "=" * (-len(maya) % 4)))
     args = recipe["extensions"][0]["args"]
     assert "ARD_WALLET_BUYER=<buyer wallet dir>" in args and "ARD_WALLET_SELLER=<seller wallet dir>" in args

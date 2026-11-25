@@ -1,34 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The words the audience reads, in one place so the terminal and the popup say the same thing.
+"""The words the audience reads, in one place so the terminal and the Goose windows say the same thing.
 
-Wording rules (design §8, Sherlock2 11-17): the screen says *assessment*, never *admission*; every
-amount is msat from the invoice; a seller's history is shown, never scored, and never called lost,
-failed or dishonest; the sample and demo labels are always there."""
+Wording rules (design §8, Sherlock2 11-17, and Sherlock2's what-check on #285): the screen says *assessment*, never
+*admission*; every amount is msat; a seller's history is shown, never scored, and never called lost, failed or
+dishonest; counts are the seller's own, signed and witnessed, and the screen says so; the adjudicator and the witness
+are said to be run by Action State, which runs every party here, so neither is independent of them."""
 from __future__ import annotations
 
-from buyer import Assessment, Evidence
+from typing import TYPE_CHECKING
 
-BANNER = ("DEMO · sample history, run by the demo operator · test nodes with real Lightning (the buyer's node pays, "
-          "the sellers' node receives; both sellers settle to the one test node)")
-BANNER_FAKE = "DEMO · sample history, run by the demo operator · SIMULATED payment: no money moves"
+import party as pt
 
+if TYPE_CHECKING:
+    from buyer import Assessment, Evidence
 
-BANNER_LOCAL = ("DEMO · sample history, run by the demo operator · real Lightning (real money, mainnet) between two demo wallets "
-                "(the buyer's wallet pays, the seller's wallet receives; both sellers settle to the one test wallet)")
-
-
-def banner(rail: str) -> str:
-    return {"lightning": BANNER, "local": BANNER_LOCAL}.get(rail, BANNER_FAKE)
 PACK_NOTE = "a copy, not published · placeholder thresholds"
 #: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
 OPERATOR_NOTE = ("filled in by the operator, not checked: the platform, the allow-list, the card's witness and "
-                 "controller; this assessment does not read the card's witness time-stamp")
+                 "controller")
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
-#: The demo adapter reads the seller's selection as verified although it carries no inclusion proofs; the screen says so
-#: (design note §3.6 item 6). The buyer skill's own rule is that an unproven selection is never a pass.
-SELECTION_NOTE = "selection: signed answer, no inclusion proofs; this pack counts it"
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
+WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
+                "witness is not independent of them.")
+#: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
+ADJUDICATOR_INDEPENDENCE = ("This adjudicator is run by the operator, who also runs every party here: it is not "
+                            "independent of the parties.")
 
 
 def fee_note(fee_msat: int | None, real: bool) -> str:
@@ -50,103 +47,93 @@ def msat(n: int) -> str:
     return f"{n:,} msat"
 
 
-def _totals(ev: Evidence) -> tuple[int, int]:
-    """Deals counted and deals that did not hold, over every band of the card (its own ``of``)."""
-    outcomes = ev.card["outcomes"]  # the card's own totals
-    return outcomes["of"], outcomes["did_not_hold"]
+def plural(n: int, one: str, many: str = "") -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
-def card_line(ev: Evidence, sample_card: bool) -> str:
-    """The card summary: deals counted and how many did not hold, with the label its count needs, if any: a
-    sample card is said to be one, and a did-not-hold from the owner's own note says so (u597). No "sample
-    history" tag of the demo's on the count (Ethan, 2026-11-17)."""
-    of, bad = _totals(ev)
-    if sample_card:
-        label = "sample card, written by hand; not recomputed from records"
-    elif bad:  # the owner's own outcome_note: not confirmed by the buyer or by a ruling
-        label = "did not hold counted from the seller's own note, not confirmed by the buyer or a ruling"
-    else:
-        return f"{bad} of {of} deals did not hold"
-    return f"{bad} of {of} deals did not hold ({label})"
+def card_line(card: dict) -> str:
+    """A card's counts in words: deals counted, how many did not hold, any still open, and the disputes others raised
+    about the holder (decided against it, of those decided; open)."""
+    o = card["outcomes"]
+    r = card.get("disputes", {}).get("received", {})
+    b = r.get("by_outcome", {})
+    decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
+    # Steven's words (#272 item 4): "didn't go as agreed", "every one went as agreed"; never "failed" or "did not hold"
+    still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
+    went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
+            else f"{o['did_not_hold']} didn't go as agreed{still}")
+    return (f"{plural(o['of'], 'deal')}, {went}. Disputes others raised about it: "
+            f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
-def decision_line(a: Assessment, ev: Evidence, max_permille: int, ceiling_msat_for_tier: int | None = None) -> str:
-    """One line: the decision and why, for this seller and this price."""
+def signed_line(name: str, witness_checked: bool = False) -> str:
+    """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
+    if witness_checked:
+        return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts."
+    return f"Signed by {name}. These are the seller's own counts."
+
+
+def own_ruling(a: Assessment) -> dict | None:
+    return next((v for v in a.own.rulings if v["adverse"]), None)
+
+
+def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None = None) -> str:
+    """One line: the decision and why, for this seller and this price (Sherlock2's wording, #285)."""
     if a.verdict == "GO":
         within = f" ({a.tier}, under {msat(ceiling_msat_for_tier)})" if ceiling_msat_for_tier else ""
         return f"GO: {msat(a.price_msat)} is within this pack's limit for it{within}"
+    card = ev.card or {}
+    b = card.get("disputes", {}).get("received", {}).get("by_outcome", {})
+    against = b.get("against", 0)
+    decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
+    ruled = own_ruling(a)
+    if a.verdict == "NO" and ruled:
+        when = (ruled.get("at") or "")[:10]
+        line = (f"NO: you hold a ruling against this seller (deal {ruled['deal_id'][5:13]}, delivery not met, ruled {when}). "
+                "Your rules block a seller you hold a ruling against for 180 days.")
+        if against:
+            line += (f" Its card also counts {plural(against, 'dispute')} decided against it, of {decided} decided; "
+                     "the card does not say which deal.")
+        return line
+    if a.verdict == "LIMIT" and "disputes-against" in a.reasons:
+        cap = f" At this limit the pack allows deals under {msat(a.cap_msat)} only, so no deal opens at {msat(a.price_msat)}." \
+            if a.cap_msat else ""
+        return (f"LIMIT: a dispute about this seller was decided against it ({against} of {decided} decided); this pack "
+                f"limits any lost dispute.{cap}")
     if a.verdict == "LIMIT" and a.cap_msat is not None:
-        why = (f"; the pack lets at most {max_permille} of every 1,000 deals not hold"
-               if "band-history" in a.reasons else "")
+        why = "; " + ", ".join(a.reasons) if a.reasons else ""
         return f"LIMIT: this history supports deals under {msat(a.cap_msat)}; the {msat(a.price_msat)} price is not under that{why}"
     return f"{a.verdict}: see the assessment rows"
 
 
 def limit_outcome(a: Assessment) -> str:
-    """What a tap on a seller that is not GO shows: nothing opens and nothing is paid."""
+    """What a pick of a seller that is not GO shows: nothing opens and nothing is paid."""
     if a.verdict == "LIMIT" and a.cap_msat:
-        why = "; more of its deals did not hold than the pack allows" if "band-history" in a.reasons else ""
-        return (f"LIMIT: {msat(a.price_msat)} is at or over this seller's limit (deals under {msat(a.cap_msat)}){why}; "
+        return (f"LIMIT: {msat(a.price_msat)} is at or over this seller's limit (deals under {msat(a.cap_msat)}); "
                 "no deal opens and nothing is paid")
     return f"{a.verdict}: no deal opens and nothing is paid"
-
-
-def button(name: str, a: Assessment) -> str:
-    """The popup button: it says what a tap does."""
-    if a.verdict == "GO":
-        return f"Pay {name} {msat(a.price_msat)}"
-    if a.verdict == "LIMIT":
-        return f"Pick {name} (outside its limit: nothing is paid)"
-    return f"Pick {name} ({a.verdict}: nothing is paid)"
 
 
 def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
 
 
-#: The foot of the spending-limit question (Steven's design, evidencebook-skills#270 item 2).
-LIMIT_FOOT = "Your answer is saved on the receipt. Change your limit any time in Everyday Rules."
-#: The foot when a rule other than the limit holds the order (#270 item 3).
-RULES_FOOT = "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
-HELD_TITLE = "The Everyday Rules held this order for your OK"  # Sherlock2 on #237
+# -- the dispute, the case and the ruling ------------------------------------------------------------
+
+def delivered_line(seller: str, shipped: str) -> str:
+    return f"{seller}'s delivery record says {shipped} were shipped."
 
 
-def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], over_limit: bool,
-                  seller: str | None = None, rail: str | None = None) -> tuple[str, str]:
-    """The one question for an order the Everyday Rules hold, as a dialog's title and text (evidencebook-skills#270,
-    Steven's "Spending-limit question"). Over a limit alone it shows the figures from the sealed caps findings
-    (``limits``: ``weekly`` and ``per_order``, each the finding's ``(limit, value)``, never recomputed); when another rule
-    holds the order too, it lists every reason in their place (Steven, 2026-11-23: one ask, every reason). ``rail`` is
-    the payment's rail clause, such as "on the simulated rail: no money moves"."""
-    weekly, per_order = limits.get("weekly"), limits.get("per_order")
-    if over_limit and weekly and not per_order:  # both limits failing: the reasons layout, so neither is dropped
-        cap, total = weekly
-        spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
-        title = "This order goes over your weekly limit"
-        figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
-        foot = LIMIT_FOOT
-    elif over_limit and per_order and not weekly:
-        cap, value = per_order
-        this, limit = msat(value), msat(cap)
-        title = "This order goes over your per-order limit"
-        figures = [f"This order: {this}", f"Your per-order limit: {limit}"]
-        foot = LIMIT_FOOT
-    else:
-        title, figures, foot = HELD_TITLE, [r[:1].upper() + r[1:] for r in reasons], RULES_FOOT  # each with a capital (Sherlock2 on #270)
-    what = f"{item} from {seller}" if seller else item
-    line = f"{what} for {msat(price_msat)}" + (f", {rail}" if rail else "") + ". Nothing has been paid yet."
-    return title, "\n".join([line, *figures, foot])
+DISPUTE_RAISED = ("Dispute raised on this deal's delivery. Sent to {seller} and to the adjudicator your agreement names. "
+                  "Nothing is refunded by this step.")
 
 
-def rules_approved(reasons: list[str], over_limit: bool = True) -> str:
-    """What the screen says after the person approves a held order."""
-    what = "this order over your limit" if over_limit else "this held order"
-    return (f"You approved {what} (" + "; ".join(reasons) + "). Paying now. Your approval goes "
-            "into this deal's records and will show on its receipt.")  # Sherlock2 on #265: not recorded until paid
-
-
-def rules_held(reasons: list[str]) -> str:
-    """What the screen says when the deal check holds an order: over the spending limit the person set (Steven's ruling
-    that a failing caps check on a person-set limit escalates, ops u325) or on any other ASK rule (Sherlock2, 2026-11-23)."""
-    return ("Held for your OK at deal check, nothing paid. The Everyday Rules held this order: "
-            + "; ".join(reasons) + ".")
+def rule_question(deal_id: str, row: str, seller: str) -> str:
+    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. A challenge is x-deal-v1's
+    ``dispute`` of kind ``challenge`` (PROFILE.md §5; ``deal dispute --challenge``, which "changes no row's status");
+    the window is 7 days (Steven, ops u214, 2026-11-24), a practice-statement constant (evidencebook
+    ``docs/design/861-four-books.md`` §6; :data:`adjudicator.CHALLENGE_DAYS`)."""
+    return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
+            f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
+            f"of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and "
+            f"never replaces it.")
