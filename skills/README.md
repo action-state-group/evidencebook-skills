@@ -21,7 +21,7 @@ skills that evolution compiles. The two cron skills run (see "Running the two cr
 | 6 | `terms-pack-author` | [`terms-pack-author/SKILL.md`](terms-pack-author/SKILL.md) | runnable: `scripts/studio/terms` (lint, test, run, verify, compare, publish) over a deal terms pack |
 | 7 | `buy-with-evidence` | [`buy-with-evidence/SKILL.md`](buy-with-evidence/SKILL.md) | demo host, step A: the ARD demo's tools; verbs later (`docs/design/ard-buyer-seller-skills.md`) |
 | 8 | `sell-with-evidence` | [`sell-with-evidence/SKILL.md`](sell-with-evidence/SKILL.md) | demo host, step A: the ARD demo's seller process; verbs later |
-| 9 | `adjudicate-deal` | [`adjudicate-deal/SKILL.md`](adjudicate-deal/SKILL.md) | demo host, step A: the ARD demo's adjudicator window (ledger-cloud's adjudicator, run locally) |
+| 9 | `adjudicate-deal` | [`adjudicate-deal/SKILL.md`](adjudicate-deal/SKILL.md) | demo host, step A: the ARD demo's adjudicator window (its own capsulectl-deal profile) |
 | 4 | `capsulectl` (thin verb skill) | **not here** | ships with `capsule-cli` at `skills/capsulectl/`, generated from `spec.yaml` |
 
 Skill 4 is consumed, not vendored. Nothing in this repo copies its `SKILL.md`/`AGENTS.md` or

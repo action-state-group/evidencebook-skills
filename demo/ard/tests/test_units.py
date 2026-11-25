@@ -158,7 +158,10 @@ def test_a_case_reads_the_silent_sellers_own_record_from_the_buyers_held_copy(tm
     assert c.deciding == ["Maya's statement on the row: not met",
                           "Kestrel Print's own signed delivery record: 150 of 200 badges"]
     lines = flow.case_lines(c, names)
-    assert "  Kestrel Print: no answer yet (its book not shown to the adjudicator)" in lines
+    assert ("  Kestrel Print: no answer yet (its own copy of its book not received; its records here come from the copy "
+            "Maya holds)") in lines
+    c.signed.discard("seller")
+    assert "  Kestrel Print: no answer yet" in flow.case_lines(c, names)
     assert not [x for x in lines if "demo" in x.lower()]
     c.ruling = {"against": "seller", "value": "not_met", "ruling": "ab" * 32}
     assert flow.case_lines(c, names)[-1] == "  ruling recorded: not met, against Kestrel Print (ruling abababab…)"

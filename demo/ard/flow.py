@@ -121,7 +121,6 @@ class SellerAgent:
         self.log: list[str] = []
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        self._last_rulings = 0.0
         self.threads: list[threading.Thread] = []
         self.advertise()
         self.republish()
@@ -359,6 +358,7 @@ class Case:
     deciding: list[str] = field(default_factory=list)       # lines read from the books
     asked_at: str = ""
     ruling: dict | None = None
+    signed: set[str] = field(default_factory=set)            # sides with at least one of their records read
 
 
 def _records(book: dict) -> list[tuple[str, dict]]:
@@ -375,7 +375,9 @@ def case_view(case: dict, names: dict[str, str]) -> Case:
     on the row, from each answer's own book and the copy it holds of the other side's. ``names`` maps a side to its
     name."""
     dispute = json.loads(Path(case["dispute"]).read_text())
-    row = dispute.get("record", {}).get("payload", {}).get("body", {}).get("row", "delivered")
+    row = dispute.get("record", {}).get("payload", {}).get("body", {}).get("row")
+    if not row:  # a dispute file of another shape: never show or rule on a guessed row
+        raise ValueError(f"the dispute for {case['deal_id']} names no row")
     c = Case(case["deal_id"], row, asked_at=case.get("asked_at", ""), ruling=case.get("ruling"))
     seen: set[str] = set()
     for side, a in case["answers"].items():
@@ -384,6 +386,7 @@ def case_view(case: dict, names: dict[str, str]) -> Case:
         other = "seller" if side == "buyer" else "buyer"
         for whose, rec in _records(book):
             signer = side if whose == "own" else other
+            c.signed.add(signer)
             b = (rec.get("payload") or {}).get("body", {})
             line = ""
             if "observed" in b and b.get("act"):
@@ -414,11 +417,14 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
     if c.asked_at:
         out.append(f"  asked both sides for their books at {c.asked_at}")
     for side in ("buyer", "seller"):
+        other = names["seller" if side == "buyer" else "buyer"]
         if side in c.answered:
-            out.append(f"  {names[side]} answered at {c.answered[side]}: its own book and the copy it holds of "
-                       f"{names['seller' if side == 'buyer' else 'buyer']}'s")
+            out.append(f"  {names[side]} answered at {c.answered[side]}: own book and the copy held of {other}'s")
+        elif side in c.signed:  # read from the copy the other side holds (u211 item 2)
+            out.append(f"  {names[side]}: no answer yet (its own copy of its book not received; its records here come "
+                       f"from the copy {other} holds)")
         else:
-            out.append(f"  {names[side]}: no answer yet (its book not shown to the adjudicator)")
+            out.append(f"  {names[side]}: no answer yet")
     out += [f"  {line}" for line in c.deciding]
     if c.ruling:
         who = names.get(c.ruling["against"], "no one")

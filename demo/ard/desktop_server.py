@@ -158,15 +158,22 @@ class Session:
     def _rulings(self) -> None:
         """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
         while True:
-            try:
-                adj.answer_requests(self.home, self.maya, BUYER, "buyer", self.say)
-                flow.enter_rulings(self.home, self.maya, "buyer", buyer.seller_of(self.maya), self.say)
-                buyer.seller_statements(self.home, self.maya)
-                with self.pay_lock:  # not while ard_pay itself waits for the same delivery
-                    buyer.pick_up_deliveries(self.home, self.maya, self.say)
-            except Exception as exc:  # shown in the next tool's output
-                self.say(f"could not read the adjudicator yet: {exc}")
+            for what, step in (
+                    ("answer the adjudicator's request", lambda: adj.answer_requests(self.home, self.maya, BUYER, "buyer",
+                                                                                     self.say)),
+                    ("enter the adjudicator's ruling",
+                     lambda: flow.enter_rulings(self.home, self.maya, "buyer", buyer.seller_of(self.maya), self.say)),
+                    ("keep the seller's statements", lambda: buyer.seller_statements(self.home, self.maya)),
+                    ("take a delivery", self._deliveries)):
+                try:
+                    step()
+                except Exception as exc:  # shown in the next tool's output
+                    self.say(f"could not {what} yet: {exc}")
             time.sleep(3)
+
+    def _deliveries(self) -> None:
+        with self.pay_lock:  # not while ard_pay itself pays or waits for the same delivery
+            buyer.pick_up_deliveries(self.home, self.maya, self.say)
 
     @property
     def keys(self) -> dict[str, str]:
@@ -344,7 +351,8 @@ def ard_pay(seller: str) -> None:
                 "your turn, and call ard_pay again only after she says yes.")
         made = buyer.open_and_pay(
             s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary,
-            lambda text: gate_off() or ask_person("Approve this payment", text, "Pay"), print, simulated=not _real())
+            lambda text: gate_off() or ask_person("Approve this payment", text, "Pay"), print, simulated=not _real(),
+            said=dialog_text)
         if made is None:
             s.declined.add(key)
             raise RuntimeError("the presenter did not approve this payment (the dialog was cancelled, timed out or could "
@@ -354,13 +362,12 @@ def ard_pay(seller: str) -> None:
         s.deals.append(deal)
         who = ("the simulated rail paid it (no money moved)" if not _real() else "the buyer's wallet paid it")
         print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}{screens.fee_note(payment.fee_msat, _real())}")
-    print(f"waiting for {name}'s delivery")
-    try:
-        with s.pay_lock:
+        print(f"waiting for {name}'s delivery")
+        try:  # still under the lock: Maya's agent does not take this delivery while the payment tool waits for it
             observed = buyer.await_delivery(s.home, s.maya, deal)
-    except pt.Refused as exc:
-        print(f"{exc}.")
-        return
+        except pt.Refused as exc:
+            print(f"{exc}.")
+            return
     shipped = buyer.shipped(observed)
     print(screens.delivered_line(name, shipped))
     if shipped.startswith("200 of 200"):

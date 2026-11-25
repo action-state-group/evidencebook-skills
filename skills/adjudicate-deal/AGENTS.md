@@ -36,7 +36,7 @@ rules what the case holds. The ruling is theirs: you never decide it, suggest it
 
 | Step | On the demo host (step A) | On a capsule host |
 |---|---|---|
-| 1 Show the case | `ard_case`: the request to each side, their `deal respond` answers | the hosted adjudicator's intake (ledger-cloud#40) |
+| 1 Show the case | `ard_case`: the request to each side, their `deal respond` answers | the hosted adjudicator's intake (evidencebook#861 PR 3) |
 | 2 Record the ruling | `ard_rule`: the presenter's dialog, then `deal ruling --answer` and the stamp | `deal ruling --answer` |
 | 3 Report the entries | `ard_case_activity` | `deal ruling entries` |
 

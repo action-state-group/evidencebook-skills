@@ -347,7 +347,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me the case.
    ```
 
-   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "its own book and the copy it holds of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". It waits up to 30 seconds for the answers; if one says "no answer yet", ask again.
+   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "own book and the copy held of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". It waits up to 30 seconds for the answers; if one says "no answer yet", ask again.
 
 10. Type, then answer the dialog.
 

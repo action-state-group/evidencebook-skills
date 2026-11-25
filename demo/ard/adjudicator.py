@@ -88,6 +88,9 @@ def _mtime(p: Path) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(p.stat().st_mtime))
 
 
+_PARTIES: dict[Path, pt.Party] = {}
+
+
 @dataclass(frozen=True)
 class Adjudicator:
     """The adjudicator's profile under the demo home (``<home>/adjudicator``)."""
@@ -96,7 +99,11 @@ class Adjudicator:
 
     @property
     def party(self) -> pt.Party:
-        return pt.Party(Path(self.home).expanduser(), ADJUDICATOR)
+        """The adjudicator's profile, opened once per home in this process."""
+        home = Path(self.home).expanduser()
+        if home not in _PARTIES:
+            _PARTIES[home] = pt.Party(home, ADJUDICATOR)
+        return _PARTIES[home]
 
     @property
     def key_file(self) -> Path:
@@ -233,8 +240,9 @@ def send_dispute(home: Path, dispute_file: Path, deal_id: str, buyer: str, selle
 
 def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[str]:
     """Answer each request the adjudicator sent this party, in full (``deal respond``): its whole deal book and the copy it
-    holds of the other side's. ``side`` is this party's side (``buyer`` or ``seller``). capsulectl refuses a request from
-    any key but the adjudicator the deal's agreement names. Returns the deals answered now."""
+    holds of the other side's. ``side`` is this party's side (``buyer`` or ``seller``). The requester is the adjudicator key
+    the stage publishes; capsulectl answers only when that key is the adjudicator the deal's agreement names (the request
+    itself carries no signature). Returns the deals answered now."""
     done = []
     for deal_id, f in wire.pending(home, me, "adjrequest"):
         mark = p.dir / "handled" / f"{deal_id}.adjanswer"

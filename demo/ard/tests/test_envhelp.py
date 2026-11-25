@@ -131,8 +131,7 @@ def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
     exe.write_text("#!/bin/sh\n")
     exe.chmod(0o755)
     run = _run("goose/open-windows.py", "--rail", "local", "--print",
-               ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe),
-               ARD_ADJUDICATOR_BIN=str(tmp_path))
+               ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe))
     assert run.returncode == 0, run.stderr
     assert "placeholder paths for ARD_WALLET_BUYER, ARD_WALLET_SELLER" in run.stderr
     import base64
@@ -142,6 +141,5 @@ def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
     args = recipe["extensions"][0]["args"]
     assert "ARD_WALLET_BUYER=<buyer wallet dir>" in args and "ARD_WALLET_SELLER=<seller wallet dir>" in args
     opened = _run("goose/open-windows.py", "--rail", "local",
-                  ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe),
-               ARD_ADJUDICATOR_BIN=str(tmp_path))
+                  ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe))
     assert opened.returncode == 2 and "ARD_WALLET_BUYER" in opened.stderr  # opening still needs them

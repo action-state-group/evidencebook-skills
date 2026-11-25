@@ -270,11 +270,11 @@ def pay(home: Path, maya: pt.Party, deal: Deal, check: dict, reference: str, sim
 
 def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
                  rail: Any, summary: str, ask: Callable[[str], bool], say: Callable[[str], None],
-                 simulated: bool) -> tuple[Deal, Any] | None:
+                 simulated: bool, said: Callable[[str], str] = lambda text: text) -> tuple[Deal, Any] | None:
     """The person's yes first, then the deal: nothing reaches the seller until the person approved the payment
     (evidencebook-skills#289, Sherlock2 on finding 13), so a late yes never meets a seller that stopped waiting. Then the
     offer and agreement, the invoice, capsulectl's payment check (its pause is answered with the yes already given, in
-    the words the person saw), the payment and the payer leg. None when the person did not say yes: nothing was sent
+    the words the person saw, as ``said`` renders them for the dialog), the payment and the payer leg. None when the person did not say yes: nothing was sent
     and nothing paid."""
     if not ask(summary):
         return None
@@ -282,7 +282,7 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     inv = rail.invoice(chosen.price_msat)
     check = check_payment(maya, deal, inv.payment_hash)
     if not check.get("proceed"):
-        maya.approve(deal.deal_id, check, "proceed", f"{summary}\nAnswer: Pay")
+        maya.approve(deal.deal_id, check, "proceed", f"{said(summary)}\nAnswer: Pay")
     payment = rail.pay_invoice(inv)
     pay(home, maya, deal, check, payment.reference, simulated=simulated)
     return deal, payment
@@ -318,8 +318,8 @@ def await_delivery(home: Path, maya: pt.Party, deal: Deal, seconds: float = flow
         if observed is not None:
             return observed
         if time.monotonic() >= stop:
-            raise pt.Refused(f"{label(deal.seller)} has not recorded the payment and the delivery yet (its window may be "
-                             "closed). The payment is recorded on Maya's side; this window shows the delivery when it comes")
+            raise pt.Refused(f"{label(deal.seller)} has not recorded the payment and the delivery yet "
+                             f"({label(deal.seller)}'s window may be closed). The payment is recorded on Maya's side; this window shows the delivery when it comes")
         time.sleep(0.5)
 
 
