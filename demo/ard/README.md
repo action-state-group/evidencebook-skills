@@ -224,14 +224,21 @@ The payment gate. `ard_pay` never pays on the agent's word: before it moves anyt
 the presenter's screen (payee, amount, real or simulated rail; Cancel is the default) and pays only if the presenter
 clicks Pay. The agent neither sees nor answers that dialog, so it cannot pay in one turn; Cancel, a timeout or no screen
 refuses and pays nothing. After such a refusal the next `ard_pay` for that seller opens no dialog: it returns
-the question to ask Maya (seller, amount, real or simulated), and the call after it opens the dialog again. Stated limit: it stops the agent, not an agent that has computer-use tools and clicks the dialog
-itself; the demo agent is told to use only the `ard_*` tools, but that is a prompt, not enforcement: Goose's extension manager stays on, so before a show confirm in each window that only its own extension is enabled. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off on the simulated rail only (tests only; the tool says so); on a real rail `ard_pay` refuses it and pays nothing.
+the question to ask Maya (seller, amount, real or simulated), and the call after it opens the dialog again. It holds because each window's agent has only its own `ard_*` tools, which is enforced, not only asked
+(evidencebook-skills#276): `open-windows.py` starts Goose with the demo's locked adapter (`goose/locked`) first on
+`GOOSE_SEARCH_PATHS`. It runs the pinned Claude Code adapter with Claude Code limited to ToolSearch (which loads the
+window's own deferred tools) and the window's own `ard_*` MCP server: no shell, file, web or other built-in tool, no
+other MCP server (a Goose extension left on, a server in your own Claude Code settings, a claude.ai connector), and
+none of your own `~/.claude` settings, hooks or CLAUDE.md. The agent's context still holds the signed-in account's
+email address (Claude Code adds it, and no setting removes it); the agent has no tool that can send it anywhere. Without the lock the adapter gave the agent Claude Code's whole
+toolset, a shell among them, which ran without a prompt under Goose 1.59.2. Turning off every Goose extension
+(set-up step 7) stays required as well. The limit that remains: an agent with computer-use tools outside the demo
+could still click the dialog. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off on the simulated rail only (tests only; the tool says so); on a real rail `ard_pay` refuses it and pays nothing.
 
 Things to know. Goose Desktop keeps environment values of a custom extension as secrets it does not pass
 to the server, so the recipes put them in the command (`/usr/bin/env`). One Goose chat per party and home:
-a second chat's server refuses to start. A Claude-backed provider (Claude Code ACP) reads the account's own
-instructions (language, tools, other sessions); ask it for English in the first message, or use a clean
-provider. The script demo above is unchanged and is the fallback.
+a second chat's server refuses to start. The demo's Claude Code ACP reads none of the account's own instructions (the locked adapter above);
+the first message still asks for English. The script demo above is unchanged and is the fallback.
 
 ## What differs from the design note
 

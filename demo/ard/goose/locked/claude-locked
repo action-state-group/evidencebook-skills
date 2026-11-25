@@ -1,0 +1,11 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# The Claude CLI each demo window's agent runs (evidencebook-skills#276): the pinned adapter's own CLI, limited so the
+# payment dialog is the only way a payment is released. Without it the adapter gives the agent Claude Code's whole
+# toolset (claude-agent-acp 0.108.0, dist/v1/acp-agent.js: tools default to the "claude_code" preset, and Goose 1.59.2
+# never turns that off), a shell among them, and reads the person's own ~/.claude (CLAUDE.md, settings, hooks) and
+# claude.ai connectors. The filter is lock.py, run by the demo's Python (ARD_PYTHON, set by open-windows.py).
+here=$(cd "$(dirname "$0")" && pwd)
+: "${ARD_ACP_PREFIX:?ARD_ACP_PREFIX is not set: start Goose for the demo with open-windows.py}"
+: "${ARD_PYTHON:?ARD_PYTHON is not set: start Goose for the demo with open-windows.py}"
+exec "$ARD_PYTHON" -I "$here/lock.py" "$@"
