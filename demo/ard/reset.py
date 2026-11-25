@@ -10,17 +10,19 @@ the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a
 under the home or listen on the stage's ports and either name this home in their arguments or run from this
 checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
 the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
-the home, and clear the Goose recipe trust given since the demo's windows first opened on it, so each window asks Trust
-and Execute again.
+the home, and clear Goose's trust in the recipes the demo's windows opened, so each window asks Trust and Execute
+again.
 
-Goose Desktop 1.59.2 keeps one file per trusted recipe, ``<userData>/recipe_hashes/<sha256>.hash``, the sha256 of the
-recipe as its own server decodes the ``goose://`` link (``ui/desktop/src/utils/recipeHash.ts``). That hash could not be
-reproduced from our recipe's JSON (checked against real files on 2026-11-18). So ``open-windows.py`` notes which trust
-files exist before it first opens the windows on a home (:func:`snapshot_trust`), and reset deletes only the ones made
-since: the demo's three, and any other recipe trusted in between. A home with no note keeps all trust, and reset says so."""
+Goose Desktop 1.59.2 keeps one file per trusted recipe, ``<userData>/recipe_hashes/<sha256>.hash`` (one folder for
+every Goose on the Mac, the demo's included). :func:`trust_hash` computes that name the way Goose does, so
+``open-windows.py`` notes the hash of each recipe it opens (:func:`note_trust`, in the demo's own Goose root, which
+every home shares and reset keeps) and reset deletes exactly those files: never a recipe the person trusted, and never
+by time. When no noted hash names a file (nothing trusted yet, or a Goose that names its files differently), it deletes
+nothing and says so."""
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -33,6 +35,15 @@ SAVED_RECIPE = "maya-buys-conference-badges.yaml"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"  # demo.DEFAULT_HOME, kept here so reset needs no evidencebook checkout
 HERE = Path(__file__).resolve().parent  # this checkout's demo/ard: a stage or server run from here is ours
 STAGE_LOCK = ".stage.lock"  # parties.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
+#: The demo's own Goose root: Goose 1.59.2 keeps its config (provider, extensions), data and state under
+#: ``GOOSE_PATH_ROOT`` when it is set (crates/goose/src/config/paths.rs), and Goose Desktop reads it from its own
+#: environment at launch (ui/desktop/src/main.ts). So the demo starts Goose itself with this root and never writes the
+#: user's own ~/.config/goose. It lives outside the demo home, so reset keeps it and the provider setup is done once.
+GOOSE_ROOT_DEFAULT = "~/.config/ard-commerce-goose"
+
+
+def goose_root() -> Path:
+    return Path(os.environ.get("ARD_GOOSE_ROOT", GOOSE_ROOT_DEFAULT)).expanduser()
 
 
 class ResetRefused(SystemExit):
@@ -275,48 +286,65 @@ def _check_target(home: Path) -> None:
         raise ResetRefused(f"refusing to reset {home}: it is / or your user folder or above it.")
 
 
-#: In the demo home: the names of Goose's trust files before the demo's windows first opened on it.
-TRUST_BEFORE = "goose-trust-before.json"
+#: In the demo's Goose root: the trust hashes of the recipes open-windows.py opened, for reset to delete.
+DEMO_TRUST = "ard-recipe-trust.json"
+
+#: The keys Goose Desktop 1.59.2 hashes, in its order (see :func:`trust_hash`): ``zRecipeDto`` and the stdio member of
+#: ``zRecipeExtensionDto`` in ui/goose-acp-client/src/generated/zod.gen.ts at the v1.59.2 tag (9da692f).
+_RECIPE_KEYS = ("version", "title", "description", "instructions", "prompt", "extensions", "settings", "activities",
+                "author", "parameters", "response", "sub_recipes", "retry")
+_STDIO_KEYS = ("name", "description", "cmd", "args", "envs", "env_keys", "timeout", "cwd", "bundled", "available_tools",
+               "type")
 
 
 def _hashes(user: Path | None = None) -> Path:
     return (user or Path.home()) / "Library" / "Application Support" / "Goose" / "recipe_hashes"
 
 
-def snapshot_trust(home: Path, user: Path | None = None) -> None:
-    """Note which recipes Goose trusts before the demo's windows open on ``home``, once per home (a re-entry keeps
-    the first note), so reset clears only the trust given since: the hash in each file's name cannot be computed
-    from the demo's recipes (see the module docstring)."""
-    note = home / TRUST_BEFORE
-    if note.exists():
-        return
-    home.mkdir(parents=True, exist_ok=True)
-    hashes = _hashes(user)
-    note.write_text(json.dumps(sorted(p.name for p in hashes.glob("*.hash")) if hashes.is_dir() else []))
+def trust_hash(recipe: dict) -> str:
+    """The name Goose Desktop 1.59.2 gives the trust file of ``recipe`` (without ``.hash``).
+
+    At the v1.59.2 tag (9da692f), ui/desktop/src/utils/recipeHash.ts hashes ``JSON.stringify(recipe)`` with sha256, and
+    the recipe it gets (ui/desktop/src/sessions.ts ``ensureRecipeConsent``) is the server's decode of the link
+    (``_goose/unstable/recipes/decode``, which returns the link's recipe unchanged) parsed by the client's zod schema:
+    keys in the schema's order, absent ones left out, ``version`` defaulting to "1.0.0". Checked against the three trust
+    files the demo's windows made on 2026-11-25. Only stdio extensions, the demo's only kind; any other is refused
+    rather than guessed."""
+    r = {"version": "1.0.0", **recipe}
+    out = {k: r[k] for k in _RECIPE_KEYS if k in r}
+    if out.get("extensions"):
+        if any(e.get("type") != "stdio" for e in out["extensions"]):
+            raise ValueError("trust_hash covers stdio extensions only")
+        out["extensions"] = [{k: e[k] for k in _STDIO_KEYS if k in e} for e in out["extensions"]]
+    return hashlib.sha256(json.dumps(out, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
-def trust_before(home: Path) -> set[str] | None:
-    """The trust files noted before the demo's windows opened, or None when this home has no readable note."""
+def _noted(root: Path) -> set[str]:
     try:
-        names = json.loads((home / TRUST_BEFORE).read_text())
+        names = json.loads((root / DEMO_TRUST).read_text())
     except (OSError, ValueError):
-        return None
-    return set(names) if isinstance(names, list) and all(isinstance(n, str) for n in names) else None
+        return set()
+    return {n for n in names if isinstance(n, str) and len(n) == 64} if isinstance(names, list) else set()
 
 
-def clear_recipe_trust(before: set[str] | None, user: Path | None = None) -> int | None:
-    """Delete the trust files made since ``before`` was noted (the demo's windows, and any recipe trusted meanwhile)
-    and the saved Maya recipe; return how many went, or None (nothing deleted) when there is no note."""
+def note_trust(recipes: list[dict], root: Path) -> None:
+    """Add the trust hashes of the recipes about to open to the note in the demo's Goose root."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / DEMO_TRUST).write_text(json.dumps(sorted(_noted(root) | {trust_hash(r) for r in recipes})))
+
+
+def clear_recipe_trust(root: Path, user: Path | None = None) -> int:
+    """Delete the trust files named by the note (the recipes the demo's windows opened), then the note, and the saved
+    Maya recipe; return how many trust files went. Nothing else in Goose's trust folder is touched."""
     base = user or Path.home()
     (base / ".config" / "goose" / "recipes" / SAVED_RECIPE).unlink(missing_ok=True)
-    if before is None:
-        return None
     hashes, gone = _hashes(user), 0
-    if hashes.is_dir():
-        for f in hashes.glob("*.hash"):
-            if f.name not in before:
-                f.unlink()
-                gone += 1
+    for h in sorted(_noted(root)):
+        f = hashes / f"{h}.hash"
+        if f.is_file():
+            f.unlink()
+            gone += 1
+    (root / DEMO_TRUST).unlink(missing_ok=True)
     return gone
 
 
@@ -349,7 +377,7 @@ def _refuse_on(others: dict[int, str], inside: set[int], home: Path, ours: set[i
         raise ResetRefused(f"these are working in {home}: {listed}. cd out of it (a terminal: cd ~), then reset again.")
 
 
-def reset(home: Path, say=print) -> int:
+def reset(home: Path, say=print, root: Path | None = None) -> int:
     """Each check refuses with its reason; this adds what was changed by then: nothing before the stop, the stopped
     processes (and the home kept) after it."""
     try:
@@ -372,17 +400,16 @@ def reset(home: Path, say=print) -> int:
     except ResetRefused as e:
         done = "stage.py and desktop_server.py on this home were stopped; the home was kept." if ours else "Nothing was changed."
         raise ResetRefused(f"{e} {done}") from None
-    before = trust_before(home)  # read before the home goes
     if home.exists():
         shutil.rmtree(home)
     say(f"removed {home}")
-    gone = clear_recipe_trust(before)
-    if gone is None:
-        say("kept Goose's recipe trust: this home has no note of the trust before its windows opened (open-windows.py "
-            "writes one), so reset cannot tell the demo's recipes from yours; removed the saved Maya recipe")
+    gone = clear_recipe_trust(root or goose_root())
+    if gone:
+        say(f"cleared Goose's trust in {gone} of the demo's recipes (each window asks Trust and Execute again); other "
+            "recipes keep theirs; removed the saved Maya recipe")
     else:
-        say(f"cleared Goose's trust in the {gone} recipes trusted since this home's windows first opened (each asks Trust "
-            "and Execute again); recipes trusted before keep theirs; removed the saved Maya recipe")
+        say("deleted no Goose recipe trust: no trust file matches a recipe the demo's windows opened (none trusted "
+            "since the last reset, or a Goose that names its trust files differently); removed the saved Maya recipe")
     return 0
 
 
