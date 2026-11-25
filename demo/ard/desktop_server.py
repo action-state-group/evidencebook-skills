@@ -615,8 +615,9 @@ def ard_show_receipt() -> None:
 
 @_tool("maya", "alder", "kestrel")
 def ard_open_receipt_page() -> None:
-    """Open THIS window's own receipt for its latest deal as a page in the browser, for the audience: capsule-viewer's
-    view of its own copy of the deal, checked by capsulectl verify --bundle, with nothing added."""
+    """Open THIS window's own receipt for its latest deal as a page in the browser, for the audience: capsulectl's own
+    page of its copy of the deal (deal report --html), with capsulectl's verify report and the witness time it verified,
+    with nothing added."""
     import pages
     import receipt
 

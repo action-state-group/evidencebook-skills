@@ -419,43 +419,57 @@ def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
     assert f"within {adj.CHALLENGE_DAYS} days" in screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
 
 
-def test_the_receipt_page_is_capsulectls_own_when_it_draws_one(monkeypatch, tmp_path):
-    # Ethan: the run shows the v1 receipt page as soon as `capsulectl deal report --html` draws one; until then the
-    # refusal falls through to the page that says it can't be drawn
+def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
+    import json
+    # #242: the receipt page is `capsulectl deal report --html` (evidencebook#935), with the hosted witness's directory so
+    # it says the witness time capsulectl verified; a deal's newest records wait for the checkpoint that covers them
     import receipt
     monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
-    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", True)
-    calls = []
+    assert receipt.DRAW_V1_PAGE is True
+    from pathlib import Path
 
     class P:
         name = "maya"
 
-        def __init__(self, refuse):
-            self.refuse = refuse
+        def __init__(self, refusals):
+            self.refusals, self.calls, self.waits = list(refusals), [], 0
+
+        def write(self, name, content):
+            path = tmp_path / name
+            path.write_text(json.dumps(content))
+            return str(path)
 
         def run(self, *args):
-            calls.append(args[:2])
-            if self.refuse:
-                raise buyer.pt.Refused(self.refuse)
+            self.calls.append(args)
+            if self.refusals:
+                raise buyer.pt.Refused(self.refusals.pop(0))
             Path(args[args.index("--html") + 1]).write_text("<html>page</html>")
             return {}
 
-        def bundle(self, *a, **k):
-            raise buyer.pt.Refused("stop here")
-    from pathlib import Path
-    page = receipt.receipt_page(P(None), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+        def wait_checkpoint(self, seconds, say=None):
+            self.waits += 1
+            return {}
+    p = P([])
+    page = receipt.receipt_page(p, "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
     assert page.read_text() == "<html>page</html>"
-    with pytest.raises(receipt.ReceiptError, match="stop here"):  # fell through to the copy, as before
-        receipt.receipt_page(P("--html renders an x-deal-v0 deal's page; an x-deal-v1 report has no page yet"), "Maya",
-                             "deal-0123456789abcdef", rail="simulated", seller=False)
+    args = p.calls[0]
+    assert args[:4] == ("report", "--deal", "deal-0123456789abcdef", "--html")
+    directory = json.loads(Path(args[args.index("--witness-directory") + 1]).read_text())
+    assert directory == buyer.pt.witness_directory()
+
+    late = P(["your deal book of deal-0123456789abcdef has records after its last checkpoint"])
+    assert receipt.receipt_page(late, "Maya", "deal-0123456789abcdef", rail="simulated", seller=False).exists()
+    assert late.waits == 1 and len(late.calls) == 2
+
     with pytest.raises(receipt.ReceiptError, match="disk full"):
-        receipt.receipt_page(P("disk full"), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+        receipt.receipt_page(P(["disk full"]), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
-def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
-    # #242: capsulectl's first v1 page says "no witness" and "not countersigned" for a witnessed two-sided deal
+def test_the_page_is_off_only_by_its_switch(monkeypatch, tmp_path):
+    # #242: on since evidencebook#935; with the switch off, no deal report --html is asked for
     import receipt
-    assert receipt.DRAW_V1_PAGE is False
+    assert receipt.DRAW_V1_PAGE is True
+    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", False)
 
     class P:
         name = "maya"

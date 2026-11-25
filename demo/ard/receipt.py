@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import warnings
 from pathlib import Path
 
@@ -37,10 +38,14 @@ STATUS = {
 ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 
 
-#: Off for the 2026-11-25 run: capsulectl's first v1 page (evidencebook 64da5152) draws a copy without the other side's
-#: half and the witness receipt, so it says "no witness" and "not countersigned" for a witnessed two-sided deal (#242).
-#: On again once the page reads them.
-DRAW_V1_PAGE = False
+#: On since evidencebook#935, whose page is drawn by capsule-viewer 130877b1 (#420, #421) from the binary's own verify
+#: report: it says the other side's half and the book's witness time as capsulectl verified them (#242). It was off for
+#: the 2026-11-25 run, when capsulectl's first v1 page (64da5152) said "no witness" and "not countersigned" for a
+#: witnessed two-sided deal.
+DRAW_V1_PAGE = True
+
+#: How long the receipt page waits for the checkpoint that covers a deal's newest records.
+PAGE_WAIT_S = 30
 
 NOT_YET = "a receipt page for this kind of deal can't be drawn yet; the receipt in words is complete"
 
@@ -216,16 +221,23 @@ def render(bundle: dict, output: dict) -> str:
 
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
     """Write the party's receipt page for a deal, and return its path: capsulectl's own page
-    (``capsulectl deal report --html``) where capsulectl draws one for an x-deal-v1 deal; otherwise capsule-viewer's page
-    of the party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
+    (``capsulectl deal report --html``, evidencebook#935). With :data:`DRAW_V1_PAGE` off, capsule-viewer's page of the
+    party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
     if DRAW_V1_PAGE:
         out = pages.path(p.name, f"receipt-{deal_id}")
-        try:
-            p.run("report", "--deal", deal_id, "--html", str(out))
-            return out
-        except pt.Refused as exc:
-            if "no page yet" not in str(exc):  # capsulectl's refusal while it draws no x-deal-v1 page
-                raise ReceiptError(str(exc)) from None
+        # with the hosted witness's directory, so the page says the book's witness time capsulectl verified
+        args = ("report", "--deal", deal_id, "--html", str(out),
+                "--witness-directory", p.write("witnesses.json", pt.witness_directory()))
+        stop = time.monotonic() + PAGE_WAIT_S
+        while True:
+            try:
+                p.run(*args)
+                return out
+            except pt.Refused as exc:
+                # a page rests on a checkpoint, as a copy does (Party.bundle): a deal's newest records wait for one
+                if "after its last checkpoint" not in str(exc) or time.monotonic() >= stop:
+                    raise ReceiptError(str(exc)) from None
+            p.wait_checkpoint(max(stop - time.monotonic(), 1))
     try:
         copy = p.bundle(deal_id, "keep", wait=30)
     except pt.Refused as exc:

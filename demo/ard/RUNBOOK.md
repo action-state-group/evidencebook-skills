@@ -2,9 +2,9 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 2a377f2 (main 65cbccab, which holds #922 and #935's receipt page, with #933's `deal tick --now` merged in while #933 is open; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 130877b (main, capsule-viewer#422: the receipt page of #420 and #421) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
-Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); and this set-up (#311). Open: the windows open stacked, not tiled. The receipt page is not drawn yet (it arrives with evidencebook-skills#310); the receipt in words is complete. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
+Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); and the receipt page, capsulectl's own `deal report --html` (evidencebook#935) drawn by capsule-viewer 130877b (#310). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
 
 ## What you will see
 
@@ -123,7 +123,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
    [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
-   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 45eaceb5f2bd29111b7bfa76dab6212e716c1c46; git -C evidencebook checkout -q 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
+   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 2a377f29de6e6140014107bfc136f932e996a5e8; git -C evidencebook checkout -q 2a377f29de6e6140014107bfc136f932e996a5e8
    [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 0043a944b22dc25515f1440169fcdabfd345750b; git -C capsule-cli checkout -q 0043a944b22dc25515f1440169fcdabfd345750b
    [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
    ```
@@ -134,7 +134,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    ```
    cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
-   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=45eaceb5f2bd29111b7bfa76dab6212e716c1c46 V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
+   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=2a377f29de6e6140014107bfc136f932e996a5e8 V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
    mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
    (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
    install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
@@ -153,8 +153,8 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    cd $HOME/ard-demo && mkdir -p bin && (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@d56da4d3314b79b7aafb6b293979a14cc49d033e"
-   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@d56da4d3314b79b7aafb6b293979a14cc49d033e"
+   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
+   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
    ```
 
    **Expect:** pip ends with no error. The second line is needed: every capsule-viewer commit carries the same version number, so the first line alone keeps an earlier capsule-viewer.
@@ -399,7 +399,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya's statement sent to Alder Print Co.: she received what she paid for." Cancel instead: "Maya chose Cancel, so nothing was sent in Maya's name."
 
 15. Type `Show your History card, then your receipt.`
-    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Asked for the receipt as a page, Maya says it can't be drawn yet for this kind of deal; the receipt in words is complete.
+    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at …, as capsulectl verify reported on your own book." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are UTC, as the page writes them.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 
