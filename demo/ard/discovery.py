@@ -56,8 +56,9 @@ def _serve(port: int, handler) -> ThreadingHTTPServer:
 class SellerOrigin:
     """One seller's own origin: its ``/.well-known/ard.json`` and its commitment."""
 
-    def __init__(self, name: str, seller: dict, commitment: Callable[[], dict | None], port: int = 0):
-        self.name, self.seller, self.commitment = name, seller, commitment
+    def __init__(self, name: str, seller: dict, commitment: Callable[[], dict | None], port: int = 0,
+                 policy: Callable[[str], bytes | None] = lambda _uri: None):
+        self.name, self.seller, self.commitment, self.policy = name, seller, commitment, policy
         self.httpd = _serve(port, _handler(self.get))
         self.origin = f"http://127.0.0.1:{self.httpd.server_address[1]}"
 
@@ -69,6 +70,9 @@ class SellerOrigin:
             return json.dumps(ard.manifest(self.name, self.seller, doc, self.origin), sort_keys=True).encode()
         if path == f"/commitments/{self.name}.json":
             return ard.commitment_octets(doc)
+        uri = doc.get("lcap", {}).get("policy_uri", "")
+        if uri and path == f"/commitments/{uri}":  # the policy_uri, resolved against the commitment's URL
+            return self.policy(uri)
         return None
 
     def close(self) -> None:
@@ -121,8 +125,9 @@ class Discovery:
 
     def __init__(self, sellers: dict[str, dict], commitment: Callable[[str], dict | None],
                  registry_port: int = 0, seller_ports: dict[str, int] | None = None,
-                 get: Callable[[str], bytes | None] | None = None):
-        self.sellers = {n: SellerOrigin(n, s, (lambda n=n: commitment(n)), (seller_ports or {}).get(n, 0))
+                 get: Callable[[str], bytes | None] | None = None,
+                 policy: Callable[[str], bytes | None] = lambda _uri: None):
+        self.sellers = {n: SellerOrigin(n, s, (lambda n=n: commitment(n)), (seller_ports or {}).get(n, 0), policy)
                         for n, s in sellers.items()}
         self.origins = {ard.publisher(n): o.origin for n, o in self.sellers.items()}
         # ``get`` serves the stage's other pages on the registry's port (the adjudicator's rules page)

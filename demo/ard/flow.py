@@ -149,14 +149,19 @@ class SellerAgent:
         self.party.close()
 
     def advertise(self) -> dict:
-        """The seller's signed ``evidence-commitment/1``, with the profile's ``history_card/2`` stapled (ops u539)."""
+        """The seller's signed ``evidence-commitment/1``, with the profile's ``history_card/2`` stapled (ops u539), on the
+        terms its own file discloses (``sellers/<name>.yaml``). Its signed ``disclosure-policy/0`` goes where the
+        commitment's ``lcap.policy_uri`` points, relative to the commitment's own URL, so the seller's origin serves it."""
         p = self.party
         if not p.notes(JOINED):
             p.note(JOINED, {"operator": p.profile, "key_id": p.key_id})
-        settings = cm.Settings(endpoint="ard:stage", derivations=("history_card/2",), human_gated=False,
-                               answers_within="PT1H")
-        doc, _ = cm.build(p.node, settings=settings)
-        wire.write_atomic(stage_dir(self.home) / "commitments" / f"{self.name}.json", ard.commitment_octets(doc))
+        d = SELLERS[self.name]["discloses"]
+        settings = cm.Settings(endpoint="ard:stage", subjects=tuple(d["subjects"]), derivations=tuple(d["derivations"]),
+                               human_gated=d["human_gated"], answers_within=d["answers_within"])
+        doc, policy = cm.build(p.node, settings=settings)
+        out = stage_dir(self.home) / "commitments"
+        wire.write_atomic(out / doc["lcap"]["policy_uri"], policy)  # first, so a served commitment's policy resolves
+        wire.write_atomic(out / f"{self.name}.json", ard.commitment_octets(doc))
         self.say(f"advertised: commitment signed by {doc['key_id'][:8]}…, price {SELLERS[self.name]['price_msat']:,} msat")
         return doc
 

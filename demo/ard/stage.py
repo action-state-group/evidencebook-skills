@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -32,6 +33,9 @@ REGISTRY_URL = f"http://127.0.0.1:{HTTP_PORT}/search"
 ORIGINS = {ard.publisher(n): f"http://127.0.0.1:{p}" for n, p in SELLER_PORTS.items()}
 #: What the buyer searches for: the item only (the budget and deadline stay with her agent).
 QUERY = "conference badges print"
+#: The one form of ``lcap.policy_uri`` a seller's commitment carries (evidencebook ``commitment.build``): a file under
+#: ``commitments/policies/``, never a path out of it.
+POLICY_URI = re.compile(r"policies/[0-9a-f]{64}\.json")
 #: The file a stage holds open under ``<home>/stage`` for as long as it runs (``demo.py reset`` finds it by it).
 STAGE_LOCK = ".stage.lock"
 
@@ -48,12 +52,19 @@ class Stage:
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
         self._held = open(self.dir / STAGE_LOCK, "a")
         self.adjudicator = adj.Adjudicator(self.home).create()
-        self.discovery = Discovery(SELLERS, self.commitment, HTTP_PORT, SELLER_PORTS, get=self.page)
+        self.discovery = Discovery(SELLERS, self.commitment, HTTP_PORT, SELLER_PORTS, get=self.page, policy=self.policy)
         self.url = self.discovery.registry.url
 
     def commitment(self, name: str) -> dict | None:
         f = self.dir / "commitments" / f"{name}.json"
         return json.loads(f.read_bytes()) if f.is_file() else None
+
+    def policy(self, uri: str) -> bytes | None:
+        """A seller's signed disclosure policy, at the ``policy_uri`` its commitment names (``policies/<node_id>.json``)."""
+        if not POLICY_URI.fullmatch(uri):
+            return None
+        f = self.dir / "commitments" / uri
+        return f.read_bytes() if f.is_file() else None
 
     def page(self, path: str) -> bytes | None:
         """The adjudicator's published rules, whose SHA-256 every agreement names."""

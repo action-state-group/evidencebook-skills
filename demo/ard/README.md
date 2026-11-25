@@ -13,9 +13,9 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 | Part | Code | What it uses |
 |---|---|---|
 | Each party's profile and its deal verbs | `party.py` | `capsulectl-deal` through the Goose reference's `Ctl` (evidencebook `python/examples/goose`, at the pin); its `Node` for a party's node book |
-| The parties and their facts | `cast.py` | |
+| The parties and their facts | `cast.py`, `sellers/<name>.yaml` | each seller's own file: its offer and what it discloses (subjects, derivations, `human_gated`, `answers_within`), which `flow.advertise` signs into its commitment; edit it, then reset and seed |
 | The sample history | `seed.py` | 12 real x-deal-v1 deals per seller, each with its own sample buyer; contest windows of seconds, stamped on demand, so the seed takes about a minute and the cards count the deals held a minute or two later |
-| Discovery | `ard.py`, `discovery.py`, `stage.py` | each seller's own `/.well-known/ard.json` and signed `evidence-commitment/1` (with its `history_card/2` staple, ops u539), a stand-in registry answering `POST /search` |
+| Discovery | `ard.py`, `discovery.py`, `stage.py` | each seller's own `/.well-known/ard.json` and signed `evidence-commitment/1` (with its `history_card/2` staple, ops u539) and the signed `disclosure-policy/0` its `lcap.policy_uri` names, a stand-in registry answering `POST /search` |
 | The History card | `flow.py` (`publish_card`, `fetch_card`) | each seller's shared `standard_history/3` card (`deal standard-history card --shared`), checked by Maya with `capsulectl verify --bundle` |
 | The assessment | `buyer.py`, `pack.py`, `pack/` | `capsule-engine admission evaluate` under `demo/ard_admission/2.0.0`; the card's dispute tally (`card.disputes_against`, LIMIT on any lost dispute) and Maya's own rulings, read from capsulectl's report of each of her deals (`own.no_adverse_adjudication`, NO) |
 | A deal | `buyer.py`, `flow.py` (`SellerAgent`), `wire.py` | offer naming the adjudicator and the witness, admit, intent, agree, check (Maya's dialog), payer and payee legs, delivery, statements; the parties hand each other the files the verbs write |
