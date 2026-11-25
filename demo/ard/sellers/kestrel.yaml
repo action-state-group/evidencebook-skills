@@ -1,0 +1,15 @@
+# Demo placeholders: what this seller tells a buyer it will disclose, and what it offers. Edit a value, then
+# reset and seed again: the seller signs a new commitment from this file (demo/ard/flow.py advertise), and its
+# ARD entry lists the new offer. Disclosure terms and the offer only; nothing else belongs here.
+label: Kestrel Print
+offer:
+  item: 200 conference badges, delivered by Friday
+  price_msat: 1000
+discloses:
+  # What a buyer can ask this seller for (the commitment's answers.subjects and answers.derivations). The
+  # derivations keep history_card/2: the commitment staples that card and its signed policy names it.
+  subjects: [checkpoints, full_history]
+  derivations: [history_card/2]
+  # Whether a person approves each answer before it goes out, and how soon an answer comes (ISO 8601).
+  human_gated: false
+  answers_within: PT1H

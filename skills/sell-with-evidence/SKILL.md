@@ -68,8 +68,8 @@ sale in those records.
   for, then say in at most two short plain sentences what it showed. Do not repeat its output: the
   audience reads it in the tool call.
 - The demo's seller is a fixed demo merchant: the demo operator published its commitment and
-  listing in advance, without a yes from the seller, and the demo seller shares by default with no
-  setup notice or opt-out.
+  listing in advance, from the seller's file (`demo/ard/sellers/<name>.yaml`) but without a yes from the seller, and
+  the demo seller shares by default with no setup notice or opt-out.
 - The card is time-stamped by Action State's witness, which also runs every party here, so it is not
   independent of them: say so when you speak of it.
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
