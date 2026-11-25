@@ -105,6 +105,7 @@ source compiles to.
 | `params` | the predicate's thresholds, as integers |
 | `from` | the lowest tier the row applies to |
 | `on_fail` | `"NO"`, `"LIMIT"` or `"record"`. A judged row's is `{cap: <tier>}` |
+| `on_unread` | optional `"record"`, on a `LIMIT` row without an `ask` only: when the row reads `not_read`, it is recorded and does not limit (§4, step 4). A failing row still limits |
 | `ask` | optional `{derivation}`, on a `LIMIT` row only: the Evidence Request it makes when it does not pass |
 | `lift` | optional `{tier, unless_fail}`, on an `own.settled` row that is `record` only: the lift of §4.1 |
 
@@ -122,6 +123,8 @@ source compiles to.
 - `on_fail: "LIMIT"` on a row from the lowest tier. The lowest tier is the floor,
   with nothing below it to limit to.
 - An `ask` on any row but a `LIMIT` row.
+- An `on_unread` other than `"record"`, or one on a row that is not `LIMIT` or that
+  carries an `ask`.
 - An `on_fail` or `ask` whose outcome the pack does not yield.
 - An unknown predicate, a predicate under the wrong source, or a missing or
   unknown param.
@@ -173,6 +176,7 @@ records its count, and its denominator where one exists.
 | `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, a stake on a rail `trust_roots.rails` does not pin, or a different unit | |
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
+| `card.disputes_against` | card | `max` | disputes others raised about the counterparty that were decided against it ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | against / decided |
 | `card.not_stapled` | card | | the card was asked for, not stapled to the holder's own message (§3.6) | card not verified | |
 | `card.witness_label` | card | | the verifier's label for the card's log is `witnessed` (§3.7) | card not verified | |
 | `card.log_key_accepted` | card | | the caller accepts the card's `checkpoint_key` as the log key for this responder (§3.7) | card not verified, or the caller has not decided | |
@@ -304,6 +308,33 @@ shows them. From a `standard_history/1` card these are
 card-level, across all bands, since `/1` carries no disputes per band. It is a
 `card` row, so it records or limits and never decides NO.
 
+`card.disputes_against` counts the disputes others raised about the
+counterparty that were decided against it, in deals with anyone, out of those
+decided (#280). Our own book holds only deals we were in, so without it a
+first-time buyer never sees that a seller lost a dispute to another buyer.
+From a `standard_history/1` or `/3` card the count is
+`disputes.received.by_outcome.against`, and the denominator is the received
+disputes decided: `for + against + split + no_finding`. Open and withdrawn
+disputes are not decided. A `split` is not counted as lost. The `raised`
+side is left out: a dispute's outcome is stated for the holder (AAC
+`spec/standard-history-v0.md` §5.4), so `raised.against` means the holder's
+own complaint was rejected, not a dispute about its conduct that it lost. The
+row is a `card` row and never decides NO. The count and denominator are
+recorded whether the row passes or not, so the decision always shows them.
+When the card is verified but carries no dispute tally, the row reads
+`not_read` with `reason: no_dispute_tally` (§5).
+
+A party that does not enter a ruling in its own book has a card that shows no
+`against` for it. The buyer cannot see that gap; the adjudicator can, with
+evidencebook's `deal ruling entries`, which shows from each party's copy
+whether that party entered the ruling.
+
+Not every pack carries these rows. A Mesh node's `inference-service-history/0`
+card carries no disputes (§3.4), so `asg/admission_node_baseline` reads none,
+and node deals are covered by `card.referee_verdicts` (§3.5). The
+`demo/tau2-live` pack is deny-list-only by design. Both are exceptions to the
+ruling that every pack reads lost disputes (#280).
+
 ### 3.4 Self-reported served periods
 
 A Mesh node's history is an `inference-service-history/0` Standard answer
@@ -427,8 +458,9 @@ In order:
    source is `missing` or that row's id.
 4. **Tier admitted.** It starts at the deal's tier. A `LIMIT` row that does not
    pass lowers it to the tier below that row's `from`, and a ladder row lowers
-   it only to the tier its earned history holds (§3.1). A failing judged row
-   lowers it to its `cap`.
+   it only to the tier its earned history holds (§3.1). A `LIMIT` row with
+   `on_unread: "record"` that reads `not_read` is recorded and lowers nothing;
+   it does not pass either. A failing judged row lowers it to its `cap`.
 5. **Above the top tier.** If the deal is `above_tier` and no row lowered the
    tier admitted, the decision is LIMIT at that top tier with source
    `above_tier`. If a row did lower it, the deal goes on to steps 6 to 8 like
@@ -492,7 +524,8 @@ The evaluator's input is the deal and what was received:
   - the card, with its state, first and latest checkpoint times, witness,
     declared controller, claims held and made, per-band counts
     `{currency, decade, subjects, adverse}`, its received disputes
-    `{open, of}`, and its served periods (§3.4);
+    `{open, of, decided: {against, of}}` (`decided` absent when the caller
+    did not read the decided disputes), and its served periods (§3.4);
   - a bound selection, with its state and its unanswered disputes;
   - the party's own book with the counterparty, as counts and adjudications;
   - the operator's list result;
@@ -532,6 +565,8 @@ The new members are additive:
   `definition_form`, `definition_binding`, `artifact_form`, `anchor_match`,
   `coverage_declaration_form`, `coverage_declaration_anchor`, `units`,
   `labels`, `period_alignment`, `period_anchor` or `period_floor`;
+- on a `card.disputes_against` row that reads `not_read` because a verified
+  card carries no dispute tally, `reason`: `no_dispute_tally`;
 - `coverage`, only when the card carries served periods:
   `{kind: "stream_interval", population: "NOT_CHECKED"}`. The counts were not
   checked against records, so completeness is not established (ISH §4.2).
@@ -563,6 +598,8 @@ Added after the first v0 compile (#79, #87, capsule-engine#273):
   `card.log_key_accepted`, `card.not_behind_pin` and `card.no_dropped_stream`
   (capsule-engine#304).
 - **The own-settled lift** (§4.1), the row field `lift` (evidencebook-skills#154).
+- **Disputes decided against the counterparty** (§3.3), `card.disputes_against`,
+  and the row field `on_unread` (§4, step 4) (#280).
 
 All are additive within `admission-pack/v0`. An evaluator from before them
 refuses a pack that uses them, as an unknown predicate or field, so it fails

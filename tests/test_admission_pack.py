@@ -100,6 +100,40 @@ class Ladder(unittest.TestCase):
             "check: card.open_disputes\n    params: {max: 1}\n    from: T1\n    on_fail: \"NO\"")))
         self.assertTrue(any("a card row may not decide NO" in i for i in issues), issues)
 
+    def test_disputes_against_with_on_unread(self):
+        # #280: a shown loss limits; a card with no dispute tally is recorded.
+        row = """  - id: disputes-against
+    statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
+    source: card
+    check: card.disputes_against
+    params: {max: 0}
+    from: T1
+    on_fail: "LIMIT"
+    on_unread: "record"
+"""
+        text = baseline_text().replace("rows:\n", "rows:\n" + row, 1)
+        self.assertEqual(pack_compile.validate_source(load(text)), [])
+        compiled = admission_pack.compile_pack(load(text))
+        got = next(r for r in compiled["rows"] if r["id"] == "disputes-against")
+        self.assertEqual(got["on_unread"], "record")
+        # Written only when set, so every other row keeps its bytes.
+        self.assertNotIn("on_unread", next(r for r in compiled["rows"] if r["id"] == "card-verified"))
+        rule = next(q for q in admission_pack.from_admission(load(text))["requirements"]
+                    if q["id"] == "disputes-against")
+        self.assertIn("when its input is not read, recorded", json.dumps(rule))
+
+        def issues_for(old, new):
+            return pack_compile.validate_source(load(text.replace(old, new, 1)))
+
+        issues = issues_for('on_unread: "record"', 'on_unread: "LIMIT"')
+        self.assertTrue(any("on_unread must be \"record\"" in i for i in issues), issues)
+        issues = issues_for('on_fail: "LIMIT"\n    on_unread', 'on_fail: "record"\n    on_unread')
+        self.assertTrue(any("only a LIMIT row may carry on_unread" in i for i in issues), issues)
+        issues = issues_for('on_unread: "record"\n', 'on_unread: "record"\n    ask: {derivation: standard_history/1}\n')
+        self.assertTrue(any("a row with on_unread carries no ask" in i for i in issues), issues)
+        issues = issues_for("params: {max: 0}", "params: {}")
+        self.assertTrue(any("needs params.max" in i for i in issues), issues)
+
     def test_not_stapled_row_asks_above_t0(self):
         # A stapled card decides T0 only (capsule-engine#277).
         row = """  - id: card-asked

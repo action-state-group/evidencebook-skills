@@ -62,6 +62,7 @@ PREDICATES = {
     "stake.covers_deal": ("stake", ()),
     "card.band_history_or_stake": ("card", ("k", "step_decades", "max_adverse_permille")),
     "card.open_disputes": ("card", ("max",)),
+    "card.disputes_against": ("card", ("max",)),
     "card.not_stapled": ("card", ()),
     "card.self_reported_served_periods": ("card", ("window", "min_periods")),
     "card.referee_verdicts": ("card", ("window", "min_periods")),
@@ -76,7 +77,7 @@ TRUST_ROOT_KEYS = ("controllers", "witnesses", "judges")
 # (AAC#406), rather than naming it.
 RAIL_KEYS = {"id", "digest"}
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
-ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "ask", "lift"}
+ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "on_unread", "ask", "lift"}
 LIFT_KEYS = {"tier", "unless_fail"}
 
 PACK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*/[a-z][a-z0-9_-]*/\d+\.\d+\.\d+$")
@@ -344,6 +345,17 @@ def validate_admission(source):
                 issues.append(f"{where}: a row from the lowest tier cannot LIMIT; it can decide NO or be recorded")
             if on_fail in ("NO", "LIMIT") and on_fail not in outcomes:
                 issues.append(f"{where}.on_fail {on_fail} is not in outcomes")
+        on_unread = r.get("on_unread")
+        if on_unread is not None:
+            # A LIMIT row whose input is not read records it instead of
+            # limiting (profile section 4, step 4); it never makes a not_read
+            # row pass, and it never asks, since the ask is for a not_read row.
+            if on_unread != "record":
+                issues.append(f"{where}.on_unread must be \"record\"")
+            if on_fail != "LIMIT":
+                issues.append(f"{where}: only a LIMIT row may carry on_unread")
+            if r.get("ask") is not None:
+                issues.append(f"{where}: a row with on_unread carries no ask")
         ask = r.get("ask")
         if ask is not None:
             # Only a LIMIT row asks (resolution step 6); an ask anywhere else
@@ -440,6 +452,9 @@ def compile_pack(source):
         row = {"id": r["id"], "statement": r["statement"], "source": r["source"], "check": r["check"],
                "params": dict(r.get("params") or {}), "from": r["from"],
                "on_fail": dict(r["on_fail"]) if isinstance(r["on_fail"], dict) else r["on_fail"]}
+        if r.get("on_unread") is not None:
+            # Written only when set, so a pack without one keeps its bytes.
+            row["on_unread"] = r["on_unread"]
         if r.get("ask") is not None:
             row["ask"] = {"derivation": r["ask"]["derivation"]}
         if r.get("lift") is not None:
@@ -476,6 +491,8 @@ def _evidence_rule(r):
         rule += "; recorded, deciding nothing"
     else:
         rule += f"; a failure gives {on_fail}"
+    if r.get("on_unread") == "record":
+        rule += "; when its input is not read, recorded, deciding nothing"
     if r.get("lift"):
         lift = r["lift"]
         rule += (f"; when it passes and none of {', '.join(lift['unless_fail'])} fails, a counterparty that served "
