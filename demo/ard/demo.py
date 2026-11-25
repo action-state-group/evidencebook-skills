@@ -176,12 +176,16 @@ class Script:
         rule("The adjudicator")
         print(screens.ADJUDICATOR_INDEPENDENCE)
         print("the adjudicator asks each side for its books; each side's agent answers on its own")
-        stop = time.time() + 30
+        # Each side answers once the witness takes its stamp, or after ANSWER_WAIT_S without one: wait past that.
+        stop = time.time() + adj.ANSWER_WAIT_S + 30
         while True:
             raw = next(c for c in self.adjudicator.gather(5) if c["deal_id"] == deal.deal_id)
             adj.answer_requests(self.home, self.maya, BUYER, "buyer", print)
             if len(raw["answers"]) == 2 or time.time() > stop:
                 break
+        raw = next(c for c in self.adjudicator.cases() if c["deal_id"] == deal.deal_id)  # with an answer sent just now
+        if len(raw["answers"]) < 2:
+            print(f"only {len(raw['answers'])} of the 2 sides answered in time; the case shows what came")
         names = flow.case_names(raw)
         c = flow.case_view(raw, names)
         print("\n".join(flow.case_lines(c, names)))

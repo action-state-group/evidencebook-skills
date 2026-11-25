@@ -756,3 +756,41 @@ def test_an_answer_waits_for_a_taken_stamp_then_goes_without_one(tmp_path, monke
     said = []
     assert adj.answer_requests(tmp_path, P(), "maya", "buyer", said.append) == ["deal-0123456789abcdef"]
     assert sent == ["answer-buyer"] and any("answered without one" in x for x in said)
+
+
+def test_an_answer_goes_at_once_when_its_stamp_is_taken_and_once_only(tmp_path, monkeypatch):
+    """The normal path, and recovery inside ANSWER_WAIT_S: a stamp the witness took lets the answer go that round,
+    with no 'without one' line; a round that failed first, then one that succeeded, answers once."""
+    import party as pt
+
+    sent, ok = [], [False]
+
+    class P:
+        name = "maya"
+        dir = tmp_path
+
+        def wait_checkpoint(self, seconds):
+            if not ok[0]:
+                raise pt.Refused("no checkpoint in 12 s")
+            return {"state": "ticked"}
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            return {"outcome": "artifact"}
+    pending = [("deal-0123456789abcdef", tmp_path / "req.json")]
+    monkeypatch.setattr(adj.wire, "pending", lambda home, me, kind: pending)
+    monkeypatch.setattr(adj, "named_key", lambda home: "k")
+    monkeypatch.setattr(adj.wire, "send", lambda home, to, deal_id, kind, f: sent.append(kind))
+    clock = [1000.0]
+    monkeypatch.setattr(adj.time, "time", lambda: clock[0])
+    said = []
+    assert adj.answer_requests(tmp_path, P(), "maya", "buyer", said.append) == []  # the witness failed: not yet
+    first = (tmp_path / "handled" / "deal-0123456789abcdef.adjrequest-seen").read_text()
+    clock[0] += 10
+    ok[0] = True
+    assert adj.answer_requests(tmp_path, P(), "maya", "buyer", said.append) == ["deal-0123456789abcdef"]
+    assert (tmp_path / "handled" / "deal-0123456789abcdef.adjrequest-seen").read_text() == first  # kept from round 1
+    assert adj.answer_requests(tmp_path, P(), "maya", "buyer", said.append) == []  # answered once only
+    assert sent == ["answer-buyer"] and not any("without one" in x for x in said)
