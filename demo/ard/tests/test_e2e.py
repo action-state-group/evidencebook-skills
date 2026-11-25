@@ -158,6 +158,34 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     buyer.close_received(w["home"], w["maya"], deal2)
 
 
+def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(world):
+    """evidencebook-skills#295: an order the person declined, or a dialog nobody answered, must not show on the seller's
+    card as a sale. The dialog comes before anything reaches the seller (#289), so the seller's own card counts the same
+    deals and rows after both, and no offer reached its folder."""
+    import buyer
+    import flow
+    import pay
+    import wire
+
+    w = world
+    seller = w["agents"]["alder"].party
+
+    def card():
+        time.sleep(65)  # past one checkpoint interval: the card counts everything sealed before it
+        seller.tick()
+        c, _, _ = flow.read_card(seller.card_bundle(shared=True))
+        return c["outcomes"], c["disputes"]["received"]["of"]
+    # the seller's deal list (no checkpoint lag) and its card once a checkpoint covers the earlier tests' deals
+    deals, before, offers = len(seller.deals()), card(), wire.pending(w["home"], "alder", "offer")
+    a = _assess(w, w["maya"])["alder"][1]
+    for how in ("declined", "no answer in time"):
+        made = buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
+                                  f"Pay (test, {how})", lambda summary: False, lambda *_: None, simulated=True)
+        assert made is None
+    assert len(seller.deals()) == deals and wire.pending(w["home"], "alder", "offer") == offers
+    assert card() == before
+
+
 def test_a_seller_window_closed_at_pay_time_delivers_when_it_reopens(world):
     """The seller's window is closed when the buyer pays: the buyer's wait ends and says so, nothing is lost, and when the
     seller's window reopens its agent records the payment and delivers; the buyer's agent then picks the delivery up

@@ -24,6 +24,8 @@ from cast import DEALS_EACH, ITEM, SAMPLE_BUYER, SELLERS
 #: A row's statements count only when their time (the witnessed checkpoint that covers them, up to a minute or two
 #: after they are sealed) falls inside the contest window, so the window leaves room for that.
 SAMPLE_DUE_S, SAMPLE_WINDOW_S = 120, 300
+#: The longest wait, after the windows end, for every seller's card to count all its deals held (a few checkpoints).
+HELD_WAIT_S = 600
 #: The sample buyer's answer to its own payment check: the demo operator's, for the sample buyer it runs.
 SAMPLE_APPROVAL = "Sample deal: the operator approves this payment for the sample buyer it runs. No money moves."
 
@@ -118,21 +120,32 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         for p in (*[ps[n] for n in SELLERS], buyer):
             p.tick()
         time.sleep(15)
-    stop = time.monotonic() + 300
-    for name in SELLERS:
-        while True:
-            ps[name].tick()
-            buyer.tick()
+    # A deal counts as held once a witnessed checkpoint after its window's end covers it, so every party keeps
+    # checkpointing until every seller's card counts all its deals held. All sellers are waited on together: waiting on
+    # one at a time starved the next of checkpoints, and on a slow CI runner Kestrel, waited on second, ran out of time
+    # at 18 of 24 (evidencebook-skills#288, CI at 10ac5bb). Ends as soon as all are held.
+    stop = time.monotonic() + HELD_WAIT_S
+    done: set[str] = set()
+    counts: dict[str, tuple[int, int]] = {}
+    while True:
+        for p in (*[ps[n] for n in SELLERS if n not in done], buyer):
+            p.tick()
+        for name in SELLERS:
+            if name in done:
+                continue
             try:
-                of, ok = held(ps[name])
+                counts[name] = held(ps[name])
             except pt.Refused:
-                of, ok = 0, 0
-            if of == DEALS_EACH and ok == DEALS_EACH:
-                say(f"{name}: {of} deals, all held")
-                break
-            if time.monotonic() > stop:
-                raise SystemExit(f"{name}'s card counts {ok} of {of} deals held after 5 minutes: "
-                                 "check the network (the witness) and run `demo.py seed` again")
-            time.sleep(10)
+                counts[name] = (0, 0)
+            if counts[name] == (DEALS_EACH, DEALS_EACH):
+                done.add(name)
+                say(f"{name}: {DEALS_EACH} deals, all held")
+        if done == set(SELLERS):
+            break
+        if time.monotonic() > stop:
+            left = "; ".join(f"{n}'s card counts {counts[n][1]} of {counts[n][0]} deals held" for n in SELLERS if n not in done)
+            raise SystemExit(f"{left} after {HELD_WAIT_S // 60} minutes: check the network (the witness) and run "
+                             "`demo.py seed` again")
+        time.sleep(10)
     for p in ps.values():
         p.close()

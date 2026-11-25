@@ -437,7 +437,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too. A `stage.py` left from an earlier run is stopped by reset itself.
 
-2. **Seed says a card counts fewer than 24 held after 5 minutes.** The checkpoints did not reach the witness: check the network, or set `ARD_WITNESS=off`, then reset and seed.
+2. **Seed says a card counts fewer than 24 held after 10 minutes.** The checkpoints did not reach the witness: check the network, or set `ARD_WITNESS=off`, then reset and seed.
 
 3. **A command says a variable is not set.** Copy the export line it prints, put in your own paths, and run it again.
 

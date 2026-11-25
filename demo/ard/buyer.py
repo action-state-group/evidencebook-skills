@@ -224,7 +224,16 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
                             "offer": deal.offer, "rail": rail, "me": me}, subject_ref=deal.deal_id)
     say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {ITEM}; the agreement names the deal's adjudicator "
         f"and {pt.WITNESS_NAME}")
-    maya.receive(wire.wait(home, me, deal.deal_id, "agree", flow.WAIT_S))
+    try:
+        agreed_by_seller = wire.wait(home, me, deal.deal_id, "agree", flow.WAIT_S)
+    except pt.Refused:
+        # withdraw the offer the seller has not taken, so a seller window opened later does not agree to a deal nobody
+        # pays (a deal the seller agreed would count on its card as undecided)
+        for kind in ("offer", "from"):
+            wire.path(home, seller, deal.deal_id, kind).unlink(missing_ok=True)
+        raise pt.Refused(f"{label(seller)} did not answer the offer in {flow.WAIT_S} s (its window may be closed): the "
+                         "offer is withdrawn, nothing was paid") from None
+    maya.receive(agreed_by_seller)
     maya.admit(deal.deal_id, chosen.decision)
     intent = maya.intent(deal.deal_id, ASK, "purchase", ["pay"], BUDGET_MSAT, label(seller), rail=rail,
                          domain=ard.publisher(seller))

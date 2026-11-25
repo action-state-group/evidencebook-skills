@@ -188,3 +188,23 @@ def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
     calls.clear()
     assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(True), print, simulated=True)
     assert calls == ["ask", "open", "invoice", "check", "paid", "pay"]
+
+
+def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
+    # a seller window opened later must not agree to a deal nobody pays (its card would count it undecided)
+    import wire
+    monkeypatch.setattr(flow, "WAIT_S", 0)
+
+    class Maya:
+        name = "maya"
+
+        def offer(self, *a, **k):
+            f = tmp_path / "offer.json"
+            f.write_text("{}")
+            return {"deal_id": "deal-0123456789abcdef", "offer": "o" * 64, "file": str(f)}
+
+        def note(self, *a, **k):
+            return {"record_id": "r"}
+    with pytest.raises(buyer.pt.Refused, match="the offer is withdrawn, nothing was paid"):
+        buyer.open_deal(tmp_path, Maya(), "alder", "k", assessment("GO"), {}, lambda *_: None, me="maya")
+    assert wire.pending(tmp_path, "alder", "offer") == [] and wire.pending(tmp_path, "alder", "from") == []
