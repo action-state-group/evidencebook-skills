@@ -229,7 +229,8 @@ the question to ask Maya (seller, amount, real or simulated), and the call after
 `GOOSE_SEARCH_PATHS`. It runs the pinned Claude Code adapter with Claude Code limited to ToolSearch (which loads the
 window's own deferred tools) and the window's own `ard_*` MCP server: no shell, file, web or other built-in tool, no
 other MCP server (a Goose extension left on, a server in your own Claude Code settings, a claude.ai connector), and
-none of your own `~/.claude` settings, hooks or CLAUDE.md. Without it the adapter gave the agent Claude Code's whole
+none of your own `~/.claude` settings, hooks or CLAUDE.md. The agent's context still holds the signed-in account's
+email address (Claude Code adds it, and no setting removes it); the agent has no tool that can send it anywhere. Without the lock the adapter gave the agent Claude Code's whole
 toolset, a shell among them, which ran without a prompt under Goose 1.59.2. Turning off every Goose extension
 (set-up step 7) stays required as well. The limit that remains: an agent with computer-use tools outside the demo
 could still click the dialog. On the real rails the money settles to one node or wallet the two sellers share (the dialog says so). `ARD_APPROVAL=none` in the extension command turns the gate off on the simulated rail only (tests only; the tool says so); on a real rail `ard_pay` refuses it and pays nothing.
