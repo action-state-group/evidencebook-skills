@@ -329,16 +329,17 @@ def test_with_no_limit_and_no_click_the_records_are_todays(tmp_path):
 
 def test_a_pack_ask_pauses_the_check_and_the_persons_answer_to_the_hold_approves_it(tmp_path, monkeypatch):
     """The real Everyday Rules escalate the first order too (a new merchant, a payment that cannot be undone): each is an
-    ASK rule, so the order is held and the person's Approve answers the pause (#230). An escalate no ASK rule makes (a DO
+    ASK rule, so the order is held and the person's Buy anyway answers the pause (#230). An escalate no ASK rule makes (a DO
     rule only) is held too, with that rule's words. A pause no one was asked about (the demo no longer makes one; forced
     here) is the agent card's answer, since standing intent approves only a pass."""
     engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
     t = terms(ITEM, 2000, CURRENCY, "simulated")
-    said = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves. The Everyday Rules held this "
-                        "order for your OK: no earlier payment to this merchant. Nothing has been paid yet. Approve this "
-                        "order anyway, or decline?", "Approve")
+    said = rules.Answer("The Everyday Rules held this order for your OK\n200 conference badges, delivered by Friday from "
+                        "Alder Print Co. for 2,000 msat, on the simulated rail: no money moves. Nothing has been paid "
+                        "yet.\nNo earlier payment to this merchant\nYour answer is saved on the receipt. Change your rules "
+                        "any time in Everyday Rules.", "Buy anyway")
     held = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, approve=lambda o: said))
     assert held["verdict"]["body"]["result"] == "pause" and held["approval"]["body"]["approver"] == "user"
     assert held["verdict"]["body"]["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r06_new_merchant"}]
@@ -495,3 +496,17 @@ def test_the_real_rules_know_a_seller_paid_before_and_flag_the_repeated_payment(
     assert outcome.reasons == ["the payment is not refundable", "more than a quarter of the price paid up front (2,000 msat)",
                                "the same act was taken in another deal inside the window"]
     maya.close(); alder.close()
+
+
+def test_rule_22_reads_as_the_receipt_does_with_the_amount_never_a_bare_number():
+    """#272 item 1 (Sherlock2): rule 22's reason names the limit the check record's amounts fail, with comma and unit;
+    when its amounts fail neither limit as read here, the rule's own words keep every amount with comma and unit."""
+    f = {"id": "r22", "check": "upfront_amount/1.1.0", "verdict": "fail",
+         "reason": "the up-front amount 2000 is above the share limit"}
+    assert rules._words(f, {"upfront_amount_minor": 2000, "terms": {"price_minor": 2000}}) == \
+        "more than a quarter of the price paid up front (2,000 msat)"
+    assert rules._words(f, {"upfront_amount_minor": 20_000, "terms": {"price_minor": 100_000}}) == \
+        "a large amount paid up front (20,000 msat)"
+    assert rules._words(f, {"upfront_amount_minor": 500, "terms": {"price_minor": 2000}}) == \
+        "the up-front amount 2,000 msat is above the share limit"
+

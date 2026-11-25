@@ -168,7 +168,7 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
 @pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
 def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason_and_an_approval_pays(tools, monkeypatch):
     """With the limit set the payment dialog moves after the deal check: a held order is one dialog (payment and every
-    reason, Approve or Decline); the first dialog is never shown before the rules have answered."""
+    reason, Don't buy or Buy anyway); the first dialog is never shown before the rules have answered."""
     s = tools._session
     assert s.run.rail.paid == [2000] and "alder" in s.paid
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
@@ -195,7 +195,7 @@ def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason
     approved = tools.ard_pay("alder")
     assert "You approved this held order" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
-    # #261: the deal's own records name the person's Approve click and what the rules said
+    # #261: the deal's own records name the person's Buy anyway click and what the rules said
     import json as _json
     maya = s.run.maya
     deals_ = [{_json.loads(p)["x-deal-v0"]["record_type"]: _json.loads(p)["body"] for p in maya.deal_payloads(b[5:])}

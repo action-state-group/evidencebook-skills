@@ -119,13 +119,13 @@ def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], 
     holds the order too, it lists every reason in their place (Steven, 2026-11-23: one ask, every reason). ``rail`` is
     the payment's rail clause, such as "on the simulated rail: no money moves"."""
     weekly, per_order = limits.get("weekly"), limits.get("per_order")
-    if over_limit and weekly:
+    if over_limit and weekly and not per_order:  # both limits failing: the reasons layout, so neither is dropped
         cap, total = weekly
         spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
         title = "This order goes over your weekly limit"
         figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
         foot = LIMIT_FOOT
-    elif over_limit and per_order:
+    elif over_limit and per_order and not weekly:
         cap, value = per_order
         this, limit = msat(value), msat(cap)
         title = "This order goes over your per-order limit"

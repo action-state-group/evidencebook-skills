@@ -66,3 +66,16 @@ def test_the_pack_overrides_the_headline_only_when_the_report_says_the_deal_did_
     plain = pack("Closed: completed.")
     assert plain["seller.outcome.completed"] != receipt.NOT_HELD
     assert plain["page.title"] == "Order receipt" and "No record" not in plain["sides.missing.none"]
+
+
+def test_both_limits_failing_lists_both_as_reasons_so_neither_is_dropped():
+    """Sherlock2 on #275: with the weekly and the per-order limit both failing, the figures of one would drop the
+    other's reason (Steven, 2026-11-23: one ask lists every reason), so the question uses the reasons layout."""
+    reasons = ["over your weekly limit: 5,000 msat with this order, limit 2,000 msat",
+               "over your per-order limit: this order 3,000 msat, limit 2,000 msat"]
+    title, text = screens.hold_question(ITEM, 3000, {"weekly": (2000, 5000), "per_order": (2000, 3000)}, reasons, True)
+    assert title == "The Everyday Rules held this order for your OK"
+    assert text.split("\n")[1:] == [
+        "Over your weekly limit: 5,000 msat with this order, limit 2,000 msat",
+        "Over your per-order limit: this order 3,000 msat, limit 2,000 msat",
+        "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."]

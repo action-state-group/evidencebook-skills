@@ -274,8 +274,8 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     failing = [f for f in result["findings"] if f["verdict"] == "fail"]
     asking = [f for f in failing if _is_ask(f)]
     refusing = [f for f in failing if _is_never(f)]
-    upfront = {"upfront_amount_minor": chain.terms.price_minor, "terms": {"price_minor": chain.terms.price_minor}}
-    reasons = list(dict.fromkeys(_words(f, upfront) for f in asking))  # one line per rule; rules 5 to 22, 26 and 27
+    sealed_check = inp["record"]["agent_input"].get("body") or {}  # the check record's own amounts, as the receipt reads them
+    reasons = list(dict.fromkeys(_words(f, sealed_check) for f in asking))  # one line per rule; rules 5 to 22, 26 and 27
     asks = [f["reason"] for f in failing if f not in asking and f.get("reason")]  # a DO rule that gave no allowance
     sealed = {"status": "evaluated", "ruleset_id": result["ruleset_id"], "definition_digest": result["definition_digest"],
               "checker_sha256": _sha256(engine()), "verdict": result["verdict"],
@@ -390,6 +390,9 @@ def _words(finding: dict, upfront: dict | None = None) -> str:
         words = upfront_words(upfront)
         if words != UPFRONT_OTHER:
             return f"{words} ({upfront['upfront_amount_minor']:,} msat)"
+        # the check's amounts fail neither limit as read here: the rule's own words, each amount with comma and unit
+        return re.sub(r"\b(\d{4,})\b", lambda m: f"{int(m.group(1)):,} msat",
+                      re.sub(r"\s*\([^)]*\)$", "", finding.get("reason", "the up-front amount is above the limit")))
     if isinstance(limit, int) and isinstance(value, int):
         if _period(finding) == "7d":
             return f"over your weekly limit: {value:,} msat with this order, limit {limit:,} msat"

@@ -192,7 +192,7 @@ item, seller, price and rail with "Nothing has been paid yet.", then one line pe
 not paid before "No earlier payment to this merchant from this profile", "The payment is not refundable" and "More than
 a quarter of the price paid up front (2,000 msat)"; a second order adds "Over your weekly limit: 4,000 msat with this
 order, limit 2,000 msat" and "The same act was taken in another deal inside the window". The buttons are Don't buy
-(the default) and Buy anyway. When every reason is a spending limit, the question is titled "This order goes over your
+(the default) and Buy anyway. When one spending limit is the only reason, the question is titled "This order goes over your
 weekly limit" (or "per-order limit") and shows the figures from the sealed caps finding ("Spent this week", "With this
 order", "Your weekly limit") in place of the reasons. An
 order nothing holds gets the payment dialog as before (rare with this demo's terms: rules 8 and 22 ask on every order).
