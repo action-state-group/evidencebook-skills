@@ -25,8 +25,10 @@ DEAL = "deal-0123456789abcdef"
 def _fresh_proof_tries():
     """Each test is its own process as far as the proof's pace and deadline go."""
     adj._PROOF_TRIES.clear()
+    adj._NEW_COPY.clear()
     yield
     adj._PROOF_TRIES.clear()
+    adj._NEW_COPY.clear()
 
 
 # -- #327: one plain line, said once ---------------------------------------------------------------
@@ -606,3 +608,34 @@ def test_a_wrapped_refusal_with_raw_output_is_plain_too(tmp_path, monkeypatch):
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
     out = ds._refusal(RuntimeError('capsulectl refused the ruling: {"error": "x"}'))
     assert out == "this step was refused (the reason is in this party's log, agent.log)"
+
+
+def test_a_new_copy_is_made_once_not_every_round(tmp_path, monkeypatch):
+    """A shared copy seals a disclose record: a copy every round would keep changing the book (the slow-witness e2e)."""
+    old = tmp_path / "old.json"
+    old.write_text("{}")
+    made, proved = [], []
+
+    class P:
+        dir = tmp_path
+
+        def tick(self):
+            pass
+
+        def bundle(self, deal_id, share, to):
+            c = tmp_path / f"new{len(made)}.json"
+            c.write_text("{}")
+            made.append(c)
+            return c
+
+        def proof(self, deal_id, c):
+            proved.append(c.name)
+            out = tmp_path / "proof.json"
+            out.write_text(json.dumps({"stamp_proof": {}, "witness_receipts": []}))
+            return out
+    clock = [1000.0]
+    monkeypatch.setattr(adj.time, "time", lambda: clock[0])
+    for _ in range(4):
+        assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) is None
+        clock[0] += adj.PROOF_EVERY_S
+    assert len(made) == 1 and proved == ["old.json", "new0.json", "new0.json", "new0.json", "new0.json"]

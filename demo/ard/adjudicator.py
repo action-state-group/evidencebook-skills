@@ -345,7 +345,8 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
     pending stamps (``deal tick``), make that copy's stamp proof again and, once it carries the witness's receipt, send it
     to the adjudicator, so ``deal ruling entries`` shows the entry time-stamped (evidencebook-skills#328). A proof is
     always of its own copy (capsulectl binds them). When the book has changed since (a later statement or ruling file),
-    no later stamp covers the old copy, so a new copy is made and, once its own proof carries a receipt, both go again.
+    no later stamp covers the old copy, so one new copy is made, once per process (a shared copy seals a disclose
+    record, so a copy every round would keep changing the book), and, once its own proof carries a receipt, both go.
 
     Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` once after :data:`PROOF_GIVE_UP_S` (said, and
     not tried again by this process), or None when there is nothing new this round. The pace and the deadline are this
@@ -353,6 +354,7 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
     carry an old deadline over."""
     key, now = (p.dir, deal_id), time.time()
     first, last = _PROOF_TRIES.get(key, (now, 0.0))
+    copy = _NEW_COPY.get(key, copy)
     if first is None or now - last < PROOF_EVERY_S:  # gave up in this process, or tried less than PROOF_EVERY_S ago
         return None
     if now - first > PROOF_GIVE_UP_S:
@@ -364,12 +366,13 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
         return GAVE_UP
     _PROOF_TRIES[key] = (first, now)
     p.tick()
-    for c in ([copy] if copy.is_file() else []) + [None]:
-        if c is None:  # the book changed since that copy: a new one, on the checkpoints there are
+    for c in ([copy] if copy.is_file() else []) + ([None] if key not in _NEW_COPY else []):
+        if c is None:  # the book changed since that copy: one new copy, on the checkpoints there are
             try:
                 c = p.bundle(deal_id, "adjudicator", "the deal's adjudicator")
             except pt.Refused:
                 return None  # a record after its last checkpoint: the next tick covers it
+            _NEW_COPY[key] = c
         proof = p.proof(deal_id, c)
         if _receipts(proof):
             # the book and its own proof go together every time, so a retry after a half-sent pair never leaves the
@@ -388,3 +391,5 @@ PROOF_GIVE_UP_S = 900
 GAVE_UP = "gave up"
 #: Per party folder and deal: when this process first tried, and when it last tried (first None: it gave up).
 _PROOF_TRIES: dict[tuple[Path, str], tuple[float | None, float]] = {}
+#: Per party folder and deal: the one new copy this process made (send_proof_once_witnessed), tried from then on.
+_NEW_COPY: dict[tuple[Path, str], Path] = {}
