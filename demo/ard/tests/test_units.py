@@ -343,7 +343,7 @@ def test_the_held_order_question_has_a_layout_for_each_hold():
         body = text.split("\n")
         assert body[0] == "badges from Alder for 1,000 msat. Nothing has been paid yet.", name
         assert body[1:-1] == lines, name  # every reason, and a DO rule (r02) is not one
-        assert body[-1] in (screens.LIMIT_FOOT, screens.RULES_FOOT), name
+        assert body[-1] == screens.HELD_FOOT == "Your answer is saved on the receipt.", name
 
 
 def test_the_limit_is_read_from_the_sealed_check():

@@ -160,10 +160,10 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
 
 
 
-#: The foot of the spending-limit question (Steven's design, evidencebook-skills#270 item 2).
-LIMIT_FOOT = "Your answer is saved on the receipt. Change your limit any time in Everyday Rules."
-#: The foot when a rule other than the limit holds the order (#270 item 3).
-RULES_FOOT = "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
+#: The foot of the held-order question, whichever layout (#270 items 2 and 3). It names no place to change the rules:
+#: the demo has none (Steven's feedback of 2026-11-25; Sherlock2 on #321, option a), and the limit is set where the
+#: windows are opened (ARD_LIMIT_MSAT).
+HELD_FOOT = "Your answer is saved on the receipt."
 HELD_TITLE = "The Everyday Rules held this order for your OK"  # Sherlock2 on #237
 
 
@@ -180,15 +180,15 @@ def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], 
         spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
         title = "This order goes over your weekly limit"
         figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
-        foot = LIMIT_FOOT
+        foot = HELD_FOOT
     elif over_limit and per_order and not weekly:
         cap, value = per_order
         this, limit = msat(value), msat(cap)
         title = "This order goes over your per-order limit"
         figures = [f"This order: {this}", f"Your per-order limit: {limit}"]
-        foot = LIMIT_FOOT
+        foot = HELD_FOOT
     else:
-        title, figures, foot = HELD_TITLE, [r[:1].upper() + r[1:] for r in reasons], RULES_FOOT  # each with a capital (Sherlock2 on #270)
+        title, figures, foot = HELD_TITLE, [r[:1].upper() + r[1:] for r in reasons], HELD_FOOT  # each with a capital (Sherlock2 on #270)
     what = f"{item} from {seller}" if seller else item
     line = f"{what} for {msat(price_msat)}" + (f", {rail}" if rail else "") + ". Nothing has been paid yet."
     return title, "\n".join([line, *figures, foot])

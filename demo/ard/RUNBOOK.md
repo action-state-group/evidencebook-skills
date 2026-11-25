@@ -408,7 +408,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 Run the steps above with a spending limit of 2,000 msat. Every order then waits at Maya's deal check for your OK. The Everyday Rules hold an order over the limit, and also one from a seller she has not paid before, or one that cannot be refunded. Each such order is one question that lists every reason.
 
-1. Before step 4 (or 5) of "Before each run", in the terminal that opens the windows, set the limit, then open the windows as there:
+1. Before you open the windows (step 4 or 5 of "Before each run"), in the terminal that opens them, set the limit, then open them as there:
 
    ```
    export ARD_LIMIT_MSAT=2000
@@ -420,7 +420,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
    - "200 conference badges, delivered by Friday from Kestrel Print for 1,000 msat, on the simulated rail: no money moves. Nothing has been paid yet."
    - "No earlier payment to this merchant from this profile"
    - "The payment is not refundable"
-   - "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
+   - "Your answer is saved on the receipt."
 
    Under them, "Saved with your answer:" and capsulectl's card, which starts "PAUSED FOR YOU" and "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?". Your answer is sealed with every word shown.
 
@@ -446,7 +446,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
 
    **Expect:** the same question as in step 3, and no second question in chat. Click Buy anyway: "You approved this held order (…). Paying now.", and the rest of step 14 as written. The approval is sealed in the deal's own records.
 
-When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and "Change your limit any time in Everyday Rules." This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
+When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and the same last line. This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
 
 To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the windows. Her next payment then runs without the spending limit.
 
