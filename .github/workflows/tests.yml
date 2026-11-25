@@ -45,6 +45,9 @@ jobs:
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
       LEDGER_CLOUD_REF: 9e52270669a2ef8564bcc92f8fcf9f2da2bdd11f  # the adjudicator (ledger-cloud#36, #38), run locally
       CAPSULE_VIEWER_REF: b21b993bca899fa69a4311c406ba86f442b50b2a  # ts/v0.26.1
+      # ledger-cloud is a private repository: its adjudicator is built, and the end-to-end test runs, only when this
+      # read token is set. Without it the job says so and runs the rest.
+      LEDGER_CLOUD_READ_TOKEN: ${{ secrets.LEDGER_CLOUD_READ_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,14 +65,16 @@ jobs:
           path: .deps/capsule-engine
           persist-credentials: false
       - uses: actions/checkout@v4
+        if: env.LEDGER_CLOUD_READ_TOKEN != ''
         with:
           repository: action-state-group/ledger-cloud
           ref: ${{ env.LEDGER_CLOUD_REF }}
           path: .deps/ledger-cloud
+          token: ${{ env.LEDGER_CLOUD_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: .deps/ledger-cloud/ledger_cloud/adjudicator/go.mod  # the newest of the three go.mod versions
+          go-version: "1.27.1"  # the newest go.mod of the three (ledger-cloud's adjudicator)
           cache: false
       - uses: actions/setup-python@v5
         with:
@@ -79,13 +84,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bin
-          key: ard-bins-v2-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.LEDGER_CLOUD_REF }}
-      - name: build capsulectl-deal, capsule-engine and the adjudicator
+          key: ard-bins-v3-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}
+      - name: build capsulectl-deal and capsule-engine
         if: steps.bins.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
           (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
+      - name: build the adjudicator (ledger-cloud, private)
+        if: env.LEDGER_CLOUD_READ_TOKEN != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
           for c in adjudicator-front adjudicator-operator adjudicator-client; do
             (cd .deps/ledger-cloud/ledger_cloud/adjudicator && go build -o "$RUNNER_TEMP/bin/$c" "./cmd/$c")
           done
@@ -94,7 +103,11 @@ jobs:
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" ARD_ADJUDICATOR_BIN="$RUNNER_TEMP/bin" \
             python -m pytest -q --durations=20 -n 4 --dist loadfile demo/ard/tests --ignore demo/ard/tests/test_e2e.py
+      - name: no end-to-end run without ledger-cloud
+        if: env.LEDGER_CLOUD_READ_TOKEN == ''
+        run: echo "::warning::LEDGER_CLOUD_READ_TOKEN is not set, so the adjudicator is not built and tests/test_e2e.py does not run"
       - name: both deals end to end (Action State's hosted witness)
+        if: env.LEDGER_CLOUD_READ_TOKEN != ''
         run: |
           ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" ARD_ADJUDICATOR_BIN="$RUNNER_TEMP/bin" \

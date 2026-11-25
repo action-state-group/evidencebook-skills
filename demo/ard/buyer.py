@@ -203,7 +203,7 @@ class Deal:
     #: the rail token the intent and the check seal (pay.Rail.SEALED: "simulated" on the fake rail)
     rail: str = "lightning"
     #: the buyer's folder on the wire: the seller answers there
-    me: str = BUYER  # the rail token the intent and the check seal (pay.Rail.SEALED: "simulated" on the fake rail)
+    me: str = BUYER
 
 
 def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,

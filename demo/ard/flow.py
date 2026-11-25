@@ -248,7 +248,16 @@ class SellerAgent:
                 if not check.get("proceed"):
                     raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
                 return p.perform(deal_id, check["check_id"], info["observed"])
-            act = self._step(deal_id, "act", deliver)
+            if self._done(deal_id, "held"):
+                continue  # this seller's own check held the delivery: it is not retried every round
+            try:
+                act = self._step(deal_id, "act", deliver)
+            except pt.Refused as exc:
+                if "held by this seller's own check" not in str(exc):
+                    raise
+                self._mark(deal_id, "held")
+                self.say(str(exc))
+                continue
             wire.send(self.home, to, deal_id, "act", act)
             if self.name != "kestrel":  # Kestrel says nothing on the row (plan Q3): the ruling rests on its own record
                 st = self._step(deal_id, "statement-sent", lambda: p.statement(deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
@@ -273,7 +282,8 @@ class SellerAgent:
                 self._mark(deal_id, "dispute-kept")
                 self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: sending this seller's records to the "
                          "adjudicator")
-            copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)
+            copy = Path(self._step(deal_id, "adj-copy",  # one copy: a retry sends the same one, never a second
+                                   lambda: p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)))
             case = adj.open_case(f, copy)  # the front keeps each object once: a retry stores nothing twice
             p.note(CASE, {"deal_id": deal_id, "case": case["case"], "copy": case["copies"][0]}, subject_ref=deal_id)
             self._mark(deal_id, "dispute")

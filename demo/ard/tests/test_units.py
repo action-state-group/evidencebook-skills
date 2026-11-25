@@ -126,3 +126,17 @@ def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
         assert got["verdict"] == "LIMIT", got
         row = next(r for r in got["rows"] if r["row"] == "disputes-against")
         assert row["result"] in ("fail", "not_read"), row
+
+
+def test_a_witness_that_cannot_be_reached_is_none_yet_not_a_failed_ruling(monkeypatch, tmp_path):
+    a = adj.Adjudicator(tmp_path)
+    calls = []
+
+    def unreachable(self, *args):
+        calls.append(args)
+        raise adj.AdjudicatorError("adjudicator-operator witness: no route to the witness")
+    monkeypatch.setattr(adj.Adjudicator, "operator", unreachable)
+    monkeypatch.setattr(adj.time, "sleep", lambda s: None)
+    assert a.witness(seconds=0) == 0 and calls == [("witness",)]
+    monkeypatch.setattr(adj.Adjudicator, "operator", lambda self, *args: {"delivered": 2})
+    assert a.witness() == 2

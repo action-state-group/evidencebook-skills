@@ -463,7 +463,9 @@ def ard_rule(seller: str) -> None:
         r = a.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
         print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name} "
               f"({'new' if r.get('sealed') else 'already recorded'}).")
-        if pt.witnessed():
+        if pt.witnessed() and not r.get("sealed"):
+            print("It was already recorded; each party's window shows the time it was stamped.")
+        elif pt.witnessed():
             if a.witness():
                 print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
             else:

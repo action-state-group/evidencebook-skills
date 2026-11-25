@@ -167,7 +167,10 @@ class Adjudicator:
         delivered (0 when the witness took none in that time)."""
         stop = time.time() + seconds
         while True:
-            n = int(self.operator("witness").get("delivered", 0) or 0)
+            try:  # the operator exits non-zero when the witness cannot be reached: that is "none yet", not a failed ruling
+                n = int(self.operator("witness").get("delivered", 0) or 0)
+            except AdjudicatorError:
+                n = 0
             if n or time.time() >= stop:
                 return n
             time.sleep(5)
