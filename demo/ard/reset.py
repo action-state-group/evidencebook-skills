@@ -310,8 +310,10 @@ def trust_hash(recipe: dict) -> str:
     out, ``version`` defaulting to "1.0.0". The decode returns a recipe like the demo's as it came, but normalizes
     some others (an extension without a description gets "", empty ``args``, ``envs`` or ``env_keys`` are dropped,
     disallowed ``envs`` too), so any recipe outside the demo's shape is refused rather than guessed: only stdio
-    extensions with a description, non-empty ``args`` and no ``envs`` or ``env_keys``. Checked against the three trust
-    files the demo's windows made on 2026-11-25."""
+    extensions with a description, non-empty ``args`` and no ``envs`` or ``env_keys``. Checked against real files: it
+    gave the names of the three trust files Goose Desktop 1.59.2 made when the demo's windows were trusted in a
+    by-hand run at evidencebook-skills a4e554d (2026-11-25 02:03 CST; Alder 0d856bd5…, Kestrel 0c0d25da…, Maya
+    673ea9e2…), and the fixture test checks one more."""
     r = {"version": "1.0.0", **recipe}
     out = {k: r[k] for k in _RECIPE_KEYS if k in r}
     if out.get("extensions"):

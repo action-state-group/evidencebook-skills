@@ -157,3 +157,12 @@ def test_the_search_path_env_is_valid_json_with_an_expanded_absolute_path(calls,
     assert paths[0].endswith("demo/ard/goose/locked")
     prefix = next(arg for arg in calls[0] if arg.startswith("ARD_ACP_PREFIX="))
     assert prefix.endswith("ard-demo/acp") and "~" not in prefix and "$" not in prefix
+
+
+def test_a_recipe_reset_could_not_clear_opens_nothing(calls, capsys, monkeypatch):
+    def refuse(recipes, root):
+        raise ValueError("trust_hash covers the demo's recipe shape only")
+    monkeypatch.setattr(ow.reset, "note_trust", refuse)
+    assert ow.main(["--rail", "fake"]) == 2
+    assert calls == []  # no Goose started, no window opened
+    assert "the demo's recipe shape only; nothing was opened" in capsys.readouterr().err

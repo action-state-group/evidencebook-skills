@@ -242,7 +242,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## Before each run
 
-1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears Goose's trust in the demo's own recipes, so each window asks Trust and Execute again. Goose keeps recipe trust in one place for the demo's Goose and your own; reset deletes only the trust files of the recipes open-windows.py opened (it computes their names the way Goose 1.59.2 does), so a recipe you trusted keeps its trust. The demo home is `~/.config/ard-commerce-demo`.
+1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears Goose's trust in the demo's own recipes, so each window asks Trust and Execute again. Goose keeps recipe trust in one place for the demo's Goose and your own; reset deletes only the trust files of the recipes open-windows.py opened (it computes their names the way Goose 1.59.2 does), so any other recipe you trusted keeps its trust. The demo home is `~/.config/ard-commerce-demo`.
 
    ```
    osascript -e 'quit app "Goose"'

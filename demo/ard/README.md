@@ -65,8 +65,8 @@ deletes the home (`$ARD_HOME`, default `~/.config/ard-commerce-demo`,
 keys and history included), and clears Goose's trust in the recipes the demo's windows opened, so each window asks
 Trust and Execute again. Goose 1.59.2 names each trust file by a hash of the recipe, which `reset.py` computes the way
 Goose does (`trust_hash`), so `open-windows.py` notes the hash of each recipe it opens (`ard-recipe-trust.json` in the
-demo's own Goose root, which every home shares) and reset deletes exactly those files. A recipe you trusted keeps its
-trust; when no noted file is there, reset deletes nothing and says so.
+demo's own Goose root, which every home shares) and reset deletes exactly those files. Any other recipe you
+trusted keeps its trust; when no noted file is there, reset deletes nothing and says so.
 
 A home seeded at other prices (before 2026-11-18's move to whole satoshis, say) is refused by `seed`: run
 `reset`, then `seed`. After a paid run Alder's card reads 25 deals. Run `reset` and `seed` before the next rehearsal so the

@@ -79,7 +79,7 @@ def _done(*procs: subprocess.Popen) -> None:
 
 MINE, DEMO_A, DEMO_B = "a" * 64, "b" * 64, "c" * 64
 #: A recipe open-windows.py builds for Maya (paths made neutral, the skill text left out), and the name of the trust file
-#: Goose Desktop 1.59.2 made when its link was opened and trusted (2026-11-25).
+#: Goose Desktop 1.59.2 made when its link was opened and trusted (2026-11-25 09:10:13Z, on the Mac of the by-hand run).
 FIXTURE = Path(__file__).parent / "fixtures" / "goose-trust-recipe.json"
 FIXTURE_HASH = "9da4a35c36d5212244208afcf1dfd3f7efb54c33b5dc0aee0925fe406b515425"
 

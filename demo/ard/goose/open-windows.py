@@ -261,7 +261,11 @@ def main(argv: list[str] | None = None) -> int:
             print(link(role, args.rail, placeholders=True))
     else:
         recipes = [recipe(role, args.rail) for role in roles]
-        reset.note_trust(recipes, root)  # before any window can be trusted: reset deletes exactly these trust files
+        try:  # before any window can be trusted: reset deletes exactly these trust files
+            reset.note_trust(recipes, root)
+        except ValueError as e:  # a recipe reset could not clear again: open nothing rather than leave trust behind
+            print(f"open-windows.py: {e}; nothing was opened (evidencebook-skills#277)", file=sys.stderr)
+            return 2
         if failed := launch_goose(root):
             print(failed, file=sys.stderr)
             return 1
