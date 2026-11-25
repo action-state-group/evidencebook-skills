@@ -340,25 +340,31 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     limit = limits.limit_msat()
     if limit is not None:
         limits.pin(maya, limit)
+    else:
+        limits.unpin(maya)
     deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name)
-    try:
+    try:  # until the offer is sent, any failure cancels it: the seller never hears of it
         inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
         check = check_payment(maya, deal, inv.payment_hash)
+        if check.get("verdict") == "deny":  # a rule that refuses (23 to 25): not put to the person, nothing is paid
+            raise pt.Refused("refused by your rules, not put to you: " + "; ".join(limits.refusal(check)) +
+                             "; nothing was sent to the seller and nothing was paid")
         held = limits.read(check, limit)
-    except Exception:
+        q = question(deal, check, held, summary, rail_words)
+        answer = ask(q)
+        words = said(f"{q.title}\n{q.text}")
+        if answer is not True and answer != "yes":
+            if answer == "no" and not check.get("proceed"):
+                maya.approve(deal.deal_id, check, "hold", f"{words}\nAnswer: {q.no}")
+            cancel_draft(maya, deal)
+            return None
+        if not check.get("proceed"):
+            maya.approve(deal.deal_id, check, "proceed", f"{words}\nAnswer: {q.yes}")
+    except BaseException:
         cancel_draft(maya, deal)
         raise
-    q = question(deal, check, held, summary, rail_words)
-    answer = ask(q)
-    words = said(f"{q.title}\n{q.text}")
-    if answer is not True and answer != "yes":
-        if answer == "no" and not check.get("proceed"):
-            maya.approve(deal.deal_id, check, "hold", f"{words}\nAnswer: {q.no}")
-        cancel_draft(maya, deal)
-        return None
-    if not check.get("proceed"):
-        maya.approve(deal.deal_id, check, "proceed", f"{words}\nAnswer: {q.yes}")
     send_deal(home, maya, deal, chosen, say)
+    maya.sending(deal.deal_id, check["check_id"])  # refused here, nothing has moved
     payment = rail.pay_invoice(inv)
     pay(home, maya, deal, check, payment.reference, simulated=simulated)
     return deal, payment

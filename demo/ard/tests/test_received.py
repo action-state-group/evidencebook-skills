@@ -108,7 +108,7 @@ def test_two_deals_to_confirm_ask_which(session, monkeypatch, sent):
 def test_the_payment_tool_seals_nothing_after_a_full_delivery(session, monkeypatch, sent):
     import types
     a = types.SimpleNamespace(price_msat=2000)
-    session.picked, session.assessed, session.keys, session.declined = {"alder"}, {"alder": a}, {"alder": "k"}, set()
+    session.picked, session.assessed, session.keys, session.declined = {"alder"}, {"alder": a}, {"alder": "k"}, {}
     session.rail = None
     session.adjudicator = types.SimpleNamespace(named=lambda: {})
     monkeypatch.setenv("ARD_APPROVAL", "none")

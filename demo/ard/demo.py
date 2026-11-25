@@ -115,6 +115,16 @@ class Script:
             return True
         return input("[y/N] ").strip().lower() in ("y", "yes")
 
+    def answer(self, q: buyer.Question) -> str:
+        """The payment question at the terminal, as the dialog shows it: its title, its text (with capsulectl's card
+        when the check paused) and its two choices; ``yes`` or ``no`` as typed (Enter is the safe one)."""
+        print(f"\n{q.title}\n{q.text}")
+        if self.auto:
+            print(f"[--auto: {q.yes}]")
+            return "yes"
+        typed = input(f"[{q.yes}: y / {q.no}: N] ").strip().lower()
+        return "yes" if typed in ("y", "yes") else "no"
+
     def pause(self, prompt: str) -> None:
         if not self.auto:
             input(f"\n[{prompt}] ")
@@ -158,8 +168,8 @@ class Script:
             return None
         words = "over Lightning, which moves real money" if self.real else "on the simulated rail: no money moves"
         made = buyer.open_and_pay(self.home, self.maya, key, self.keys[key], a, self.adjudicator.named(), self.rail,
-                                  f"Pay {name} {screens.msat(a.price_msat)} {words}.", self.ask, print,
-                                  simulated=not self.real)
+                                  f"Pay {name} {screens.msat(a.price_msat)} {words}.", self.answer, print,
+                                  simulated=not self.real, rail_words=words)
         if made is None:
             print("not approved: nothing was sent to the seller and nothing was paid")
             return None

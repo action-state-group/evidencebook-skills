@@ -172,6 +172,7 @@ def _pay_world(monkeypatch, check):
     """open_and_pay with every party and rail step recorded in ``calls``; the check returns ``check``."""
     calls, sealed = [], []
     monkeypatch.delenv("ARD_LIMIT_MSAT", raising=False)
+    monkeypatch.setattr(buyer.limits, "unpin", lambda maya: calls.append("unpin"))
     monkeypatch.setattr(buyer, "draft_deal", lambda *a, **k: calls.append("draft") or buyer.Deal("deal-01", "alder", "k", 1000, "o"))
     monkeypatch.setattr(buyer, "send_deal", lambda *a, **k: calls.append("send"))
     monkeypatch.setattr(buyer, "cancel_draft", lambda *a, **k: calls.append("cancel"))
@@ -185,6 +186,9 @@ def _pay_world(monkeypatch, check):
 
     class Who:
         name = "maya"
+
+        def sending(self, deal_id, check_id):
+            pass
 
         def approve(self, deal_id, check, choice, said):
             sealed.append((choice, said))
@@ -201,11 +205,11 @@ def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
     def ask(answer):
         return lambda q: calls.append("ask") or shown.append(q) or answer
     assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(False), print, simulated=True) is None
-    assert calls == ["draft", "invoice", "check", "ask", "cancel"]
+    assert calls == ["unpin", "draft", "invoice", "check", "ask", "cancel"]
     assert (shown[0].title, shown[0].text, shown[0].yes) == ("Approve this payment", "Pay?", "Pay")  # no card: a pass
     calls.clear()
     assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(True), print, simulated=True)
-    assert calls == ["draft", "invoice", "check", "ask", "send", "paid", "pay"]
+    assert calls == ["unpin", "draft", "invoice", "check", "ask", "send", "paid", "pay"]
     assert sealed == []  # a check that passed needs no answer sealed
 
 
@@ -228,6 +232,59 @@ def test_only_a_no_to_a_paused_payment_is_sealed(monkeypatch):
                                   simulated=True) is None
         assert calls[-1] == "cancel" and "send" not in calls and "paid" not in calls
         assert [(c, s.rsplit("\n", 1)[1]) for c, s in sealed] == want
+
+
+def test_a_payment_the_rules_refuse_is_not_put_to_the_person(monkeypatch):
+    # a failing NEVER rule (23 to 25) denies: no dialog, nothing sealed as an answer, the unsent offer cancelled
+    never = {"id": "r23-secrets-and-authentication", "check": "credential_pattern/1.0.0", "verdict": "fail",
+             "reason": "the act carries a credential"}
+    calls, sealed, Rail, who = _pay_world(monkeypatch, {"verdict": "deny", "proceed": False, "check_id": "c",
+                                                        "rules": {"status": "evaluated", "verdict": "deny", "findings": [never]}})
+    with pytest.raises(buyer.pt.Refused, match="refused by your rules, not put to you: the act carries a credential"):
+        buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?",
+                           lambda q: pytest.fail("asked"), print, simulated=True)
+    assert calls == ["unpin", "draft", "invoice", "check", "cancel"] and sealed == []
+
+
+def test_a_failure_after_the_check_cancels_the_unsent_offer(monkeypatch):
+    calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": False, "check_id": "c", "card": "C"})
+
+    def broken(q):
+        raise RuntimeError("the dialog crashed")
+    with pytest.raises(RuntimeError):
+        buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?", broken, print, simulated=True)
+    assert calls[-1] == "cancel" and "send" not in calls
+
+
+def test_the_payment_is_counted_as_sent_before_money_moves(monkeypatch):
+    # capsulectl checks the rules again at `settle --sent`: a refusal there must come before the rail pays
+    calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": True, "check_id": "c"})
+    who.sending = lambda deal_id, check_id: calls.append("sending")
+    buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?", lambda q: "yes", print, simulated=True)
+    assert calls.index("sending") < calls.index("paid")
+
+
+def test_unsetting_the_limit_removes_the_demos_checker(tmp_path):
+    import limits
+    ran = []
+    maya = type("M", (), {"dir": tmp_path, "run": lambda self, *a: ran.append(a)})()
+    limits.unpin(maya)
+    assert ran == []  # no limits file of the demo's: the profile is left as it is
+    (tmp_path / "spending-limit.json").write_text("{}")
+    limits.unpin(maya)
+    assert ran == [("profile", "update", "--rules-checker", "")] and not (tmp_path / "spending-limit.json").exists()
+
+
+def test_the_terminal_shows_the_question_and_returns_its_answer(monkeypatch, capsys):
+    import demo
+    q = buyer.Question("This order goes over your weekly limit", "line\n\nWhat your answer is recorded with:\nCARD", "Buy anyway",
+                       "Don't buy")
+    run = type("R", (), {"auto": False})()
+    for typed, want in (("y", "yes"), ("", "no"), ("n", "no")):
+        monkeypatch.setattr("builtins.input", lambda prompt: typed)
+        assert demo.Script.answer(run, q) == want
+    out = capsys.readouterr().out
+    assert "This order goes over your weekly limit\nline\n\nWhat your answer is recorded with:\nCARD" in out
 
 
 def _rules(*findings, verdict="escalate", limit=2000):
@@ -263,7 +320,7 @@ def test_the_held_order_question_has_a_layout_for_each_hold():
                                       "No earlier payment to this merchant from this profile"]),
     }
     for name, (findings, title, lines) in cases.items():
-        held = limits.read({"rules": _rules(*findings)}, 2000)
+        held = limits.read({"verdict": "pause", "rules": _rules(*findings)}, 2000)
         got_title, text = screens.hold_question("badges", 1000, held.limits, held.reasons, held.over_limit, "Alder")
         assert got_title == title, name
         body = text.split("\n")
@@ -274,12 +331,15 @@ def test_the_held_order_question_has_a_layout_for_each_hold():
 
 def test_the_limit_is_read_from_the_sealed_check():
     import limits
-    assert limits.read({"rules": _rules(verdict="allow")}, 2000) is None  # within the limit
+    assert limits.read({"verdict": "pass", "rules": _rules(verdict="allow")}, 2000) is None  # within the limit
+    # a deny the counterparty's History alone caused: capsulectl asks (pause), so it is a hold
+    assert limits.read({"verdict": "pause", "rules": _rules(NEW_MERCHANT, verdict="deny")}, 2000).reasons == [
+        "no earlier payment to this merchant from this profile"]
     assert limits.read({"rules": {"status": "not_configured"}}, None) is None  # no limit set
     with pytest.raises(limits.LimitError, match="was not checked"):
         limits.read({"rules": {"status": "not_evaluated", "reason": "the rules checker refused the record"}}, 2000)
     with pytest.raises(limits.LimitError, match="did not apply your spending limit"):
-        limits.read({"rules": _rules(verdict="allow", limit=50000)}, 2000)  # the pack's own figure: the file was not read
+        limits.read({"verdict": "pass", "rules": _rules(verdict="allow", limit=50000)}, 2000)  # the pack's own figure: the file was not read
 
 
 def test_a_reason_reads_amounts_with_commas_and_units():

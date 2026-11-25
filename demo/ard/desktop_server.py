@@ -176,7 +176,8 @@ class Session:
         self.pack: packs.Pack | None = None
         self.picked: set[str] = set()
         self.deals: list[buyer.Deal] = buyer.deals_from_notes(self.maya)  # a reopened window keeps its deals
-        self.declined: set[str] = set()
+        #: the sellers whose last payment dialog was declined, each with that dialog's title (a held order's question)
+        self.declined: dict[str, str] = {}
         self.pay_lock = threading.Lock()
         self.log: list[str] = []
         threading.Thread(target=self._rulings, daemon=True).start()
@@ -373,11 +374,12 @@ def ard_pay(seller: str) -> None:
     summary = f"Pay {name} {screens.msat(a.price_msat)} {words}."
     with s.pay_lock:
         if key in s.declined:
-            s.declined.discard(key)
+            held = s.declined.pop(key)
             raise RuntimeError(
                 f"the presenter did not approve the last payment to {name}, so this call opens no dialog and pays nothing. "
                 f'The question is: "Pay {name} {screens.msat(a.price_msat)} '
-                + ("over Lightning, which moves real money?" if _real() else "on the simulated rail, where no money moves?")
+                + ("over Lightning, which moves real money" if _real() else "on the simulated rail, where no money moves")
+                + (f", although {held[:1].lower() + held[1:]}?" if held and held != "Approve this payment" else "?")
                 + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
                 "your turn, and call ard_pay again only after she says yes.")
         answer: dict = {}
@@ -395,7 +397,7 @@ def ard_pay(seller: str) -> None:
         if made is None:
             how = answer.get("how", NOT_SHOWN)
             if how == NO:
-                s.declined.add(key)
+                s.declined[key] = getattr(answer.get("q"), "title", "")
             reasons = (" " + screens.rules_held(held.reasons)) if held is not None else ""
             raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
                                "was paid." + reasons + " Do not retry on your own; if Maya asks again, confirm with her first."

@@ -81,6 +81,24 @@ def pin(maya: pt.Party, limit: int) -> None:
     maya.run("profile", "update", "--rules-checker", pin_file)
 
 
+def unpin(maya: pt.Party) -> None:
+    """With no limit set, remove the checker :func:`pin` set (``profile update --rules-checker ""``), so a profile used
+    with a limit before does not keep it. Only the demo's own pin: a profile with no limits file of the demo's is left
+    as it is."""
+    limits = maya.dir / "spending-limit.json"
+    if not limits.exists():
+        return
+    maya.run("profile", "update", "--rules-checker", "")
+    limits.unlink()
+
+
+def refusal(check: dict) -> list[str]:
+    """Why the rules refused a check (its verdict ``deny``): each failing rule in its own words."""
+    findings = (check.get("rules") or {}).get("findings") or []
+    out = [words(f) for f in findings if f.get("verdict") == "fail"]
+    return list(dict.fromkeys(out)) or ["the Everyday Rules refused it"]
+
+
 @dataclass
 class Held:
     """What the rules said about an order, read from the check's sealed rules block."""
@@ -132,7 +150,9 @@ def read(check: dict, limit: int | None) -> Held | None:
     if not caps or any(f.get("limit") != limit for f in caps):
         raise LimitError("the rules checker did not apply your spending limit (its caps findings carry another figure); "
                          "nothing was paid")
-    if rules.get("verdict") != "escalate":
+    # what the check acts on: capsulectl pauses on an escalation, and on a deny the counterparty's History alone
+    # caused, which never refuses on its own (it asks); any other deny is refused before this (buyer.open_and_pay)
+    if check.get("verdict") != "pause" or rules.get("verdict") not in ("escalate", "deny"):
         return None
     asking = [f for f in findings if f.get("verdict") == "fail" and _is_ask(f)]
     unchecked = [f for f in findings if f.get("verdict") == "not_evaluable" and f.get("reason") != DECLARED]
