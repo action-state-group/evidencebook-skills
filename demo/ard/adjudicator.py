@@ -348,28 +348,21 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
     no later stamp covers the old copy, so a new copy is made and, once its own proof carries a receipt, both go again.
 
     Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` once after :data:`PROOF_GIVE_UP_S` (said, and
-    not tried again by this process), or None when there is nothing new this round."""
-    mark = p.dir / "handled" / f"{deal_id}.proof-tried"
-    now = time.time()
-    if mark.exists():
-        if now - mark.stat().st_mtime < PROOF_EVERY_S:
-            return None
-        first = float(mark.read_text() or now)
-    else:
-        mark.parent.mkdir(exist_ok=True)
-        first = now
-    mark.write_text(str(first))
-    if (p.dir, deal_id) in _GAVE_UP:
+    not tried again by this process), or None when there is nothing new this round. The pace and the deadline are this
+    process's own (:data:`_PROOF_TRIES`): a reopened window is a new process and starts again, with nothing on disk to
+    carry an old deadline over."""
+    key, now = (p.dir, deal_id), time.time()
+    first, last = _PROOF_TRIES.get(key, (now, 0.0))
+    if first is None or now - last < PROOF_EVERY_S:  # gave up in this process, or tried less than PROOF_EVERY_S ago
         return None
     if now - first > PROOF_GIVE_UP_S:
-        # not a delivery: nothing is noted, so a reopened window (a new process, the mark cleared) tries again
-        p.log(f"deal {deal_id}: no witness receipt for this party's book after {PROOF_GIVE_UP_S} s; stopped trying")
-        _GAVE_UP.add((p.dir, deal_id))
-        mark.unlink(missing_ok=True)
-        say(f"this party's book of deal {deal_id[5:13]}: {pt.WITNESS_NAME} has not time-stamped it in "
-            f"{PROOF_GIVE_UP_S // 60} minutes; the ruling is entered, its entry not time-stamped. Reopening this window "
-            "tries again.")
+        _PROOF_TRIES[key] = (None, now)
+        p.log(f"deal {deal_id}: this party's time-stamped book not sent to the adjudicator in {PROOF_GIVE_UP_S} s; "
+              "stopped trying")
+        say(f"this party's book of deal {deal_id[5:13]}: its time-stamp could not be sent to the adjudicator in "
+            f"{PROOF_GIVE_UP_S // 60} minutes; the ruling is entered. Reopening this window tries again.")
         return GAVE_UP
+    _PROOF_TRIES[key] = (first, now)
     p.tick()
     for c in ([copy] if copy.is_file() else []) + [None]:
         if c is None:  # the book changed since that copy: a new one, on the checkpoints there are
@@ -391,6 +384,7 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
 
 #: How long a party keeps looking for its book's witness receipt (send_proof_once_witnessed).
 PROOF_GIVE_UP_S = 900
-#: send_proof_once_witnessed stopped looking, in this process (:data:`_GAVE_UP`).
+#: send_proof_once_witnessed stopped looking, in this process.
 GAVE_UP = "gave up"
-_GAVE_UP: set[tuple[Path, str]] = set()
+#: Per party folder and deal: when this process first tried, and when it last tried (first None: it gave up).
+_PROOF_TRIES: dict[tuple[Path, str], tuple[float | None, float]] = {}

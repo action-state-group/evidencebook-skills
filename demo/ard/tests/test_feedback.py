@@ -21,6 +21,14 @@ import wire
 DEAL = "deal-0123456789abcdef"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_proof_tries():
+    """Each test is its own process as far as the proof's pace and deadline go."""
+    adj._PROOF_TRIES.clear()
+    yield
+    adj._PROOF_TRIES.clear()
+
+
 # -- #327: one plain line, said once ---------------------------------------------------------------
 
 def test_a_failure_reads_as_one_plain_line_and_never_carries_raw_output():
@@ -262,8 +270,7 @@ def test_a_stamp_proof_goes_again_only_once_it_carries_the_receipt(tmp_path, mon
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
     assert ticks == [1]  # throttled: not every round
-    import os
-    os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))  # PROOF_EVERY_S later
+    clock[0] += adj.PROOF_EVERY_S
     receipts[0] = [{"receipt": "r"}]
     said = []
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", said.append) == copy
@@ -299,14 +306,50 @@ def test_a_changed_book_goes_again_with_a_time_stamped_copy_and_the_search_ends(
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) == new
     assert sent == [("book-seller", "new.json"), ("proof-seller", "proof-new.json")]
     clock[0] += adj.PROOF_GIVE_UP_S + 1
-    import os
-    os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))
     said = []
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) == adj.GAVE_UP
-    assert "Reopening this window tries again" in said[0]
-    assert not (tmp_path / "handled" / f"{DEAL}.proof-tried").exists()  # a reopened window starts again
+    assert said == ["this party's book of deal 01234567: its time-stamp could not be sent to the adjudicator in 15 "
+                    "minutes; the ruling is entered. Reopening this window tries again."]
+    clock[0] += adj.PROOF_EVERY_S
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) is None  # not this process
-    adj._GAVE_UP.clear()
+    assert not (tmp_path / "handled").exists()  # nothing on disk carries the deadline over
+
+
+def test_a_reopened_window_tries_again_however_long_after(tmp_path, monkeypatch):
+    """Codex's and Claude's round 3: a give-up never makes the next process give up at once."""
+    ticks = []
+
+    class P:
+        dir = tmp_path
+
+        def tick(self):
+            ticks.append(1)
+
+        def bundle(self, deal_id, share, to):
+            raise pt.Refused("after its last checkpoint")
+
+        def proof(self, deal_id, c):
+            out = tmp_path / "proof.json"
+            out.write_text(json.dumps({"stamp_proof": {}, "witness_receipts": []}))
+            return out
+
+        def log(self, line):
+            pass
+    clock = [1000.0]
+    monkeypatch.setattr(adj.time, "time", lambda: clock[0])
+    copy = tmp_path / "c.json"
+    copy.write_text("{}")
+    adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None)
+    clock[0] += adj.PROOF_GIVE_UP_S + 1
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) == adj.GAVE_UP
+    for _ in range(3):  # the old process's later rounds
+        clock[0] += adj.PROOF_EVERY_S
+        assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
+    adj._PROOF_TRIES.clear()  # the window reopened: a new process
+    clock[0] += 2 * adj.PROOF_GIVE_UP_S
+    before = len(ticks)
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
+    assert len(ticks) == before + 1  # it tried, not gave up
 
 
 def test_a_book_noted_before_this_change_is_proved_from_the_adjudicators_copy(tmp_path, monkeypatch):
@@ -534,8 +577,7 @@ def test_a_half_sent_book_and_proof_go_again_as_a_pair(tmp_path, monkeypatch):
     monkeypatch.setattr(adj.time, "time", lambda: clock[0])
     with pytest.raises(OSError):
         adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "buyer", lambda *_: None)
-    import os
-    os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))
+    clock[0] += adj.PROOF_EVERY_S
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "buyer", lambda *_: None) == old
     assert sent == ["book-buyer", "book-buyer", "proof-buyer"]
 
