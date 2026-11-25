@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills c4e262a · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0, receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills efbe791 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0: the receipt pages, and the History page vendors 0.25.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: run by hand once at 859c27b plus these fixes on the simulated rail (2026-11-24, Goose Desktop 1.59.2, macOS: setup from a clean Goose, the three windows, the pick, the deal, the receipt pages and the spending-limit hold on its Approve path); that run started Goose on its own settings folder (GOOSE_PATH_ROOT) with the pinned adapter found through GOOSE_SEARCH_PATHS. The Decline path has not been run by hand, and the real-payment steps have not been run at these pins at all. It has not yet been run by hand at this pin (c4e262a), which adds the capsule-viewer 0.25.0 receipt pages (#264) and the receipt's approval and rules lines (#265). The demo's automated tests pass at these pins in CI.
+Status: run by hand at 28118b6 on the simulated rail with `ARD_LIMIT_MSAT=2000` (Steven, 2026-11-24, Goose Desktop 1.59.2, macOS, a new demo home): steps 1 to 19 except step 16 and the optional steps, both orders' one dialog, the second order's Decline (nothing paid), the fresh yes after it and Approve, and both receipts' approval lines. That run found one wrong line, an extra "another of the rules' checks" reason in each receipt's step 3. Changed since then: that line's fix (Steven's patch, evidencebook-skills#237) and the History page on capsule-viewer 0.25.0 (#271). It has not been run by hand at this pin (efbe791), and the real-payment steps have not been run at these pins at all. An earlier run at 859c27b plus fixes covered setup from a clean Goose with Goose on its own settings folder (GOOSE_PATH_ROOT) and the pinned adapter found through GOOSE_SEARCH_PATHS. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -119,7 +119,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q c4e262aa909a7be3a861b876fa7c6ea5d0a8092f
+   git -C evidencebook-skills checkout -q efbe7918273c3d3ee9892bbdbb658054f36b0cdc
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/capsule-engine
@@ -147,11 +147,14 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
    **Expect:** pip ends with no error.
 
-2. Already cloned? Move the checkout to this pin instead.
+2. Already cloned? Move the checkout to this pin instead, then rerun the pip line from step 1, so the venv gets the pinned capsule-viewer. Without it, an earlier capsule-viewer stays installed and the receipt pages are the old ones (evidencebook-skills#239).
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach c4e262aa909a7be3a861b876fa7c6ea5d0a8092f
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach efbe7918273c3d3ee9892bbdbb658054f36b0cdc
+   cd $HOME/ard-demo/evidencebook-skills && .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@89b75d6ab5f34bada727082758562071d494ce0b"
    ```
+
+   **Expect:** pip ends with no error.
 
 3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
 
@@ -307,7 +310,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at c4e262a.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at efbe791.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
@@ -452,8 +455,24 @@ Before the run, in the shell that starts the windows, set the limit to the first
    Order 200 more badges from Alder Print Co.
    ```
 
-   **Expect:** one dialog, "Held for your OK" (default Decline), after Maya's deal check: "Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves. The Everyday Rules held this order for your OK: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat); the payment is not refundable; the up-front amount 2000 is above the share limit; the same act was taken in another deal inside the window. Nothing has been paid yet. Approve this order anyway, or decline?" (on the real rail the first sentence is the real-money one from step 12). Say aloud: every rule that asks is in this one question, and nothing is paid until the answer. Click Decline: nothing is paid, Maya tells you which rules held the order ("Held for your OK at deal check, nothing paid. …"), the wallet balances do not change and Maya's History card still counts 1 deal.
-   Click Approve instead: the screen says "You approved this held order (…). Paying now." and the payment goes on. The approval is sealed in the deal's own records (and as a note in Maya's book). Open this deal's receipt (step 19): step 3 reads "Checked against the Everyday Rules (0.3.8) and your spending limit: over your limit, a payment that cannot be undone, more than a quarter of the price paid up front and a repeat of a recent payment to this seller, so the order was held for your approval" and step 4 "Held by your spending limit, then approved by you". With the limit set, the first order (step 12) is the same one dialog, with that order's reasons (a seller not paid before, not refundable, the up-front amount), in place of the payment dialog. Not yet run by hand at this text: the one-dialog flow (evidencebook-skills#237).
+   **Expect:** one dialog, "Held for your OK" (default Decline), after Maya's deal check: "Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves. The Everyday Rules held this order for your OK: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000 msat, this order would bring it to 4,000 msat); the payment is not refundable; the up-front amount 2000 is above the share limit; the same act was taken in another deal inside the window. Nothing has been paid yet. Approve this order anyway, or decline?" (on the real rail the first sentence is the real-money one from step 12). Say aloud: every rule that asks is in this one question, and nothing is paid until the answer. With the limit set, the first order (step 12) is the same one dialog, with that order's reasons (a seller not paid before, not refundable, the up-front amount), in place of the payment dialog.
+
+   Click Decline.
+   **Expect:** nothing is paid, Maya tells you which rules held the order ("Held for your OK at deal check, nothing paid. …"), the wallet balances do not change and Maya's History card still counts 1 deal.
+
+   Ask for the order again:
+
+   ```
+   Order 200 more badges from Alder Print Co.
+   ```
+
+   **Expect:** no dialog yet. The payment tool refuses the first call after a Decline, so Maya asks you for a fresh yes ("Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"; on the real rail, "over Lightning, which moves real money?"). Answer:
+
+   ```
+   Yes.
+   ```
+
+   **Expect:** the same dialog as above. Click Approve: the screen says "You approved this held order (…). Paying now." and the payment goes on. The approval is sealed in the deal's own records (and as a note in Maya's book). Open this deal's receipt (step 19): step 3 reads "Checked against the Everyday Rules (0.3.8) and your spending limit: over your limit, a payment that cannot be undone, more than a quarter of the price paid up front and a repeat of a recent payment to this seller, so the order was held for your approval" and step 4 "Held by your spending limit, then approved by you". Run by hand at 28118b6 (Steven, 2026-11-24): the dialog text, Decline, the fresh yes and Approve as above; step 3 then carried an extra "another of the rules' checks", fixed since in #237.
 
 19. Open Maya's History page again (`Show your History card, then open your History card as a page.`).
    **Expect:** the live deal's row has "Open receipt" with the line "Demo link to this party's receipt page; the History card itself carries no link." under it; click it: the receipt page opens. Each row reads time-stamped by Action State's hosted witness once a checkpoint with a receipt covers it (a minute or so); with no network, or `ARD_WITNESS=off`, it reads unwitnessed.
