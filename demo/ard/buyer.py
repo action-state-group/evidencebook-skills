@@ -225,7 +225,9 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
 def check_payment(maya: pt.Party, deal: Deal, payment_ref: str) -> dict:
     """Maya's final review of the payment (``deal check``): it pauses for her answer, with the card she is shown."""
     return maya.check(deal.deal_id, "pay", ITEM, deal.price_msat, label(deal.seller),
-                      {"amount_minor": deal.price_msat, "payment_ref": payment_ref}, rail=deal.rail,
+                      # a rail other than lightning states the most the payment may take (capsulectl's check)
+                      {"amount_minor": deal.price_msat, "payment_ref": payment_ref,
+                       **({} if deal.rail == "lightning" else {"authorized_max_minor": deal.price_msat})}, rail=deal.rail,
                       domain=ard.publisher(deal.seller))
 
 

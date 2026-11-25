@@ -166,3 +166,20 @@ def test_a_seller_that_sends_no_book_cannot_be_ruled_against_yet(world):
     view = flow.case_view(case, {second.key_id: "the second buyer", w["keys"]["alder"]: "Alder Print Co."})
     assert {b["side"] for b in view.books} == {"buyer"}
     assert not [d for d in view.deciding if "delivery record" in d]
+
+
+def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after_a_re_entry(world, monkeypatch):
+    """evidencebook-skills#287: a checkpoint whose delivery failed (here, a proxy that answers nothing) stays pending, and
+    the next tick, run by a new process on the same home as a reopened window does, is accepted by the witness and
+    leaves nothing pending (capsulectl delivers the newest checkpoint, which extends the last one the witness took)."""
+    import party as pt
+
+    w = world
+    p = pt.Party(w["home"], "kestrel")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+    failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
+    assert failed["pending"], failed
+    monkeypatch.delenv("HTTPS_PROXY")
+    again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
+    done = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(again.tick()), 120, step=5)
+    assert done["delivered"] and not done["pending"], (failed, done)
