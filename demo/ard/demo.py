@@ -172,7 +172,8 @@ class Script:
             return
         r = self.adjudicator.rule(raw, c.row, "not_met", "seller")
         if not self.adjudicator.stamp({**raw, "ruling": r}) and pt.witnessed():
-            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 12 seconds")
+            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 12 seconds; it keeps trying for "
+                  f"{adj.LATER_S // 60} minutes and sends the ruling again with its stamp")
         print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 60

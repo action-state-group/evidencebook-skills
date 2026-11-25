@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,6 +90,10 @@ def _mtime(p: Path) -> str:
 
 
 _PARTIES: dict[Path, pt.Party] = {}
+#: How long a ruling stamp the witness did not take in the foreground keeps being taken in the background.
+LATER_S = 180
+#: The background stamp threads started (Adjudicator.stamp), so a caller or a test can wait for them.
+LATER: list[threading.Thread] = []
 
 
 @dataclass(frozen=True)
@@ -195,11 +200,14 @@ class Adjudicator:
         wire.send_json(self.home, ADJUDICATOR, case["deal_id"], "ruling", record)
         return record
 
-    def stamp(self, case: dict, seconds: float = 12) -> bool:
+    def stamp(self, case: dict, seconds: float = 12, later: float = LATER_S) -> bool:
         """Take a checkpoint now (on demand) so the witness stamps the ruling, write the ruling file again with the
         receipt, and hand it to both parties. True when the stamp was delivered within ``seconds`` (never without a
-        witness); the ruling goes to the parties either way."""
-        p, record = self.party, case["ruling"]
+        witness); the ruling goes to the parties either way. A stamp the witness did not take in time (it answers
+        slowly under load, evidencebook-skills#307) keeps being taken in the background for up to ``later`` seconds,
+        and the ruling goes to both parties again with its receipt when it is: each party then records its time
+        (flow.enter_rulings takes a ruling file that arrives again)."""
+        p = self.party
         stamped = False
         if pt.witnessed():
             try:
@@ -207,10 +215,25 @@ class Adjudicator:
                 stamped = True
             except pt.Refused:
                 pass
+        self._send_ruling(case)
+        if pt.witnessed() and not stamped and later > 0:
+            def go() -> None:
+                try:
+                    p.wait_checkpoint(later)
+                except pt.Refused:
+                    return
+                self._send_ruling(case)
+            t = threading.Thread(target=go, name=f"ruling-stamp-{case['deal_id'][5:13]}", daemon=True)
+            t.start()
+            LATER.append(t)
+        return stamped
+
+    def _send_ruling(self, case: dict) -> None:
+        """Write the ruling file again (with the receipts the shelf holds by then) and hand it to both parties."""
+        record = case["ruling"]
         again = self.rule(case, record["row"], record["value"], record["against"])
         for side in ("buyer", "seller"):
             wire.send(self.home, case["parties"][side], case["deal_id"], "ruling", again["file"])
-        return stamped
 
     def entries(self, case: dict) -> list[dict]:
         """Whether each party entered the ruling, from the copies they sent back after entering it

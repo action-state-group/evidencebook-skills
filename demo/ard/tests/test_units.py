@@ -563,3 +563,29 @@ def test_the_tool_timeout_covers_the_longest_call():
     ow = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ow)
     assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.INVOICE_WAIT_S + pay.PAY_WAIT_S
+
+
+def test_a_ruling_stamp_the_witness_took_late_is_sent_again(monkeypatch):
+    """#307: a stamp the witness did not take within the foreground bound goes on in the background, and the ruling is
+    sent to both parties again once it is taken; a stamp taken in time is sent once."""
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    tries = []
+
+    class P:
+        def wait_checkpoint(self, seconds):
+            tries.append(seconds)
+            if len(tries) == 1:
+                raise pt.Refused("no checkpoint in 12 s")
+            return {"state": "ticked"}
+    sent = []
+    monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
+    monkeypatch.setattr(adj.Adjudicator, "_send_ruling", lambda self, case: sent.append(case["deal_id"]))
+    case = {"deal_id": "deal-0123456789abcdef", "ruling": {}, "parties": {}}
+    assert adj.Adjudicator("home").stamp(case, seconds=12, later=60) is False
+    adj.LATER[-1].join(5)
+    assert tries == [12, 60] and sent == [case["deal_id"]] * 2
+    tries[:] = [0]  # the next wait succeeds at once
+    sent.clear()
+    assert adj.Adjudicator("home").stamp(case) is True and sent == [case["deal_id"]]
