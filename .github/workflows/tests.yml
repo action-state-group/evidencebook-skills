@@ -138,7 +138,8 @@ jobs:
   report:
     # A red run on main or a nightly reaches a person the same day: one open ci-red issue per workflow.
     needs: [ard-demo, tau2-live]
-    if: failure() && github.event_name != 'pull_request'
+    # Not a dispatch on a branch: only main and the nightly open a ci-red issue.
+    if: failure() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     permissions:
       issues: write

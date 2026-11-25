@@ -86,6 +86,13 @@ venv() {
   printf '%s\n' "$dir"
 }
 
+# req_venv: the name of the requirements.txt environment, keyed by the file's content so an edit rebuilds it.
+req_venv() {
+  local h
+  h=$(shasum -a 256 requirements.txt | cut -c1-12)
+  printf 'requirements-%s\n' "$h"
+}
+
 # engine REF: capsule-engine (Go) built from REF; prints the binary's path.
 engine() {
   local out="$deps/bin/capsule-engine@${1//\//_}" src
@@ -119,10 +126,11 @@ plugins() {
 }
 
 job_unit() {
-  local ref aac py
+  local ref aac py req
+  req=$(req_venv)
   ref=$(pin fast.yml unit AAC_REF)
   aac=$(checkout agent-action-capsule "$ref")
-  py=$(venv requirements -r requirements.txt)
+  py=$(venv "$req" -r requirements.txt)
   AAC_CHECKOUT=$aac PATH="$py/bin:$PATH" python -m unittest discover -s tests -p 'test_*.py'
 }
 
@@ -142,19 +150,21 @@ job_ard_demo() {
 }
 
 job_admission_engine() {
-  local ref ce py
+  local ref ce py req
   ref=$(pin fast.yml admission-engine CAPSULE_ENGINE_REF)
   ce=$(engine "$ref")
-  py=$(venv requirements -r requirements.txt)
-  CAPSULE_ENGINE="$ce" PATH="$py/bin:$PATH" python -m unittest tests.test_pack_schema.RealAdmissionEngine -v
+  req=$(req_venv)
+  py=$(venv "$req" -r requirements.txt)
+  CAPSULE_ENGINE="$ce" CAPSULE_ENGINE_REF="$ref" PATH="$py/bin:$PATH" python -m unittest tests.test_pack_schema.RealAdmissionEngine -v
 }
 
 job_live_engine() {
-  local ref eng py
+  local ref eng py req
   ref=$(pin fast.yml live-engine CAPSULE_ENGINE_PY_REF)
   eng=$(venv "engine-py-${ref:0:12}" "git+https://github.com/action-state-group/capsule-engine@${ref}#subdirectory=python")
-  py=$(venv requirements -r requirements.txt)
-  CAPSULE_LIVE_ENGINE="$eng/bin/capsule-engine" PATH="$py/bin:$PATH" python -m unittest tests.test_pack_schema.RealLiveEngine -v
+  req=$(req_venv)
+  py=$(venv "$req" -r requirements.txt)
+  CAPSULE_LIVE_ENGINE="$eng/bin/capsule-engine" CAPSULE_ENGINE_PY_REF="$ref" PATH="$py/bin:$PATH" python -m unittest tests.test_pack_schema.RealLiveEngine -v
 }
 
 job_report_grades() {

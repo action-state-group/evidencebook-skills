@@ -207,7 +207,8 @@ jobs:
   report:
     # A red run on main reaches a person the same day: one open ci-red issue per workflow.
     needs: [unit, viewer-drift, admission-engine, live-engine, report-grades, obligations-report]
-    if: failure() && github.event_name != 'pull_request'
+    # Not a dispatch on a branch: only main opens a ci-red issue.
+    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       issues: write
