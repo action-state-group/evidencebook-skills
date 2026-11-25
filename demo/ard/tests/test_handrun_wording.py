@@ -17,6 +17,8 @@ def test_approval_lines_say_who_approved_in_plain_words():
     assert receipt._line("approval", {"approver": "user"}, True) == "Approved by you"
     assert "instructions you gave your agent" in receipt._line("approval", {"approver": "standing_intent"}, True)
     assert "standing_intent" not in receipt._line("approval", {"approver": "standing_intent"}, True)
+    # #261: no click is claimed or denied under standing intent: that approver now means no one clicked
+    assert "click" not in receipt._line("approval", {"approver": "standing_intent"}, True)
 
 
 def test_a_did_not_hold_note_reads_as_words_not_the_record_type():

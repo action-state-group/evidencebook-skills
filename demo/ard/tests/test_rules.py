@@ -5,6 +5,7 @@ second order."""
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import stat
@@ -17,8 +18,10 @@ import pytest
 import deals
 import goose_node as gn
 import rules
+import screens
 from conftest import engine_only
 from demo_node import DemoNode
+from evidencebook import deal
 from world import CURRENCY, ITEM, terms
 
 AT = datetime(2026, 11, 23, 12, 0, tzinfo=timezone.utc)
@@ -34,7 +37,8 @@ def pair(tmp_path):
     return maya, alder
 
 
-def stub_engine(tmp_path, *, caps_fail_when_history: bool = True, other_fail: bool = False, rc: int = 0, err: str = ""):
+def stub_engine(tmp_path, *, caps_fail_when_history: bool = True, other_fail: bool = False, rc: int = 0, err: str = "",
+                verdict: str = ""):
     """A stand-in `capsule-engine`: records its argv and the limits file, answers from the input's history."""
     log = tmp_path / "engine-calls.jsonl"
     script = tmp_path / "engine"
@@ -49,13 +53,15 @@ if {rc!r}:
     sys.stderr.write({err!r}); sys.exit({rc!r})
 findings = []
 if {caps_fail_when_history!r} and inp["history"]:
-    findings.append({{"id": "r05-spending-caps", "check": "caps/5.1.0", "verdict": "fail",
+    findings.append({{"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail",
                      "reason": "the 7-day total with this purchase is over the 7-day limit you set", "limit": 2000, "value": 4000}})
 if {other_fail!r}:
     findings.append({{"id": "r06-new-merchant", "check": "counterparty_seen_before/4.0.0", "verdict": "fail",
                      "reason": "no earlier payment to this merchant"}})
-print(json.dumps({{"schema": "external-check-result/v0", "ruleset_id": "asg/everyday/0.3.8", "definition_digest": "00",
-                  "verdict": "escalate" if findings else "allow", "tier": "recomputed", "findings": findings}}))
+findings.append({{"id": "r05-spending-limits#per_purchase", "check": "caps/5.1.0", "verdict": "pass", "limit": 2000, "value": 2000}})
+print(json.dumps({{"schema": "external-check-result/v0", "ruleset_id": "asg/everyday/0.3.8", "definition_digest": "ab" * 32,
+                  "verdict": {verdict!r} or ("escalate" if len(findings) > 1 else "allow"), "tier": "recomputed",
+                  "findings": findings}}))
 """)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     return script, log
@@ -202,4 +208,147 @@ def test_only_acts_in_the_last_seven_days_are_the_history_and_any_failure_of_the
     monkeypatch.setenv("CAPSULE_ENGINE", str(garbage))
     with pytest.raises(rules.RulesError, match="could not run"):
         deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    maya.close(); alder.close()
+
+
+# -- #261: the deal's own records say what the rules said and who approved ----------------------------------------
+
+def _records(node, deal_id: str) -> dict:
+    """The deal's x-deal-v0 records by type (the last of each), checked by evidencebook's x-deal-v0 profile checker."""
+    payloads = [json.loads(p) for p in node.deal_payloads(deal_id)]
+    checker = gn._profile_checker()
+    for p in payloads:
+        checker.check_record(p)
+    checker.check_chain(payloads)
+    return {p["x-deal-v0"]["record_type"]: p for p in payloads}
+
+
+def _local(node, deal_id: str, kind: str) -> dict:
+    """The local (unshared) side of the deal's last ``kind`` record: the openings this party keeps."""
+    book = node.shelf.open(f"deal/{deal_id}")
+    payloads = node.deal_payloads(deal_id)
+    i = max(i for i, p in enumerate(payloads) if json.loads(p)["x-deal-v0"]["record_type"] == kind)
+    return json.loads(book.opening(book.records()[i].record_id, deal.LOCAL_FIELD).text)
+
+
+def test_a_held_order_the_person_approves_seals_the_rules_escalation_and_their_approve_click(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    pay_click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, clicked=pay_click)
+    second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000, approve=lambda o: True,
+                            clicked=pay_click)
+    r = _records(maya, second)
+    verdict, approval = r["verdict"]["body"], r["approval"]["body"]
+    assert verdict["result"] == "pause" and verdict["options"] == ["hold", "proceed"]
+    assert verdict["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r05_spending_limits_7d"}]
+    rs = verdict["rules"]
+    assert (rs["status"], rs["verdict"], rs["ruleset_id"], rs["tier"]) == ("evaluated", "escalate", "asg/everyday/0.3.8", "recomputed")
+    assert rs["definition_digest"] == "ab" * 32 and rs["checker_sha256"] == hashlib.sha256(engine.read_bytes()).hexdigest()
+    assert rs["history"] == {"days": 7, "acts": 1, "complete": True}
+    assert all(set(f) <= set(rules.SEALED_FINDING) for f in rs["findings"]), "the engine's words are not sealed"
+    assert {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail", "limit": 2000, "value": 4000} in rs["findings"]
+    # the Approve click answers the hold: the person's words, committed, the opening kept in Maya's own local record
+    assert approval["approver"] == "user" and approval["choice"] == "proceed"
+    local = _local(maya, second, "approval")
+    assert local["said"] == screens.rules_ask(["the 7-day total with this purchase is over the 7-day limit you set "
+                                               "(limit 2,000 msat, this order would bring it to 4,000 msat)"]) + "\nAnswer: Approve"
+    assert approval["said_commitment"] == deal.commit_text(local["nonces"]["said"], local["said"])
+    maya.close(); alder.close()
+
+
+def test_the_pay_click_with_no_limit_is_the_persons_approval_and_the_rules_stay_not_configured(tmp_path):
+    maya, alder = pair(tmp_path)
+    click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")
+    deal_id = deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: "ref-1",
+                             clicked=click)
+    r = _records(maya, deal_id)
+    assert r["verdict"]["body"]["result"] == "pass" and r["verdict"]["body"]["rules"] == {"status": "not_configured"}
+    assert r["approval"]["body"]["approver"] == "user"
+    assert _local(maya, deal_id, "approval")["said"] == click.shown + "\nAnswer: Pay"
+    maya.close(); alder.close()
+
+
+def test_with_no_limit_and_no_click_the_records_are_todays(tmp_path):
+    maya, alder = pair(tmp_path)
+    deal_id = deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: "ref-1")
+    r = _records(maya, deal_id)
+    assert r["verdict"]["body"]["rules"] == {"status": "not_configured"} and r["approval"]["body"] == {
+        "choice": "proceed", "proceed": True, "approver": "standing_intent"}
+    maya.close(); alder.close()
+
+
+def test_a_pack_ask_pauses_the_check_and_the_pay_click_answers_it(tmp_path, monkeypatch):
+    """The real Everyday Rules escalate the first order too (a new merchant, a payment that cannot be undone): that is a
+    pause, answered by the person's Pay click; with no click (the gate off, tests only) it is the agent card's answer,
+    since standing intent approves only a pass."""
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")
+    clicked = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, clicked=click))
+    assert clicked["verdict"]["body"]["result"] == "pause" and clicked["approval"]["body"]["approver"] == "user"
+    assert clicked["verdict"]["body"]["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r06_new_merchant"}]
+    unclicked = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000))
+    assert unclicked["approval"]["body"] == {"choice": "proceed", "proceed": True, "approver": "agent_card"}
+    maya.close(); alder.close()
+
+
+def test_an_allow_is_a_passing_check_with_the_rules_evaluated(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    r = _records(maya, deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: "ref-1",
+                                      limit=2000))
+    assert r["verdict"]["body"]["result"] == "pass" and r["verdict"]["body"]["rules"]["verdict"] == "allow"
+    assert r["verdict"]["body"]["differences"] == [] and r["approval"]["body"]["approver"] == "standing_intent"
+    maya.close(); alder.close()
+
+
+def test_a_deny_pays_nothing(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True, verdict="deny")
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    with pytest.raises(rules.RulesError, match="deny"):
+        deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: pytest.fail("not paid"),
+                       limit=2000, approve=lambda o: True)
+    maya.close(); alder.close()
+
+
+def test_a_history_cut_at_the_cap_is_sealed_as_not_complete(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    monkeypatch.setattr(rules, "MAX_HISTORY", 0)
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000)
+    assert _records(maya, second)["verdict"]["body"]["rules"]["history"] == {"days": 7, "acts": 0, "complete": False}
+    maya.close(); alder.close()
+
+
+def test_the_approve_dialog_s_own_words_are_the_ones_committed(tmp_path, monkeypatch):
+    """#265 review: the hold callback returns the Answer it showed, so the commitment is to the dialog's words (the
+    dialog replaces a double quote, which AppleScript cannot carry), not to a rebuilt text."""
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    shown = rules.Answer("the words the dialog showed, with 'quotes'", "Approve")
+    second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000, approve=lambda o: shown)
+    assert _local(maya, second, "approval")["said"] == shown.said()
+    maya.close(); alder.close()
+
+
+def test_a_deny_is_a_refusal_not_a_check_that_could_not_run(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True, verdict="deny")
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    with pytest.raises(rules.RulesRefused):
+        deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: pytest.fail("not paid"),
+                       limit=2000)
     maya.close(); alder.close()

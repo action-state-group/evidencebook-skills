@@ -118,6 +118,12 @@ class Session:
             raise
 
 
+def dialog_text(text: str) -> str:
+    """The words a native dialog shows for ``text``: AppleScript's string quoting takes no backslash or double quote,
+    so they are replaced. The approval record commits to these words, the ones the person saw."""
+    return text.replace("\\", " ").replace('"', "'")
+
+
 def approve_payment(summary: str) -> bool:
     """The presenter's approval, out of band: a native dialog on the presenter's screen that the agent neither reads
     nor answers through the chat (a code returned in the tool's output would reach the agent, which could reuse it in
@@ -125,7 +131,7 @@ def approve_payment(summary: str) -> bool:
     ``ARD_APPROVAL=none`` turns the gate off (tests only; the tool says so in its output)."""
     import subprocess
 
-    text = summary.replace("\\", " ").replace('"', "'")
+    text = dialog_text(summary)
     script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
               'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
     try:
@@ -140,7 +146,7 @@ def approve_hold(summary: str) -> bool:
     :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
     import subprocess
 
-    text = summary.replace("\\", " ").replace('"', "'")
+    text = dialog_text(summary)
     script = (f'display dialog "{text}" with title "Held for your OK" buttons {{"Decline", "Approve"}} '
               'default button "Decline" cancel button "Decline" with icon caution giving up after 180')
     try:
@@ -150,11 +156,13 @@ def approve_hold(summary: str) -> bool:
     return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
 
 
-def _ask_about_hold(outcome: "rules.Outcome") -> bool:
-    approved = approve_hold(screens.rules_ask(outcome.reasons))
-    if approved:
-        print(screens.rules_approved(outcome.reasons))
-    return approved
+def _ask_about_hold(outcome: "rules.Outcome") -> "rules.Answer | None":
+    """The hold dialog; for an Approve, the words it showed and the button, which the approval record commits to."""
+    asked = screens.rules_ask(outcome.reasons)
+    if not approve_hold(asked):
+        return None
+    print(screens.rules_approved(outcome.reasons))
+    return rules.Answer(dialog_text(asked), "Approve")
 
 
 _session: Session | None = None
@@ -284,16 +292,19 @@ class NotApproved(RuntimeError):
     """The presenter's dialog did not approve the payment."""
 
 
-def approval_gate(real: bool, rail_name: str, summary: str) -> None:
-    """Return only when this payment may go ahead: the presenter clicked Pay, or the gate is off on a simulated rail."""
+def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | None:
+    """Return only when this payment may go ahead: the presenter clicked Pay (their answer: the dialog's words and Pay,
+    which the deal's approval record names), or the gate is off on a simulated rail (``None``: no one clicked)."""
     if os.environ.get("ARD_APPROVAL") == "none":
         if real:  # the gate goes off only where no money moves: a leftover test setting never pays for real
             raise RuntimeError(f"ARD_APPROVAL=none is refused on the {rail_name} rail, which moves real money: "
                                "unset it so the presenter approves the payment. Nothing was paid.")
         print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
-    elif not approve_payment(summary):
+        return None
+    if not approve_payment(summary):
         raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
                            "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
+    return rules.Answer(dialog_text(summary), "Pay")
 
 
 @_tool("maya", description=_PAY)
@@ -337,7 +348,7 @@ def ard_pay(seller: str) -> None:
                     + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
             try:
-                approval_gate(real, rail_name, summary)
+                clicked = approval_gate(real, rail_name, summary)
             except NotApproved:
                 s.declined.add(key)
                 raise
@@ -347,7 +358,7 @@ def ard_pay(seller: str) -> None:
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
-        _pay(s, key, limit)
+        _pay(s, key, limit, clicked)
     except (rules.RuleHeld, rules.RulesError) as stopped:
         # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
         # (an earlier paid order stays paid, and the order may be tried again).
@@ -357,12 +368,15 @@ def ard_pay(seller: str) -> None:
         if isinstance(stopped, rules.RuleHeld):
             raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
                                "order and why, and that nothing was paid; do not try to pay around it.") from None
+        if isinstance(stopped, rules.RulesRefused):
+            raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the Everyday Rules did not allow this order; do not "
+                               "pay around it.") from None
         raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 
-def _pay(s, key: str, limit: int | None) -> None:
+def _pay(s, key: str, limit: int | None, clicked: rules.Answer | None = None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold)
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold, clicked=clicked)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
@@ -371,6 +385,7 @@ def _pay(s, key: str, limit: int | None) -> None:
     s.deal_ids.append(chain.deal_id)
     try:
         payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=_ask_about_hold,
+                                     clicked=clicked,
                                      on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
     except (rules.RuleHeld, rules.RulesError):
         s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a declined order is not one
