@@ -63,7 +63,7 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     reask = tools.ard_pay("alder")
     assert reask.startswith("REFUSED: the presenter did not approve the last payment to Alder Print Co.")
     assert 'The question is: "Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"' in reask
-    assert ("If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was declined, "
+    assert ("If you asked Maya to confirm this payment (the seller, the amount and the rail) after that dialog, "
             "and she said yes, call ard_pay again now: do not ask her again.") in reask
     assert "call ard_pay again only after she says yes" in reask and tools._session.run.rail.paid == []
     # A second refusal sets it again: each Cancel is followed by the question before the next dialog.
@@ -172,12 +172,21 @@ def test_a_held_order_nobody_answered_is_told_as_no_answer_never_as_a_decline(to
     s = tools._session
     assert s.run.rail.paid == [2000] and "alder" in s.paid
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
-    monkeypatch.setattr(tools, "hold_answer", lambda title, text: tools.rules.NO_ANSWER)
-    said = tools.ard_pay("alder")
-    assert "No answer in time, so the order was not placed and nothing was paid" in said and "Want to try again?" in said
-    assert "never that she declined it" in said and "The presenter declined" not in said
-    assert s.run.rail.paid == [2000]  # nothing more was paid
-    s.declined.discard("alder")  # the module's later tests start from a fresh question, as before this one
+    try:
+        for how, words in ((tools.rules.NO_ANSWER, "No answer in time, so the order was not placed and nothing was paid"),
+                           (tools.rules.NOT_SHOWN, "could not be shown")):
+            monkeypatch.setattr(tools, "hold_answer", lambda title, text, how=how: how)
+            said = tools.ard_pay("alder")
+            assert words in said and "The presenter declined" not in said, said
+            assert ("alder" in s.declined) is (how != tools.rules.NO_ANSWER)  # no answer: the question was already put
+            s.declined.discard("alder")
+        monkeypatch.setattr(tools, "hold_answer", lambda title, text: tools.rules.NO_ANSWER)
+        said = tools.ard_pay("alder")
+        assert 'Want to try again? (Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?)' in said
+        assert "Never say she declined it" in said and "alder" not in s.declined
+        assert s.run.rail.paid == [2000]  # nothing more was paid
+    finally:
+        s.declined.discard("alder")  # the module's later tests start from a fresh question, as before this one
 
 
 @pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")

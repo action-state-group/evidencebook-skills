@@ -93,6 +93,7 @@ class Session:
         self.deal_ids: list[str] = []     # this run's deals, oldest first (the receipt shows the latest)
         self.attempted: set[str] = set()  # payments started: a failure mid-way is not a retry
         self.declined: set[str] = set()   # the presenter's last dialog for this seller was not approved
+        self.declined_how: dict[str, str] = {}  # and how it ended (rules.NO or rules.NOT_SHOWN)
         self.pay_lock = threading.Lock()  # one check, approval and payment at a time
         rail: pay.Rail = pay.from_env(os.environ.get("ARD_RAIL", "fake"))
         kestrel_card = os.environ.get("ARD_KESTREL_CARD", "sentinel")
@@ -337,16 +338,22 @@ class NotApproved(RuntimeError):
         self.answer = answer
 
 
-def _not_approved(answer: str) -> NotApproved:
+def _try_again(question: str) -> str:
+    """What the agent is told after a dialog nobody answered: PM's words, asked once with the payment it is about, so a
+    yes is the one confirmation for the retry (one question per order, PM on #278)."""
+    return (f'{NOT_YES[rules.NO_ANSWER]}. Ask Maya exactly this, as one question: "{NOT_YES[rules.NO_ANSWER]}. Want to try '
+            f'again? ({question})" Never say she declined it. If she says yes, call ard_pay again: do not ask her again; '
+            "the presenter's click in the next dialog stays the gate. Do not retry on your own.")
+
+
+def _not_approved(answer: str, question: str) -> NotApproved:
     if answer == rules.NO_ANSWER:
-        say = (f"{NOT_YES[answer]}. Tell Maya exactly that, and ask her: Want to try again? Do not retry on your own.")
-    else:
-        say = (f"the presenter did not approve this payment ({NOT_YES[answer]}): nothing was paid. Do not retry on your "
-               "own; if Maya asks again, confirm with her first.")
-    return NotApproved(say, answer)
+        return NotApproved(_try_again(question), answer)
+    return NotApproved(f"the presenter did not approve this payment ({NOT_YES[answer]}): nothing was paid. Do not retry on "
+                       "your own; if Maya asks again, confirm with her first.", answer)
 
 
-def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | None:
+def approval_gate(real: bool, rail_name: str, summary: str, question: str = "") -> rules.Answer | None:
     """Return only when this payment may go ahead: the presenter clicked Pay (their answer: the dialog's words and Pay,
     which the deal's approval record names), or the gate is off on a simulated rail (``None``: no one clicked)."""
     if os.environ.get("ARD_APPROVAL") == "none":
@@ -357,7 +364,7 @@ def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | No
         return None
     answer = payment_answer(summary)
     if answer != "yes":
-        raise _not_approved(answer)
+        raise _not_approved(answer, question or summary)
     return rules.Answer(dialog_text(summary), "Pay")
 
 
@@ -390,6 +397,8 @@ def ard_pay(seller: str) -> None:
             rail = (f"over Lightning: this moves real money, to a wallet {shared} share" if real
                     else "on the simulated rail: no money moves")
             summary = f"Pay {label} {amount} {rail}."
+            question = f"Pay {label} {amount} " + ("over Lightning, which moves real money?" if real
+                                                   else "on the simulated rail, where no money moves?")
             if key in s.declined:
                 # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
                 # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
@@ -398,18 +407,19 @@ def ard_pay(seller: str) -> None:
                 # next call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
-                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
-                    f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
-                    + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was '
-                    "declined, and she said yes, call ard_pay again now: do not ask her again. "
+                    f"the presenter did not approve the last payment to {label} ({NOT_YES[s.declined_how.get(key, rules.NO)]}), "
+                    f'so this call opens no dialog and pays nothing. The question is: "{question}'
+                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after that dialog, '
+                    "and she said yes, call ard_pay again now: do not ask her again. "
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
             ask, clicked = None, None
             if limit is None:
                 try:
-                    clicked = approval_gate(real, rail_name, summary)
-                except NotApproved:
-                    s.declined.add(key)
+                    clicked = approval_gate(real, rail_name, summary, question)
+                except NotApproved as no:
+                    if no.answer != rules.NO_ANSWER:  # no answer: its refusal already put the question to Maya, once
+                        s.declined.add(key)
+                        s.declined_how[key] = no.answer
                     raise
             else:  # under a spending limit the one dialog comes after the deal check, so it can carry the hold reasons
                 ask = _ask_order(summary, real, rail_name, label, rail)
@@ -426,14 +436,14 @@ def ard_pay(seller: str) -> None:
         s.attempted.discard(key)
         if was_paid:
             s.paid.add(key)
-        if isinstance(stopped, rules.RuleHeld):
+        if isinstance(stopped, rules.RuleHeld) and stopped.answer != rules.NO_ANSWER:
             s.declined.add(key)  # the next call hands the agent the question again instead of reopening the dialog
+            s.declined_how[key] = stopped.answer
         if isinstance(stopped, rules.RuleHeld) and not stopped.reasons:  # the payment dialog, nothing held
-            raise _not_approved(stopped.answer) from None
+            raise _not_approved(stopped.answer, question) from None
         if isinstance(stopped, rules.RuleHeld) and stopped.answer == rules.NO_ANSWER:
-            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} {NOT_YES[rules.NO_ANSWER]}. Tell Maya which rule held "
-                               "the order and why, and that there was no answer in time, never that she declined it; "
-                               "then ask her: Want to try again? Do not try to pay around it.") from None
+            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} Tell Maya which rule held the order and why. "
+                               f"{_try_again(question)}") from None
         if isinstance(stopped, rules.RuleHeld):
             raise RuntimeError(f"{screens.rules_held(stopped.reasons)} {NOT_YES[stopped.answer].capitalize()}. Tell Maya which "
                                "rule held the order and why, and that nothing was paid; do not try to pay around it.") from None

@@ -514,7 +514,9 @@ def test_rule_22_reads_as_the_receipt_does_with_the_amount_never_a_bare_number()
 
 @pytest.mark.parametrize("answer,decision,words", [(rules.NO_ANSWER, "no answer", "not answered in time"),
                                                    (rules.NOT_SHOWN, "not shown", "not shown"),
-                                                   (rules.NO, "declined", "declined")])
+                                                   (rules.NO, "declined", "declined"),
+                                                   ("timeout", "not shown", "not shown"),  # unknown: never a yes
+                                                   ("yes", "not shown", "not shown")])  # a yes is an Answer or True
 def test_a_held_order_seals_and_says_how_the_question_ended(tmp_path, monkeypatch, answer, decision, words):
     # #239 finding 11: a timeout is sealed and reported as no answer, never as the person's decline (PM's words)
     engine, _ = stub_engine(tmp_path)
@@ -526,5 +528,6 @@ def test_a_held_order_seals_and_says_how_the_question_ended(tmp_path, monkeypatc
     with pytest.raises(rules.RuleHeld) as held:
         deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "",
                        pay=lambda: paid.append("2") or "ref-2", limit=2000, approve=lambda o: answer)
-    assert paid == [] and held.value.answer == answer and words in str(held.value)
+    assert paid == [] and held.value.answer == (answer if answer in (rules.NO, rules.NO_ANSWER) else rules.NOT_SHOWN)
+    assert words in str(held.value)
     assert [n["decision"] for _, n in maya.notes(rules.CHECKED)][-1] == decision

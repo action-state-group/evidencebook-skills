@@ -449,10 +449,13 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
         try:
             ok = approve(outcome) if approve is not None else False
         except Exception as exc:  # the question could not be put: nothing is paid and the order is not approved
-            outcome.decision = "declined"
+            outcome.decision = _DECISION[NOT_SHOWN]
             seal_note(node, chain.deal_id, outcome)
             raise RulesError(f"the person could not be asked: {type(exc).__name__}: {exc}") from None
-        not_yes = ok if isinstance(ok, str) and ok in _DECISION else (None if ok else NO)
+        if isinstance(ok, str):  # only an Answer or True is a yes: a string is how a dialog ended, and an unknown one pays nothing
+            not_yes = ok if ok in _DECISION else NOT_SHOWN
+        else:
+            not_yes = None if ok else NO
         if not_yes:
             ok = False
         outcome.decision = _DECISION[not_yes] if not_yes else "approved"
