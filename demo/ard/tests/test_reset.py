@@ -4,6 +4,8 @@ while holding the home's own lock files, refuses if anything else holds the home
 deletes the home, and clears Goose's recipe trust. Real processes stand in for the stage and the servers; no Goose."""
 from __future__ import annotations
 
+import os
+import random
 import shutil
 import signal
 import socket
@@ -19,10 +21,30 @@ import reset
 needs_lsof = pytest.mark.skipif(not shutil.which("lsof"), reason="reset finds the home's holders with lsof")
 
 
-def _free_port() -> int:
+def _bindable(port: int) -> bool:
     with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
+def _use_free_demo_ports(monkeypatch) -> None:
+    """Point the demo at a relay and stage port whose four ports (``reset.demo_ports``) are free, chosen where no other
+    test process listens. Reset refuses when anything else listens on those ports, and under pytest-xdist the other
+    workers listen on ports the OS hands out from its ephemeral range (from 32768 on Linux, 49152 on macOS), so a port
+    from that range, or the stage port's +10 and +11 beside it, can be taken by another worker mid-test (#267). Each
+    worker draws from a band of its own below 32768 instead."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    band = 20000 + (int(worker.removeprefix("gw") or 0) % 30) * 400
+    for _ in range(100):
+        relay = band + random.randrange(0, 400 - 12)
+        monkeypatch.setenv("ARD_RELAY_PORT", str(relay))
+        monkeypatch.setenv("ARD_STAGE_PORT", str(relay + 1))
+        if all(map(_bindable, reset.demo_ports())):
+            return
+    raise RuntimeError(f"no free demo ports in {band}-{band + 399}")
 
 
 def _holder(tmp: Path, script: str, *args: str, hold: Path | None = None, cwd: Path | None = None,
@@ -58,8 +80,7 @@ def _done(*procs: subprocess.Popen) -> None:
 def mac(tmp_path, monkeypatch):
     """A home, a user folder with Goose's recipe trust, its settings and two saved recipes, and free demo ports."""
     monkeypatch.setenv("HOME", str(tmp_path / "user"))
-    monkeypatch.setenv("ARD_STAGE_PORT", str(_free_port()))
-    monkeypatch.setenv("ARD_RELAY_PORT", str(_free_port()))
+    _use_free_demo_ports(monkeypatch)
     monkeypatch.setattr(reset, "goose_running", lambda: False)
     hashes = tmp_path / "user" / "Library" / "Application Support" / "Goose" / "recipe_hashes"
     hashes.mkdir(parents=True)
@@ -299,7 +320,7 @@ def test_reset_runs_with_no_evidencebook_or_engine_set(mac, tmp_path):
     stub.mkdir()
     (stub / "pgrep").write_text("#!/bin/sh\nexit 1\n")
     (stub / "pgrep").chmod(0o755)
-    env = {k: v for k, v in __import__("os").environ.items()
+    env = {k: v for k, v in os.environ.items()
            if k not in ("ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL", "ARD_HOME")}
     env["PATH"] = f"{stub}:{env.get('PATH', '')}"
     run = subprocess.run([sys.executable, str(Path(reset.__file__).with_name("demo.py")), "reset", "--home", str(home)],
@@ -387,8 +408,7 @@ def test_a_probe_failure_after_the_stop_says_the_processes_were_stopped(mac, tmp
 @needs_lsof
 def test_a_missing_home_and_no_goose_folder_still_reset(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "user"))
-    monkeypatch.setenv("ARD_STAGE_PORT", str(_free_port()))
-    monkeypatch.setenv("ARD_RELAY_PORT", str(_free_port()))
+    _use_free_demo_ports(monkeypatch)
     monkeypatch.setattr(reset, "goose_running", lambda: False)
     said = []
     assert reset.reset(tmp_path / "never-made", say=said.append) == 0
