@@ -43,11 +43,14 @@ __all__ = ["Party", "Refused", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "wi
 WITNESS_URL = "https://witness.agentactioncapsule.org"
 WITNESS_KEY = "39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"
 WITNESS_NAME = "Action State's witness"
-#: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter, so a sale or a ruling
-#: counts on the card within a minute.
+#: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter. A step that needs its
+#: records stamped does not wait for it: it stamps on demand (:meth:`Party.stamp`).
 CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
 #: The History card's derivation every party makes and every buyer accepts: the one constant a move to
 #: ``standard_history/4`` changes (AAC standard-history §12: /3 with one rule changed).
+#: How long one stamp takes the hosted witness to take, at most, when it is well (measured 3 to 6 s): a stamp is tried
+#: again only with this long left of its wait.
+STAMP_TRY_S = 6
 CARD_DERIVATION = "standard_history/3"
 #: The one forum the demo's agreements accept: the demo adjudicator, an outside party to the deal.
 FORUM = "external:ard-demo"
@@ -59,6 +62,14 @@ CURRENCY = "BTC"  # capsulectl reads a BTC amount_minor in msat (deal_rules.go m
 def witnessed() -> bool:
     """True unless ``ARD_WITNESS=off``: a Mac with no network can still run, its records then timed locally only."""
     return os.environ.get("ARD_WITNESS", "public") != "off"
+
+
+def taken(tick: dict) -> bool:
+    """Whether a tick cut a checkpoint and the witness took it (its receipt is in hand), or there is no witness. Older
+    checkpoints the witness refused may stay pending: the newest covers every record before it."""
+    if tick.get("state") != "ticked":
+        return False
+    return not witnessed() or tick.get("witness") == "not_configured" or tick.get("checkpoint") in (tick.get("delivered") or [])
 
 
 def witness_directory() -> dict:
@@ -88,7 +99,7 @@ class Party:
     def exists(self) -> bool:
         return (self.dir / "deal" / "signing.seed").is_file()
 
-    def create(self, holder_kind: str, key_file: str = "", neutral: bool = False) -> Party:
+    def create(self, holder_kind: str, key_file: str = "", neutral: bool = False, witness: bool = True) -> Party:
         """Make the profile once: keys, the store, the hosted witness unless ``ARD_WITNESS=off``, a one-minute cadence,
         and who holds the card (``person`` for a buyer, ``node`` for a shop). ``neutral`` pins capsulectl's
         ``builtin:neutral`` materiality predicate, so a check pauses only on what the predicate finds material, not on
@@ -97,7 +108,7 @@ class Party:
             return self
         self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         args = ["init", "--dir", str(self.dir / "deal")]
-        if not witnessed():
+        if not witnessed() or not witness:
             args.append("--no-witness")
         if key_file:
             args += ["--signing-key-file", key_file, "--checkpoint-key-file", key_file]
@@ -109,6 +120,21 @@ class Party:
             fh.write(CADENCE)
         self.run("standard-history", "declare", "--holder-kind", holder_kind)
         return self
+
+    def add_witness(self) -> None:
+        """Name the hosted witness in a profile made without one (``create(witness=False)``): its next stamp, which covers
+        every record before it, is the first the witness sees. Unless ``ARD_WITNESS=off``."""
+        if not witnessed():
+            return
+        prof = self.dir / ".config" / "capsule" / "profiles" / f"{self.profile}.yaml"
+        text = prof.read_text()
+        if "endpoint: " + WITNESS_URL in text:
+            return
+        if "\ncheckpoint:\n" not in text:
+            raise Refused(f"{self.name}: its profile has no checkpoint section to name the witness in")
+        # The same two lines ``deal init`` writes when it names the witness (endpoint and the witness's key).
+        prof.write_text(text.replace("\ncheckpoint:\n",
+                                     f"\ncheckpoint:\n    endpoint: {WITNESS_URL}\n    public_key: {WITNESS_KEY}\n", 1))
 
     def run(self, *args: str) -> Any:
         with self._lock:
@@ -154,21 +180,34 @@ class Party:
     # -- the cadence and the card -------------------------------------------------------------
 
     def tick(self) -> dict:
+        """The cadence's poll: a checkpoint when one is due (a minute after the last), else nothing new."""
         return self.run("tick")
 
-    def wait_checkpoint(self, seconds: float = 90, say=None) -> dict:
-        """Take the next checkpoint, waiting for it to fall due (up to a minute on the demo's cadence)."""
+    def stamp(self) -> dict:
+        """A checkpoint now, whatever the cadence (``deal tick --now``, evidencebook's on-demand stamp, as ``deal agree``
+        takes): for a step that needs its records stamped, so no one waits for the cadence. The witness then sees a stamp
+        off the cadence; the demo's parties accept that."""
+        return self.run("tick", "--now")
+
+    def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
+        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again while it does not
+        (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
+        ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
+        then mid-delivery), and what it did not deliver goes with the next tick."""
         stop = time.monotonic() + seconds
         while True:
-            t = self.tick()
-            if t.get("state") == "ticked":
+            try:
+                t = self.stamp()
+            except Refused as exc:
+                t = {"error": str(exc)}
+            if taken(t):
                 return t
-            if time.monotonic() >= stop:
-                raise Refused(f"no checkpoint in {int(seconds)} s")
+            time.sleep(1)
+            if stop - time.monotonic() < STAMP_TRY_S:
+                raise Refused(f"{self.name}: no checkpoint in {int(seconds)} s (last: {json.dumps(t)[:300]})")
             if say:
-                say("waiting for this party's next checkpoint (up to a minute)")
+                say("this party's checkpoint did not go through; trying again")
                 say = None
-            time.sleep(3)
 
     def card_bundle(self, shared: bool) -> Path:
         """The party's :data:`CARD_DERIVATION` card as a bundle, as of its newest checkpoint: the shared copy (the card,

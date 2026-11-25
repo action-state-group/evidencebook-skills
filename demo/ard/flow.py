@@ -20,7 +20,7 @@ import adjudicator as adj
 import ard
 import party as pt
 import wire
-from cast import BUYER, ITEM, SELLERS, label
+from cast import BUYER, HELD_FROM, ITEM, SELLERS, label
 
 _paths_setup = pt._paths  # party already put the Goose reference on the path
 import commitment as cm  # noqa: E402
@@ -123,7 +123,8 @@ class SellerAgent:
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
         self.advertise()
-        self.republish()
+        self.wait_sample_held()
+        self.republish(now=True)
         if start:
             t = threading.Thread(target=self._loop, name=f"seller-{name}", daemon=True)
             t.start()
@@ -151,10 +152,20 @@ class SellerAgent:
         self.say(f"advertised: commitment signed by {doc['key_id'][:8]}…, price {SELLERS[self.name]['price_msat']:,} msat")
         return doc
 
-    def republish(self) -> None:
-        """Take a checkpoint if one is due and publish the card as of the newest one."""
+    def wait_sample_held(self) -> None:
+        """On a home seeded under a minute ago, wait for the minute from which a stamp counts the sample deals held
+        (``seed.py``), so the card this agent publishes counts them."""
+        f = self.home / HELD_FROM
+        left = int(f.read_text()) - time.time() if f.is_file() else 0
+        if left > 0:
+            self.say(f"waiting {left:.0f} s for the sample deals' contest windows to end, so the card counts them held")
+            print(f"{self.label}: the sample deals' contest windows end in {left:.0f} s; its card counts them then")
+            time.sleep(left + 0.5)
+
+    def republish(self, now: bool = False) -> None:
+        """Take a checkpoint (``now``: at once; otherwise if one is due) and publish the card as of the newest one."""
         try:
-            self.party.tick()
+            self.party.stamp() if now else self.party.tick()
             publish_card(self.home, self.party)
         except pt.Refused as exc:
             self.say(f"card not published yet: {exc}")

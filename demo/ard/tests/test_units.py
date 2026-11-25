@@ -18,7 +18,7 @@ import pages
 import screens
 
 
-def card(of=24, held=24, dnh=0, undecided=0, against=0, open_=0, for_=0, split=0, no_finding=0, withdrawn=0):
+def card(of=12, held=12, dnh=0, undecided=0, against=0, open_=0, for_=0, split=0, no_finding=0, withdrawn=0):
     by = {"against": against, "for": for_, "no_finding": no_finding, "open": open_, "split": split, "withdrawn": withdrawn}
     by["of"] = sum(by.values())
     return {"derivation": "standard_history/3", "outcomes": {"of": of, "held": held, "did_not_hold": dnh, "undecided": undecided},
@@ -38,28 +38,28 @@ def test_decided_counts_only_decided_disputes_and_split_is_not_lost():
 
 
 def test_the_inputs_carry_the_tally_bands_and_the_own_ruling():
-    ev = buyer.Evidence("kestrel", card=card(of=25, held=24, dnh=1, against=1))
+    ev = buyer.Evidence("kestrel", card=card(of=13, held=12, dnh=1, against=1))
     own = buyer.Own(deals=1, settled=1, rulings=[{"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z",
                                                   "row": "delivered", "value": "not_met", "adverse": True}])
     got = buyer.inputs(ev, 1000, own, datetime(2026, 11, 25, tzinfo=timezone.utc))
     assert got["card"]["disputes"] == {"open": 0, "of": 1, "decided": {"against": 1, "of": 1}}
-    assert got["card"]["bands"] == [{"currency": "BTC", "decade": -8, "subjects": 25, "adverse": 1}]
+    assert got["card"]["bands"] == [{"currency": "BTC", "decade": -8, "subjects": 13, "adverse": 1}]
     assert got["own"]["verdicts"] == [{"at": "2026-11-25T10:00:00Z", "adverse": True}]
     assert got["card"]["witness"] == buyer.pt.WITNESS_KEY  # filled in by the operator: no verb gives the receipt
 
 
 def test_the_card_line_says_the_tally_in_words():
     # Steven's words (#272 item 4)
-    assert screens.card_line(card()) == ("24 deals, every one went as agreed. Disputes others raised about it: 0 decided "
+    assert screens.card_line(card()) == ("12 deals, every one went as agreed. Disputes others raised about it: 0 decided "
                                          "against it, of 0 decided; 0 open.")
-    assert screens.card_line(card(of=25, dnh=1, against=1)) == ("25 deals, 1 didn't go as agreed. Disputes others raised "
+    assert screens.card_line(card(of=13, dnh=1, against=1)) == ("13 deals, 1 didn't go as agreed. Disputes others raised "
                                                                 "about it: 1 decided against it, of 1 decided; 0 open.")
-    assert "0 didn't go as agreed, 1 not final yet" in screens.card_line(card(of=25, undecided=1))
-    assert "did not hold" not in screens.card_line(card(of=25, dnh=1)) and "failed" not in screens.card_line(card(dnh=1))
+    assert "0 didn't go as agreed, 1 not final yet" in screens.card_line(card(of=13, undecided=1))
+    assert "did not hold" not in screens.card_line(card(of=13, dnh=1)) and "failed" not in screens.card_line(card(dnh=1))
 
 
 def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
-    ev = buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1))
+    ev = buyer.Evidence("kestrel", card=card(of=13, dnh=1, against=1))
     ruled = {"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z", "adverse": True}
     line = screens.decision_line(assessment("NO", ["adverse-adjudication", "disputes-against"], [ruled]), ev)
     assert line.startswith("NO: you hold a ruling against this seller (deal 01234567, delivery not met, ruled 2026-11-25).")
@@ -68,7 +68,7 @@ def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike
 
 
 def test_a_second_buyer_sees_limit_from_the_card_alone():
-    ev = buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1))
+    ev = buyer.Evidence("kestrel", card=card(of=13, dnh=1, against=1))
     line = screens.decision_line(assessment("LIMIT", ["disputes-against"], cap=10), ev)
     assert line == ("LIMIT: a dispute about this seller was decided against it (1 of 1 decided); this pack limits any lost "
                     "dispute. At this limit the pack allows deals under 10 msat only, so no deal opens at 1,000 msat.")
@@ -104,7 +104,7 @@ def test_a_history_row_says_capsulectls_statuses_and_derives_no_outcome():
     assert row["asked"] == "Sold" and row["money"] == "from 1 sat (its value band)"
     assert row["outcome"] == "this party's row: ruled, not met; the other party's row: met"
     assert "held" not in row["outcome"] and row["witness"] == {"state": "none"}
-    assert pages.labels(card(of=25, dnh=1, against=1), witnessed=False) == [screens.card_line(card(of=25, dnh=1, against=1))]
+    assert pages.labels(card(of=13, dnh=1, against=1), witnessed=False) == [screens.card_line(card(of=13, dnh=1, against=1))]
 
 
 @pytest.mark.skipif(not os.environ.get("CAPSULE_ENGINE"), reason="CAPSULE_ENGINE names the evaluator")
@@ -116,7 +116,7 @@ def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
     clean = buyer.inputs(buyer.Evidence("alder", card=card()), 1000, buyer.Own(), now)
     no_tally = buyer.inputs(buyer.Evidence("alder", card=card()), 1000, buyer.Own(), now)
     no_tally["card"]["disputes"].pop("decided")
-    lost = buyer.inputs(buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1)), 1000, buyer.Own(), now)
+    lost = buyer.inputs(buyer.Evidence("kestrel", card=card(of=13, dnh=1, against=1)), 1000, buyer.Own(), now)
     clean["card"].update(first_checkpoint_at="2026-11-24T00:00:00Z", latest_checkpoint_at="2026-11-24T23:00:00Z")
     for d in (no_tally, lost):
         d["card"].update(first_checkpoint_at="2026-11-24T00:00:00Z", latest_checkpoint_at="2026-11-24T23:00:00Z")
@@ -208,3 +208,148 @@ def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
     with pytest.raises(buyer.pt.Refused, match="the offer is withdrawn, nothing was paid"):
         buyer.open_deal(tmp_path, Maya(), "alder", "k", assessment("GO"), {}, lambda *_: None, me="maya")
     assert wire.pending(tmp_path, "alder", "offer") == [] and wire.pending(tmp_path, "alder", "from") == []
+
+
+# -- stamps on demand (#297) -------------------------------------------------------------------------------------------
+
+def test_taken_means_the_witness_took_the_newest_checkpoint(monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    assert pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [9], "pending": [{"checkpoint": 4}]})
+    assert not pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [4], "pending": [{"checkpoint": 9}]})
+    assert not pt.taken({"state": "ticked", "checkpoint": 9})  # no delivery list: not taken
+    assert not pt.taken({"state": "not_due", "delivered": [9]})
+    assert not pt.taken({"error": "refused"})
+    assert pt.taken({"state": "ticked", "checkpoint": 9, "witness": "not_configured"})
+    monkeypatch.setenv("ARD_WITNESS", "off")
+    assert pt.taken({"state": "ticked", "checkpoint": 9})
+
+
+def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    p = pt.Party(tmp_path, "seller")
+    prof = p.dir / ".config" / "capsule" / "profiles" / f"{p.profile}.yaml"
+    prof.parent.mkdir(parents=True)
+    prof.write_text("name: x\ncheckpoint:\n    signing:\n        file: k\ncadence:\n  interval: 1m\n")
+    p.add_witness()
+    p.add_witness()
+    text = prof.read_text()
+    assert text.count(f"endpoint: {pt.WITNESS_URL}") == 1 and text.count(f"public_key: {pt.WITNESS_KEY}") == 1
+    assert text.index("checkpoint:") < text.index("endpoint:") < text.index("signing:")
+    prof.write_text("name: x\n")
+    with pytest.raises(pt.Refused):
+        p.add_witness()
+
+
+def test_a_seller_agent_waits_for_the_minute_its_sample_deals_count_held(tmp_path, monkeypatch):
+    import time
+
+    from cast import HELD_FROM
+
+    slept = []
+    monkeypatch.setattr(time, "sleep", slept.append)
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent.home, agent.label, agent.log = tmp_path, "Kestrel Print", []
+    agent._lock = __import__("threading").Lock()
+    agent.wait_sample_held()  # no seed file: no wait
+    (tmp_path / HELD_FROM).write_text(str(int(time.time()) - 5))
+    agent.wait_sample_held()  # past: no wait
+    assert slept == []
+    (tmp_path / HELD_FROM).write_text(str(int(time.time()) + 30))
+    agent.wait_sample_held()
+    assert len(slept) == 1 and 25 < slept[0] <= 31
+
+
+def test_a_sample_deals_window_ends_at_the_seeds_whole_second():
+    """seed.sample_deal hands offer ``window_end - int(now)`` seconds; offer writes now plus that, cut to the second:
+    the deal's window ends exactly at window_end (or a second later), never before the seed's own check."""
+    from datetime import timedelta
+
+    import party as pt
+
+    window_end = 1_795_620_090
+    for frac in (0.0, 0.2, 0.7, 0.999):
+        now = datetime.fromtimestamp(1_795_620_010 + frac, tz=timezone.utc)
+        left = window_end - int(now.timestamp())
+        end = datetime.strptime(pt._iso(now + timedelta(seconds=left)), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        assert end.timestamp() == window_end, frac
+
+
+def test_a_stamp_is_tried_again_only_with_time_left(monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    clock = [0.0]
+    monkeypatch.setattr(pt.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(pt.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    p = pt.Party.__new__(pt.Party)
+    p.name, tries = "x", []
+
+    def slow_refused():
+        tries.append(clock[0])
+        clock[0] += 5  # each try takes 5 s and the witness does not take it
+        return {"state": "ticked", "checkpoint": 1, "delivered": []}
+    p.stamp = slow_refused
+    with pytest.raises(pt.Refused):
+        p.wait_checkpoint(12)
+    assert tries == [0.0, 6.0] and clock[0] == 12.0  # a third try (at 12 s) would not end by the bound
+    clock[0], tries[:] = 0.0, []
+
+    def slower():
+        tries.append(clock[0])
+        clock[0] += 6
+        return {"state": "ticked", "checkpoint": 1, "delivered": []}
+    p.stamp = slower
+    with pytest.raises(pt.Refused):
+        p.wait_checkpoint(12)
+    assert tries == [0.0]  # after a 6 s try and the pause, 5 s are left: no second try
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_path, monkeypatch):
+    """A seller is done only when its worker says so: a stream thread that fails to start (any way out but success)
+    stops the seed, with no HELD_FROM file and no 'made' line (Codex on #301, 43a34ef)."""
+    import threading
+
+    import party as pt
+    import seed
+    from cast import HELD_FROM, SELLERS
+
+    class Fake:
+        def __init__(self, name):
+            self.name = name
+
+        def card_bundle(self, shared):
+            raise pt.Refused("no card yet")
+
+        def deals(self):
+            return []
+
+        def add_witness(self):
+            pass
+
+        def stamp(self):
+            return {"state": "ticked", "checkpoint": 1, "delivered": [1], "pending": []}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(seed, "parties", lambda home: {n: Fake(n) for n in (*SELLERS, "maya", *(f"sample-buyer-{s}" for s in SELLERS))})
+    monkeypatch.setattr(seed.adj.Adjudicator, "named", lambda self: {})
+    monkeypatch.setattr(seed, "sample_deal", lambda *a: "deal")
+    real_start, failed = threading.Thread.start, []
+
+    def start(self):
+        # Only a deal stream's start fails, the first one whichever seller's it is: the seed's own threads start.
+        if getattr(self, "_target", None) is not None and self._target.__name__ == "stream" and not failed:
+            failed.append(self)
+            raise RuntimeError("can't start new thread")
+        return real_start(self)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    said = []
+    with pytest.raises(SystemExit, match="did not finish"):
+        seed.seed(tmp_path, say=said.append)
+    assert failed and not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)

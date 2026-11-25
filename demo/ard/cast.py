@@ -15,10 +15,19 @@ SELLERS = {
     "kestrel": {"label": "Kestrel Print", "price_msat": 1000, "item": ITEM, "observed": "partial:badges_150_of_200",
                 "shipped": "150 of 200 badges"},
 }
-DEALS_EACH = 24
+DEALS_EACH = 12
 BUYER = "maya"
 SAMPLE_BUYER = "sample-buyer"
+
+
+def sample_buyer(seller: str) -> str:
+    """The sample buyer of one seller's sample history: one per seller, so both histories are made at once (one buyer's
+    store takes one deal step at a time) and each store stays small."""
+    return f"{SAMPLE_BUYER}-{seller}"
 ADJUDICATOR = "adjudicator"
+#: The file in the demo home that says when the sample deals can first count as held (seconds since the epoch): the start
+#: of the first minute after their contest windows end (a stamp's time is cut to the minute).
+HELD_FROM = "sample-held-from"
 
 
 def label(name: str) -> str:
