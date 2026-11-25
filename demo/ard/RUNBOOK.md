@@ -2,25 +2,25 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 1372f2e (main, with #935's receipt page and #933's `deal tick --now`; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 130877b (main, capsule-viewer#422: the receipt page of #420 and #421) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 684dd44 (main, with #935's receipt page, #933's `deal tick --now` and #951's receipt page on capsule-viewer bb8169bb; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 1259579 (main, for the Python package; the receipt page itself is drawn by capsulectl, on the capsule-viewer bb8169bb evidencebook pins, and the History page vendors capsule-viewer's 0.27.2 script) · Goose Desktop 1.59.2 · real rail: ln-pay-local 4b936bb
 
-Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); and the receipt page, capsulectl's own `deal report --html` (evidencebook#935) drawn by capsule-viewer 130877b (#310). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
+Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); the receipt page, capsulectl's own `deal report --html` (evidencebook#935, #951) on capsule-viewer bb8169bb (#310, #320); the History page on capsule-viewer 0.27.2, evidencebook 684dd44 and ln-pay-local 4b936bb (#320). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
 
 ## What you will see
 
-Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 12 sample deals, all held, and no disputes. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
+Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Alder starts with 15 sample deals and Kestrel with 10, all held, and no disputes: a longer track record against half the price. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
-2. **History cards.** Each seller's card: 12 deals, every one went as agreed, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
+2. **History cards.** Alder's card: 15 deals, every one went as agreed, no disputes; Kestrel's: 10 deals, the same. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
 
 3. **Deal 1.** Both sellers are "Good to buy"; Maya picks Kestrel, the cheaper one, and pays 1,000 msat (a dialog asks you first). Kestrel's own delivery record says 150 of 200 badges were shipped. Maya disputes the delivery.
 
 4. **The adjudicator.** The adjudicator asks each side for its books, and each side's agent answers on its own: its own book and the copy it holds of the other side's. The adjudicator's window shows the case and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
 
-5. **Deal 2.** Kestrel's card now counts 13 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
+5. **Deal 2.** Kestrel's card now counts 11 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
 
-The registry, the seller sites and the 24 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
+The registry, the seller sites and the 25 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
 
 ## What you need
 
@@ -123,7 +123,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
    [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
-   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e; git -C evidencebook checkout -q 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e
+   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a; git -C evidencebook checkout -q 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a
    [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 0043a944b22dc25515f1440169fcdabfd345750b; git -C capsule-cli checkout -q 0043a944b22dc25515f1440169fcdabfd345750b
    [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
    ```
@@ -134,7 +134,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    ```
    cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
-   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=1372f2ea75c2bc9c884dd701307ab3b1be92fa1e V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
+   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=684dd44d02ba1d47ce7afdf3eee3c182317e1f0a V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
    mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
    (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
    install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
@@ -153,8 +153,8 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    cd $HOME/ard-demo && mkdir -p bin && (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
-   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
+   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@125957929578f651d3ab474c56c87e0ad74b324e"
+   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@125957929578f651d3ab474c56c87e0ad74b324e"
    ```
 
    **Expect:** pip ends with no error. The second line is needed: every capsule-viewer commit carries the same version number, so the first line alone keeps an earlier capsule-viewer.
@@ -202,15 +202,14 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 1. [Real] Install ln-pay-local. ln-pay-local is a small command-line wallet on Lexe's Lightning SDK.
 
    ```
-   git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local
-   git -C $HOME/ard-demo/ln-pay-local checkout -q 025d56672d92ea12fda5fe6c3fbb84dd1d40ddf7
+   [ -d $HOME/ard-demo/ln-pay-local ] || git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local; git -C $HOME/ard-demo/ln-pay-local fetch -q origin 4b936bb164d7dcea4db37075ad336d4a9f2ec102; git -C $HOME/ard-demo/ln-pay-local checkout -q 4b936bb164d7dcea4db37075ad336d4a9f2ec102
    cargo install --path $HOME/ard-demo/ln-pay-local --locked
    ln-pay-local --help
    ```
 
    **Expect:** one usage line starting `{"error": "usage: ln-pay-local init`.
 
-2. [Real] Make a buyer and a seller wallet. **Each writes a private seed file into its folder: back it up, never print or share it.**
+2. [Real] Make a buyer and a seller wallet. **Each registers a wallet account with Lexe and writes its private seed into its folder, unencrypted: back the folder up, never print or share it.**
 
    ```
    ln-pay-local init --wallet $HOME/ard-wallets/buyer
@@ -262,7 +261,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
    **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …". If it refuses, it says what to stop.
 
-2. Make the sample history. This is set-up: run it before anyone watches, at least two minutes before you open the windows. It takes about a minute: 12 sample deals per seller, with contest windows of seconds, and one witness stamp per seller. Each card counts its deals held from the first stamp after their windows end, which each seller's window takes as it opens; a window opened sooner waits for that minute and says so.
+2. Make the sample history. This is set-up: run it before anyone watches, at least two minutes before you open the windows. It takes about a minute: 15 sample deals for Alder and 10 for Kestrel, with contest windows of seconds, and one witness stamp per seller. Each card counts its deals held from the first stamp after their windows end, which each seller's window takes as it opens; a window opened sooner waits for that minute and says so.
 
    ```
    (cd demo/ard && ../../.venv/bin/python demo.py seed)
@@ -295,7 +294,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 6. If the windows are still not tiled: allow the access, click Maya's window, then by hand: Window, Move & Resize, Quarters.
 
 7. Click Trust and Execute in all four windows, in any order.
-   **Expect:** Alder and Kestrel each say 12 deals, all held; Maya and the adjudicator's assistant only say they are ready.
+   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya and the adjudicator's assistant only say they are ready.
 
 8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
@@ -325,7 +324,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** for each: "History card: 12 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 12 deals are sample history the operator made before this run." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
+   **Expect:** Alder: "History card: 15 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 15 deals are sample history the operator made before this run." Kestrel: the same with 10 deals and "Its first 10 deals …". The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
 
 4. Type.
 
@@ -333,7 +332,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Assess both sellers.
    ```
 
-   **Expect:** both "GO: … is within this pack's limit for it", Kestrel at 1,000 msat and Alder at 2,000 msat.
+   **Expect:** both "GO: … is within this pack's limit for it", Kestrel at 1,000 msat and Alder at 2,000 msat. Kestrel is half the price with 10 deals on its card; Alder has 15. Both pass Maya's rules.
 
 5. Type.
 
@@ -382,7 +381,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 12 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
+    **Expect:** "11 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 10 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type:
 
@@ -399,7 +398,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya's statement sent to Alder Print Co.: she received what she paid for." Cancel instead: "Maya chose Cancel, so nothing was sent in Maya's name."
 
 15. Type `Show your History card, then your receipt.`
-    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at …, as capsulectl verify reported on your own book." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are UTC, as the page writes them.
+    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at … (… UTC), as capsulectl verify reported on your own book. This file carries no witness receipt, so this page did not check it itself." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are in this Mac's own zone, with UTC beside the due and window-end times.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 

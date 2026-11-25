@@ -840,3 +840,43 @@ def test_a_seeded_home_is_refused_only_past_each_sellers_own_count(tmp_path, mon
     else:
         seed.seed(tmp_path, say=said.append)
         assert said == ["already seeded: the sample history is made and stamped"]
+
+
+
+def test_the_viewer_drift_check_fails_only_when_the_vendored_copy_is_behind():
+    # evidencebook-skills#316: a vendored History script older than capsule-viewer's newest ts/v* release fails CI
+    import viewer_drift
+    tags = ["abc\trefs/tags/ts/v0.25.0", "def\trefs/tags/ts/v0.27.2", "def\trefs/tags/ts/v0.27.2^{}", "x\trefs/tags/go/v0.30.0",
+            "y\trefs/tags/ts/v0.27.10"]
+    assert viewer_drift.newest(tags) == "0.27.10"
+    assert viewer_drift.behind("0.27.2", tags) == "0.27.10"
+    assert viewer_drift.behind("0.27.10", tags) is None
+    assert viewer_drift.behind("0.25.0", ["refs/tags/ts/v0.25.0"]) is None
+    assert viewer_drift.behind("0.25.0", []) is None
+    assert viewer_drift.vendored_version() == pages.VIEWER.removeprefix("capsule-viewer-") == "0.27.2"
+
+
+@pytest.mark.parametrize("result,want,said", [
+    ("abc\trefs/tags/ts/v0.27.2\n", 0, "is the newest release (0.27.2)"),
+    ("abc\trefs/tags/ts/v0.27.2\nabd\trefs/tags/ts/v0.28.0\n", 1, "0.28.0 is released"),
+    ("", 2, "no ts/vX.Y.Z release tag found"),
+    ("abc\trefs/tags/go/v0.30.0\n", 2, "no ts/vX.Y.Z release tag found"),
+    ("error", 2, "Could not resolve host"),
+    ("timeout", 2, "cannot read capsule-viewer's releases"),
+])
+def test_the_viewer_drift_command_exits_by_what_it_could_compare(monkeypatch, capsys, result, want, said):
+    # #320 review: the check passes only after comparing with a release it found; no network is a failure, not a pass
+    import subprocess
+    import viewer_drift
+
+    def run(*args, **kwargs):
+        if result == "error":
+            raise subprocess.CalledProcessError(128, args[0], stderr="Could not resolve host")
+        if result == "timeout":
+            raise subprocess.TimeoutExpired(args[0], 60)
+        return subprocess.CompletedProcess(args[0], 0, stdout=result)
+    monkeypatch.setattr(viewer_drift.subprocess, "run", run)
+    monkeypatch.setattr(viewer_drift, "vendored_version", lambda: "0.27.2")
+    assert viewer_drift.main() == want
+    out = capsys.readouterr()
+    assert said in out.out + out.err
