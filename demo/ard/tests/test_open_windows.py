@@ -59,7 +59,8 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert calls[1][4].endswith("goose-root")  # the demo's own Goose root, never the user's ~/.config/goose
     import json as _json
     assert calls[1][5] == "--env" and calls[1][6].startswith("GOOSE_SEARCH_PATHS=")
-    assert _json.loads(calls[1][6].split("=", 1)[1]) == [str(ow.acp_prefix() / "node_modules" / ".bin")]  # the demo's adapter
+    assert _json.loads(calls[1][6].split("=", 1)[1]) == [str(ow.LOCKED_DIR)]  # the demo's locked adapter (#276)
+    assert calls[1][7:11] == ["--env", f"ARD_ACP_PREFIX={ow.acp_prefix()}", "--env", f"ARD_PYTHON={ow.sys.executable}"]
     assert [c[1] for c in calls[2:5]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
     assert calls[5] == ow.TILE and len(calls) == 6
     assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
@@ -150,4 +151,6 @@ def test_the_search_path_env_is_valid_json_with_an_expanded_absolute_path(calls,
     paths = _json.loads(value.split("=", 1)[1])
     assert isinstance(paths, list) and len(paths) == 1
     assert Path(paths[0]).is_absolute() and "$" not in paths[0] and "~" not in paths[0]
-    assert paths[0].endswith("ard-demo/acp/node_modules/.bin")
+    assert paths[0].endswith("demo/ard/goose/locked")
+    prefix = next(arg for arg in calls[0] if arg.startswith("ARD_ACP_PREFIX="))
+    assert prefix.endswith("ard-demo/acp") and "~" not in prefix and "$" not in prefix

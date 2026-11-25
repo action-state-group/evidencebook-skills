@@ -20,7 +20,7 @@ Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousa
 
 4. **Recommendation and pick.** Maya's agent recommends; Maya picks. Picking Kestrel opens no deal and pays nothing. Picking Alder seals the pick.
 
-5. **Payment.** A macOS dialog asks you to approve 2,000 msat. Only your click releases the payment, as long as each agent has only its own ard tools; by default the payment is simulated and no money moves.
+5. **Payment.** A macOS dialog asks you to approve 2,000 msat. Only your click releases the payment: each agent has only its own ard tools, which the demo enforces (its locked Claude Code adapter gives an agent no shell, file, web or connector tool and none of your own Claude Code settings); by default the payment is simulated and no money moves.
 
 6. **Receipts.** Each side keeps its own record. Maya's card shows 1 deal, Alder's 25, each deal row reads time-stamped by Action State's hosted witness (a hosted witness, run by Action State, not independent of us), and the live deal's row has an Open receipt link (a demo link, with the line "Demo link to this party's receipt page; the History card itself carries no link."). With a spending limit set, a second order is held for the person's OK at Maya's deal check, and each side can open a receipt page.
 
@@ -315,7 +315,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
 
-9. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools.
+9. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder` or `ard_kestrel` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type the ask. The payment dialog holds only for agents limited to their own ard tools: the demo's locked adapter (`demo/ard/goose/locked`, which open-windows.py starts Goose with) gives each agent only ToolSearch and its own ard tools. To see it, type `List every tool you have by exact name, including deferred ones.` in any window before the ask. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else (no Bash, Write, WebFetch or connector tools).
 
 10. Keep the screen awake and unlocked: the payment dialog appears on it.
 

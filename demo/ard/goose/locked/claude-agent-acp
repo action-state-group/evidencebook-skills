@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# The demo's Claude Code adapter for Goose (evidencebook-skills#276). Goose finds this file first through
+# GOOSE_SEARCH_PATHS (open-windows.py) and starts it as the "Claude Code ACP" provider. It runs the pinned adapter
+# under ARD_ACP_PREFIX, with the Claude CLI the adapter starts replaced by claude-locked (next to this file), which
+# gives each window's agent only ToolSearch and the window's own ard_* tools.
+here=$(cd "$(dirname "$0")" && pwd)
+: "${ARD_ACP_PREFIX:?ARD_ACP_PREFIX is not set: start Goose for the demo with open-windows.py}"
+CLAUDE_CODE_EXECUTABLE="$here/claude-locked" exec "$ARD_ACP_PREFIX/node_modules/.bin/claude-agent-acp" "$@"

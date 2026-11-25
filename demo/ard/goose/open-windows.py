@@ -173,6 +173,8 @@ GOOSE_ROOT_DEFAULT = "~/.config/ard-commerce-goose"
 #: global install replaces the version other ACP clients on the Mac rely on (one broke above 0.94.0). 0.108.0 is the
 #: version Goose 1.59.2 ran with on the Mac the demo was built on.
 ACP_PIN = "0.108.0"
+#: The demo's adapter wrapper (evidencebook-skills#276): the folder Goose searches first for claude-agent-acp.
+LOCKED_DIR = HERE / "locked"
 ACP_PREFIX_DEFAULT = "~/ard-demo/acp"
 
 
@@ -197,10 +199,13 @@ def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
                 "(pinned, under the demo's folder; never npm install -g, which changes the adapter other tools use)")
     root.mkdir(parents=True, exist_ok=True)
     # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
-    # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first.
+    # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first. It finds the
+    # demo's locked adapter (goose/locked, #276), which runs the pinned one under ARD_ACP_PREFIX with each agent limited
+    # to ToolSearch and its own ard tools; ARD_PYTHON runs the lock's filter.
     try:
         subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}",
-                        "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(bin_dir)])}"], check=True,
+                        "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(LOCKED_DIR)])}",
+                        "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}"], check=True,
                        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"
