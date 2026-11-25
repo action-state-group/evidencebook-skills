@@ -1,27 +1,30 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The ARD two-seller demo as a Goose extension (an MCP server over stdio), so a party's Goose in
-Goose Desktop runs its steps itself. It drives the same :class:`demo.Run` the script demo runs; each
-tool returns the text that run prints, so the screen says what the script demo says (:mod:`screens`).
+"""The ARD demo as a Goose extension (an MCP server over stdio), one per party's window, so each party's Goose in
+Goose Desktop runs its own steps. Every tool returns the text a person reads (:mod:`screens`); a refusal is a line
+starting ``REFUSED:`` and changes nothing.
 
-``ARD_ROLE`` picks who this server is:
+``ARD_ROLE`` picks whose window this is:
 
-``maya``     the buyer's window (needs the sellers' windows running):
-    ard_find_sellers   ->  Maya's ask and ARD discovery
-    ard_show_history   ->  each seller's signed answers, checked, and the History cards
-    ard_assess         ->  the assessment (the on-stage edit is its ``max_adverse_permille``)
-    ard_pick           ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
-    ard_pay            ->  the deal and the payment; the one tool that moves money (the presenter approves in a dialog)
-``alder`` / ``kestrel``     a seller's window, its own node and keys:
-    ard_seller_activity  ->  what its agent did: requests answered, the deal, the sale, its card
-    ard_show_card / ard_show_receipt  ->  its own History card and its own receipt (every window has these two)
-    ard_open_card_page  ->  its own History card as a page in the browser (every window; pages.py)
-    ard_open_receipt_page  ->  its own receipt for its closed deal as a page in the browser (every window; receipt.py)
-``all`` (default)     the whole story in one process, Maya's tools (one window).
+``maya``   the buyer:
+    ard_find_sellers  ->  her ask and ARD discovery
+    ard_show_history  ->  each seller's History card, fetched and checked
+    ard_assess        ->  the assessment of each seller under her pack
+    ard_pick          ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
+    ard_pay           ->  the deal and the payment; the one tool that moves money (the presenter approves in a dialog)
+    ard_dispute       ->  her dispute of a deal's delivery, sent to the seller and to the deal's adjudicator
+``alder`` / ``kestrel``   a seller, its own profile and keys; its agent answers on its own:
+    ard_seller_activity  ->  what its agent did: the deal, the delivery, a dispute, a ruling, its card now
+``adjudicator``   the demo's adjudicator (ledger-cloud's, run locally by the demo operator):
+    ard_case          ->  the cases sent to it, and what each side's books show
+    ard_rule          ->  the presenter's ruling on a case (a dialog), recorded and time-stamped
+    ard_case_activity ->  whether each party entered the ruling in its own book
+Every party's window also has ard_show_card, ard_open_card_page, ard_show_receipt and ard_open_receipt_page: its own
+History card and its own receipt (the adjudicator holds no deal of its own, so not those).
 
-Environment: ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK`` and ``ARD_HOME`` as for ``demo.py``; ``ARD_RAIL``
-(``fake`` or ``lightning``, default ``fake``) and ``ARD_KESTREL_CARD`` (``sentinel`` or ``sample``, the
-same in every window); ``CAPSULECTL_DEAL``, the capsulectl-deal binary the receipt page is verified with. Seed the home first with ``demo.py seed``. See README.md ("In Goose Desktop")."""
+Environment (``demo.py --help`` lists it): ``CAPSULECTL_DEAL``, ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK``,
+``ARD_ADJUDICATOR_BIN``, ``ARD_HOME``, ``ARD_RAIL`` (``fake``, ``lightning`` or ``local``; default ``fake``). Seed the
+home first with ``demo.py seed``. See RUNBOOK.md."""
 from __future__ import annotations
 
 import contextlib
@@ -30,10 +33,10 @@ import functools
 import inspect
 import io
 import os
+import subprocess
 import sys
 import threading
 import time
-import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -44,30 +47,39 @@ try:  # mcp >= 2 renamed FastMCP to MCPServer
 except ImportError:  # mcp < 2
     from mcp.server.fastmcp import FastMCP
 
-import demo  # noqa: E402  (puts ../goose on the path and sets CAPSULE_WITNESS)
+import adjudicator as adj  # noqa: E402
+import ard  # noqa: E402
 import buyer  # noqa: E402
+import flow  # noqa: E402
 import pack as packs  # noqa: E402
-import parties  # noqa: E402
+import party as pt  # noqa: E402
 import pay  # noqa: E402
-import rules  # noqa: E402
 import screens  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
-from world import SELLERS  # noqa: E402
+import stage  # noqa: E402
+from cast import ADJUDICATOR, BUYER, SELLERS, label  # noqa: E402
 
-ROLE = os.environ.get("ARD_ROLE", "all")
-if ROLE not in ("all", "maya", *SELLERS):
-    raise SystemExit(f"ARD_ROLE must be all, maya, alder or kestrel, not {ROLE!r}")
+ROLE = os.environ.get("ARD_ROLE", "maya")
+if ROLE not in (BUYER, ADJUDICATOR, *SELLERS):
+    raise SystemExit(f"ARD_ROLE must be maya, alder, kestrel or adjudicator, not {ROLE!r}")
 
-server = FastMCP("ard_demo" if ROLE == "all" else f"ard_{ROLE}")
-DEFAULT_PERMILLE = demo.DEFAULT_PERMILLE
+server = FastMCP(f"ard_{ROLE}")
+DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
 
 def _home() -> Path:
-    return Path(os.environ.get("ARD_HOME", demo.DEFAULT_HOME)).expanduser()
+    return Path(os.environ.get("ARD_HOME", DEFAULT_HOME)).expanduser()
+
+
+def _rail_name() -> str:
+    return os.environ.get("ARD_RAIL", "fake")
+
+
+def _real() -> bool:
+    return _rail_name() in ("lightning", "local")
 
 
 def _lock(role: str) -> object:
-    """One server per party and demo home: a second Goose chat's server would wait on the first's shelf locks."""
+    """One server per party and demo home: a second Goose chat's server would wait on the first's store."""
     home = _home()
     home.mkdir(parents=True, exist_ok=True)
     handle = open(home / f".desktop-{role}.lock", "w")
@@ -79,109 +91,91 @@ def _lock(role: str) -> object:
     return handle
 
 
-class Session:
-    """The buyer's run (``all`` and ``maya``)."""
+def _seeded() -> None:
+    if not pt.Party(_home(), BUYER).exists:
+        raise RuntimeError("no sample history yet: run `python demo.py seed` first")
 
-    def __init__(self) -> None:
-        packs.engine(), packs.skills_checkout()
-        self._lock = _lock(ROLE)
-        self.start: packs.Pack | None = None
-        self.assessed: dict | None = None
-        self.pack: packs.Pack | None = None
-        self.picked: dict[str, str] = {}
-        self.paid: set[str] = set()       # payments the rail reported succeeded
-        self.deal_ids: list[str] = []     # this run's deals, oldest first (the receipt shows the latest)
-        self.attempted: set[str] = set()  # payments started: a failure mid-way is not a retry
-        self.declined: set[str] = set()   # the presenter's last dialog for this seller was not approved
-        self.pay_lock = threading.Lock()  # one check, approval and payment at a time
-        rail: pay.Rail = pay.from_env(os.environ.get("ARD_RAIL", "fake"))
-        kestrel_card = os.environ.get("ARD_KESTREL_CARD", "sentinel")
-        if ROLE == "maya":
-            self.world = parties.ProcessWorld(_home(), ("maya",)).open()
-            self.world.sample_card = {"kestrel": True} if kestrel_card == "sample" else {}
-            parties.ensure_stage(_home())
-            self.bworld = parties.BuyerWorld(self.world, {})
-            self.server = parties.NoServer(parties.REGISTRY_URL)
-            self.server.origins, self.server.query = parties.ORIGINS, parties.QUERY
-            self.run = demo.Run(self.bworld, self.server, rail, True, False)
-            return
-        args = types.SimpleNamespace(home=str(_home()), port=0, kestrel_card=kestrel_card)
-        self.world, self.server = demo.prepare(args)
-        try:
-            if any(sum(1 for b in self.world.nodes[n].shelf.books() if b.startswith("deal/") and b.count("/") == 1) < demo.DEALS_EACH
-                   for n in SELLERS):
-                raise RuntimeError("no sample history yet: run `python demo.py seed` first")
-            self.run = demo.Run(self.world, self.server, rail, True, False)
-        except BaseException:
-            self.server.close()
-            self.world.close()
-            raise
 
+# -- dialogs ------------------------------------------------------------------------------------------
 
 def dialog_text(text: str) -> str:
     """The words a native dialog shows for ``text``: AppleScript's string quoting takes no backslash or double quote,
-    so they are replaced. The approval record commits to these words, the ones the person saw."""
+    so they are replaced. A record of the person's answer commits to these words, the ones the person saw."""
     return text.replace("\\", " ").replace('"', "'")
 
 
-def approve_payment(summary: str) -> bool:
-    """The presenter's approval, out of band: a native dialog on the presenter's screen that the agent neither reads
-    nor answers through the chat (a code returned in the tool's output would reach the agent, which could reuse it in
-    the same turn). True only for the Pay button; Cancel, a timeout, no screen or any error is a refusal.
-    ``ARD_APPROVAL=none`` turns the gate off (tests only; the tool says so in its output)."""
-    import subprocess
-
-    text = dialog_text(summary)
-    script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
-              'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
+def ask_person(title: str, text: str, yes: str, no: str = "Cancel") -> bool:
+    """A native dialog on the presenter's screen that the agent neither reads nor answers through the chat. True only
+    for ``yes``; ``no``, a timeout (3 minutes), no screen or any error is a no."""
+    script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" buttons {{"{no}", "{yes}"}} '
+              f'default button "{no}" cancel button "{no}" with icon caution giving up after 180')
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
     except (OSError, subprocess.SubprocessError):
         return False
-    return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
+    return run.returncode == 0 and f"button returned:{yes}" in run.stdout and "gave up:true" not in run.stdout
 
 
-def approve_hold(title: str, text: str) -> bool:
-    """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
-    :func:`approve_payment`, with :func:`screens.hold_question`'s title and text and Steven's buttons (#270); True only
-    for Buy anyway. Don't buy, a timeout, no screen or any error is a decline."""
-    import subprocess
-
-    script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" '
-              "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
-              "with icon caution giving up after 180")
-    try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
-    except (OSError, subprocess.SubprocessError):
+def gate_off() -> bool:
+    """``ARD_APPROVAL=none`` answers every dialog yes, on the simulated rail only (tests; the tool says so)."""
+    if os.environ.get("ARD_APPROVAL") != "none":
         return False
-    return run.returncode == 0 and "button returned:Buy anyway" in run.stdout and "gave up:true" not in run.stdout
+    if _real():
+        raise RuntimeError(f"ARD_APPROVAL=none is refused on the {_rail_name()} rail, which moves real money: unset it")
+    print("(approval dialog off: ARD_APPROVAL=none, simulated rail, tests only)")
+    return True
 
 
-def _ask_order(summary: str, real: bool, rail_name: str, seller: str = "", rail: str = ""):
-    """The one question that releases an order under the person's spending limit, put after the deal check so a hold
-    reason is part of it: an order the Everyday Rules hold is one dialog (:func:`screens.hold_question`: over a limit
-    alone its figures, else every reason; Don't buy or Buy anyway); an order they do not hold is the payment dialog as
-    before (``approval_gate``). ``seller`` and ``rail`` name the payee and the rail clause on the question's item line.
-    For a yes it returns the person's :class:`rules.Answer` (the words the dialog showed and the button), which the
-    approval record commits to."""
-    def ask(outcome: "rules.Outcome") -> "rules.Answer | bool | None":
-        if outcome.held:
-            title, text = screens.hold_question(outcome.item, outcome.amount_msat, outcome.limits, outcome.reasons,
-                                                outcome.over_limit, seller=seller, rail=rail)
-            if not approve_hold(title, text):
-                return None
-            print(screens.rules_approved(outcome.reasons, outcome.over_limit))
-            return rules.Answer(dialog_text(f"{title}\n{text}"), "Buy anyway")
-        try:
-            clicked = approval_gate(real, rail_name, summary)
-        except NotApproved:
-            return None
-        return clicked or True  # True: the gate is off on a simulated rail (ARD_APPROVAL=none), no one clicked
-    return ask
+# -- the buyer's session ------------------------------------------------------------------------------
+
+class Session:
+    """Maya's run: her profile, the sellers found, the evidence, the assessments, the pick and the deals."""
+
+    def __init__(self) -> None:
+        packs.engine(), packs.skills_checkout()
+        _seeded()
+        self._lock = _lock(BUYER)
+        stage.ensure_stage(_home())
+        self.home = _home()
+        self.maya = pt.Party(self.home, BUYER)
+        self.adjudicator = adj.Adjudicator(self.home)
+        self.rail: pay.Rail = pay.from_env(_rail_name())
+        self.entries: list[dict] = []
+        self.evidence: dict[str, buyer.Evidence] = {}
+        self.assessed: dict[str, buyer.Assessment] = {}
+        self.pack: packs.Pack | None = None
+        self.picked: set[str] = set()
+        self.deals: list[buyer.Deal] = []
+        self.declined: set[str] = set()
+        self.pay_lock = threading.Lock()
+        self.log: list[str] = []
+        threading.Thread(target=self._rulings, daemon=True).start()
+
+    def say(self, line: str) -> None:
+        self.log.append(line)
+
+    def _rulings(self) -> None:
+        """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
+        while True:
+            try:
+                for d in {d.seller for d in self.deals}:
+                    flow.enter_rulings(self.home, self.maya, d, self.say)
+                buyer.seller_statements(self.home, self.maya)
+            except Exception as exc:  # shown in the next tool's output
+                self.say(f"could not read the adjudicator yet: {exc}")
+            time.sleep(3)
+
+    @property
+    def keys(self) -> dict[str, str]:
+        return {e["id"]: e["commitment"]["key_id"] for e in self.entries if "commitment" in e}
+
+    def latest(self, seller: str | None = None) -> buyer.Deal | None:
+        ds = [d for d in self.deals if seller is None or d.seller == seller]
+        return ds[-1] if ds else None
 
 
 _session: Session | None = None
-_seller: parties.Seller | None = None
+_seller: flow.SellerAgent | None = None
 _seller_lock: object | None = None
 
 
@@ -192,25 +186,20 @@ def session() -> Session:
     return _session
 
 
-def seller() -> parties.Seller:
-    global _seller
+def seller() -> flow.SellerAgent:
+    global _seller, _seller_lock
     if _seller is None:
         packs.engine()
-        global _seller_lock
-        _seller_lock = _lock(ROLE)  # kept for the process's life: a dropped handle closes and frees the lock
-        world = parties.ProcessWorld(_home(), (ROLE,)).open()
-        n = world.nodes[ROLE]
-        if sum(1 for b in n.shelf.books() if b.startswith("deal/") and b.count("/") == 1) < demo.DEALS_EACH:
-            world.close()
-            raise RuntimeError("no sample history yet: run `python demo.py seed` first")
-        parties.ensure_stage(_home())
-        _seller = parties.Seller(world, ROLE, os.environ.get("ARD_KESTREL_CARD", "sentinel"))
+        _seeded()
+        _seller_lock = _lock(ROLE)
+        stage.ensure_stage(_home())
+        _seller = flow.SellerAgent(_home(), ROLE)
     return _seller
 
 
 def _tool(*roles: str, description: str | None = None):
-    """Register a tool for these roles (and for ``all``, which is the buyer's five). A tool returns the text the
-    run printed; a refusal is a line starting ``REFUSED:`` and changes nothing."""
+    """Register a tool for these roles. A tool returns the text it printed; a refusal is a line starting
+    ``REFUSED:`` and changes nothing."""
     def deco(fn):
         @functools.wraps(fn)
         def run(*args, **kwargs) -> str:
@@ -218,13 +207,13 @@ def _tool(*roles: str, description: str | None = None):
             try:
                 with contextlib.redirect_stdout(buf):
                     fn(*args, **kwargs)
-            except (SystemExit, Exception) as exc:  # the demo's own refusals raise SystemExit with a message
+            except (SystemExit, Exception) as exc:
                 return (buf.getvalue() + f"\nREFUSED: {exc}").strip()
             return buf.getvalue().strip()
-        run.__signature__ = inspect.signature(fn).replace(return_annotation=str)  # the result is the text, not what fn returns
+        run.__signature__ = inspect.signature(fn).replace(return_annotation=str)
         run.__annotations__ = {**fn.__annotations__, "return": str}
         del run.__wrapped__
-        if ROLE in roles or (ROLE == "all" and "maya" in roles):
+        if ROLE in roles:
             return server.tool(description=description)(run)
         return run
     return deco
@@ -233,307 +222,356 @@ def _tool(*roles: str, description: str | None = None):
 def _seller_key(name: str) -> str:
     key = name.strip().lower().split()[0] if name.strip() else ""
     if key not in SELLERS:
-        raise ValueError(f"unknown seller {name!r}; the sellers found are " + ", ".join(SELLERS[k]["label"] for k in SELLERS))
+        raise ValueError(f"unknown seller {name!r}; the sellers are " + ", ".join(SELLERS[k]["label"] for k in SELLERS))
     return key
 
 
+def _flush(s: Session) -> None:
+    while s.log:
+        print(s.log.pop(0))
+
+
+# -- Maya ---------------------------------------------------------------------------------------------
+
 @_tool("maya")
 def ard_find_sellers() -> None:
-    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its offer and whether its signed
+    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its signed
     commitment verified. Call this first."""
     s = session()
-    s.run.discover()
-    if ROLE == "maya":
-        s.bworld.nodes.update(parties.peers_from(_home()))
-        if len(s.run.entries) < len(SELLERS):
-            print("only " + ", ".join(e["name"] for e in s.run.entries) + " answered: the other seller's window is not running")
+    s.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
+    for e in s.entries:
+        price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
+        print(f"found: {e['name']:18} {price:>10}   commitment {'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
+        for line in e.get("checks", []):
+            print(f"       {line}")
+    if len(s.entries) < len(SELLERS):
+        print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
 
 
 @_tool("maya")
 def ard_show_history() -> None:
-    """Step 3: ask each seller found for its evidence (history card and selection, over its mailbox), check each
-    signed answer, and show the History cards. Call after ard_find_sellers."""
+    """Step 3: fetch each seller's History card and check it (its signature, the key its commitment names, its witness
+    receipt), and show it. Call after ard_find_sellers, and again before a second order: a card changes."""
     s = session()
-    if not s.run.entries:
+    if not s.entries:
         raise RuntimeError("call ard_find_sellers first")
-    s.run.collect()
-    print("\nHistory cards")
-    for e in s.run.verified:
-        ev = s.run.evidence[e["id"]]
-        print(f"  {e['name']:18} {screens.card_line(ev, ev.sample_card)}")
+    for e in s.entries:
+        ev = buyer.gather(s.home, s.maya, e)
+        s.evidence[e["id"]] = ev
+        print(f"\n{e['name']}")
+        print("\n".join("  " + line for line in screens.check_lines(ev)))
+        if ev.card:
+            print(f"  History card: {screens.card_line(ev.card)}")
+            print(f"  {screens.signed_line(e['name'], ev.read is not None and ev.read.witness_status == 'pass')}")
 
 
 @_tool("maya")
-def ard_assess(max_adverse_permille: int = DEFAULT_PERMILLE) -> None:
-    """Step 4: assess each seller under the admission pack, first as written, then with the rule tightened to at most
-    ``max_adverse_permille`` deals in every 1,000 not holding (the pack's thresholds are placeholders).
-    Call after ard_show_history."""
+def ard_assess() -> None:
+    """Step 4: assess each seller under Maya's admission pack (its thresholds are placeholders), from the card she
+    checked and her own records of deals with that seller. Call after ard_show_history."""
     s = session()
-    if not s.run.evidence:
+    if not s.evidence:
         raise RuntimeError("call ard_show_history first")
-    s.start = s.start or packs.starting()
-    s.run.assessments(s.start, "4  Assessment under the starting pack")
-    s.pack = s.run.edit(s.start, max_adverse_permille)
-    s.assessed = s.run.assessments(s.pack, "4b  Assessment again under the edited pack")
+    s.pack = s.pack or packs.starting()
+    p = s.pack
+    print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
+    print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})")
+    print(f"({screens.OPERATOR_NOTE})\n")
+    for e in s.entries:
+        ev = s.evidence.get(e["id"])
+        if ev is None or ev.card is None:
+            print(f"  {e['name']:18} not assessed: no checked History card")
+            continue
+        a = buyer.assess(s.maya, ev, e["commitment"]["key_id"], e["offer"]["price_msat"], p)
+        s.assessed[e["id"]] = a
+        ceiling = p.ceiling_msat(a.tier) if a.tier else None
+        print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}")
 
 
 @_tool("maya")
 def ard_pick(seller: str) -> None:
-    """Step 5-6: seal Maya's pick of ``seller`` ("alder" or "kestrel"), citing both assessments. A seller over its
-    limit ends here: no deal opens and nothing is paid. For a seller within its limit, ard_pay pays it next.
-    Call after ard_assess."""
+    """Step 5: seal Maya's pick of ``seller`` ("alder" or "kestrel"), citing every assessment. A seller that is not GO
+    ends here: no deal opens and nothing is paid. For a GO seller, ard_pay opens the deal and pays it next."""
     s = session()
-    if s.assessed is None:
-        raise RuntimeError("call ard_assess first")
     key = _seller_key(seller)
-    pick = s.run.seal(s.assessed, key)
-    if pick is not None:
-        s.picked[key] = pick
-        print(f"{SELLERS[key]['label']} is within its limit. Call ard_pay to open the deal and pay it.")
+    if key not in s.assessed:
+        raise RuntimeError("call ard_assess first")
+    a = s.assessed[key]
+    buyer.seal_pick(s.maya, s.keys[key], a, [m for k, m in s.assessed.items() if k != key])
+    print(f"pick sealed before any payment: {SELLERS[key]['label']} at {screens.msat(a.price_msat)}, citing every assessment")
+    if a.verdict != "GO":
+        print(screens.limit_outcome(a))
+        return
+    s.picked.add(key)
+    print(f"{SELLERS[key]['label']} is within its limit. Call ard_pay to open the deal and pay it.")
 
 
-if os.environ.get("ARD_RAIL") in ("lightning", "local"):
-    _PAY = ("Step 6-7: open the deal for the picked seller and pay it over the real Lightning rail (2,000 msat for Alder). "
-            "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until "
-            "the presenter clicks Pay or Cancel: do not retry or call it again while it waits, and tell the presenter to answer the "
-            "dialog. Refused unless ard_pick sealed this seller.")
-else:
-    _PAY = ("Step 6-7: open the deal for the picked seller and pay it on the SIMULATED rail: no money moves. "
-            "A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until the presenter clicks Pay "
-            "or Cancel: do not retry or call it again while it waits. Refused unless ard_pick sealed this seller.")
+_RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
+_PAY = ("Step 6: open the deal with the picked seller (the agreement names the deal's adjudicator and Action State's "
+        "witness) and pay it on the {rail}. A dialog appears on the presenter's screen and this call blocks, for up to "
+        "3 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it waits. Refused "
+        "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
+        "record says it shipped.")
 
 
-class NotApproved(RuntimeError):
-    """The presenter's dialog did not approve the payment."""
-
-
-def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | None:
-    """Return only when this payment may go ahead: the presenter clicked Pay (their answer: the dialog's words and Pay,
-    which the deal's approval record names), or the gate is off on a simulated rail (``None``: no one clicked)."""
-    if os.environ.get("ARD_APPROVAL") == "none":
-        if real:  # the gate goes off only where no money moves: a leftover test setting never pays for real
-            raise RuntimeError(f"ARD_APPROVAL=none is refused on the {rail_name} rail, which moves real money: "
-                               "unset it so the presenter approves the payment. Nothing was paid.")
-        print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
-        return None
-    if not approve_payment(summary):
-        raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
-                           "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
-    return rules.Answer(dialog_text(summary), "Pay")
-
-
-@_tool("maya", description=_PAY)
+@_tool("maya", description=_PAY.format(rail="real Lightning rail: THIS MOVES REAL MONEY" if _real() else "SIMULATED rail: no money moves"))
 def ard_pay(seller: str) -> None:
-    """Step 6-7: open the deal for the picked seller and pay it. Refused unless ard_pick sealed this seller."""
     s = session()
     key = _seller_key(seller)
     if key not in s.picked:
         raise RuntimeError(f"no sealed pick of {SELLERS[key]['label']} within its limit: call ard_pick first")
-    limit = rules.limit_msat()
-    with s.pay_lock:  # a second call waits here, then sees the seller attempted or paid
-        was_paid = limit is not None and key in s.paid
-        if was_paid:
-            # With a spending limit set, a second order is the point of the show: it goes to the deal check as a new
-            # deal, and the Everyday Rules decide. Without one, a seller is paid once per run, as before.
-            s.paid.discard(key)
-            s.attempted.discard(key)
-            print(f"a second order to {SELLERS[key]['label']}: the deal check will run the Everyday Rules under your limit")
-        try:  # nothing is paid until the lines below pass: a refusal here restores a paid seller the second order lifted
-            if key in s.paid:
-                raise RuntimeError(f"{SELLERS[key]['label']} was already paid in this run")
-            if key in s.attempted:
-                raise RuntimeError(f"a payment to {SELLERS[key]['label']} was already attempted in this run and is not confirmed: "
-                                   "check the wallet before trying again")
-            rail_name = os.environ.get("ARD_RAIL", "fake")
-            real = rail_name in ("lightning", "local")
-            label, amount = SELLERS[key]["label"], screens.msat(s.assessed[key].price_msat)
-            shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"  # one seller wallet takes both sellers' payments
-            rail = (f"over Lightning: this moves real money, to a wallet {shared} share" if real
-                    else "on the simulated rail: no money moves")
-            summary = f"Pay {label} {amount} {rail}."
-            if key in s.declined:
-                # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
-                # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
-                # back to the dialog. An agent that asked Maya after the dialog was declined (the skill asks before every
-                # payment) calls again at once, with no second question (PM on #278: one question per order); the
-                # next call opens the dialog again, and the presenter's click stays the gate.
-                s.declined.discard(key)
-                raise RuntimeError(
-                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
-                    f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
-                    + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was '
-                    "declined, and she said yes, call ard_pay again now: do not ask her again. "
-                    "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
-            ask, clicked = None, None
-            if limit is None:
-                try:
-                    clicked = approval_gate(real, rail_name, summary)
-                except NotApproved:
-                    s.declined.add(key)
-                    raise
-            else:  # under a spending limit the one dialog comes after the deal check, so it can carry the hold reasons
-                ask = _ask_order(summary, real, rail_name, label, rail)
-        except BaseException:
-            if was_paid:
-                s.paid.add(key)
-            raise
-        s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
-    try:
-        _pay(s, key, limit, ask, clicked)
-    except (rules.RuleHeld, rules.RulesError) as stopped:
-        # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
-        # (an earlier paid order stays paid, and the order may be tried again).
-        s.attempted.discard(key)
-        if was_paid:
-            s.paid.add(key)
-        if isinstance(stopped, rules.RuleHeld):
-            s.declined.add(key)  # the next call hands the agent the question again instead of reopening the dialog
-        if isinstance(stopped, rules.RuleHeld) and not stopped.reasons:  # the payment dialog was cancelled, nothing held
-            raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
-                              "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.") from None
-        if isinstance(stopped, rules.RuleHeld):
-            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
-                               "order and why, and that nothing was paid; do not try to pay around it.") from None
-        if isinstance(stopped, rules.RulesRefused):
-            raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the Everyday Rules did not allow this order; do not "
-                               "pay around it.") from None
-        raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
-
-
-def _pay(s, key: str, limit: int | None, ask=None, clicked: rules.Answer | None = None) -> None:
-    if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=ask, ask_always=True, clicked=clicked)
-        s.paid.add(key)
-        return
-    a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
-    chain = buyer.open_deal(run.maya, peer, s.picked[key], a, demo.ASK, run.rail.SEALED)
-    print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
-    s.deal_ids.append(chain.deal_id)
-    try:
-        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=ask, ask_always=True,
-                                     clicked=clicked,
-                                     on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
-    except (rules.RuleHeld, rules.RulesError):
-        s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a declined order is not one
-        raise
-    who = ("the buyer's test node paid it" if run.banner == screens.BANNER else "the buyer's wallet paid it") if run.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
-    print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}"
-          + screens.fee_note(payment.fee_msat, run.banner != screens.BANNER_FAKE))
-    if payment.status == "succeeded":
-        s.paid.add(key)
-    print(f"deal closed with {SELLERS[key]['label']}: both parties' records of the deal compared.")
-    # Maya's checkpoint over her own records, taken now so her card shows this deal right away. The profile allows one a
-    # minute at the soonest, so this waits for it if the last one is that recent (it is due in the demo's story).
-    waited = 0
-    while waited < 60:
-        if run.maya.tick(datetime.now(timezone.utc)).ticked:
-            print("Maya's checkpoint taken over her records: her History card now counts this deal.")
-            break
-        if waited == 0:
-            print("Maya's last checkpoint was under a minute ago: waiting for the next one (at most a minute).")
-        time.sleep(5)
-        waited += 5
+    a, name = s.assessed[key], SELLERS[key]["label"]
+    shared = f"{SELLERS['alder']['label']} and {SELLERS['kestrel']['label']}"
+    words = _RAIL_WORDS[0].format(shared=shared) if _real() else _RAIL_WORDS[1]
+    summary = f"Pay {name} {screens.msat(a.price_msat)} {words}."
+    with s.pay_lock:
+        if key in s.declined:
+            s.declined.discard(key)
+            raise RuntimeError(
+                f"the presenter did not approve the last payment to {name}, so this call opens no dialog and pays nothing. "
+                f'The question is: "Pay {name} {screens.msat(a.price_msat)} '
+                + ("over Lightning, which moves real money?" if _real() else "on the simulated rail, where no money moves?")
+                + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
+                "your turn, and call ard_pay again only after she says yes.")
+        deal = buyer.open_deal(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), print, rail=s.rail.SEALED)
+        s.deals.append(deal)
+        inv = s.rail.invoice(a.price_msat)
+        check = buyer.check_payment(s.maya, deal, inv.payment_hash)
+        if not check.get("proceed"):
+            if not (gate_off() or ask_person("Approve this payment", summary, "Pay")):
+                s.declined.add(key)
+                raise RuntimeError("the presenter did not approve this payment (the dialog was cancelled, timed out or could "
+                                   "not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm "
+                                   "with her first.")
+            s.maya.approve(deal.deal_id, check, "proceed", f"{dialog_text(summary)}\nAnswer: Pay")
+        payment = s.rail.pay_invoice(inv)
+        who = ("the simulated rail paid it (no money moved)" if not _real() else "the buyer's wallet paid it")
+        print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}{screens.fee_note(payment.fee_msat, _real())}")
+        buyer.pay(s.home, s.maya, deal, check, payment.reference, simulated=not _real())
+    print(f"waiting for {name}'s delivery")
+    observed = buyer.await_delivery(s.home, s.maya, deal)
+    shipped = buyer.shipped(observed)
+    print(screens.delivered_line(name, shipped))
+    if shipped.startswith("200 of 200"):
+        buyer.close_received(s.home, s.maya, deal)
+        print("Maya's statement sent: she received what she paid for.")
     else:
-        print("Maya's checkpoint is not due yet: her card shows this deal after it.")
-    print(f"{SELLERS[key]['label']}'s agent takes its own checkpoint after the close; its card follows.")
+        print(f"Maya ordered 200 badges. If fewer arrived, she can dispute the delivery (ard_dispute {key}).")
 
+
+@_tool("maya")
+def ard_dispute(seller: str) -> None:
+    """Dispute the delivery of Maya's latest deal with ``seller``: her statement that it was not met, and a dispute,
+    sent to the seller and, with her copy of the deal's records, to the adjudicator the agreement names. It moves no
+    money. Call only when Maya says the delivery was short or did not come."""
+    s = session()
+    key = _seller_key(seller)
+    deal = s.latest(key)
+    if deal is None:
+        raise RuntimeError(f"Maya has no deal with {SELLERS[key]['label']} in this run")
+    buyer.dispute(s.home, s.maya, deal, print)
+    print(screens.DISPUTE_RAISED.format(seller=SELLERS[key]["label"]))
+    _flush(s)
+
+
+# -- the sellers --------------------------------------------------------------------------------------
 
 @_tool("alder", "kestrel")
 def ard_seller_activity() -> None:
-    """What this seller's agent has done: the evidence requests it answered, any deal asked of it and how it went,
-    the sale and payment, and its own History card now."""
+    """What this seller's agent did on its own: its commitment, the deal asked of it, the payment, its delivery, a
+    dispute and a ruling, and its own History card now."""
     sel = seller()
-    print(f"{sel.label}: its own node, keys and book (this window only)")
+    print(f"{sel.label}: its own profile, keys and records (this window only)")
     for line in list(sel.log):
         print("  " + line)
-    print(f"now: {sel.card_line()}")
+    card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
+    print(f"now: {screens.card_line(card)}")
 
 
-def _own_node():
-    """This window's own node, and its label."""
+# -- the adjudicator ----------------------------------------------------------------------------------
+
+def _adjudicator() -> adj.Adjudicator:
+    global _seller_lock
+    if _seller_lock is None:
+        _seller_lock = _lock(ADJUDICATOR)
+        stage.ensure_stage(_home())
+    return adj.Adjudicator(_home())
+
+
+def _names() -> dict[str, str]:
+    """Each party's key and name, from the sellers' commitments on the stage and Maya's profile."""
+    out = {pt.Party(_home(), BUYER).key_id: "Maya"}
+    for n in SELLERS:
+        f = _home() / "stage" / "commitments" / f"{n}.json"
+        if f.is_file():
+            import json
+            out[json.loads(f.read_bytes())["key_id"]] = SELLERS[n]["label"]
+    return out
+
+
+def _cases() -> list[flow.Case]:
+    a, names = _adjudicator(), _names()
+    return [flow.case_view(c, names) for c in a.cases()]
+
+
+@_tool("adjudicator")
+def ard_case() -> None:
+    """Show the cases sent to this adjudicator: the deal, the disputed row, which side's books arrived and when, and what
+    those books show (a seller's own signed delivery record, each side's statement on the row). It decides nothing."""
+    cases, names = _cases(), _names()
+    if not cases:
+        print("no case yet: a party has sent no dispute to this adjudicator")
+        return
+    print(screens.ADJUDICATOR_INDEPENDENCE)
+    for c in cases:
+        print(f"\ncase {c.case[:8]}… for deal {c.deal_id[5:13]}, row {c.row}")
+        raw = next(x for x in _adjudicator().cases() if x["case"] == c.case)
+        seller_name, buyer_name = names.get(raw["seller"], "the seller"), names.get(raw["buyer"], "the buyer")
+        shown = {b["side"] for b in c.books}
+        for b in c.books:
+            print(f"  books read: {buyer_name if b['side'] == 'buyer' else seller_name}'s own book (sent {b['received_at']})")
+        if "seller" not in shown:
+            print(f"  {seller_name}'s book: not shown to the adjudicator; its delivery record is not in {buyer_name}'s copy, "
+                  "so this case cannot be ruled against it yet")
+        if "buyer" not in shown:
+            print(f"  {buyer_name}'s book: not shown to the adjudicator")
+        for line in c.deciding:
+            print(f"  {line}")
+
+
+@_tool("adjudicator")
+def ard_rule(seller: str) -> None:
+    """Rule on the open case about ``seller``'s delivery: a dialog on the presenter's screen asks for the decision
+    (against the seller, the row not met); only the presenter's click records it. The ruling is then time-stamped by
+    Action State's witness and each party fetches it. Refused when the seller's own book was not shown."""
+    key = _seller_key(seller)
+    a, names = _adjudicator(), _names()
+    seller_name = SELLERS[key]["label"]
+    for raw in a.cases():
+        if names.get(raw["seller"]) != seller_name:
+            continue
+        c = flow.case_view(raw, names)
+        if "seller" not in {b["side"] for b in c.books}:
+            raise RuntimeError(f"{seller_name}'s book was not shown to the adjudicator: no ruling against it from this case yet")
+        if not (gate_off() or ask_person("Rule on this case", screens.rule_question(c.deal_id, c.row, seller_name), "Rule")):
+            raise RuntimeError("the presenter did not record a ruling (the dialog was cancelled or timed out): nothing was ruled")
+        r = a.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
+        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name} "
+              f"({'new' if r.get('sealed') else 'already recorded'}).")
+        if pt.witnessed():
+            a.witness()
+            print(f"Its stamp was sent to {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
+        print("Both parties can fetch it now; each enters it in its own records.")
+        return
+    raise RuntimeError(f"no case about {seller_name}")
+
+
+@_tool("adjudicator")
+def ard_case_activity() -> None:
+    """Whether each party entered this adjudicator's ruling in its own records, read from the books they sent back."""
+    a, names = _adjudicator(), _names()
+    rulings = sorted((a.dir / "read" / "rulings").glob("case/*/*.json")) if (a.dir / "read").is_dir() else []
+    if not rulings:
+        print("no ruling yet")
+        return
+    for f in rulings:
+        case, digest = f.parent.name, f.stem
+        try:
+            answers = a.entry(case, digest)
+        except adj.AdjudicatorError as exc:
+            print(f"ruling {digest[:8]}…: {exc}")
+            continue
+        for x in answers:
+            who = names.get(x.get("key", ""), x.get("party", "?"))
+            words = x.get("words", "")
+            if "not shown" in words:
+                words = "book not shown to the adjudicator"
+            print(f"ruling {digest[:8]}…  {who}: {words}")
+
+
+# -- every party: its own card and receipt ---------------------------------------------------------------
+
+def _own() -> tuple[pt.Party, str]:
     if ROLE in SELLERS:
         sel = seller()
-        return sel.node, sel.label
-    s = session()
-    return s.run.maya, "Maya"
+        return sel.party, sel.label
+    return session().maya, "Maya"
 
 
 @_tool("maya", "alder", "kestrel")
 def ard_show_card() -> None:
-    """Show THIS window's own History card (standard_history/1), computed from its own sealed records: its deals
-    counted, held, did not hold. Call it before the deal and again after it: a sale counts after the party's next
-    checkpoint. Each window shows only its own card."""
-    node, label = _own_node()
-    print(parties.card_view(node, label))
+    """Show THIS window's own History card (standard_history/3) as of its newest checkpoint: deals counted, held, did
+    not hold, and disputes others raised about it. A deal or a ruling counts after the party's next checkpoint."""
+    p, name = _own()
+    p.tick()
+    card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
+    print(f"{name}: its own History card, as of its checkpoint at {as_of['anchor_time']}")
+    print("  " + screens.card_line(card))
 
 
-def _own_deal():
-    """This window's node, its label and the latest deal of this run (``None`` before one)."""
-    node, label = _own_node()
-    stored = sorted(b[len("deal/"):] for b in node.shelf.books() if b.startswith("deal/") and b.count("/") == 1)
-    # This run's deals in order. A seller's book also holds its 24 sample deals, so a seller shows only deals made since
-    # its window opened (a restarted window shows none); the buyer's book holds only its own deals.
-    ids = seller().deal_ids if ROLE in SELLERS else (session().deal_ids or stored)
-    return node, label, (ids[-1] if ids else None)
+def _own_deal() -> tuple[pt.Party, str, str | None]:
+    p, name = _own()
+    if ROLE in SELLERS:
+        ids = [d["deal_id"] for d in p.deals() if d.get("version") == "x-deal-v1"]
+        live = [i for i in ids if (p.dir / "handled" / f"{i}.offer").exists()]
+        return p, name, (live[-1] if live else None)
+    d = session().latest()
+    return p, name, (d.deal_id if d else None)
 
 
 @_tool("maya", "alder", "kestrel")
 def ard_show_receipt() -> None:
-    """Show THIS window's own receipt for the deal it took part in, read from its own sealed deal book: terms,
-    steps, the payment's commitment, how it closed and its check of the other party's half."""
-    node, label, deal_id = _own_deal()
+    """Show THIS window's own receipt for its latest deal of this run: capsulectl's report of the deal, each row's
+    status, read from its own records."""
+    import receipt
+
+    p, name, deal_id = _own_deal()
     if deal_id is None:
-        print(f"{label}: no deal yet, so no receipt")
+        print(f"{name}: no deal yet, so no receipt")
         return
-    print(parties.receipt_view(node, label, deal_id, seller=ROLE in SELLERS,
-                               real=os.environ.get("ARD_RAIL", "fake") in ("lightning", "local")))
+    print(receipt.receipt_text(p, name, deal_id, real=_real(), seller=ROLE in SELLERS))
 
 
 @_tool("maya", "alder", "kestrel")
 def ard_open_receipt_page() -> None:
-    """Open THIS window's own receipt for its deal as a page in the browser, for the audience: capsule-viewer's receipt
-    view of its own copy of the deal, checked by capsulectl verify --bundle, with nothing added. Call it after the
-    deal has closed (after ard_pay on Maya's side, after the close on a seller's)."""
+    """Open THIS window's own receipt for its latest deal as a page in the browser, for the audience: capsule-viewer's
+    view of its own copy of the deal, checked by capsulectl verify --bundle, with nothing added."""
     import pages
     import receipt
 
-    node, label, deal_id = _own_deal()
+    p, name, deal_id = _own_deal()
     if deal_id is None:
-        print(f"{label}: no deal yet, so no receipt page")
+        print(f"{name}: no deal yet, so no receipt page")
         return
-    name = ROLE if ROLE in SELLERS else "maya"
     try:
-        path = receipt.receipt_page(node, name, label, deal_id, rail=os.environ.get("ARD_RAIL", "fake"), seller=name in SELLERS)
+        path = receipt.receipt_page(p, name, deal_id, rail=_rail_name(), seller=ROLE in SELLERS)
     except receipt.ReceiptError as exc:
-        print(f"{label}: no receipt page yet: {exc}")
+        print(f"{name}: no receipt page yet: {exc}")
         return
     opened = pages.open_page(path)
-    shown = ("opened in the browser on the presenter's screen; nothing else is needed (do not copy or link the file)"
-             if opened else "written (not opened)")
-    print(f"{label}: its receipt page {shown}: {path}")
+    print(f"{name}: its receipt page " + ("opened in the browser on the presenter's screen; nothing else is needed "
+                                          "(do not copy or link the file)" if opened else "written (not opened)") + f": {path}")
 
 
 @_tool("maya", "alder", "kestrel")
 def ard_open_card_page() -> None:
-    """Open THIS window's own History card as a page in the browser, for the audience: capsule-viewer's History
-    view of its own card (standard_history/1), with only the labels its count needs. Call it before the deal and again after it."""
+    """Open THIS window's own History card as a page in the browser, for the audience."""
     import pages
 
-    node, label = _own_node()
-    name = ROLE if ROLE in SELLERS else "maya"
-    sample = name == "kestrel" and os.environ.get("ARD_KESTREL_CARD", "sentinel") == "sample"
-    path = pages.card_page(node, name, label, rail=os.environ.get("ARD_RAIL", "fake"), seller=name in SELLERS,
-                           sample_card=sample)
+    p, name = _own()
+    path = pages.card_page(p, name, rail=_rail_name(), seller=ROLE in SELLERS)
     opened = pages.open_page(path)
-    shown = ("opened in the browser on the presenter's screen; nothing else is needed (do not copy or link the file)"
-             if opened else "written (not opened)")
-    print(f"{label}: its History card page {shown}: {path}")
+    print(f"{name}: its History card page " + ("opened in the browser on the presenter's screen; nothing else is needed "
+                                               "(do not copy or link the file)" if opened else "written (not opened)")
+          + f": {path}")
 
 
 def main() -> None:
     if ROLE in SELLERS:
         seller()  # a seller's agent runs from the moment its window opens, so the buyer finds it
+    elif ROLE == ADJUDICATOR:
+        _adjudicator()
     server.run()
 
 

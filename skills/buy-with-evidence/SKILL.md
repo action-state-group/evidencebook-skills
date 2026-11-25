@@ -76,10 +76,11 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|
 | 2 Search, check entries and commitments | `ard_find_sellers` | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
-| 3 History cards | `ard_show_history` | `request` / `respond` over the mailbox (capsule-cli#573) |
-| 4 Assess | `ard_assess` (and the threshold edit it takes) | `capsule-engine admission evaluate` |
+| 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card, checked with `verify --bundle` | `request` / `respond` over the mailbox (capsule-cli#573) |
+| 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
 | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
+| 6b Dispute a delivery | `ard_dispute`: a dispute on the delivery row, sent to the seller and the deal's adjudicator | `deal statement`, `deal dispute`, the adjudicator's intake |
 | 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
 
 `deal check` and `approval_text` belong to the capsule-host column only: the demo host's check
@@ -92,20 +93,24 @@ before paying is its own approval dialog.
   reads it in the tool call.
 - The registry is a demo stand-in run by the demo operator, and the sellers' domains are local
   stand-ins; the recipe gives its search URL.
-- The demo's tools do not report whether a commitment is witnessed: the demo runs no witness, so
-  do not say either way.
-- The demo gives GO or LIMIT and has no ASK step. On the demo, LIMIT and NO end with nothing paid,
+- A History card is the seller's own count, signed by it and time-stamped by Action State's witness, which also runs
+  every party here, so it is not independent of them: say so, and never call the counts recomputed or
+  confirmed by anyone else.
+- The demo gives GO, LIMIT or NO and has no ASK step. On the demo, LIMIT and NO end with nothing paid,
   no smaller order is offered, and a pick the verdict does not allow opens no deal.
-- The demo's "did not hold" counts come from the seller's own note (a temporary record): say so, and
-  never present them as confirmed by the buyer or a ruling.
+- A dispute decided against a seller, on its card, limits it (LIMIT). A ruling the person holds against a seller, in
+  their own records, blocks that seller for 180 days (NO): when both apply, say it is the same lost dispute only if the
+  tool says so; the card does not say which deal.
+- After `ard_pay`, say what the seller's delivery record says it shipped. If it is short of what the person ordered,
+  ask whether they want to dispute the delivery; call `ard_dispute` only after they say yes. A dispute moves no money
+  and asks the deal's adjudicator, which the demo operator runs, to rule.
 - Say a card's counts and the verdicts in these words (Steven's, from his hand runs): "deals that didn't go as
   agreed" for the did-not-hold count (never "failed deals"), "every one went as agreed" when that count is 0,
-  "Good to buy" for GO and "Small orders only" for LIMIT; when a seller is "Small orders only" because the person
-  tightened a threshold, say why: it "doesn't meet your stricter setting". Never name a tool to the person (say
+  "Good to buy" for GO, "Small orders only" for LIMIT and "Not from this seller" for NO; say why in the tool's own
+  words (a dispute decided against it, a ruling you hold against it). Never name a tool to the person (say
   "the payment", never `ard_pay`).
-- The demo's assessment fills some facts in for the demo operator (the platform, the allow-list,
-  the card's witness and controller; no witness runs) and counts the seller's selection although it
-  carries no inclusion proofs; the screen says so. Do not present those as checked.
+- The demo's assessment fills some facts in for the demo operator (the platform, the allow-list and the card's
+  controller); the screen says so. Do not present those as checked.
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
 - To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the

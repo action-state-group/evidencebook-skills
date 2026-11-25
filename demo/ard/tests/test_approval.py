@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The approval dialog's reading of osascript's answer: only the Pay button approves; everything else refuses.
+"""The presenter's dialogs (the payment's and the ruling's): only the yes button approves; everything else refuses.
 osascript is stubbed here, so no dialog appears and no engine is needed."""
 from __future__ import annotations
 
@@ -9,6 +9,10 @@ import types
 import pytest
 
 import desktop_server as ds
+
+
+def pay_dialog(summary: str) -> bool:
+    return ds.ask_person("Approve this payment", summary, "Pay")
 
 
 def answer(monkeypatch, returncode=0, stdout="", raises=None):
@@ -23,7 +27,7 @@ def answer(monkeypatch, returncode=0, stdout="", raises=None):
 
 def test_only_the_pay_button_approves(monkeypatch):
     answer(monkeypatch, stdout="button returned:Pay, gave up:false\n")
-    assert ds.approve_payment("Pay Alder 289 msat") is True
+    assert pay_dialog("Pay Alder 289 msat") is True
 
 
 @pytest.mark.parametrize("kw", [
@@ -36,20 +40,20 @@ def test_only_the_pay_button_approves(monkeypatch):
 ])
 def test_anything_else_refuses(monkeypatch, kw):
     answer(monkeypatch, **kw)
-    assert ds.approve_payment("Pay Alder 289 msat") is False
+    assert pay_dialog("Pay Alder 289 msat") is False
 
 
 def test_quotes_in_the_summary_cannot_break_out_of_the_script(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment('x" & (do shell script "id") & "')
+    pay_dialog('x" & (do shell script "id") & "')
     assert 'do shell script "id"' not in seen[0] and "x' & (do shell script 'id') & '" in seen[0]
 
 
 def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment("Pay X")
+    pay_dialog("Pay X")
     assert "giving up after 180" in seen[0]
 
 
@@ -64,7 +68,7 @@ def test_summary_wording_names_the_rail():
 def test_the_dialog_title_names_no_demo(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
-    ds.approve_payment("Pay Alder Print Co. 289 msat over Lightning: this moves real money.")
+    pay_dialog("Pay Alder Print Co. 289 msat over Lightning: this moves real money.")
     assert 'with title "Approve this payment"' in seen[0] and "demo" not in seen[0].lower()
 
 
@@ -73,31 +77,16 @@ def test_the_assess_tool_description_names_no_demo():
     assert "demo" not in (ds.ard_assess.__doc__ or "").lower()
 
 
-def hold_answer(monkeypatch, returncode=0, stdout="", raises=None):
-    def run(cmd, **kw):
-        if raises:
-            raise raises
-        assert cmd[0] == "osascript" and 'buttons {"Don\'t buy", "Buy anyway"}' in cmd[2]
-        assert 'default button "Don\'t buy"' in cmd[2] and 'cancel button "Don\'t buy"' in cmd[2]
-        assert 'with title "This order goes over your weekly limit"' in cmd[2]
-        return types.SimpleNamespace(returncode=returncode, stdout=stdout)
-
-    monkeypatch.setattr(subprocess, "run", run)
+def test_the_ruling_dialog_is_the_presenters_and_defaults_to_cancel(monkeypatch):
+    seen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(
+        returncode=0, stdout="button returned:Rule, gave up:false\n"))
+    assert ds.ask_person("Rule on this case", "Rule on deal x", "Rule") is True
+    assert 'buttons {"Cancel", "Rule"}' in seen[0] and 'default button "Cancel"' in seen[0]
 
 
-def test_only_the_buy_anyway_button_approves_a_held_order(monkeypatch):
-    hold_answer(monkeypatch, stdout="button returned:Buy anyway, gave up:false\n")
-    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is True
-
-
-@pytest.mark.parametrize("kw", [
-    {"returncode": 1, "stdout": ""},
-    {"stdout": "button returned:Don't buy, gave up:false\n"},
-    {"stdout": "button returned:Buy anyway, gave up:true\n"},
-    {"returncode": 1, "stdout": "button returned:Buy anyway"},
-    {"raises": OSError("no osascript")},
-    {"raises": subprocess.TimeoutExpired("osascript", 200)},
-])
-def test_anything_else_declines_a_held_order(monkeypatch, kw):
-    hold_answer(monkeypatch, **kw)
-    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is False
+def test_approval_none_is_refused_on_a_real_rail(monkeypatch):
+    monkeypatch.setenv("ARD_APPROVAL", "none")
+    monkeypatch.setenv("ARD_RAIL", "local")
+    with pytest.raises(RuntimeError, match="refused on the local rail"):
+        ds.gate_off()

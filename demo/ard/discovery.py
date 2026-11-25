@@ -80,9 +80,9 @@ class StandInRegistry:
     """A demo stand-in for an ARD registry run by someone else: ``POST /search`` over a fixed list of
     seller origins, read at query time. No crawler, no referrals (it has none to give)."""
 
-    def __init__(self, origins: list[str], port: int = 0):
+    def __init__(self, origins: list[str], port: int = 0, get: Callable[[str], bytes | None] | None = None):
         self.origins = list(origins)
-        self.httpd = _serve(port, _handler(lambda _p: None, self.post))
+        self.httpd = _serve(port, _handler(get or (lambda _p: None), self.post))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/search"
 
     def post(self, path: str, body: bytes) -> bytes | None:
@@ -120,11 +120,13 @@ class Discovery:
     free ports. :attr:`origins` is the fixed domain-to-origin table the buyer resolves with."""
 
     def __init__(self, sellers: dict[str, dict], commitment: Callable[[str], dict | None],
-                 registry_port: int = 0, seller_ports: dict[str, int] | None = None):
+                 registry_port: int = 0, seller_ports: dict[str, int] | None = None,
+                 get: Callable[[str], bytes | None] | None = None):
         self.sellers = {n: SellerOrigin(n, s, (lambda n=n: commitment(n)), (seller_ports or {}).get(n, 0))
                         for n, s in sellers.items()}
         self.origins = {ard.publisher(n): o.origin for n, o in self.sellers.items()}
-        self.registry = StandInRegistry([o.origin for o in self.sellers.values()], registry_port)
+        # ``get`` serves the stage's other pages on the registry's port (the adjudicator's rules page)
+        self.registry = StandInRegistry([o.origin for o in self.sellers.values()], registry_port, get)
 
     def close(self) -> None:
         self.registry.close()

@@ -6,9 +6,10 @@ above it, or a symlink; refuse while Goose Desktop runs (its windows hold server
 recipes again); find who holds files under the home or listens on the stage's ports (``lsof``; refuse if that cannot
 be checked). The demo's own processes are Python running ``stage.py`` or ``desktop_server.py`` that either hold one of
 the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a ``stage.py`` holds
-``stage/.stage.lock``, :data:`parties.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
+``stage/.stage.lock``, :data:`stage.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
 under the home or listen on the stage's ports and either name this home in their arguments or run from this
-checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
+checkout's ``demo/ard``, whatever commit started them; and the demo adjudicator's front (ledger-cloud's
+``adjudicator-front``, which a stage starts) whose intake folder is under this home. Anything else holding the home or listening on those ports stops
 the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
 the home, and clear the Goose recipe trust given since the demo's windows first opened on it, so each window asks Trust
 and Execute again.
@@ -17,7 +18,7 @@ Goose Desktop 1.59.2 keeps one file per trusted recipe, ``<userData>/recipe_hash
 recipe as its own server decodes the ``goose://`` link (``ui/desktop/src/utils/recipeHash.ts``). That hash could not be
 reproduced from our recipe's JSON (checked against real files on 2026-11-18). So ``open-windows.py`` notes which trust
 files exist before it first opens the windows on a home (:func:`snapshot_trust`), and reset deletes only the ones made
-since: the demo's three, and any other recipe trusted in between. A home with no note keeps all trust, and reset says so."""
+since: the demo's four, and any other recipe trusted in between. A home with no note keeps all trust, and reset says so."""
 from __future__ import annotations
 
 import argparse
@@ -32,7 +33,7 @@ from pathlib import Path
 SAVED_RECIPE = "maya-buys-conference-badges.yaml"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"  # demo.DEFAULT_HOME, kept here so reset needs no evidencebook checkout
 HERE = Path(__file__).resolve().parent  # this checkout's demo/ard: a stage or server run from here is ours
-STAGE_LOCK = ".stage.lock"  # parties.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
+STAGE_LOCK = ".stage.lock"  # stage.STAGE_LOCK, kept here so reset needs none of the demo's heavier modules
 
 
 class ResetRefused(SystemExit):
@@ -196,6 +197,19 @@ def _started_for(pid: int, home: Path) -> bool:
     return any(path(a) == target for a in argv[i + 1:] if not a.startswith("-"))
 
 
+def _front_for(pid: int, home: Path) -> bool:
+    """Whether ``pid`` is the demo adjudicator's front for this home: ledger-cloud's ``adjudicator-front`` whose
+    ``-intake`` folder is under the home (a stage starts it with ``<home>/adjudicator/intake``)."""
+    argv = _argv(pid)
+    if not argv or Path(argv[0]).name != "adjudicator-front" or "-intake" not in argv[:-1]:
+        return False
+    try:
+        intake = Path(argv[argv.index("-intake") + 1]).resolve()
+    except (RuntimeError, OSError):
+        return False
+    return home.resolve() in intake.parents
+
+
 def _lock_holders(home: Path) -> set[int]:
     locks = _locks(home)
     return {pid for pid, _, _ in _lsof(*map(str, locks))} - {os.getpid()} if locks else set()
@@ -215,7 +229,7 @@ def holders(home: Path) -> tuple[set[int], dict[int, str], set[int]]:
     others, inside = {pid: "a lock file of this home" for pid in holding_locks - ours}, set()
     found = _lsof("+D", str(home)) if home.exists() else []
     near = {pid for pid, _, _ in found} | set(_listeners())
-    ours |= {pid for pid in near - ours - holding_locks - {os.getpid()} if _started_for(pid, home)}
+    ours |= {pid for pid in near - ours - holding_locks - {os.getpid()} if _started_for(pid, home) or _front_for(pid, home)}
     for pid, fd, name in found:
         if pid == os.getpid() or pid in ours:
             continue
@@ -321,9 +335,10 @@ def clear_recipe_trust(before: set[str] | None, user: Path | None = None) -> int
 
 
 def demo_ports() -> list[int]:
-    """The ports the demo's stage listens on (parties: the relay, the stand-in registry and the two seller sites)."""
+    """The ports the demo's stage listens on (stage.py: the stand-in registry, the adjudicator's front and the two
+    seller sites)."""
     http = int(os.environ.get("ARD_STAGE_PORT", "47481"))
-    return [int(os.environ.get("ARD_RELAY_PORT", "47480")), http, http + 10, http + 11]
+    return [http, http + 2, http + 10, http + 11]
 
 
 def _listeners() -> dict[int, int]:

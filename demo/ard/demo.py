@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The ARD two-seller demo: Maya buys 200 conference badges from one of two sellers found through ARD.
+"""The ARD two-seller demo: Maya buys 200 conference badges twice from sellers found through ARD.
 
-    python demo.py seed            # once: the sample history (24 + 24 deals), about 20 s
+    python demo.py seed            # once: the sample history (24 + 24 deals), about eight minutes
     python demo.py run [--rail lightning]
     python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 
-See README.md for the run sheet. The environment each command needs is listed at the end of --help."""
+Deal 1: Maya picks Kestrel Print, the cheaper seller; Kestrel's own delivery record says 150 of 200 badges; Maya
+disputes; the demo's adjudicator rules against Kestrel. Deal 2: Kestrel's card counts the lost dispute, Maya's own
+records hold the ruling, and Maya buys from Alder Print Co. The Goose windows run the same story (RUNBOOK.md); this
+script runs it in one terminal, each dialog asked at the prompt. The environment each command needs is listed at the
+end of --help."""
 from __future__ import annotations
 
 import argparse
 import os
 import sys
 import time
-import webbrowser
-from datetime import datetime, timezone
 from pathlib import Path
-
-os.environ.setdefault("CAPSULE_WITNESS", "off")  # the demo runs no witness: the operator is the witness it names
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -25,7 +25,6 @@ import _paths  # noqa: E402
 import envhelp  # noqa: E402
 
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
-DEFAULT_PERMILLE = 50
 
 
 def parser() -> argparse.ArgumentParser:
@@ -35,12 +34,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("command", nargs="?", choices=["seed", "run", "reset"])
     ap.add_argument("--home", default=DEFAULT_HOME)
     ap.add_argument("--rail", choices=["fake", "lightning", "local"], default="fake")
-    ap.add_argument("--port", type=int, default=0)
-    ap.add_argument("--auto", action="store_true", help="no pauses and the default edit (tests)")
-    ap.add_argument("--no-browser", action="store_true", help="print the popup URL, do not open it")
-    ap.add_argument("--permille", type=int, default=None, help="the on-stage threshold (default: asked)")
-    ap.add_argument("--kestrel-card", choices=["sample", "sentinel"], default="sentinel",
-                    help="sentinel: Kestrel's card from its own book (the owner's outcome_note); sample: the hand-written fallback")
+    ap.add_argument("--auto", action="store_true", help="no pauses; every question answered yes (simulated rail only)")
     return ap
 
 
@@ -60,265 +54,189 @@ if __name__ == "__main__":
 
 _paths.setup()
 
+import adjudicator as adj  # noqa: E402
 import ard  # noqa: E402
 import buyer  # noqa: E402
-import deals  # noqa: E402
+import flow  # noqa: E402
 import hf_search  # noqa: E402
 import pack as packs  # noqa: E402
+import party as pt  # noqa: E402
 import pay  # noqa: E402
 import screens  # noqa: E402
 import seed as seeding  # noqa: E402
-from server import Server  # noqa: E402
-from world import DEALS_EACH, ITEM, SELLERS, World  # noqa: E402
+import stage  # noqa: E402
+from cast import ASK, BUYER, SELLERS  # noqa: E402
 
-ASK = f"Maya: I need 200 conference badges by Friday, under 3,000 msat. ({ITEM})"
+
 def rule(title: str) -> None:
     print(f"\n── {title} " + "─" * max(4, 70 - len(title)))
 
 
-def pause(prompt: str, auto: bool) -> None:
-    if not auto:
-        input(f"\n[{prompt}] ")
+class Script:
+    """The whole story in one process: the stage, both sellers' agents, Maya's steps and the adjudicator's."""
 
-
-class Run:
-    def __init__(self, world: World, server: Server, rail: pay.Rail, auto: bool, open_browser: bool):
-        self.w, self.srv, self.rail, self.auto, self.open_browser = world, server, rail, auto, open_browser
-        self.maya = world.nodes["maya"]
-        # Only for the real-or-simulated wording of the payment lines: never printed (Ethan, 2026-11-17).
-        self.banner = screens.banner("lightning" if isinstance(rail, pay.LightningRail) else "local" if isinstance(rail, pay.LocalRail) else "fake")
-        self.started_payment = False
+    def __init__(self, home: Path, rail: pay.Rail, auto: bool, real: bool):
+        self.home, self.rail, self.auto, self.real = home, rail, auto, real
+        self.stage = stage.Stage(home)
+        self.agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
+        self.maya = pt.Party(home, BUYER)
+        self.adjudicator = adj.Adjudicator(home)
+        self.pack = packs.starting()
         self.entries: list[dict] = []
-        self.evidence: dict[str, buyer.Evidence] = {}
-        self.info: dict[str, dict] = {}
+        self.keys: dict[str, str] = {}
 
-    @property
-    def verified(self) -> list[dict]:
-        """The sellers whose entry and commitment passed discovery: only these are asked and assessed."""
-        return [e for e in self.entries if "commitment" in e]
+    def close(self) -> None:
+        for a in self.agents.values():
+            a.stop()
+        self.stage.close()
 
-    # -- 1-2 ask and discover -------------------------------------------------------------
+    def ask(self, question: str) -> bool:
+        print(f"\n{question}")
+        if self.auto:
+            print("[--auto: yes]")
+            return True
+        return input("[y/N] ").strip().lower() in ("y", "yes")
+
+    def pause(self, prompt: str) -> None:
+        if not self.auto:
+            input(f"\n[{prompt}] ")
 
     def discover(self) -> None:
-        rule("1  Maya asks her agent")
-        print(ASK)
-        rule("2  ARD discovery")
-        self.entries = ard.lookup(self.srv.registry_url, self.srv.origins, self.srv.query)
-        print(f"  searched a local stand-in registry, run by the operator: POST {self.srv.registry_url} {{query: {self.srv.query!r}}}")
+        rule("Maya asks her agent")
+        print(f"Maya: {ASK}")
+        rule("ARD discovery")
+        self.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+        self.keys = {e["id"]: e["commitment"]["key_id"] for e in self.entries if "commitment" in e}
         for e in self.entries:
             price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
-            print(f"  found: {e['name']:18} {price:>10}   commitment "
-                  f"{'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
-            for line in e.get("checks", []):
-                print(f"         {line}")
-        if hf_search.enabled():  # opt-in, display only: never part of lookup or the deal
-            print("\n".join(hf_search.report(self.srv.query)))
+            print(f"  found: {e['name']:18} {price:>10}   commitment {'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
+        if hf_search.enabled():
+            print("\n".join(hf_search.report(stage.QUERY)))
 
-    # -- 3 evidence -----------------------------------------------------------------------
-
-    def collect(self) -> None:
-        rule("3  Evidence: Maya's library asks each seller, and checks each signed answer")
-        for e in self.entries:
-            if "commitment" not in e:  # shown as failed at discovery; never asked or assessed
-                print(f"\n{e['name']}: not asked, its commitment failed ({e.get('problem', 'no commitment')})")
-        for e in self.verified:
-            node = self.w.nodes[e["id"]]
-            anchor = node.cadence.standard_history_anchor(0)
-            self.info[e["id"]] = {"first_checkpoint_time": anchor.first_checkpoint_time, "anchor_time": anchor.anchor_time}
-            print(f"\n{e['name']}")
-            ev = buyer.gather(self.w, self.maya, e, anchor.anchor)
-            ev.sample_card = self.w.sample_card.get(e["id"], False)
-            self.evidence[e["id"]] = ev
-            if e["id"] == "kestrel" and not ev.sample_card and ev.card and ev.card["outcomes"]["did_not_hold"] == 0:
-                raise SystemExit("Kestrel's card shows no deal that did not hold: seed this home with `seed --kestrel-card sentinel`")
-            print("\n".join("  " + line for line in screens.check_lines(ev)))
-
-    # -- 4 assessment ---------------------------------------------------------------------
-
-    def assess(self, p: packs.Pack) -> dict[str, buyer.Assessment]:
-        out = {}
-        for e in self.verified:
-            ev = self.evidence[e["id"]]
-            if ev.card is None:
-                raise SystemExit(f"{e['name']}: no verified card, nothing to assess")
-            a = buyer.assess(self.maya, self.w.nodes[e["id"]], ev, e["offer"]["price_msat"], p, self.info[e["id"]], ev.sample_card)
-            out[e["id"]] = a
-            ceiling = p.ceiling_msat(a.tier) if a.tier else None
-            print(f"  {e['name']:18} {screens.decision_line(a, ev, p.max_adverse_permille, ceiling)}")
-            print(f"  {'':18} history: {screens.card_line(ev, ev.sample_card)}")
-        return out
-
-    def assessments(self, p: packs.Pack, heading: str) -> dict[str, buyer.Assessment]:
+    def assess(self, heading: str) -> dict[str, buyer.Assessment]:
         rule(heading)
-        print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
-        print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})")
-        print(f"({screens.SELECTION_NOTE})")
-        print(f"({screens.OPERATOR_NOTE})\n")
-        return self.assess(p)
+        made = {}
+        for e in self.entries:
+            ev = buyer.gather(self.home, self.maya, e)
+            print(f"\n{e['name']}")
+            print("\n".join("  " + line for line in screens.check_lines(ev)))
+            if ev.card is None:
+                continue
+            print(f"  History card: {screens.card_line(ev.card)}")
+            print(f"  {screens.signed_line(e['name'], ev.read is not None and ev.read.witness_status == 'pass')}")
+            a = buyer.assess(self.maya, ev, self.keys[e["id"]], e["offer"]["price_msat"], self.pack)
+            made[e["id"]] = a
+            ceiling = self.pack.ceiling_msat(a.tier) if a.tier else None
+            print(f"  assessment: {screens.decision_line(a, ev, ceiling)}")
+        return made
 
-    # -- 4b the on-stage edit ---------------------------------------------------------------
-
-    def edit(self, p: packs.Pack, permille: int | None) -> packs.Pack:
-        rule("4b  The presenter tightens the rule (placeholder thresholds)")
-        print(f"The pack allows at most {p.max_adverse_permille} in every 1,000 deals not holding, in pack {p.version}.")
-        if permille is None:
-            raw = input(f"New value [{DEFAULT_PERMILLE}]: ").strip() if not self.auto else ""
-            permille = int(raw or DEFAULT_PERMILLE)
-        if permille >= p.max_adverse_permille:
-            raise SystemExit("the edit must tighten the rule (a lower value)")
-        major, minor, _ = p.version.split(".")
-        version = f"{major}.{int(minor) + 1}.0"
-        new = packs.compile_source(packs.edited(p.source, permille, version), version)
-        print(f"recompiled: pack {p.version}  digest {p.digest[:12]}…  →  pack {new.version}  digest {new.digest[:12]}…")
-        print("both sellers assessed again on the evidence already collected: no new request is sent")
-        return new
-
-    # -- 5 popup and pick -------------------------------------------------------------------
-
-    def options(self, p: packs.Pack, made: dict[str, buyer.Assessment]) -> list[dict]:
-        opts = []
-        for e in self.verified:
-            a, ev = made[e["id"]], self.evidence[e["id"]]
-            ceiling = p.ceiling_msat(a.tier) if a.tier else None
-            opts.append({"id": e["id"], "name": e["name"], "price": "Listed price " + screens.msat(a.price_msat), "verdict": a.verdict,
-                         "decision": screens.decision_line(a, ev, p.max_adverse_permille, ceiling),
-                         "card": screens.card_line(ev, ev.sample_card),
-                         "button": screens.button(e["name"], a)})
-        return opts
-
-    def popup(self, p: packs.Pack, made: dict[str, buyer.Assessment]) -> str:
-        rule("5  The popup: the presenter picks for Maya")
-        header = {"title": "Maya: 200 conference badges by Friday, under 3,000 msat. Pick a seller.",
-                  "pack": f"Assessed under pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}",
-                  "note": f"{screens.CLAIMS_NOTE}. {screens.ASSESSMENT_NOTE}."}
-        self.srv.popup(self.options(p, made), header)
-        print(f"popup: {self.srv.url}/")
-        if self.open_browser:
-            webbrowser.open(self.srv.url + "/")
-        while not self.srv.pick_event.wait(0.5):
-            pass
-        return self.srv.picked  # type: ignore[return-value]
-
-    # -- 6-7 deal, payment, close, card -----------------------------------------------------
-
-    def settle(self, p: packs.Pack, made: dict[str, buyer.Assessment], chosen: str) -> None:
-        pick = self.seal(made, chosen)
-        if pick is not None:
-            self.pay_deal(made, chosen, pick)
-
-    def seal(self, made: dict[str, buyer.Assessment], chosen: str) -> str | None:
-        """Seal the pick. A seller that is not GO ends the run here (nothing opens, nothing is paid) and returns ``None``."""
-        a = made[chosen]
-        seller = self.w.nodes[chosen]
-        name = SELLERS[chosen]["label"]
-        pick = buyer.seal_pick(self.maya, seller, a, [m for k, m in made.items() if k != chosen])
-        rule("6  Pick sealed, deal and payment")
-        print(f"pick sealed before any payment: {name} at {screens.msat(a.price_msat)}, citing both assessments ({pick[:10]}…)")
+    def buy(self, made: dict[str, buyer.Assessment], key: str) -> buyer.Deal | None:
+        a, name = made[key], SELLERS[key]["label"]
+        buyer.seal_pick(self.maya, self.keys[key], a, [m for k, m in made.items() if k != key])
+        rule(f"Maya picks {name}")
+        print(f"pick sealed before any payment: {name} at {screens.msat(a.price_msat)}")
         if a.verdict != "GO":
-            line = screens.limit_outcome(a)
-            print(line)
-            self.srv.finish(line)
+            print(screens.limit_outcome(a))
             return None
-        return pick
+        deal = buyer.open_deal(self.home, self.maya, key, self.keys[key], a, self.adjudicator.named(), print,
+                               rail=self.rail.SEALED)
+        inv = self.rail.invoice(a.price_msat)
+        check = buyer.check_payment(self.maya, deal, inv.payment_hash)
+        words = "over Lightning, which moves real money" if self.real else "on the simulated rail: no money moves"
+        summary = f"Pay {name} {screens.msat(a.price_msat)} {words}."
+        if not check.get("proceed"):
+            if not self.ask(summary):
+                print("not approved: nothing was paid")
+                return None
+            self.maya.approve(deal.deal_id, check, "proceed", f"{summary}\nAnswer: Pay")
+        payment = self.rail.pay_invoice(inv)
+        print(f"invoice {screens.msat(payment.invoice_msat)}: {payment.status}{screens.fee_note(payment.fee_msat, self.real)}")
+        buyer.pay(self.home, self.maya, deal, check, payment.reference, simulated=not self.real)
+        observed = buyer.await_delivery(self.home, self.maya, deal)
+        print(screens.delivered_line(name, buyer.shipped(observed)))
+        return deal
 
-    def pay_deal(self, made: dict[str, buyer.Assessment], chosen: str, pick: str, limit: int | None = None, approve=None,
-                 clicked=None, ask_always: bool = False) -> None:
-        a = made[chosen]
-        seller = self.w.nodes[chosen]
-        name = SELLERS[chosen]["label"]
-        deals.admit(seller, self.maya, reason="buyer Maya, picked by the presenter")
-        chain = buyer.open_deal(self.maya, seller, pick, a, ASK, self.rail.SEALED)
-        before = self.rail.balances()
-        paid: list[pay.Payment] = []
-
-        def send() -> str:
-            self.started_payment = True
-            payment = self.rail.pay(a.price_msat)
-            paid.append(payment)
-            who = ("the buyer's test node paid it" if self.banner == screens.BANNER else "the buyer's wallet paid it") if self.banner != screens.BANNER_FAKE else "the simulated rail paid it (no money moved)"
-            print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}{screens.fee_note(payment.fee_msat, self.banner != screens.BANNER_FAKE)}")
-            return payment.reference
-
-        deals.run_deal(self.maya, seller, chain.terms, ASK, "", opened=chain, pay=send, limit=limit, approve=approve,
-                       clicked=clicked, ask_always=ask_always)
-        after = self.rail.balances()
-        print(f"operator check, not shown as the price: balances {before} → {after}")
-        rule("7  Both halves compared, deal closed, card after the next checkpoint")
-        for node in (self.maya, seller):
-            while True:
-                tick = node.tick(datetime.now(timezone.utc))
-                if tick.ticked:
-                    break
-                wait = (tick.due_next - datetime.now(timezone.utc)).total_seconds()
-                print(f"  waiting for the next checkpoint ({max(0, int(wait))} s)")
-                time.sleep(min(max(wait, 1), 10))
-        card = seller.standard_history()
-        o = card["deals"]
-        live = len(o) - DEALS_EACH
-        summary = f"{name}'s card now counts {len(o)} deals: {DEALS_EACH} sample, {live} run live ({sum(1 for d in o if d['outcome'] == 'held')} held)"
-        print(summary)
-        self.srv.finish(f"Paid {name} {screens.msat(paid[0].invoice_msat)} (the invoice amount). {summary}.")
-
-
-def prepare(args) -> tuple[World, Server]:
-    home = Path(os.environ.get("ARD_HOME", args.home)).expanduser()
-    world = World(home).open()
-    world.sample_card = {"kestrel": True} if args.kestrel_card == "sample" else {}
-    for name in SELLERS:
-        world.advertise(name)
-        world.serve(name)
-    server = Server(args.port)
-    from discovery import Discovery
-    disc = Discovery(SELLERS, lambda n: world.commitments.get(n))
-    server.discovery, server.registry_url, server.origins, server.query = disc, disc.registry.url, disc.origins, "conference badges print"
-    return world, server
+    def dispute(self, deal: buyer.Deal) -> None:
+        rule("Maya disputes the delivery")
+        buyer.dispute(self.home, self.maya, deal, print)
+        print(screens.DISPUTE_RAISED.format(seller=SELLERS[deal.seller]["label"]))
+        rule("The adjudicator")
+        print(screens.ADJUDICATOR_INDEPENDENCE)
+        names = {self.maya.key_id: "Maya", **{v: SELLERS[k]["label"] for k, v in self.keys.items()}}
+        print("waiting for both sides' books (each needs its next checkpoint, up to a minute)")
+        stop = time.time() + 300
+        while time.time() < stop:
+            cases = [c for c in self.adjudicator.cases() if c["deal_id"] == deal.deal_id]
+            if cases and len(cases[0]["copies"]) >= 2:
+                break
+            time.sleep(3)
+        c = flow.case_view(cases[0], names)
+        for b in c.books:
+            print(f"  books read: {'Maya' if b['side'] == 'buyer' else SELLERS[deal.seller]['label']}'s own book (sent {b['received_at']})")
+        for line in c.deciding:
+            print(f"  {line}")
+        if not self.ask(screens.rule_question(c.deal_id, c.row, SELLERS[deal.seller]["label"])):
+            print("no ruling recorded")
+            return
+        self.adjudicator.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
+        if pt.witnessed():
+            self.adjudicator.witness()
+        print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Both parties fetch it and enter it.")
+        agent = self.agents[deal.seller]
+        stop = time.time() + 300
+        while time.time() < stop and not (self.maya.notes(flow.RULING_ENTERED) and agent.party.notes(flow.RULING_ENTERED)):
+            flow.enter_rulings(self.home, self.maya, deal.seller, print)
+            time.sleep(3)
+        print("waiting for the seller's next checkpoint, so its card counts the ruling (up to a minute)")
+        stop = time.time() + 180
+        while time.time() < stop:
+            agent.republish()
+            card, _, _ = flow.read_card(self.home / "stage" / "cards" / f"{deal.seller}.json")
+            if card["disputes"]["received"]["by_outcome"]["against"]:
+                break
+            time.sleep(5)
 
 
 def cmd_seed(args) -> int:
-    with World(Path(os.environ.get("ARD_HOME", args.home)).expanduser()) as world:
-        seeding.seed(world, kestrel_card=args.kestrel_card)
+    seeding.seed(Path(os.environ.get("ARD_HOME", args.home)).expanduser())
     return 0
-
-
-def cmd_reset(args) -> int:
-    """Stop the demo's processes on the home, delete it, and clear Goose's recipe trust (:mod:`reset`)."""
-    import reset
-
-    return reset.main(["--home", args.home])
 
 
 def cmd_run(args) -> int:
     packs.engine(), packs.skills_checkout()
-    world, server = prepare(args)
-    run = None
+    home = Path(os.environ.get("ARD_HOME", args.home)).expanduser()
+    if not pt.Party(home, BUYER).exists:
+        print("no sample history yet: run `python demo.py seed` first")
+        return 2
+    real = args.rail in ("lightning", "local")
+    if args.auto and real:
+        print("--auto answers every question yes, so it is refused on a rail that moves real money")
+        return 2
+    s = Script(home, pay.from_env(args.rail), args.auto, real)
     try:
-        if any(sum(1 for b in world.nodes[n].shelf.books() if b.startswith("deal/") and b.count("/") == 1) < DEALS_EACH for n in SELLERS):
-            print("no sample history yet: run `python demo.py seed` first")
-            return 2
-        rail: pay.Rail = pay.from_env(args.rail)
-        run = Run(world, server, rail, args.auto, not args.no_browser)
-        run.discover()
-        pause("Enter: collect the evidence", args.auto)
-        run.collect()
-        start = packs.starting()
-        made = run.assessments(start, "4  Assessment under the starting pack")
-        pause("Enter: tighten the rule on stage", args.auto)
-        tight = run.edit(start, args.permille)
-        made = run.assessments(tight, "4b  Assessment again under the edited pack")
-        pause("Enter: open the popup", args.auto)
-        chosen = run.popup(tight, made)
-        run.settle(tight, made, chosen)
+        s.discover()
+        s.pause("Enter: read each seller's History card and assess both")
+        made = s.assess("Deal 1: History cards and assessment")
+        s.pause("Enter: Maya picks the cheaper seller")
+        cheaper = min(made, key=lambda k: made[k].price_msat)
+        deal = s.buy(made, cheaper)
+        if deal is not None:
+            s.pause("Enter: Maya disputes the short delivery")
+            s.dispute(deal)
+        s.pause("Enter: deal 2, Maya orders again")
+        made = s.assess("Deal 2: History cards and assessment again")
+        go = [k for k, a in made.items() if a.verdict == "GO"]
+        if go:
+            d2 = s.buy(made, go[0])
+            if d2 is not None:
+                buyer.close_received(home, s.maya, d2)
+                print("Maya's statement sent: she received what she paid for.")
         return 0
     except KeyboardInterrupt:
-        if run is not None and run.started_payment:
-            print("\ninterrupted after the payment started: it may have settled. Check Brattain's balance "
-                  "(`pay-lightning control balance`) before running again; the sample history is kept")
-        else:
-            print("\ninterrupted before any payment: nothing was paid; run again to start over (the sample history is kept)")
+        print("\ninterrupted: the deals so far are kept; run `demo.py reset` and `demo.py seed` to start over")
         return 130
     finally:
-        server.close()
-        world.close()
+        s.close()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -328,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         ap.print_help()
         return 2
-    return {"seed": cmd_seed, "run": cmd_run, "reset": cmd_reset}[args.command](args)
+    return {"seed": cmd_seed, "run": cmd_run}[args.command](args)
 
 
 if __name__ == "__main__":

@@ -61,9 +61,9 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert calls[1][5] == "--env" and calls[1][6].startswith("GOOSE_SEARCH_PATHS=")
     assert _json.loads(calls[1][6].split("=", 1)[1]) == [str(ow.LOCKED_DIR)]  # the demo's locked adapter (#276)
     assert calls[1][7:11] == ["--env", f"ARD_ACP_PREFIX={ow.acp_prefix()}", "--env", f"ARD_PYTHON={ow.sys.executable}"]
-    assert [c[1] for c in calls[2:5]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "maya")]
-    assert calls[5] == ow.TILE and len(calls) == 6
-    assert 'click menu item "Left & Quarters" of menu "Move & Resize"' in ow.TILE[-1]
+    assert [c[1] for c in calls[2:6]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "adjudicator", "maya")]
+    assert calls[6] == ow.TILE and len(calls) == 7
+    assert 'click menu item "Quarters" of menu "Move & Resize"' in ow.TILE[-1]
     assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
     assert capsys.readouterr().err == ""
 
@@ -72,7 +72,7 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     (1, "execution error: osascript is not allowed assistive access. (-1719)", None, "not allowed assistive access", True),
     (1, "execution error: Not authorized to send Apple events to System Events. (-1743)", None, "(-1743)", True),
     (0, "", subprocess.TimeoutExpired("osascript", 30), "timed out", True),  # a pending permission prompt
-    (1, "execution error: Can't get menu item \"Left & Quarters\".\n(-1728)", None, "Can't get menu item", False),
+    (1, "execution error: Can't get menu item \"Quarters\".\n(-1728)", None, "Can't get menu item", False),
     (1, "", None, "osascript exit 1", False),
     (0, "", FileNotFoundError("osascript"), "osascript", False),
 ])
@@ -84,7 +84,7 @@ def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_sti
     assert len(err) == 5 and all("trying again in 10 s" in line for line in err[:2])
     assert why in err[2]  # the message on one line even when osascript printed two
     assert ("System Settings, Privacy & Security, Accessibility" in err[2]) is grant  # the grant only for a permission
-    assert err[2].endswith("tile by hand: Window, Move & Resize, Left & Quarters.")
+    assert err[2].endswith("tile by hand: Window, Move & Resize, Quarters.")
     assert err[3] == "" and shlex.split(err[4]) == ow.TILE  # a blank line, then the exact command to paste
 
 

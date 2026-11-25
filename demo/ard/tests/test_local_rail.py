@@ -13,7 +13,16 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pay  # noqa: E402
 
-INVOICE_289 = "lnbc2890p1pnexample"  # 2890 pico-BTC = 289 msat (the amount is read from the human-readable part)
+#: BOLT11's own example invoice data (its payment hash is 0001020304…0102) under a human-readable part for 2890 pico-BTC,
+#: 289 msat: the amount is read from the human-readable part and the hash from the ``p`` field (the stand-in checks no
+#: signature, and nor does the demo: the wallet that pays does).
+#: BOLT11's first example invoice (its payment hash is 0001020304…0102).
+SPEC_INVOICE = ("lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rq"
+                "wzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087"
+                "fxdwk8qakdyafkq3yap9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql")
+SPEC_DATA = SPEC_INVOICE[len("lnbc1"):]
+INVOICE_289 = "lnbc2890p1" + SPEC_DATA
+SPEC_HASH = "0001020304050607080900010203040506070809000102030405060708090102"
 
 
 def program(tmp_path: Path, invoice: str = INVOICE_289, pay_answer: dict | None = None, fail: str = "") -> str:
@@ -42,7 +51,22 @@ def rail(tmp_path: Path, **kw) -> pay.LocalRail:
 
 def test_pays_the_invoice_the_seller_made(tmp_path):
     p = rail(tmp_path).pay(289)
-    assert (p.invoice_msat, p.status, p.fee_msat, p.reference) == (289, "succeeded", 0, "ab" * 32)
+    assert (p.invoice_msat, p.status, p.fee_msat, p.reference) == (289, "succeeded", 0, SPEC_HASH)
+
+
+def test_the_invoice_comes_first_and_its_hash_is_what_the_check_binds(tmp_path):
+    inv = rail(tmp_path).invoice(289)
+    assert (inv.amount_msat, inv.payment_hash) == (289, SPEC_HASH)
+
+
+def test_an_invoice_whose_hash_does_not_decode_is_refused(tmp_path):
+    with pytest.raises(pay.RailError, match="payment hash does not decode"):
+        rail(tmp_path, invoice="lnbc2890p1qqqq").invoice(289)
+
+
+def test_the_fake_rail_gives_a_fresh_hash_each_time():
+    r = pay.FakeRail()
+    assert r.invoice(1000).payment_hash != r.invoice(1000).payment_hash
 
 
 def test_refuses_an_invoice_for_another_amount(tmp_path):

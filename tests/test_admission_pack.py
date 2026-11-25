@@ -908,10 +908,21 @@ class ArdDemoBuyer(unittest.TestCase):
         self.assertEqual(set(self.pack), set(self.base))
         base_rows = {r["id"]: r for r in self.base["rows"]}
         demo_rows = {r["id"]: r for r in self.pack["rows"]}
-        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "disputes-against", "open-disputes"})
+        # 2.0.0 (#285): no selection rows (no verb serves selection/1), and the dispute tally is read with no
+        # on_unread interim, since the demo's /3 card carries it (profile section 3.3).
+        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "selection", "no-unanswered-dispute"})
         self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
-        self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]], [])
+        self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]], ["disputes-against"])
+        self.assertEqual({k: v for k, v in base_rows["disputes-against"].items() if k != "on_unread"},
+                         demo_rows["disputes-against"])
+        self.assertNotIn("on_unread", demo_rows["disputes-against"])
 
-    def test_it_ships_at_100_per_1000_for_the_presenter_to_tighten(self):
+    def test_a_lost_dispute_limits_and_the_witness_is_the_hosted_one(self):
+        row = next(r for r in self.pack["rows"] if r["id"] == "disputes-against")
+        self.assertEqual((row["params"], row["on_fail"]), ({"max": 0}, "LIMIT"))
+        self.assertEqual(self.pack["trust_roots"]["witnesses"],
+                         ["39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"])
+
+    def test_it_ships_at_100_per_1000(self):
         params = next(r["params"] for r in self.pack["rows"] if r["id"] == "band-history")
         self.assertEqual(params["max_adverse_permille"], 100)

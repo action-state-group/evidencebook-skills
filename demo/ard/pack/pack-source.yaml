@@ -1,17 +1,20 @@
 # ard-demo-buyer -- the ARD two-seller demo's admission pack, in admission pack
 # profile v0 (docs/admission-pack-profile-v0.md). A DEMO pack: derived from
 # admission-baseline@1 with msat-scale tiers, the demo's own trust roots (its
-# witness and controller), no claims-held row and a band-history row. Every
-# number is a placeholder for the demo only, never a recommendation.
+# witness and controller), no claims-held row, a band-history row and the
+# baseline 1.1.0's dispute rows (#280). Every number is a placeholder for the
+# demo only, never a recommendation.
 #
 # The buyer skill (skills/buy-with-evidence) points at it on the demo host.
-# It ships at 100 per 1,000 adverse; the presenter edits it on stage (by
-# default to 50 per 1,000), which recompiles it (evidencebook
-# python/examples/ard-commerce pack.py). Moved here from that demo (#169).
+# 2.0.0 (#285): the card is a standard_history/3 card, whose dispute tally the
+# disputes-against row reads with no on_unread interim (profile section 3.3: a
+# card that carries the tally is read, and a missing tally limits); the
+# selection rows are gone, since no verb serves a selection/1 answer; the
+# witness trust root is Action State's hosted witness key.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
-pack_id: demo/ard_admission/1.0.0
-pack_version: 1.0.0
+pack_id: demo/ard_admission/2.0.0
+pack_version: 2.0.0
 scope:
   kind: admission
 source: "demo copy of evidencebook-skills admission-baseline@1; placeholder thresholds, for this demo only"
@@ -50,7 +53,7 @@ budget:
 # Whose word counts: placeholders until the operator names its own.
 trust_roots:
   controllers: [demo-controller]
-  witnesses: [demo-witness]
+  witnesses: ["39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"]  # Action State's hosted witness
   judges: [placeholder-judge]
 
 rows:
@@ -134,6 +137,20 @@ rows:
     check: card.controller_declared
     from: T1
     on_fail: "LIMIT"
+  - id: disputes-against
+    statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
+    source: card
+    check: card.disputes_against
+    params: {max: 0}              # placeholder; LIMIT on any loss (Steven, #280)
+    from: T1
+    on_fail: "LIMIT"
+  - id: open-disputes
+    statement: The counterparty's card shows how many disputes about it are still open, out of all it received.
+    source: card
+    check: card.open_disputes
+    params: {max: 0}              # placeholder
+    from: T1
+    on_fail: "record"             # recorded only: anyone can open one (as the baseline)
   - id: no-conflicting-deal
     statement: No deal with the counterparty is CONFLICTING in this party's own book.
     source: own_history
@@ -141,26 +158,11 @@ rows:
     from: T1
     on_fail: "LIMIT"
 
-  # T2: a selection bound to our ask, with inclusion proofs; the controller in
-  # our trust roots; no dispute left unanswered with anyone in 90 days.
-  - id: selection
-    statement: A selection the counterparty returned to this party's own ask verifies, inclusion proofs included.
-    source: bound
-    check: bound.selection_verified
-    from: T2
-    on_fail: "LIMIT"
-    ask: {derivation: selection}
+  # T2: the controller in our trust roots, and the band history.
   - id: controller-trusted
     statement: The controller the card declares is in this pack's trust roots.
     source: card
     check: card.controller_trusted
-    from: T2
-    on_fail: "LIMIT"
-  - id: no-unanswered-dispute
-    statement: The selection shows no dispute with anyone left unanswered in the last 90 days.
-    source: bound
-    check: bound.no_unanswered_dispute
-    params: {window_days: 90}   # placeholder
     from: T2
     on_fail: "LIMIT"
   - id: band-history

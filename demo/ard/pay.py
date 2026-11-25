@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -44,6 +45,41 @@ def invoice_msat(invoice: str) -> int | None:
     return n * _MULT_MSAT[unit]
 
 
+_BECH32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+
+def invoice_hash(invoice: str) -> str | None:
+    """The payment hash a BOLT11 invoice carries (its ``p`` tagged field, 32 bytes), as hex; ``None`` when the
+    invoice does not decode. This is what the buyer's deal check binds before anything is paid: the hash, never the
+    preimage."""
+    inv = invoice.lower()
+    sep = inv.rfind("1")
+    if sep < 0:
+        return None
+    try:
+        data = [_BECH32.index(c) for c in inv[sep + 1:]]
+    except ValueError:
+        return None
+    words = data[7:-6 - 104]  # after the 35-bit timestamp, before the 520-bit signature and the 6-word checksum
+    i = 0
+    while i + 3 <= len(words):
+        tag, length = words[i], words[i + 1] * 32 + words[i + 2]
+        field = words[i + 3:i + 3 + length]
+        if tag == 1 and length == 52:  # "p": the payment hash
+            bits = "".join(f"{w:05b}" for w in field)[:256]
+            return f"{int(bits, 2):064x}"
+        i += 3 + length
+    return None
+
+
+@dataclass
+class Invoice:
+    text: str
+    amount_msat: int
+    payment_hash: str
+    raw: dict
+
+
 def redact(text: str) -> str:
     """``text`` with every 64-hex string (a preimage, a hash or a key) replaced, cut to 200 characters."""
     return _HEX64.sub("<hex>", text)[-200:]
@@ -74,9 +110,17 @@ class Rail:
     def balances(self) -> dict[str, dict]:
         raise NotImplementedError
 
+    def invoice(self, amount_msat: int) -> Invoice:
+        """The seller side's invoice for exactly ``amount_msat``: its hash is what the buyer's deal check binds."""
+        raise NotImplementedError
+
+    def pay_invoice(self, inv: Invoice) -> Payment:
+        """Pay an invoice from :meth:`invoice` from the buyer's wallet, once the person approved it."""
+        raise NotImplementedError
+
     def pay(self, amount_msat: int) -> Payment:
         """Issue an invoice for exactly ``amount_msat`` on the seller's wallet and pay it from the buyer's."""
-        raise NotImplementedError
+        return self.pay_invoice(self.invoice(amount_msat))
 
 
 class LightningRail(Rail):
@@ -99,22 +143,22 @@ class LightningRail(Rail):
         return {"shockley": self._control(self.SELLER, {"command": "balance"}),
                 "brattain": self._control(self.BUYER, {"command": "balance"})}
 
-    def pay(self, amount_msat: int) -> Payment:
+    def invoice(self, amount_msat: int) -> Invoice:
         made = self._control(self.SELLER, {"command": "fund", "amount_msat": amount_msat})
         invoice = _find_invoice(made)
         if invoice is None:
             raise RailError("Shockley's fund call returned no invoice")
-        stated = invoice_msat(invoice)  # the invoice itself, not the wallet's account of it
-        if stated != amount_msat:
-            raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+        return _checked(invoice, amount_msat, made)
+
+    def pay_invoice(self, inv: Invoice) -> Payment:
+        invoice, amount_msat, made = inv.text, inv.amount_msat, inv.raw
         sent = self._control(self.BUYER, {"command": "send", "invoice": invoice, "max_fee_msat": MAX_FEE_MSAT})
         status = str(sent.get("status", ""))
         if status != "succeeded":
             raise RailError(f"Brattain's send did not succeed: status {status or 'unknown'}")
         if sent.get("amount_msat") is not None and int(sent["amount_msat"]) != amount_msat:
             raise RailError(f"Brattain sent {sent['amount_msat']} msat, not {amount_msat}")
-        ref = str(sent.get("payment_hash") or sent.get("id") or hashlib.sha256(invoice.encode()).hexdigest())
-        return Payment(amount_msat, ref, status, sent.get("fee_msat"), {"fund": made, "send": sent})
+        return Payment(amount_msat, inv.payment_hash, status, sent.get("fee_msat"), {"fund": made, "send": sent})
 
 
 class LocalRail(Rail):
@@ -140,22 +184,22 @@ class LocalRail(Rail):
     def balances(self) -> dict[str, dict]:
         return {"seller": self._run("balance", "--wallet", self.seller), "buyer": self._run("balance", "--wallet", self.buyer)}
 
-    def pay(self, amount_msat: int) -> Payment:
+    def invoice(self, amount_msat: int) -> Invoice:
         made = self._run("invoice", str(amount_msat), "--wallet", self.seller)
         invoice = made.get("invoice")
         if not isinstance(invoice, str):
             raise RailError("the seller's wallet returned no invoice")
-        stated = invoice_msat(invoice)  # the invoice itself, not the program's account of it
-        if stated != amount_msat:
-            raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+        return _checked(invoice, amount_msat, made)
+
+    def pay_invoice(self, inv: Invoice) -> Payment:
+        invoice, amount_msat = inv.text, inv.amount_msat
         sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=180)
         status = str(sent.get("status", ""))
         if status != "succeeded":
             raise RailError(f"the buyer's wallet did not pay: status {status or 'unknown'}")
         if int(sent.get("amount_msat", amount_msat)) != amount_msat:
             raise RailError(f"the wallet paid {sent['amount_msat']} msat, not {amount_msat}")
-        ref = str(sent.get("payment_hash") or hashlib.sha256(invoice.encode()).hexdigest())
-        return Payment(amount_msat, ref, status, sent.get("fee_msat"), {"local": True})
+        return Payment(amount_msat, inv.payment_hash, status, sent.get("fee_msat"), {"local": True})
 
 
 def from_env(name: str) -> Rail:
@@ -183,6 +227,16 @@ def from_env(name: str) -> Rail:
     raise RailError(f"unknown rail {name!r}")
 
 
+def _checked(invoice: str, amount_msat: int, raw: dict) -> Invoice:
+    stated = invoice_msat(invoice)  # the invoice itself, not the wallet's account of it
+    if stated != amount_msat:
+        raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+    payment_hash = invoice_hash(invoice)
+    if payment_hash is None:
+        raise RailError("the invoice's payment hash does not decode: not paying it")
+    return Invoice(invoice, amount_msat, payment_hash, raw)
+
+
 def _find_invoice(doc: Any) -> str | None:
     found = _INVOICE.search(json.dumps(doc))
     return found.group(0) if found else None
@@ -200,7 +254,11 @@ class FakeRail(Rail):
     def balances(self) -> dict[str, dict]:
         return {"shockley": {"spendable_msat": 0, "fake": True}, "brattain": {"spendable_msat": 0, "fake": True}}
 
-    def pay(self, amount_msat: int) -> Payment:
-        self.paid.append(amount_msat)
-        ref = hashlib.sha256(f"fake:{amount_msat}:{len(self.paid)}".encode()).hexdigest()
-        return Payment(amount_msat, ref, "succeeded", 0, {"fake": True})
+    def invoice(self, amount_msat: int) -> Invoice:
+        # a fresh hash each time: capsulectl refuses a payment reference a deal already used
+        ref = hashlib.sha256(f"fake:{amount_msat}:".encode() + os.urandom(16)).hexdigest()
+        return Invoice(f"fake-invoice:{amount_msat}", amount_msat, ref, {"fake": True})
+
+    def pay_invoice(self, inv: Invoice) -> Payment:
+        self.paid.append(inv.amount_msat)
+        return Payment(inv.amount_msat, inv.payment_hash, "succeeded", 0, {"fake": True})

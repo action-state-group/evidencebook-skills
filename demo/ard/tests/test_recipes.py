@@ -22,6 +22,8 @@ _spec.loader.exec_module(ow)
 def env(monkeypatch):
     monkeypatch.setenv("CAPSULE_ENGINE", "/bin/true")
     monkeypatch.setenv("ARD_EVIDENCEBOOK", "/nonexistent/evidencebook")
+    monkeypatch.setenv("CAPSULECTL_DEAL", "/opt/capsulectl-deal")
+    monkeypatch.setenv("ARD_ADJUDICATOR_BIN", "/opt/adjudicator-bin")
 
 
 def _recipe(link: str) -> dict:
@@ -31,7 +33,7 @@ def _recipe(link: str) -> dict:
 
 def test_no_recipe_link_ends_in_base64_padding():
     # Goose Desktop drops a link whose config ends in "=": every window must open, whatever its recipe's length.
-    for role in ("alder", "kestrel", "maya"):
+    for role in ("alder", "kestrel", "adjudicator", "maya"):
         for rail in ("fake", "lightning"):
             link = ow.link(role, rail)
             assert not link.endswith("=") and "=" not in link.split("config=", 1)[1]
@@ -50,8 +52,8 @@ def test_maya_follows_the_buyer_skill_with_her_facts_and_the_rail():
 
 
 def test_maya_is_given_the_registry_the_stage_serves(monkeypatch):
-    # parties.py (which needs the Goose reference to import) serves POST /search on the same variable and default
-    assert 'HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))' in (HERE / "parties.py").read_text()
+    # stage.py serves POST /search on the same variable and default
+    assert 'HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))' in (HERE / "stage.py").read_text()
     text = _recipe(ow.link("maya", "fake"))["instructions"]
     assert "The ARD registry to search is http://127.0.0.1:47481/search" in text
     assert "registry to search" not in _recipe(ow.link("alder", "fake"))["instructions"]
@@ -60,11 +62,11 @@ def test_maya_is_given_the_registry_the_stage_serves(monkeypatch):
     assert "http://127.0.0.1:48000/search" in r["instructions"] and "ARD_STAGE_PORT=48000" in r["extensions"][0]["args"]
 
 
-def test_every_window_is_given_the_receipt_verifier(monkeypatch):
-    # Without it ard_open_receipt_page refuses in every window (Codex, #173).
-    monkeypatch.setenv("CAPSULECTL_DEAL", "/opt/capsulectl-deal")
-    for role in ("alder", "kestrel", "maya"):
-        assert "CAPSULECTL_DEAL=/opt/capsulectl-deal" in _recipe(ow.link(role, "fake"))["extensions"][0]["args"]
+def test_every_window_is_given_capsulectl_deal_and_the_adjudicator(monkeypatch):
+    # every deal record is capsulectl-deal's, and every window reaches the demo's adjudicator
+    for role in ("alder", "kestrel", "adjudicator", "maya"):
+        args = _recipe(ow.link(role, "fake"))["extensions"][0]["args"]
+        assert "CAPSULECTL_DEAL=/opt/capsulectl-deal" in args and "ARD_ADJUDICATOR_BIN=/opt/adjudicator-bin" in args
 
 
 def test_a_real_rail_says_real_money_moves():
@@ -87,7 +89,7 @@ def test_the_recipe_carries_nothing_of_its_own_beyond_the_facts():
 
 def test_every_demo_tool_a_skill_names_is_a_tool_of_this_demo():
     tools = set(re.findall(r'^def (ard_\w+)\(', (HERE / "desktop_server.py").read_text(), re.M))
-    for name in ("buy-with-evidence", "sell-with-evidence"):
+    for name in ("buy-with-evidence", "sell-with-evidence", "adjudicate-deal"):
         named = set(re.findall(r"`(ard_\w+)`", (ROOT / "skills" / name / "SKILL.md").read_text()))
         assert named and named <= tools, (name, named - tools)
 
@@ -96,7 +98,7 @@ def test_what_each_window_shows_names_no_demo():
     # Ethan, 2026-11-18: no mention of the demo anywhere a person sees or an agent can repeat. The recipe's own text
     # (title, description, first message, extension description, the facts before the skill) says none; the pack's
     # directory name (demo/ard/pack) is a path, left as it is.
-    for role in ("alder", "kestrel", "maya"):
+    for role in ("alder", "kestrel", "adjudicator", "maya"):
         for rail in ("fake", "local"):
             r = _recipe(ow.link(role, rail))
             head = r["instructions"].split("\n\n", 1)[0].replace("demo/ard/pack", "")

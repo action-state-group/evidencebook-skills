@@ -1,236 +1,99 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The parts of the ARD demo that need no evaluator and no network: the pack edit, the screen
-wording, the wallet rail's refusals and the one-way scrub of secret material."""
+"""The demo's own logic that needs no binary: how a /3 card's dispute tally becomes the pack's inputs, the screen's
+words for a card and a decision (Sherlock2's what-check on #285), the History page's rows, and the delivery record's
+words. capsulectl-deal and capsule-engine are not run here (tests/test_e2e.py runs them)."""
 from __future__ import annotations
 
-import json
-import os
+from datetime import datetime, timezone
 
-import pytest
-
-import pack as packs
-import pay
+import buyer
+import flow
+import pages
 import screens
-from buyer import Assessment, Check, Evidence
 
 
-
-def assessment(verdict: str, tier: str, price: int, cap: int | None = None, reasons=()) -> Assessment:
-    return Assessment("kestrel", price, verdict, tier, cap, "demo/ard_admission/1.1.0", "ab" * 32, list(reasons), [], "r", True, "cd" * 32)
-
-
-def card(held: int, bad: int) -> Evidence:
-    ev = Evidence("kestrel")
-    ev.card = {"outcomes": {"of": held + bad, "did_not_hold": bad}, "bands": [{"currency": "BTC", "decade": -9, "held": held, "did_not_hold": bad, "undecided": 0, "of": held + bad}]}
-    return ev
+def card(of=24, held=24, dnh=0, undecided=0, against=0, open_=0, for_=0, split=0, no_finding=0, withdrawn=0):
+    by = {"against": against, "for": for_, "no_finding": no_finding, "open": open_, "split": split, "withdrawn": withdrawn}
+    by["of"] = sum(by.values())
+    return {"derivation": "standard_history/3", "outcomes": {"of": of, "held": held, "did_not_hold": dnh, "undecided": undecided},
+            "bands": [{"currency": "BTC", "decade": -8, "held": held, "did_not_hold": dnh, "undecided": undecided, "of": of}],
+            "disputes": {"received": {"by_outcome": by, "of": by["of"]},
+                         "raised": {"by_outcome": {k: 0 for k in by}, "of": 0}}}
 
 
-def test_edit_changes_threshold_version_and_id_suffix_only():
-    source = packs.source_path().read_text()
-    out = packs.edited(source, 50, "1.1.0")
-    assert packs.threshold(source) == 100 and packs.threshold(out) == 50
-    assert "pack_id: demo/ard_admission/1.1.0" in out and "pack_version: 1.1.0" in out
-    assert "at most 50 per thousand did not hold" in out and "at most 100 per thousand" not in out
-    changed = [(a, b) for a, b in zip(source.splitlines(), out.splitlines()) if a != b]
-    assert len(changed) == 4, changed
+def assessment(verdict, reasons=(), rulings=(), cap=None, price=1000):
+    return buyer.Assessment("kestrel", price, verdict, "T0" if verdict == "LIMIT" else "T2", cap, "demo/ard_admission/2.0.0",
+                            "d" * 64, list(reasons), [], "r" * 64, {}, buyer.Own(rulings=list(rulings)))
 
 
-def test_threshold_refuses_a_pack_without_the_row():
-    with pytest.raises(packs.PackError):
-        packs.threshold("pack_id: demo/x/1.0.0\n")
+def test_decided_counts_only_decided_disputes_and_split_is_not_lost():
+    d = flow.decided(card(against=1, open_=2, split=1, withdrawn=1))
+    assert d == {"open": 2, "of": 5, "decided": {"against": 1, "of": 2}}
 
 
-def test_the_pack_is_a_demo_fork_that_reads_no_claims():
-    source = packs.source_path().read_text()
-    assert "pack_id: demo/ard_admission/1.0.0" in source and "asg/" not in source.split("rows:")[0].replace("evidencebook-skills", "")
-    assert "claims-held" not in source.split("rows:")[1]
-    assert "card.band_history_or_stake" in source and "BTC: {band: sat, scale: 8}" in source
+def test_the_inputs_carry_the_tally_bands_and_the_own_ruling():
+    ev = buyer.Evidence("kestrel", card=card(of=25, held=24, dnh=1, against=1))
+    own = buyer.Own(deals=1, settled=1, rulings=[{"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z",
+                                                  "row": "delivered", "value": "not_met", "adverse": True}])
+    got = buyer.inputs(ev, 1000, own, datetime(2026, 11, 25, tzinfo=timezone.utc))
+    assert got["card"]["disputes"] == {"open": 0, "of": 1, "decided": {"against": 1, "of": 1}}
+    assert got["card"]["bands"] == [{"currency": "BTC", "decade": -8, "subjects": 25, "adverse": 1}]
+    assert got["own"]["verdicts"] == [{"at": "2026-11-25T10:00:00Z", "adverse": True}]
+    assert got["card"]["witness"] == buyer.pt.WITNESS_KEY  # filled in by the operator: no verb gives the receipt
 
 
-def test_screen_lines_say_assessment_and_never_score_or_blame():
-    go = screens.decision_line(assessment("GO", "T2", 289), card(24, 0), 100, 1000)
-    limit = screens.decision_line(assessment("LIMIT", "T1", 268, 100, ["band-history"]), card(22, 2), 50)
-    assert go == "GO: 289 msat is within this pack's limit for it (T2, under 1,000 msat)"
-    assert limit == "LIMIT: this history supports deals under 100 msat; the 268 msat price is not under that; the pack lets at most 50 of every 1,000 deals not hold"
-    assert "demo" not in limit
-    text = " ".join([go, limit, screens.card_line(card(22, 2), True), screens.card_line(card(24, 0), False), screens.BANNER,
-                    screens.ASSESSMENT_NOTE, screens.PACK_NOTE]).lower()
-    for word in ("lost", "failed", "dishonest", "usd", "$"):
-        assert word not in text
-    assert "2 of 24 deals did not hold (sample card, written by hand; not recomputed from records)" in text
-    assert "did not hold counted from the seller's own note" in screens.card_line(card(22, 2), False)
-    # no "sample history, run by the demo operator" tag on a count (Ethan, 2026-11-17); a clean one needs no label
-    assert screens.card_line(card(24, 0), False) == "0 of 24 deals did not hold"
-    assert "demo operator" not in screens.card_line(card(22, 2), False)
-    assert "sample" in text and "test nodes" in text
+def test_the_card_line_says_the_tally_in_words():
+    assert screens.card_line(card()) == ("24 deals, 0 did not hold. Disputes others raised about it: 0 decided against "
+                                         "it, of 0 decided; 0 open.")
+    assert screens.card_line(card(of=25, dnh=1, against=1)) == ("25 deals, 1 did not hold. Disputes others raised about "
+                                                                "it: 1 decided against it, of 1 decided; 0 open.")
+    assert "1 not final yet" in screens.card_line(card(of=25, undecided=1))
 
 
-def test_scrub_drops_preimages_at_any_depth():
-    out = pay.scrub({"status": "ok", "payment": {"preimage": "aa", "payment_preimage_hex": "bb", "hash": "cc"}, "l": [{"Preimage": "dd", "n": 1}]})
-    assert json.dumps(out) == '{"status": "ok", "payment": {"hash": "cc"}, "l": [{"n": 1}]}'
+def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
+    ev = buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1))
+    ruled = {"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z", "adverse": True}
+    line = screens.decision_line(assessment("NO", ["adverse-adjudication", "disputes-against"], [ruled]), ev)
+    assert line.startswith("NO: you hold a ruling against this seller (deal 01234567, delivery not met, ruled 2026-11-25).")
+    assert "Your rules block a seller you hold a ruling against for 180 days." in line
+    assert line.endswith("Its card also counts 1 dispute decided against it, of 1 decided; the card does not say which deal.")
 
 
-class Scripted(pay.LightningRail):
-    def __init__(self, fund, send):
-        self.fund, self.send, self.calls = fund, send, []
-
-    def _control(self, host, payload, timeout=90):
-        self.calls.append((host, payload["command"]))
-        return scrub_copy(self.fund if payload["command"] == "fund" else self.send)
+def test_a_second_buyer_sees_limit_from_the_card_alone():
+    ev = buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1))
+    line = screens.decision_line(assessment("LIMIT", ["disputes-against"], cap=10), ev)
+    assert line == ("LIMIT: a dispute about this seller was decided against it (1 of 1 decided); this pack limits any lost "
+                    "dispute. At this limit the pack allows deals under 10 msat only, so no deal opens at 1,000 msat.")
 
 
-def scrub_copy(d):
-    return pay.scrub(json.loads(json.dumps(d)))
+def test_no_line_a_person_reads_names_the_demo():
+    lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
+             screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
+             pages.WITNESS_NOTE]
+    assert not [s for s in lines if "demo" in s.lower()]
 
 
-INVOICE = "lnbc2890p1pnqexample"
-OTHER = "lnbc2900p1pnqexample"
+def test_the_ruling_question_scopes_the_challenge():
+    q = screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
+    assert "not met, against Kestrel Print" in q and "not independent of the parties" in q
+    assert "Either side may challenge it within 30 days. A challenge is recorded beside the ruling and never replaces it." in q
 
 
-def test_the_rail_pays_the_invoice_amount_and_makes_only_fund_and_send_calls():
-    rail = Scripted({"invoice": INVOICE, "amount_msat": 289}, {"status": "succeeded", "amount_msat": 289, "fee_msat": 0, "payment_hash": "ph", "preimage": "secret"})
-    p = rail.pay(289)
-    assert (p.invoice_msat, p.reference, p.status) == (289, "ph", "succeeded")
-    assert "secret" not in json.dumps(p.raw)
-    assert rail.calls == [(pay.LightningRail.SELLER, "fund"), (pay.LightningRail.BUYER, "send")]
+def test_the_delivery_record_in_words():
+    assert buyer.shipped("partial:badges_150_of_200") == "150 of 200 badges"
+    assert buyer.shipped("delivered:badges_200_of_200") == "200 of 200 badges"
+    assert buyer._observed({"agent_input": {"body": {"act": "delivered", "observed": "partial:badges_150_of_200"}}}) == \
+        "partial:badges_150_of_200"
 
 
-@pytest.mark.parametrize("fund,send,why", [
-    ({"note": "no invoice"}, {}, "no invoice"),
-    ({"invoice": OTHER, "amount_msat": 289}, {}, "not 289"),
-    ({"invoice": "lnbc1pnqnoamount", "amount_msat": 289}, {}, "None msat"),
-    ({"invoice": INVOICE, "amount_msat": 289}, {"status": "failed"}, "did not succeed"),
-    ({"invoice": INVOICE, "amount_msat": 289}, {"status": "succeeded", "amount_msat": 290}, "not 289"),
-])
-def test_the_rail_refuses_a_wrong_invoice_or_payment(fund, send, why):
-    with pytest.raises(pay.RailError, match=why):
-        Scripted(fund, send).pay(289)
-
-
-def test_a_refused_invoice_is_never_paid():
-    rail = Scripted({"invoice": OTHER, "amount_msat": 289}, {"status": "succeeded"})
-    with pytest.raises(pay.RailError):
-        rail.pay(289)
-    assert [c for _, c in rail.calls] == ["fund"]
-
-
-def test_fake_rail_moves_no_money():
-    rail = pay.FakeRail()
-    assert rail.pay(289).status == "succeeded" and rail.paid == [289]
-
-
-def test_invoice_amounts_are_read_from_the_invoice_text():
-    assert pay.invoice_msat("lnbc2890p1pabc") == 289 and pay.invoice_msat("lnbc2680p1pabc") == 268
-    assert pay.invoice_msat("lnbc10n1pabc") == 1000 and pay.invoice_msat("lnbc1pabc") is None
-    assert pay.invoice_msat("lnbc2895p1pabc") is None  # not a whole msat
-
-
-def test_a_failed_wallet_call_never_echoes_secret_looking_output(monkeypatch):
-    class Run:
-        returncode, stdout, stderr = 1, "", "boom " + "ab" * 32
-
-    monkeypatch.setattr(pay.subprocess, "run", lambda *a, **k: Run())
-    with pytest.raises(pay.RailError) as e:
-        pay.LightningRail()._control("h", {"command": "balance"})
-    assert "ab" * 32 not in str(e.value) and "<hex>" in str(e.value)
-
-
-def test_an_entry_whose_commitment_failed_is_a_failed_check_not_a_crash():
-    import buyer
-    ev = buyer.gather(None, None, {"id": "x", "problem": "commitment: bad signature"}, "aa")
-    assert [(c.name, c.ok) for c in ev.checks] == [("commitment", False)] and ev.card is None
-
-
-def test_limit_tap_line_is_english_and_pays_nothing():
-    line = screens.limit_outcome(assessment("LIMIT", "T1", 268, 100, ["band-history"]))
-    assert line == ("LIMIT: 268 msat is at or over this seller's limit (deals under 100 msat); more of its deals did not hold "
-                    "than the pack allows; no deal opens and nothing is paid")
-    assert line.isascii()
-
-
-def test_kestrels_lines_at_a_price_equal_to_its_cap_stay_true():
-    # Kestrel sells at 1,000 msat and its history supports deals under 1,000 msat: the price is at the cap, not over it
-    a = assessment("LIMIT", "T1", 1000, 1000, ["band-history"])
-    assert screens.decision_line(a, card(22, 2), 50) == (
-        "LIMIT: this history supports deals under 1,000 msat; the 1,000 msat price is not under that; "
-        "the pack lets at most 50 of every 1,000 deals not hold")
-    assert screens.limit_outcome(a) == (
-        "LIMIT: 1,000 msat is at or over this seller's limit (deals under 1,000 msat); more of its deals did not hold "
-        "than the pack allows; no deal opens and nothing is paid")
-    assert screens.button("Kestrel", a) == "Pick Kestrel (outside its limit: nothing is paid)"
-
-
-def test_card_line_uses_the_cards_own_total_and_a_stated_check_is_not_a_tick():
-    ev = card(17, 2)
-    ev.card["bands"][0].update(undecided=5, of=24)
-    ev.card["outcomes"].update(of=24)
-    assert screens.card_line(ev, False).startswith("2 of 24 deals did not hold")
-    ev.stated("selection", "the seller states 0 unanswered disputes")
-    assert screens.check_lines(ev)[-1].startswith("– selection")
-
-
-def test_a_non_limit_seller_that_is_not_go_never_prints_a_zero_cap():
-    assert screens.limit_outcome(assessment("ASK", "T0", 268)) == "ASK: no deal opens and nothing is paid"
-
-
-def test_popup_buttons_say_what_a_tap_does():
-    assert screens.button("Alder", assessment("GO", "T2", 289)) == "Alder".join(["Pay ", " 289 msat"])
-    assert "outside its limit: nothing is paid" in screens.button("Kestrel", assessment("LIMIT", "T1", 268, 100))
-    assert screens.button("Kestrel", assessment("ASK", "T0", 268)) == "Pick Kestrel (ASK: nothing is paid)"
-
-
-def test_the_owners_note_makes_a_real_card_count_did_not_hold(tmp_path):
-    import deal_records as dr
-    import deals
-    from demo_node import DemoNode
-    buyer, seller = DemoNode.open(tmp_path / "b", operator="b"), DemoNode.open(tmp_path / "s", operator="s")
-    try:
-        deals.admit(buyer, seller)
-        deals.admit(seller, buyer)
-        ids = [deals.run_deal(buyer, seller, dr.Terms("badges", 268, "BTC", "lightning", False), "x", deals.SAMPLE_PAYMENT) for _ in range(4)]
-        for deal_id in ids[:3]:
-            deals.note_did_not_hold(seller, deal_id, "other")
-        seller.tick(__import__("datetime").datetime.now(__import__("datetime").timezone.utc))
-        card = json.loads(seller.standard_history()["card"])
-        assert (card["outcomes"]["held"], card["outcomes"]["did_not_hold"]) == (1, 3)
-        with pytest.raises(ValueError):
-            deals.note_did_not_hold(seller, ids[3], "made up")
-    finally:
-        buyer.close()
-        seller.close()
-
-
-def test_the_demo_pack_is_this_repositorys():
-    assert packs.source_path() == packs.skills_checkout() / "demo" / "ard" / "pack" / "pack-source.yaml"
-
-
-def test_the_assessment_screen_says_the_selection_has_no_inclusion_proofs():
-    assert "no inclusion proofs" in screens.SELECTION_NOTE and "this pack counts it" in screens.SELECTION_NOTE
-
-
-def test_a_seller_whose_commitment_failed_is_not_asked_or_assessed(capsys):
-    import demo
-    run = object.__new__(demo.Run)
-    run.entries = [{"id": "kestrel", "name": "Kestrel Print", "problem": "the served commitment's digest differs"}]
-    run.evidence, run.info = {}, {}
-    assert run.verified == []
-    run.collect()  # no world is touched: the failed seller is only reported
-    assert "Kestrel Print: not asked, its commitment failed (the served commitment's digest differs)" in capsys.readouterr().out
-    assert run.assess(None) == {} and run.options(None, {}) == []
-
-
-def test_the_script_demos_popup_carries_no_banner():
-    # Ethan, 2026-11-17, and Sherlock2 on #174: no demo banner on what the demo draws, the popup included.
-    from pathlib import Path
-    page = (Path(__file__).resolve().parents[1] / "popup.html").read_text()
-    assert 'id="banner"' not in page and "s.banner" not in page
-    assert '"banner"' not in (Path(__file__).resolve().parents[1] / "demo.py").read_text()
-
-
-def test_the_screen_notes_name_no_demo_and_keep_their_facts():
-    # Ethan, 2026-11-18: no "demo" on screen; the facts the labels carried stay
-    for note in (screens.PACK_NOTE, screens.OPERATOR_NOTE, screens.SELECTION_NOTE, screens.ASSESSMENT_NOTE, screens.CLAIMS_NOTE):
-        assert "demo" not in note.lower(), note
-    assert "placeholder thresholds" in screens.PACK_NOTE and "not published" in screens.PACK_NOTE
-    assert "no witness ran" not in screens.OPERATOR_NOTE  # the hosted witness runs since #222 (#244)
-    assert "not checked" in screens.OPERATOR_NOTE and "no inclusion proofs" in screens.SELECTION_NOTE
+def test_a_history_row_says_capsulectls_statuses_and_derives_no_outcome():
+    deal = {"deal": "ab" * 32, "agreed_at": "2026-11-25T09:00:00Z", "role": "provided",
+            "amount": {"value": "1", "assetCode": "BTC", "assetScale": 8}, "happened": "stamped_by_both",
+            "rows": [{"owed_by": "counterparty", "status": "agreed", "value": "met"},
+                     {"owed_by": "holder", "status": "ruled", "value": "not_met"}]}
+    view = pages.history_input([deal], name="Kestrel Print", built_at="2026-11-25T10:00:00Z", witnessed=None)
+    row = view["rows"][0]
+    assert row["asked"] == "Sold" and row["money"] == "from 1 sat (its value band)"
+    assert row["outcome"] == "this party's row: ruled, not met; the other party's row: met"
+    assert "held" not in row["outcome"] and row["witness"] == {"state": "none"}
+    assert pages.labels(card(of=25, dnh=1, against=1), witnessed=False) == [screens.card_line(card(of=25, dnh=1, against=1))]

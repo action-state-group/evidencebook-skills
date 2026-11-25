@@ -1,6 +1,6 @@
 {
-  "id": "demo/ard_admission/1.0.0",
-  "version": "1.0.0",
+  "id": "demo/ard_admission/2.0.0",
+  "version": "2.0.0",
   "requirements": [
     {
       "id": "attestation",
@@ -102,6 +102,24 @@
       "backward_verdict": "DETERMINISTIC"
     },
     {
+      "id": "disputes-against",
+      "profile": "outcome",
+      "statement": "The counterparty's card shows no dispute about it decided against it, out of the disputes decided.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.disputes_against (max 0), from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "open-disputes",
+      "profile": "outcome",
+      "statement": "The counterparty's card shows how many disputes about it are still open, out of all it received.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.open_disputes (max 0), from tier T1; recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
       "id": "no-conflicting-deal",
       "profile": "outcome",
       "statement": "No deal with the counterparty is CONFLICTING in this party's own book.",
@@ -111,29 +129,11 @@
       "backward_verdict": "DETERMINISTIC"
     },
     {
-      "id": "selection",
-      "profile": "outcome",
-      "statement": "A selection the counterparty returned to this party's own ask verifies, inclusion proofs included.",
-      "tier": "must_have",
-      "evidence_rule": "admission check bound.selection_verified, from tier T2; a failure gives LIMIT; asks for selection",
-      "forward_verdict": "DETERMINISTIC",
-      "backward_verdict": "DETERMINISTIC"
-    },
-    {
       "id": "controller-trusted",
       "profile": "outcome",
       "statement": "The controller the card declares is in this pack's trust roots.",
       "tier": "must_have",
       "evidence_rule": "admission check card.controller_trusted, from tier T2; a failure gives LIMIT",
-      "forward_verdict": "DETERMINISTIC",
-      "backward_verdict": "DETERMINISTIC"
-    },
-    {
-      "id": "no-unanswered-dispute",
-      "profile": "outcome",
-      "statement": "The selection shows no dispute with anyone left unanswered in the last 90 days.",
-      "tier": "must_have",
-      "evidence_rule": "admission check bound.no_unanswered_dispute (window_days 90), from tier T2; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },

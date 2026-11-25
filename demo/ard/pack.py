@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The demo's admission pack: compile it, edit its threshold, and run the evaluator on it.
+"""The demo's admission pack: compile it for the evaluator.
 
 The pack is evidencebook-skills' ``demo/ard/pack`` (a demo pack derived from its ``admission-baseline``),
 in this repository, as the buyer skill names it (#169).
 Compiling is that repository's ``scripts/pack_compile.py`` (its ``--out`` must sit inside the
 checkout, so the work goes under ``<checkout>/demo-ard/``); deciding is ``capsule-engine admission
-evaluate``, run through :func:`evidencebook.evidence.evaluate`. Neither is reimplemented here."""
+evaluate`` (:func:`party.decide`). Neither is reimplemented here."""
 from __future__ import annotations
 
 import json
@@ -65,16 +65,6 @@ def threshold(source: str) -> int:
     return int(m.group(1))
 
 
-def edited(source: str, permille: int, version: str) -> str:
-    """The source with its threshold, ``pack_version`` and the ``pack_id`` suffix changed (lint
-    requires the id to end in the version)."""
-    out = re.sub(r"max_adverse_permille:\s*\d+", f"max_adverse_permille: {permille}", source)
-    out = re.sub(r"at most \d+ per thousand", f"at most {permille} per thousand", out)  # the row's statement says it too
-    out = re.sub(r"(?m)^pack_version:.*$", f"pack_version: {version}", out)
-    out = re.sub(r"(?m)^pack_id: (\S+)/[^/\s]+$", rf"pack_id: \1/{version}", out)
-    return out
-
-
 def compile_source(text: str, version: str, work: Path | None = None) -> Pack:
     """Compile ``text`` (a pack source) with the skills checkout's compiler. Returns the pack as the
     compiler printed it (id and ``definition_digest``)."""
@@ -104,5 +94,14 @@ def source_path() -> Path:
     return path
 
 
+def version_of(source: str) -> str:
+    m = re.search(r"(?m)^pack_version:\s*(\S+)$", source)
+    if not m:
+        raise PackError("the pack source has no pack_version")
+    return m.group(1)
+
+
 def starting() -> Pack:
-    return compile_source(source_path().read_text(), "1.0.0")
+    """The demo pack as this checkout holds it."""
+    text = source_path().read_text()
+    return compile_source(text, version_of(text))

@@ -34,16 +34,17 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_*.py'
 
   ard-demo:
-    # The ARD two-seller demo (demo/ard): its tests, end to end on a simulated rail, against the
-    # Goose reference and the x-deal-v0 checker in a pinned evidencebook checkout, and a
-    # capsule-engine built from a pinned tag, and the capsulectl-deal binary from a pinned
-    # evidencebook release for the receipt pages' verify (the run sheet's pins).
+    # The ARD two-seller demo (demo/ard): its tests, against the pins the run sheet names: an evidencebook checkout
+    # (the Goose reference's Ctl and Node) and the capsulectl-deal built from it, a capsule-engine built from a tag,
+    # ledger-cloud's adjudicator built from a commit, and capsule-viewer for the pages. The end-to-end test runs both
+    # deals against Action State's hosted witness (network), as a person's run does.
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9  # #522: #514 reverted; the demo seals no demo flag
-      CAPSULE_ENGINE_TAG: go/v0.7.0  # b84d7d0: guard check --limits (capsule-engine#314), for the spending-limit tests
-      CAPSULECTL_DEAL_TAG: capsulectl/v0.1.0-rc50  # rc49 or later for the receipt pages; evidencebook#610: the deal plugin moved into evidencebook
-      CAPSULE_VIEWER_REF: 89b75d6ab5f34bada727082758562071d494ce0b  # ts/v0.25.0: the receipt page redesign (capsule-viewer#374)
+      EVIDENCEBOOK_REF: d3ad8fa2c38cdb9cded1f48f6c3051f86abf2793  # #833: the Goose reference on capsulectl-deal, x-deal-v1
+      CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
+      LEDGER_CLOUD_REF: 9e52270669a2ef8564bcc92f8fcf9f2da2bdd11f  # the adjudicator (ledger-cloud#36, #38), run locally
+      CAPSULE_VIEWER_REF: b21b993bca899fa69a4311c406ba86f442b50b2a  # ts/v0.26.1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,39 +61,44 @@ jobs:
           ref: ${{ env.CAPSULE_ENGINE_TAG }}
           path: .deps/capsule-engine
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/ledger-cloud
+          ref: ${{ env.LEDGER_CLOUD_REF }}
+          path: .deps/ledger-cloud
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: .deps/capsule-engine/go/go.mod
+          go-version-file: .deps/ledger-cloud/ledger_cloud/adjudicator/go.mod  # the newest of the three go.mod versions
           cache: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ./.deps/evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
-      # capsule-engine depends only on its pinned ref and the Go toolchain: build it once per pin.
+      - run: pip install cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
       - id: bins
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bin
-          key: ard-bins-${{ runner.os }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ hashFiles('.deps/capsule-engine/go/go.mod') }}
-      - name: build capsule-engine
+          key: ard-bins-v2-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.LEDGER_CLOUD_REF }}
+      - name: build capsulectl-deal, capsule-engine and the adjudicator
         if: steps.bins.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
+          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
-      - name: fetch capsulectl-deal
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          d="$(mktemp -d)"
-          gh release download "$CAPSULECTL_DEAL_TAG" -R action-state-group/evidencebook -D "$d" \
-            -p SHA256SUMS -p "capsulectl-deal-${CAPSULECTL_DEAL_TAG#capsulectl/}-linux-amd64"
-          (cd "$d" && grep ' capsulectl-deal-.*-linux-amd64$' SHA256SUMS | sha256sum -c -)
-          mkdir -p "$RUNNER_TEMP/bin"
-          install -m 755 "$d"/capsulectl-deal-*-linux-amd64 "$RUNNER_TEMP/bin/capsulectl-deal"
+          for c in adjudicator-front adjudicator-operator adjudicator-client; do
+            (cd .deps/ledger-cloud/ledger_cloud/adjudicator && go build -o "$RUNNER_TEMP/bin/$c" "./cmd/$c")
+          done
       - name: the demo's tests
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
-            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" python -m pytest -q --durations=40 -n 4 --dist loadfile demo/ard/tests
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" ARD_ADJUDICATOR_BIN="$RUNNER_TEMP/bin" \
+            python -m pytest -q --durations=20 -n 4 --dist loadfile demo/ard/tests --ignore demo/ard/tests/test_e2e.py
+      - name: both deals end to end (Action State's hosted witness)
+        run: |
+          ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" ARD_ADJUDICATOR_BIN="$RUNNER_TEMP/bin" \
+            python -m pytest -v demo/ard/tests/test_e2e.py
 
   admission-engine:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
