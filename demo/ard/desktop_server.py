@@ -354,14 +354,16 @@ def ard_pay(seller: str) -> None:
             if key in s.declined:
                 # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
                 # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
-                # back to the dialog. An agent that already asked it calls again at once (no second ask of Maya); the next
-                # call opens the dialog again, and the presenter's click stays the gate.
+                # back to the dialog. An agent that asked Maya after the dialog was declined (the skill asks before every
+                # payment) calls again at once, with no second question (Sherlock2 on #278: one question per order); the
+                # next call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
                     f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
                     f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
                     + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                    + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
+                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was '
+                    "declined, and she said yes, call ard_pay again now: do not ask her again. "
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
             ask, clicked = None, None
             if limit is None:
