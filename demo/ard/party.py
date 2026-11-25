@@ -312,6 +312,11 @@ class Party:
             if not any(w in str(exc) for w in ("in flight", "is used")):
                 raise
 
+    def payment_failed(self, deal_id: str, check_id: str) -> None:
+        """Close a payment counted as sent that the rail says failed (``deal settle --status failed``): no spend is
+        counted for it, and the approval it used stays used."""
+        self.run("settle", "--deal", deal_id, "--check", check_id, "--status", "failed", "--out", self.tmp("failed-leg.json"))
+
     def pay_leg(self, deal_id: str, check_id: str) -> str:
         """The buyer's payment: counted as in flight (:meth:`sending`, a no-op once done), then the payer leg settled,
         written for the seller. The payment reference is the one the check bound."""

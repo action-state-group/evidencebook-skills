@@ -264,6 +264,23 @@ def test_the_payment_is_counted_as_sent_before_money_moves(monkeypatch):
     assert calls.index("sending") < calls.index("paid")
 
 
+def test_a_failed_payment_is_closed_and_an_unknown_one_stays_in_flight(monkeypatch):
+    # the payment is counted as sent before the rail pays: a payment the rail says failed is closed as failed, so it no
+    # longer counts against the limit; any other error leaves its outcome unknown, and it stays counted
+    import pay
+    for error, closed in ((pay.PaymentFailed("status failed"), True), (pay.RailError("exit 1: timeout"), False)):
+        calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": True, "check_id": "c"})
+        who.payment_failed = lambda deal_id, check_id: calls.append("failed")
+
+        def boom(inv, error=error):
+            raise error
+        monkeypatch.setattr(Rail, "pay_invoice", staticmethod(boom))
+        with pytest.raises(pay.RailError):
+            buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?", lambda q: "yes", print,
+                               simulated=True)
+        assert ("failed" in calls) is closed and "cancel" not in calls  # the offer was sent: it is not withdrawn
+
+
 def test_unsetting_the_limit_removes_the_demos_checker(tmp_path):
     import limits
     ran = []

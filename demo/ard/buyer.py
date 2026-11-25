@@ -22,6 +22,7 @@ import ard
 import flow
 import limits
 import party as pt
+import pay as rails  # buyer.pay is the function below
 import screens
 import wire
 from cast import ASK, BUDGET_MSAT, BUYER, SELLERS, label
@@ -365,7 +366,11 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
         raise
     send_deal(home, maya, deal, chosen, say)
     maya.sending(deal.deal_id, check["check_id"])  # refused here, nothing has moved
-    payment = rail.pay_invoice(inv)
+    try:
+        payment = rail.pay_invoice(inv)
+    except rails.PaymentFailed:  # the rail says no money moved: the payment no longer counts against the limit
+        maya.payment_failed(deal.deal_id, check["check_id"])
+        raise
     pay(home, maya, deal, check, payment.reference, simulated=simulated)
     return deal, payment
 
