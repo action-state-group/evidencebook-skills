@@ -202,7 +202,8 @@ class Party:
         return self.run("tick", "--now")
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
-        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again while it does not
+        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:class:`StampWait`: any checkpoint this wait
+        cut), taken again while it does not
         (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
         ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
         then mid-delivery), and what it did not deliver goes with the next tick."""
