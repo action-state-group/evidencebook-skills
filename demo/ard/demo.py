@@ -85,10 +85,28 @@ class Script:
         self.entries: list[dict] = []
         self.keys: dict[str, str] = {}
 
-    def close(self) -> None:
-        for a in self.agents.values():
-            a.stop()
-        self.stage.close()
+    def close(self, wait: bool = True) -> None:
+        """Stop the run. With ``wait``, first wait for a ruling stamp still being asked for in the background
+        (adjudicator.LATER, #307), so the ruling with its stamp reaches both parties and Maya enters it; an
+        interrupted run (Ctrl-C) does not wait, and a second Ctrl-C during the wait stops it too."""
+        try:
+            pending = [t for t in adj.LATER if t.is_alive()] if wait else []
+            if pending:
+                print(f"waiting up to {adj.LATER_S // 60} minutes for {pt.WITNESS_NAME} to stamp the ruling before "
+                      "closing (Ctrl-C stops without it)")
+                stop = time.monotonic() + adj.LATER_S
+                for t in pending:
+                    t.join(max(stop - time.monotonic(), 0))
+            if wait:  # a ruling sent again with its stamp, now or earlier in the run: each side takes it before stopping
+                for deal in buyer.deals_from_notes(self.maya):
+                    flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
+        except KeyboardInterrupt:
+            wait = False
+            print("\nstopped without the ruling's stamp")
+        finally:
+            for a in self.agents.values():  # each seller takes a stamped ruling after its loop stops, not alongside it
+                a.stop(take_rulings=wait)
+            self.stage.close()
 
     def ask(self, question: str) -> bool:
         print(f"\n{question}")
@@ -172,7 +190,9 @@ class Script:
             return
         r = self.adjudicator.rule(raw, c.row, "not_met", "seller")
         if not self.adjudicator.stamp({**raw, "ruling": r}) and pt.witnessed():
-            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 12 seconds")
+            print(f"Not yet time-stamped: {pt.WITNESS_NAME} did not answer within 12 seconds. Both parties have the "
+                  f"ruling without a stamp. This run keeps asking for {adj.LATER_S // 60} minutes and, once stamped, "
+                  "sends the ruling to both parties again with its stamp.")
         print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 60
@@ -203,6 +223,7 @@ def cmd_run(args) -> int:
     if args.auto and real:
         print("--auto answers every question yes, so it is refused on a rail that moves real money")
         return 2
+    interrupted = False
     s = Script(home, pay.from_env(args.rail), args.auto, real)
     try:
         s.discover()
@@ -224,10 +245,11 @@ def cmd_run(args) -> int:
                 buyer.confirm_by_question(home, s.maya, d2, SELLERS[d2.seller]["label"], s.ask, print)
         return 0
     except KeyboardInterrupt:
+        interrupted = True
         print("\ninterrupted: the deals so far are kept; run `demo.py reset` and `demo.py seed` to start over")
         return 130
     finally:
-        s.close()
+        s.close(wait=not interrupted)
 
 
 def main(argv: list[str] | None = None) -> int:

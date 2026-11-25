@@ -563,3 +563,106 @@ def test_the_tool_timeout_covers_the_longest_call():
     ow = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ow)
     assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.INVOICE_WAIT_S + pay.PAY_WAIT_S
+
+
+def test_a_ruling_stamp_the_witness_took_late_is_sent_again(monkeypatch):
+    """#307: a stamp the witness did not take within the foreground bound goes on in the background, and the ruling is
+    sent to both parties again once it is taken; a stamp taken in time is sent once."""
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    tries = []
+
+    class P:
+        def wait_checkpoint(self, seconds):
+            tries.append(seconds)
+            if len(tries) == 1:
+                raise pt.Refused("no checkpoint in 12 s")
+            return {"state": "ticked"}
+    sent = []
+    monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
+    monkeypatch.setattr(adj.Adjudicator, "_send_ruling", lambda self, case: sent.append(case["deal_id"]))
+    case = {"deal_id": "deal-0123456789abcdef", "ruling": {}, "parties": {}}
+    assert adj.Adjudicator("home").stamp(case, seconds=12, later=60) is False
+    adj.LATER[-1].join(5)
+    assert tries == [12, 60] and sent == [case["deal_id"]] * 2
+    tries[:] = [0]  # the next wait succeeds at once
+    sent.clear()
+    assert adj.Adjudicator("home").stamp(case) is True and sent == [case["deal_id"]]
+
+
+def test_ruling_resends_never_overlap(monkeypatch):
+    """#308 review: a background resend and a ruling made in the window write the same wire files; _send_ruling runs
+    them one at a time under the adjudicator party's lock."""
+    import threading
+    import time
+
+    lock, inside, most = threading.RLock(), [0], [0]
+
+    class P:
+        _lock = lock
+    monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
+
+    def rule(self, case, row, value, against):
+        inside[0] += 1
+        most[0] = max(most[0], inside[0])
+        time.sleep(0.05)
+        inside[0] -= 1
+        return {"file": "ruling.json"}
+    monkeypatch.setattr(adj.Adjudicator, "rule", rule)
+    monkeypatch.setattr(adj.wire, "send", lambda *a: None)
+    case = {"deal_id": "deal-0123456789abcdef", "ruling": {"row": "r", "value": "v", "against": "a"},
+            "parties": {"buyer": "maya", "seller": "kestrel"}}
+    a = adj.Adjudicator("home")
+    threads = [threading.Thread(target=a._send_ruling, args=(case,)) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+    assert most[0] == 1
+
+
+@pytest.mark.parametrize("wait", [True, False])
+def test_a_closing_run_lets_both_sides_take_a_stamped_ruling(monkeypatch, wait):
+    """#308 review: a ruling sent again with its stamp, while the run went on or as it closes, is taken by Maya and by
+    each seller before the run stops; an interrupted run (wait=False) skips that and still stops everything."""
+    import demo
+
+    took, stopped = [], []
+
+    class Agent:
+        def stop(self, take_rulings=False):
+            if take_rulings:
+                took.append("seller")
+            stopped.append("seller")
+    s = demo.Script.__new__(demo.Script)
+    s.home, s.maya, s.agents = "home", object(), {"kestrel": Agent(), "alder": Agent()}
+    s.stage = type("St", (), {"close": lambda self: stopped.append("stage")})()
+    monkeypatch.setattr(demo.adj, "LATER", [])  # the background stamp already finished
+    monkeypatch.setattr(demo.buyer, "deals_from_notes", lambda m: [type("D", (), {"seller": "kestrel"})()])
+    monkeypatch.setattr(demo.flow, "enter_rulings", lambda home, p, side, other, say: took.append(f"maya:{other}"))
+    s.close(wait=wait)
+    assert took == (["maya:kestrel", "seller", "seller"] if wait else [])
+    assert stopped == ["seller", "seller", "stage"]
+
+
+def test_a_stopping_seller_takes_its_rulings_only_after_its_loop_ends(monkeypatch):
+    """#308 review: the closing run's last ruling step never runs alongside the agent's own loop."""
+    import threading
+    import time
+
+    events = []
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent._stop, agent.log, agent._lock = threading.Event(), [], threading.Lock()
+    agent.party = type("P", (), {"close": lambda self: events.append("close")})()
+
+    def loop():
+        while not agent._stop.is_set():
+            time.sleep(0.01)
+        time.sleep(0.05)
+        events.append("loop ended")
+    agent.threads = [threading.Thread(target=loop)]
+    agent.threads[0].start()
+    monkeypatch.setattr(flow.SellerAgent, "_rulings", lambda self: events.append("rulings"))
+    agent.stop(take_rulings=True)
+    assert events == ["loop ended", "rulings", "close"]

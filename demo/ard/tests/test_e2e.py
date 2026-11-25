@@ -87,6 +87,7 @@ def _until(pred, seconds, step=3):
 
 
 def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
+    import adjudicator as adj
     import buyer
     import flow
     import party as pt
@@ -111,13 +112,16 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert "Kestrel Print's own signed delivery record: 150 of 200 badges" in view.deciding
     r = w["adj"].rule(case, view.row, "not_met", "seller")
     assert r["sealed"] and set(r["books"]) == {"buyer", "seller"}
-    assert w["adj"].stamp(_fresh(w, deal.deal_id))
+    w["adj"].stamp(_fresh(w, deal.deal_id))  # a slow witness: the stamp is taken later, in the background (#307)
 
     # each side enters it in its own records and sends its book back; the entry check reads both
     _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True)
            and w["maya"].notes(flow.BOOK_SENT), 300)
     _until(lambda: w["agents"]["kestrel"].party.notes(flow.BOOK_SENT), 300)
-    assert w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"]
+    # the ruling's witnessed time reaches Maya: with the ruling, or on the ruling file sent again once stamped (#307)
+    assert _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
+        w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"] or w["maya"].notes(flow.RULING_STAMPED)),
+        adj.LATER_S + 30)
     assert {x["words"] for x in w["adj"].entries(_fresh(w, deal.deal_id))} == {"entered"}
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
