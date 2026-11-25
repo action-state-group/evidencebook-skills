@@ -13,6 +13,7 @@ starting ``REFUSED:`` and changes nothing.
     ard_pick          ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
     ard_pay           ->  the deal and the payment; the one tool that moves money (the presenter approves in a dialog)
     ard_dispute       ->  her dispute of a deal's delivery, sent to the seller and to the deal's adjudicator
+    ard_confirm_received -> her statement that she received what she paid for, only after her yes in a dialog
 ``alder`` / ``kestrel``   a seller, its own profile and keys; its agent answers on its own:
     ard_seller_activity  ->  what its agent did: the deal, the delivery, a dispute, a ruling, its card now
 ``adjudicator``   the demo's adjudicator (its own capsulectl-deal profile, run by the demo operator):
@@ -406,11 +407,57 @@ def ard_pay(seller: str) -> None:
             return
     shipped = buyer.shipped(observed)
     print(screens.delivered_line(name, shipped))
-    if shipped.startswith("200 of 200"):
-        buyer.close_received(s.home, s.maya, deal)
-        print("Maya's statement sent: she received what she paid for.")
-    else:
-        print(f"Maya ordered 200 badges. If fewer arrived, she can dispute the delivery (ard_dispute {key}).")
+    print(buyer.after_delivery(key, shipped))
+
+
+#: How the receipt dialog ended other than Received, in Maya's terms (Sherlock2 on #304: "presenter" is our word).
+RECEIVED_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in time",
+                    NOT_SHOWN: "the dialog could not be shown"}
+
+
+@_tool("maya")
+def ard_confirm_received(seller: str, deal: str = "") -> None:
+    """Ask Maya, in a dialog on the presenter's screen, whether she received what she paid for in her deal with
+    ``seller``; only her yes seals her statement that she did and sends it to the seller. Call only when Maya says she
+    received the delivery, never on your own after a payment or a delivery. You cannot see or answer the dialog. With
+    more than one deal with that seller still to confirm, pass ``deal`` (the deal id, or its first characters)."""
+    s = session()
+    key = _seller_key(seller)
+    name = SELLERS[key]["label"]
+    mine = [d for d in s.deals if d.seller == key]
+    if not mine:
+        raise RuntimeError(f"Maya has no deal with {name} in this run")
+    if deal:  # the deal she named, among all her deals with this seller
+        found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
+        if len(found) != 1:
+            raise RuntimeError(f"{'no' if not found else 'more than one'} deal with {name} matches {deal!r}: her deals "
+                               "with it are " + ", ".join(d.deal_id[5:13] for d in mine))
+        target = found[0]
+    else:  # the one still to confirm; with none, her latest
+        open_ = buyer.to_confirm(s.maya, mine)
+        if len(open_) > 1:
+            raise RuntimeError(f"Maya has {len(open_)} deals with {name} still to confirm (" +
+                               ", ".join(d.deal_id[5:13] for d in open_) + "): ask her which, then pass it as deal")
+        target = open_[0] if open_ else mine[-1]
+    if buyer.received_said(s.maya, target):
+        print(f"Maya already said she received it: {name} has her statement for deal {target.deal_id[5:13]}.")
+        return
+    if buyer.disputed(s.maya, target):
+        raise RuntimeError(f"Maya disputed her delivery from {name} (deal {target.deal_id[5:13]}): her dispute stands, "
+                           "and nothing was sent")
+    with s.pay_lock:  # not while the payment tool or Maya's agent takes the same delivery
+        observed = buyer.take_delivery(s.home, s.maya, target)
+    if observed is None:
+        raise RuntimeError(f"{name} has not delivered yet, so there is nothing to confirm")
+    text = (f"Did you receive what you paid for from {name}? Its delivery record says {buyer.shipped(observed)} were "
+            f"shipped. Choosing Received sends {name} your statement that you received it.")
+    how = "yes" if gate_off() else dialog_answer("Confirm what you received", text, "Received")
+    if how != "yes":
+        raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so nothing was sent in Maya's name. Do not retry on your own; ask "
+                           "Maya.")
+    with s.pay_lock:
+        buyer.close_received(s.home, s.maya, target)
+    print(f"Maya's statement sent to {name}: she received what she paid for.")
 
 
 @_tool("maya")

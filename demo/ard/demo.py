@@ -220,8 +220,8 @@ def cmd_run(args) -> int:
         if go:
             d2 = s.buy(made, go[0])
             if d2 is not None:
-                buyer.close_received(home, s.maya, d2)
-                print("Maya's statement sent: she received what she paid for.")
+                print(buyer.after_delivery(d2.seller, "200 of 200 badges"))
+                buyer.confirm_by_question(home, s.maya, d2, SELLERS[d2.seller]["label"], s.ask, print)
         return 0
     except KeyboardInterrupt:
         print("\ninterrupted: the deals so far are kept; run `demo.py reset` and `demo.py seed` to start over")
