@@ -90,3 +90,25 @@ def test_approval_none_is_refused_on_a_real_rail(monkeypatch):
     monkeypatch.setenv("ARD_RAIL", "local")
     with pytest.raises(RuntimeError, match="refused on the local rail"):
         ds.gate_off()
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,raises,expected", [
+    (0, "button returned:Pay, gave up:false\n", "", None, "yes"),
+    (0, "button returned:, gave up:true\n", "", None, ds.NO_ANSWER),  # nobody clicked before it gave up
+    (1, "", "execution error: User canceled. (-128)", None, ds.NO),  # the cancel button
+    (0, "button returned:Cancel, gave up:false\n", "", None, ds.NO),  # a cancel button that returns instead of raising
+    (1, "", "execution error: no display", None, ds.NOT_SHOWN),
+    (0, "", "", OSError("no osascript"), ds.NOT_SHOWN),
+    (0, "", "", subprocess.TimeoutExpired("osascript", 200), ds.NO_ANSWER),  # hung past its own give-up
+])
+def test_the_dialog_says_how_it_ended_so_a_timeout_is_never_called_a_decline(monkeypatch, returncode, stdout, stderr,
+                                                                               raises, expected):
+    # #239 finding 11 (ported from #292): a dialog that timed out was reported as "declined"
+    def run(cmd, **kw):
+        if raises:
+            raise raises
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+    monkeypatch.setattr(subprocess, "run", run)
+    assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == expected
+    assert ds.ask_person("Approve this payment", "Pay X", "Pay") is (expected == "yes")
+    assert expected == "yes" or "declined" not in ds.NOT_YES[expected] or expected == ds.NO

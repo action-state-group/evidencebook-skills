@@ -104,16 +104,38 @@ def dialog_text(text: str) -> str:
     return text.replace("\\", " ").replace('"', "'")
 
 
-def ask_person(title: str, text: str, yes: str, no: str = "Cancel") -> bool:
-    """A native dialog on the presenter's screen that the agent neither reads nor answers through the chat. True only
-    for ``yes``; ``no``, a timeout (3 minutes), no screen or any error is a no."""
+#: How a dialog ended other than yes (#239 finding 11: a dialog nobody answered is never called a decline).
+NO, NO_ANSWER, NOT_SHOWN = "no", "no_answer", "not_shown"
+#: What the person is told when the dialog did not end in yes (Sherlock2's words for no answer, #239 finding 11).
+NOT_YES = {NO: "the presenter declined it",
+           NO_ANSWER: "No answer in time",
+           NOT_SHOWN: "the dialog could not be shown"}
+
+
+def dialog_answer(title: str, text: str, yes: str, no: str = "Cancel") -> str:
+    """A native dialog on the presenter's screen that the agent neither reads nor answers through the chat, and how it
+    ended: ``"yes"`` (the ``yes`` button), :data:`NO` (the other button), :data:`NO_ANSWER` (it gave up after 3 minutes,
+    nobody clicked) or :data:`NOT_SHOWN` (no screen, or any error)."""
     script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" buttons {{"{no}", "{yes}"}} '
               f'default button "{no}" cancel button "{no}" with icon caution giving up after 180')
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+    except subprocess.TimeoutExpired:  # past its own give-up: most likely on screen, unanswered
+        return NO_ANSWER
     except (OSError, subprocess.SubprocessError):
-        return False
-    return run.returncode == 0 and f"button returned:{yes}" in run.stdout and "gave up:true" not in run.stdout
+        return NOT_SHOWN
+    if run.returncode == 0 and "gave up:true" in run.stdout:
+        return NO_ANSWER
+    if run.returncode == 0 and f"button returned:{yes}" in run.stdout:
+        return "yes"
+    if "(-128)" in (getattr(run, "stderr", "") or "") or (run.returncode == 0 and "button returned:" in run.stdout):
+        return NO  # the cancel button (osascript: "User canceled. (-128)")
+    return NOT_SHOWN
+
+
+def ask_person(title: str, text: str, yes: str, no: str = "Cancel") -> bool:
+    """True only for ``yes`` (:func:`dialog_answer`)."""
+    return dialog_answer(title, text, yes, no) == "yes"
 
 
 def gate_off() -> bool:
@@ -349,15 +371,22 @@ def ard_pay(seller: str) -> None:
                 + ("over Lightning, which moves real money?" if _real() else "on the simulated rail, where no money moves?")
                 + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
                 "your turn, and call ard_pay again only after she says yes.")
-        made = buyer.open_and_pay(
-            s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary,
-            lambda text: gate_off() or ask_person("Approve this payment", text, "Pay"), print, simulated=not _real(),
-            said=dialog_text)
+        answer: dict[str, str] = {}
+
+        def ask(text: str) -> bool:
+            if gate_off():
+                return True
+            answer["how"] = dialog_answer("Approve this payment", text, "Pay")
+            return answer["how"] == "yes"
+        made = buyer.open_and_pay(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary, ask,
+                                  print, simulated=not _real(), said=dialog_text)
         if made is None:
-            s.declined.add(key)
-            raise RuntimeError("the presenter did not approve this payment (the dialog was cancelled, timed out or could "
-                               "not be shown): nothing was sent to the seller and nothing was paid. Do not retry on your "
-                               "own; if Maya asks again, confirm with her first.")
+            how = answer.get("how", NOT_SHOWN)
+            if how == NO:
+                s.declined.add(key)
+            raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
+                               "was paid. Do not retry on your own; if Maya asks again, confirm with her first."
+                               + ("" if how == NO else " Never say she declined it."))
         deal, payment = made
         s.deals.append(deal)
         who = ("the simulated rail paid it (no money moved)" if not _real() else "the buyer's wallet paid it")
@@ -446,9 +475,10 @@ def ard_rule(seller: str) -> None:
             raise RuntimeError("neither side has answered the adjudicator's request for its books yet: no ruling from "
                                "this case yet (try again in a minute)")
         c = flow.case_view(raw, flow.case_names(raw))
-        if not raw["ruling"] and not (gate_off() or ask_person("Rule on this case", screens.rule_question(
-                c.deal_id, c.row, seller_name), "Rule")):
-            raise RuntimeError("the presenter did not record a ruling (the dialog was cancelled or timed out): nothing was ruled")
+        if not raw["ruling"] and not gate_off():
+            how = dialog_answer("Rule on this case", screens.rule_question(c.deal_id, c.row, seller_name), "Rule")
+            if how != "yes":
+                raise RuntimeError(f"{NOT_YES[how]}, so no ruling was recorded")
         try:
             r = raw["ruling"] or a.rule(raw, c.row, "not_met", "seller")
         except adj.AdjudicatorError as exc:
