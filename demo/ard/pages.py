@@ -27,6 +27,7 @@ from pathlib import Path
 
 import party as pt
 import screens
+from cast import SELLERS
 
 HERE = Path(__file__).resolve().parent
 VIEWER = "capsule-viewer-0.25.0"
@@ -104,10 +105,10 @@ WITNESS_NOTE = (f"Time-stamped by {pt.WITNESS_NAME}. Action State also runs ever
                 "independent of them.")
 
 
-def labels(card: dict, witnessed: bool) -> list[str]:
-    """The lines above the view: who time-stamped it, and the card's counts with its dispute tally (the view has no
-    member for disputes)."""
-    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)]
+def labels(card: dict, witnessed: bool, sample: bool = False) -> list[str]:
+    """The lines above the view: who time-stamped it, the card's counts with its dispute tally (the view has no member
+    for disputes), and, on a seller's card, that its first deals are sample history."""
+    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + ([screens.SAMPLE_NOTE] if sample else [])
 
 
 def _script_json(value: dict) -> str:
@@ -158,7 +159,8 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
                  if out.get("witnesses", {}).get("status") == "pass" else None)
     view = history_input(ext.get("deals", []), name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(p.name, "history", history_page(view, labels(card, witnessed is not None), f"History · {label}"))
+    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name in SELLERS),
+                                                     f"History · {label}"))
 
 
 def open_page(path: Path) -> bool:

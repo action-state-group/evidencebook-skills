@@ -77,6 +77,7 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 def test_no_line_a_person_reads_names_the_demo():
     lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
              screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
+             screens.SAMPLE_NOTE,
              pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
 
@@ -397,3 +398,15 @@ def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, hal
             return {"named_witness_receipts": receipts}
     from pathlib import Path
     assert receipt.proof_lines(P(), "deal-0123456789abcdef") == expect
+
+
+def test_a_sellers_card_says_its_first_deals_are_sample_history():
+    for line in (screens.signed_line("Alder Print Co."), screens.signed_line("Alder Print Co.", True)):
+        assert line.endswith("Its first 24 deals are sample history the operator made before this run.")
+    assert pages.labels(card(), witnessed=True, sample=True)[-1] == screens.SAMPLE_NOTE
+    assert screens.SAMPLE_NOTE not in pages.labels(card(), witnessed=True)  # a buyer's own card has no sample deals
+
+
+def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
+    import adjudicator as adj
+    assert f"within {adj.CHALLENGE_DAYS} days" in screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
