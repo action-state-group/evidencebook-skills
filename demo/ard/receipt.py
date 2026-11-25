@@ -97,16 +97,20 @@ def proof_lines(p: pt.Party, deal_id: str) -> list[str]:
         lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
     else:
         lines = ["  The other side's half is not in this copy."]
-    when = ""
+    stamped, when = False, ""
     try:
         out = p.tmp("proof.json")
         got = p.run("checkpoint", "proof", "--deal", deal_id, "--copy", str(copy), "--out", out)
         if got.get("named_witness_receipts"):
-            when = witness_time(json.loads(Path(out).read_text()))
+            stamped, when = True, witness_time(json.loads(Path(out).read_text()))
     except (pt.Refused, OSError, ValueError):
-        when = ""
-    lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)}." if when else
-                 f"  Not time-stamped yet: the next checkpoint sends it to {pt.WITNESS_NAME}.")
+        stamped, when = False, ""
+    if stamped and when:
+        lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)}.")
+    elif stamped:  # a receipt that verifies but carries no time: stamped, its time not stated
+        lines.append(f"  Time-stamped by {pt.WITNESS_NAME}; its receipt states no time.")
+    else:
+        lines.append(f"  Not time-stamped yet: the next checkpoint sends it to {pt.WITNESS_NAME}.")
     return lines
 
 
@@ -119,10 +123,13 @@ def witness_time(proof: dict) -> str:
     for r in proof.get("witness_receipts", []):
         if r.get("ts_url", "").rstrip("/") != pt.WITNESS_URL:
             continue  # a receipt from another witness: its time is not Action State's witness's
-        raw = base64.b64decode(r["receipt"] + "=" * (-len(r["receipt"]) % 4))
-        sign1, _ = _cbor(raw, 0)
-        protected = sign1[0] if isinstance(sign1, list) else b""
-        header, _ = _cbor(protected, 0) if protected else ({}, 0)
+        try:
+            raw = base64.b64decode(r["receipt"] + "=" * (-len(r["receipt"]) % 4))
+            sign1, _ = _cbor(raw, 0)
+            protected = sign1[0] if isinstance(sign1, list) and sign1 and isinstance(sign1[0], bytes) else b""
+            header, _ = _cbor(protected, 0) if protected else ({}, 0)
+        except (ValueError, KeyError, TypeError):
+            continue  # a receipt this reader cannot read gives no time; capsulectl already verified it
         claims = header.get(15, {}) if isinstance(header, dict) else {}
         iat = claims.get(6) if isinstance(claims, dict) else None
         if isinstance(iat, int):
@@ -130,14 +137,21 @@ def witness_time(proof: dict) -> str:
     return ""
 
 
-def _cbor(b: bytes, i: int):
-    """A small CBOR reader (RFC 8949) for a COSE receipt's header: integers, byte and text strings, arrays, maps, tags."""
+def _cbor(b: bytes, i: int, depth: int = 0):
+    """A small CBOR reader (RFC 8949) for a COSE receipt's header: integers, byte and text strings, arrays, maps, tags.
+    Any input it cannot read (truncated, too deep, an indefinite length) raises ValueError."""
+    if depth > 16:
+        raise ValueError("CBOR nested too deep")
+    if i >= len(b):
+        raise ValueError("CBOR truncated")
     major, info = b[i] >> 5, b[i] & 31
     i += 1
     if info < 24:
         n = info
     elif info in (24, 25, 26, 27):
         size = 1 << (info - 24)
+        if i + size > len(b):
+            raise ValueError("CBOR truncated")
         n, i = int.from_bytes(b[i:i + size], "big"), i + size
     else:
         raise ValueError("indefinite or reserved CBOR length")
@@ -146,23 +160,28 @@ def _cbor(b: bytes, i: int):
     if major == 1:
         return -1 - n, i
     if major in (2, 3):
+        if i + n > len(b):
+            raise ValueError("CBOR truncated")
         v = b[i:i + n]
-        return (v if major == 2 else v.decode()), i + n
+        try:
+            return (v if major == 2 else v.decode()), i + n
+        except UnicodeDecodeError:
+            raise ValueError("CBOR text is not UTF-8") from None
     if major == 4:
         out = []
         for _ in range(n):
-            v, i = _cbor(b, i)
+            v, i = _cbor(b, i, depth + 1)
             out.append(v)
         return out, i
     if major == 5:
         m = {}
         for _ in range(n):
-            k, i = _cbor(b, i)
-            v, i = _cbor(b, i)
+            k, i = _cbor(b, i, depth + 1)
+            v, i = _cbor(b, i, depth + 1)
             m[k if not isinstance(k, (list, dict)) else str(k)] = v
         return m, i
     if major == 6:
-        return _cbor(b, i)
+        return _cbor(b, i, depth + 1)
     return None, i  # simple values and floats: not read here
 
 

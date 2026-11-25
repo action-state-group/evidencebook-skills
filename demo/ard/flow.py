@@ -133,7 +133,7 @@ class SellerAgent:
 
     def say(self, line: str) -> None:
         with self._lock:
-            self.log.append(f"{datetime.now().strftime('%H:%M:%S')}  {line}")
+            self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
 
     def stop(self) -> None:
         self._stop.set()

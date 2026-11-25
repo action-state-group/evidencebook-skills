@@ -149,8 +149,8 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert a2.verdict == "LIMIT" and a2.reasons == ["disputes-against"], a2.reasons
     assert screens.decision_line(a2, ev2).startswith("LIMIT: a dispute about this seller was decided against it (1 of 1")
 
-    # Alder is paid, delivers all 200, and Maya says she received it. The person answers the payment dialog at its last
-    # second (it waits up to 3 minutes, desktop_server.ask_person), longer than any wait for the other side
+    # Alder is paid, delivers all 200, and Maya says she received it. The person answers the payment dialog late, after
+    # 185 s: within its 10-minute wait (desktop_server.DIALOG_GIVE_UP_S) but longer than any wait for the other side
     # (flow.WAIT_S): nothing reaches the seller before the yes (evidencebook-skills#289), so the deal still goes through.
     assert 185 > flow.WAIT_S
     deal2, shipped2 = _buy(w, "alder", made["alder"][1], answer_after=185)

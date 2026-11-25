@@ -479,3 +479,53 @@ def test_times_show_in_local_time_with_the_zone(monkeypatch):
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()
+
+
+def _receipt_without_time() -> str:
+    """A COSE_Sign1 witness receipt whose protected header carries no CWT claims, so no iat."""
+    import base64
+    protected = bytes([0xa1, 0x01, 0x26])
+    return base64.b64encode(bytes([0xd2, 0x84, 0x40 + len(protected)]) + protected + bytes([0xa0, 0xf6, 0x41, 0x00])).decode()
+
+
+def test_a_stamped_receipt_without_a_time_still_says_time_stamped(tmp_path):
+    # Codex on #305: a receipt that verifies (named_witness_receipts >= 1) but states no iat was stamped; the line must
+    # not say "Not time-stamped yet"
+    import json
+    import receipt
+
+    class P:
+        def bundle(self, deal_id):
+            return tmp_path / "copy.json"
+
+        def verify(self, copy):
+            return {"verdict": "VALID", "extensions": []}
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            out = args[args.index("--out") + 1]
+            Path(out).write_text(json.dumps({"witness_receipts": [{"ts_url": "https://witness.agentactioncapsule.org",
+                                                                   "receipt": _receipt_without_time()}]}))
+            return {"named_witness_receipts": 1}
+    from pathlib import Path
+    assert receipt.proof_lines(P(), "deal-0123456789abcdef")[-1] == \
+        "  Time-stamped by Action State's witness; its receipt states no time."
+
+
+@pytest.mark.parametrize("raw", [
+    b"",                              # empty
+    b"\xd2",                          # a tag with nothing after it
+    b"\xd2\x84\x4b\xa2\x01",          # a byte string shorter than its length
+    b"\xd2\x84\x1a\x01",              # an integer shorter than its size
+    b"\x81" * 200 + b"\x00",          # nested too deep
+    b"\xd2\x84\x63\xff\xfe\xfd",      # text that is not UTF-8
+    b"\xd2\x9f",                      # an indefinite-length array
+    b"\xd2\x84\x01\x02\x03\x04",      # the first member is not a byte string
+])
+def test_a_receipt_this_reader_cannot_read_gives_no_time_and_no_error(raw):
+    import base64
+    import receipt
+    hosted = {"ts_url": "https://witness.agentactioncapsule.org", "receipt": base64.b64encode(raw).decode()}
+    assert receipt.witness_time({"witness_receipts": [hosted]}) == ""
