@@ -452,17 +452,25 @@ def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
     p = P([])
     page = receipt.receipt_page(p, "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
     assert page.read_text() == "<html>page</html>"
+    assert p.waits == 1, "it stamps and waits for the witness before drawing"
     args = p.calls[0]
     assert args[:4] == ("report", "--deal", "deal-0123456789abcdef", "--html")
     directory = json.loads(Path(args[args.index("--witness-directory") + 1]).read_text())
     assert directory == buyer.pt.witness_directory()
 
-    late = P(["your deal book of deal-0123456789abcdef has records after its last checkpoint"])
-    assert receipt.receipt_page(late, "Maya", "deal-0123456789abcdef", rail="simulated", seller=False).exists()
-    assert late.waits == 1 and len(late.calls) == 2
-
     with pytest.raises(receipt.ReceiptError, match="disk full"):
         receipt.receipt_page(P(["disk full"]), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+
+    class NoWitness(P):
+        def wait_checkpoint(self, seconds, say=None):
+            raise buyer.pt.Refused("no checkpoint the witness took in time")
+    # the witness not taking the stamp in time still draws the page, which then has no witness line
+    late = NoWitness([])
+    assert receipt.receipt_page(late, "Maya", "deal-0123456789abcdef", rail="simulated", seller=False).exists()
+    # and a refusal after that is the receipt's own error
+    with pytest.raises(receipt.ReceiptError, match="records after its last checkpoint"):
+        receipt.receipt_page(NoWitness(["your deal book of deal-0123456789abcdef has records after its last checkpoint"]),
+                             "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
 def test_the_page_is_off_only_by_its_switch(monkeypatch, tmp_path):

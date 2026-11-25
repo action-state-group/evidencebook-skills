@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """A party's own receipt for a deal: in words (:func:`receipt_text`, from capsulectl's report of the deal) and as a page
-(:func:`receipt_page`, capsule-viewer's receipt module drawing the party's own copy of the deal, with nothing added).
+(:func:`receipt_page`, capsulectl's own ``deal report --html``, evidencebook#935).
 
-The copy is ``capsulectl deal report --deal D --bundle F``: the party's own deal book at its checkpoint with the sealed
-report beside it. ``capsulectl verify --bundle`` checks it. capsule-viewer's x-deal-v1 receipt module is JavaScript only
-and draws a copy only once the page's verifier runs the x-deal-v1 profile rule, which is not released yet (lane
-eb-viewer025, after capsule-viewer#398); its Python receipt path covers x-deal-v0 only. Until then the page says it is not
-available, and :func:`receipt_text` gives the receipt in words. Nothing here computes a row's status: every line is read
-from capsulectl's report."""
+The page is drawn by capsulectl from its own verify report of the party's copy, with capsule-viewer's receipt page: it says
+the other side's half and the book's witness time as capsulectl verified them, and adds nothing. Nothing here computes a
+row's status: every line is read from capsulectl's report."""
 from __future__ import annotations
 
 import hashlib
@@ -44,7 +41,7 @@ ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 #: witnessed two-sided deal.
 DRAW_V1_PAGE = True
 
-#: How long the receipt page waits for the checkpoint that covers a deal's newest records.
+#: How long the receipt page waits for the witness to take the checkpoint it stamps first.
 PAGE_WAIT_S = 30
 
 NOT_YET = "a receipt page for this kind of deal can't be drawn yet; the receipt in words is complete"
@@ -228,16 +225,18 @@ def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: boo
         # with the hosted witness's directory, so the page says the book's witness time capsulectl verified
         args = ("report", "--deal", deal_id, "--html", str(out),
                 "--witness-directory", p.write("witnesses.json", pt.witness_directory()))
-        stop = time.monotonic() + PAGE_WAIT_S
-        while True:
-            try:
-                p.run(*args)
-                return out
-            except pt.Refused as exc:
-                # a page rests on a checkpoint, as a copy does (Party.bundle): a deal's newest records wait for one
-                if "after its last checkpoint" not in str(exc) or time.monotonic() >= stop:
-                    raise ReceiptError(str(exc)) from None
-            p.wait_checkpoint(max(stop - time.monotonic(), 1))
+        # A page rests on a checkpoint, and says the witness time only once the witness has taken it: stamp now and
+        # wait for the witness, as the card page does. If it does not take the stamp in time the page is still drawn,
+        # without the witness line, since capsulectl says only what it verified.
+        try:
+            p.wait_checkpoint(PAGE_WAIT_S)
+        except pt.Refused:
+            pass
+        try:
+            p.run(*args)
+        except pt.Refused as exc:
+            raise ReceiptError(str(exc)) from None
+        return out
     try:
         copy = p.bundle(deal_id, "keep", wait=30)
     except pt.Refused as exc:

@@ -161,6 +161,13 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert shipped2 == "200 of 200 badges"
     buyer.close_received(w["home"], w["maya"], deal2)
 
+    # #242: Maya's receipt page is capsulectl's own (deal report --html), drawn with the hosted witness's directory
+    import receipt
+    page = receipt.receipt_page(w["maya"], "Maya", deal2, rail="simulated", seller=False)
+    html = page.read_text()
+    assert page.stat().st_size > 10000 and "<html" in html.lower()
+    assert '"status":"verified","witness":"Action State\'s witness"' in html, "the page carries the witness time capsulectl verified"
+
 
 def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(world):
     """evidencebook-skills#295: an order the person declined, or a dialog nobody answered, must not show on the seller's
