@@ -619,7 +619,6 @@ def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
     # it says the witness time capsulectl verified; a deal's newest records wait for the checkpoint that covers them
     import receipt
     monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
-    assert receipt.DRAW_V1_PAGE is True
     from pathlib import Path
 
     class P:
@@ -667,22 +666,15 @@ def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
                              "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
-def test_the_page_is_off_only_by_its_switch(monkeypatch, tmp_path):
-    # #242: on since evidencebook#935; with the switch off, no deal report --html is asked for
-    import receipt
-    assert receipt.DRAW_V1_PAGE is True
-    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", False)
-
-    class P:
-        name = "maya"
-
-        def run(self, *args):
-            raise AssertionError("no deal report --html while the page is off")
-
-        def bundle(self, *a, **k):
-            raise buyer.pt.Refused("stop here")
-    with pytest.raises(receipt.ReceiptError, match="stop here"):
-        receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+def test_the_demo_imports_no_python_receipt_module():
+    # evidencebook-skills#270 item 1, capsule-viewer#383: the receipt page is capsulectl's, drawn with capsule-viewer's Go
+    # receipt package; no demo file (the windows' scripts and the tests included) names the Python package, so neither a
+    # plain nor a dynamic import of it is left
+    from pathlib import Path
+    here, me = Path(__file__).resolve().parents[1], Path(__file__).resolve()
+    files = [f for f in here.rglob("*.py") if "vendor" not in f.relative_to(here).parts and f != me]
+    assert here / "receipt.py" in files and here / "goose" / "open-windows.py" in files
+    assert [f.name for f in files if "capsule_viewer" in f.read_text()] == []
 
 
 def test_times_show_in_local_time_with_the_zone(monkeypatch):
