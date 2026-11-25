@@ -241,3 +241,17 @@ def test_a_notification_that_hangs_is_killed_and_reaped(tmp_path, monkeypatch):
     for t in threads:
         t.join(5)
     assert calls == [30, "kill", None] and "did not finish in 30 s" in (tmp_path / "kestrel" / "agent.log").read_text()
+
+
+@pytest.mark.parametrize("leg,rows", [(True, {"paid_as_agreed": "met", "delivered": "not_met"}),
+                                      (False, {"delivered": "not_met"})])
+def test_a_dispute_says_the_payment_was_met_only_when_it_went_through(tmp_path, monkeypatch, leg, rows):
+    """Codex's round 3: a deal agreed but never paid gets no "payment met" in Maya's name."""
+    m = FakeMaya()
+    m.dispute = lambda deal_id, row: {"file": str(tmp_path / "d.json")}
+    monkeypatch.setattr(buyer.wire, "send", lambda *a: None)
+    monkeypatch.setattr(buyer.adj, "send_dispute", lambda *a, **k: None)
+    if leg:
+        buyer.wire.path(tmp_path, KESTREL.seller, KESTREL.deal_id, "paid").write_text("{}")
+    buyer.dispute(tmp_path, m, KESTREL, lambda *_: None)
+    assert m.statements == [(KESTREL.deal_id, rows)]

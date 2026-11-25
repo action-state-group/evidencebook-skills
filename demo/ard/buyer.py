@@ -528,8 +528,10 @@ def close_received(home: Path, maya: pt.Party, deal: Deal) -> None:
 def dispute(home: Path, maya: pt.Party, deal: Deal, say: Callable[[str], None]) -> dict:
     """Maya disputes the delivery: her statement that it was not met, then ``deal dispute``; the dispute goes to the
     seller and to the adjudicator the agreement names, which then asks each side for its books."""
-    wire.send(home, deal.seller, deal.deal_id, "statement",
-              maya.statement(deal.deal_id, {pt.PAID: "met", pt.DELIVERED: "not_met"}))
+    # the delivery row is what she disputes; she says the payment was met only when her payer leg reached the seller,
+    # never for a deal whose payment did not go through
+    rows = {pt.DELIVERED: "not_met", **({pt.PAID: "met"} if paid(home, deal) else {})}
+    wire.send(home, deal.seller, deal.deal_id, "statement", maya.statement(deal.deal_id, rows))
     d = maya.dispute(deal.deal_id, pt.DELIVERED)
     wire.send(home, deal.seller, deal.deal_id, "dispute", d["file"])
     adj.send_dispute(home, Path(d["file"]), deal.deal_id, buyer=deal.me, seller=deal.seller)
