@@ -631,10 +631,9 @@ def test_a_closing_run_lets_both_sides_take_a_stamped_ruling(monkeypatch, wait):
     took, stopped = [], []
 
     class Agent:
-        def take_rulings(self):
-            took.append("seller")
-
-        def stop(self):
+        def stop(self, take_rulings=False):
+            if take_rulings:
+                took.append("seller")
             stopped.append("seller")
     s = demo.Script.__new__(demo.Script)
     s.home, s.maya, s.agents = "home", object(), {"kestrel": Agent(), "alder": Agent()}
@@ -645,3 +644,25 @@ def test_a_closing_run_lets_both_sides_take_a_stamped_ruling(monkeypatch, wait):
     s.close(wait=wait)
     assert took == (["maya:kestrel", "seller", "seller"] if wait else [])
     assert stopped == ["seller", "seller", "stage"]
+
+
+def test_a_stopping_seller_takes_its_rulings_only_after_its_loop_ends(monkeypatch):
+    """#308 review: the closing run's last ruling step never runs alongside the agent's own loop."""
+    import threading
+    import time
+
+    events = []
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent._stop, agent.log, agent._lock = threading.Event(), [], threading.Lock()
+    agent.party = type("P", (), {"close": lambda self: events.append("close")})()
+
+    def loop():
+        while not agent._stop.is_set():
+            time.sleep(0.01)
+        time.sleep(0.05)
+        events.append("loop ended")
+    agent.threads = [threading.Thread(target=loop)]
+    agent.threads[0].start()
+    monkeypatch.setattr(flow.SellerAgent, "_rulings", lambda self: events.append("rulings"))
+    agent.stop(take_rulings=True)
+    assert events == ["loop ended", "rulings", "close"]

@@ -135,10 +135,17 @@ class SellerAgent:
         with self._lock:
             self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
 
-    def stop(self) -> None:
+    def stop(self, take_rulings: bool = False) -> None:
+        """Stop the agent's loop; with ``take_rulings``, then take any ruling file waiting for it (a ruling sent again
+        with its stamp as a run closes), never at the same time as the loop; then close its profile."""
         self._stop.set()
         for t in self.threads:
             t.join(timeout=5)
+        if take_rulings:
+            try:
+                self._rulings()
+            except Exception as exc:  # shown in its log, as a failed loop step is
+                self.say(f"refused or failed: {exc}")
         self.party.close()
 
     def advertise(self) -> dict:
@@ -292,10 +299,6 @@ class SellerAgent:
 
     def _requests(self) -> None:
         adj.answer_requests(self.home, self.party, self.name, "seller", self.say)
-
-    def take_rulings(self) -> None:
-        """Take any ruling file waiting for this seller now (as its loop does each round): for a run that closes."""
-        self._rulings()
 
     def _rulings(self) -> None:
         enter_rulings(self.home, self.party, "seller", self.buyer_of, self.say)

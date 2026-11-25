@@ -100,13 +100,12 @@ class Script:
             if wait:  # a ruling sent again with its stamp, now or earlier in the run: each side takes it before stopping
                 for deal in buyer.deals_from_notes(self.maya):
                     flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
-                for a in self.agents.values():
-                    a.take_rulings()
         except KeyboardInterrupt:
+            wait = False
             print("\nstopped without the ruling's stamp")
         finally:
-            for a in self.agents.values():
-                a.stop()
+            for a in self.agents.values():  # each seller takes a stamped ruling after its loop stops, not alongside it
+                a.stop(take_rulings=wait)
             self.stage.close()
 
     def ask(self, question: str) -> bool:
