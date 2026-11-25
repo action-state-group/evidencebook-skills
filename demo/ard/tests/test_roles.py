@@ -27,8 +27,8 @@ def maya(tmp_path, monkeypatch):
     s.home, s.maya, s.deals, s.pay_lock = tmp_path, m, [KESTREL], threading.Lock()
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.delenv("ARD_APPROVAL", raising=False)
-    s.paid = {KESTREL.deal_id}
-    monkeypatch.setattr(buyer, "paid", lambda home, deal: deal.deal_id in s.paid)
+    s.paid = {KESTREL.deal_id}  # the deals the seller agreed
+    monkeypatch.setattr(buyer, "agreed", lambda home, deal: deal.deal_id in s.paid)
     return s
 
 
@@ -87,7 +87,8 @@ def test_an_offer_never_paid_is_no_deal_to_dispute(maya, monkeypatch):
                            offer="o", rail="simulated", me="maya")
     maya.deals[:] = [withdrawn]
     monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: pytest.fail("no dialog"))
-    assert "REFUSED: Maya paid Kestrel Print nothing in this run, so there is nothing to dispute" in ds.ard_dispute("kestrel")
+    assert ("REFUSED: Maya has no deal with Kestrel Print that it agreed to in this run, so there is nothing to dispute"
+            in ds.ard_dispute("kestrel"))
     maya.deals.append(KESTREL)  # with a paid one too, the paid one is the only choice, and the dialog names it
     monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: None)
     asked = []
@@ -202,3 +203,41 @@ def test_no_key_id_or_digest_in_the_check_lines():
     ev.ok("commitment", "its signature verifies, and it is the one the seller's entry names")
     line = screens.check_lines(ev)[0]
     assert "…" not in line and "digest" not in line
+
+
+def test_a_deal_is_agreed_once_the_sellers_agreement_reached_her(tmp_path):
+    """Codex's round 2: a paid deal whose payer leg never reached the seller is still hers to dispute."""
+    assert not buyer.agreed(tmp_path, KESTREL)
+    f = buyer.wire.path(tmp_path, "maya", KESTREL.deal_id, "agree")
+    f.write_text("{}")
+    assert buyer.agreed(tmp_path, KESTREL) and not buyer.paid(tmp_path, KESTREL)
+
+
+def test_a_notification_that_hangs_is_killed_and_reaped(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+    monkeypatch.setattr(ds, "ROLE", "kestrel")
+    calls = []
+
+    class Run:
+        returncode = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def communicate(self, timeout=None):
+            calls.append(timeout)
+            if timeout:
+                raise ds.subprocess.TimeoutExpired("osascript", timeout)
+            return "", ""
+
+        def kill(self):
+            calls.append("kill")
+    monkeypatch.setattr(ds.subprocess, "Popen", Run)
+    threads = []
+    real = ds.threading.Thread
+    monkeypatch.setattr(ds.threading, "Thread", lambda target, daemon: threads.append(real(target=target, daemon=daemon))
+                        or threads[-1])
+    ds.notify("Kestrel Print", "paid")
+    for t in threads:
+        t.join(5)
+    assert calls == [30, "kill", None] and "did not finish in 30 s" in (tmp_path / "kestrel" / "agent.log").read_text()

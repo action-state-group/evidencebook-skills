@@ -412,6 +412,12 @@ def await_delivery(home: Path, maya: pt.Party, deal: Deal, seconds: float = flow
         time.sleep(0.5)
 
 
+def agreed(home: Path, deal: Deal) -> bool:
+    """Whether the seller agreed to this deal: its agreement reached Maya (:func:`open_deal`). An offer withdrawn
+    unanswered has none."""
+    return wire.path(home, deal.me, deal.deal_id, "agree").is_file()
+
+
 def paid(home: Path, deal: Deal) -> bool:
     """Whether Maya handed the seller her payer leg for this deal."""
     return wire.path(home, deal.seller, deal.deal_id, "paid").is_file()

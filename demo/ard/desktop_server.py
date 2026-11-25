@@ -276,6 +276,7 @@ def notify(seller_label: str, line: str) -> None:
                 _log(f"notification not shown (osascript exit {run.returncode}): {err.strip()}")
         except subprocess.TimeoutExpired:
             run.kill()
+            run.communicate()  # reaped, its pipe closed
             _log("notification not shown: osascript did not finish in 30 s")
     threading.Thread(target=reap, daemon=True).start()
 
@@ -539,10 +540,11 @@ def ard_dispute(seller: str, deal: str = "") -> None:
     s = session()
     key = _seller_key(seller)
     name = SELLERS[key]["label"]
-    # only deals she paid: an offer that was withdrawn before payment is no deal to dispute
-    mine = [d for d in s.deals if d.seller == key and buyer.paid(s.home, d)]
+    # only deals the seller agreed: an offer withdrawn unanswered (buyer.open_deal) is no deal to dispute. Not "paid":
+    # a payment can move money and still fail to reach the seller's records
+    mine = [d for d in s.deals if d.seller == key and buyer.agreed(s.home, d)]
     if not mine:
-        raise RuntimeError(f"Maya paid {name} nothing in this run, so there is nothing to dispute")
+        raise RuntimeError(f"Maya has no deal with {name} that it agreed to in this run, so there is nothing to dispute")
     if deal:
         found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
         if len(found) != 1:

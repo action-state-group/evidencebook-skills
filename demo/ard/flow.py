@@ -344,7 +344,9 @@ class SellerAgent:
                            "adjudicator asks for this seller's books, which this seller answers in full")
 
     def _requests(self) -> None:
-        adj.answer_requests(self.home, self.party, self.name, "seller", self.say)
+        def say(line: str) -> None:  # the books going to the adjudicator is an event (#336)
+            (self.event if line.startswith("the adjudicator asked for this party's books") else self.say)(line)
+        adj.answer_requests(self.home, self.party, self.name, "seller", say)
 
     def _rulings(self) -> None:
         def say(line: str) -> None:  # the ruling entered is the event; its book and stamp lines are activity only
