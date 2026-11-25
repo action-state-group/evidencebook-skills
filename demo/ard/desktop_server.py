@@ -133,9 +133,9 @@ def approve_payment(summary: str) -> bool:
 
     text = dialog_text(summary)
     script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
-              'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
+              f'default button "Cancel" cancel button "Cancel" with icon caution giving up after {parties.DIALOG_GIVE_UP_S}')
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
@@ -149,9 +149,9 @@ def approve_hold(title: str, text: str) -> bool:
 
     script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" '
               "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
-              "with icon caution giving up after 180")
+              f"with icon caution giving up after {parties.DIALOG_GIVE_UP_S}")
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return run.returncode == 0 and "button returned:Buy anyway" in run.stdout and "gave up:true" not in run.stdout
@@ -292,15 +292,18 @@ def ard_pick(seller: str) -> None:
         print(f"{SELLERS[key]['label']} is within its limit. Call ard_pay to open the deal and pay it.")
 
 
+#: What the agent may tell the presenter about the dialog: its buttons differ for an order the Everyday Rules held (#275).
+_DIALOG = ("the presenter answers it: Pay or Cancel, or Buy anyway or Don't buy for an order the Everyday Rules held. Only "
+           "Pay or Buy anyway releases the money; when you tell the presenter which button to click, name only those two. "
+           "Do not retry or call it again while it waits")
 if os.environ.get("ARD_RAIL") in ("lightning", "local"):
     _PAY = ("Step 6-7: open the deal for the picked seller and pay it over the real Lightning rail (2,000 msat for Alder). "
-            "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until "
-            "the presenter clicks Pay or Cancel: do not retry or call it again while it waits, and tell the presenter to answer the "
-            "dialog. Refused unless ard_pick sealed this seller.")
+            "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen (it gives up after 3 minutes) and this call blocks until "
+            f"{_DIALOG}, and tell the presenter to answer the dialog. Refused unless ard_pick sealed this seller.")
 else:
     _PAY = ("Step 6-7: open the deal for the picked seller and pay it on the SIMULATED rail: no money moves. "
-            "A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until the presenter clicks Pay "
-            "or Cancel: do not retry or call it again while it waits. Refused unless ard_pick sealed this seller.")
+            "A dialog appears on the presenter's screen (it gives up after 3 minutes) and this call blocks until "
+            f"{_DIALOG}. Refused unless ard_pick sealed this seller.")
 
 
 class NotApproved(RuntimeError):

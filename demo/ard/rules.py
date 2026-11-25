@@ -257,7 +257,7 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
             limits = Path(tmp) / "limits.json"
             limits.write_text(json.dumps(limits_profile(limit)))
             run = subprocess.run([engine(), "guard", "check", "--limits", str(limits)], input=json.dumps(inp),
-                                 capture_output=True, text=True, timeout=60)
+                                 capture_output=True, text=True, timeout=CHECK_TIMEOUT_S)
         if run.returncode != 0:
             say = run.stderr.strip().splitlines()[-1] if run.stderr.strip() else f"exit {run.returncode}"
             if "--limits" in run.stderr or "usage" in run.stderr:
@@ -411,6 +411,10 @@ def seal_note(node, deal_id: str, outcome: Outcome) -> None:
                         "held": outcome.held, "decision": outcome.decision, "limit_msat": outcome.limit_msat,
                         "amount_msat": outcome.amount_msat, "reasons": outcome.reasons, "asks": outcome.asks, "refused": outcome.refused,
                         "findings": outcome.findings}, subject_ref=deal_id)
+
+
+#: The longest the engine's deal check may run (evidencebook-skills#289 counts it in the seller's wait).
+CHECK_TIMEOUT_S = 60
 
 
 def gate(node, chain: dr.DealChain, limit: int, at: datetime,

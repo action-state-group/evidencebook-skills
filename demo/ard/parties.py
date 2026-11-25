@@ -41,6 +41,7 @@ import goose_node as gn  # noqa: E402
 import mailbox_exchange as mx  # noqa: E402
 import nostr_mailbox as mb  # noqa: E402
 import responder  # noqa: E402
+import pay  # noqa: E402
 import rules  # noqa: E402
 import screens  # noqa: E402
 from demo_node import RECONCILED, DemoNode  # noqa: E402
@@ -130,11 +131,33 @@ def write_atomic(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
-def wait_file(path: Path, seconds: float) -> dict:
+#: The longest the buyer's approval dialog waits for the person (``desktop_server.approve_payment`` and
+#: ``approve_hold`` give up after it; their osascript call is cut :data:`DIALOG_SLACK_S` later).
+DIALOG_GIVE_UP_S = 180
+DIALOG_SLACK_S = 20
+#: How long the seller waits for the buyer's paid half after sending its own first half. Under a spending limit the
+#: buyer runs the deal check and asks the person only then, and then pays, so the wait covers each of those at its
+#: own timeout, plus :data:`AFTER_PAY_S` (evidencebook-skills#289: a 180 s wait let a person who answered late pay a seller that
+#: had stopped waiting). An order the buyer does not pay ends the wait at once: the buyer writes :func:`withdrawn`.
+#: Time kept for what the buyer does after the payment and before the paid half is out (its seals).
+AFTER_PAY_S = 60
+SELLER_PAID_HALF_WAIT_S = rules.CHECK_TIMEOUT_S + DIALOG_GIVE_UP_S + DIALOG_SLACK_S + pay.MAX_PAY_S + AFTER_PAY_S
+
+
+def withdrawn(inbox: Path, deal_id: str) -> Path:
+    """The file the buyer writes to the seller's inbox when it ends an order before paying (declined, no answer, refused
+    by the rules or a check that could not run), so the seller stops waiting for a payment that will not come."""
+    return inbox / f"{deal_id}.withdrawn.json"
+
+
+def wait_file(path: Path, seconds: float, unless: Path | None = None) -> dict | None:
+    """``path``'s JSON once it appears; ``None`` if ``unless`` appears first; a refusal after ``seconds``."""
     stop = time.time() + seconds
     while time.time() < stop:
         if path.is_file():
             return json.loads(path.read_bytes())
+        if unless is not None and unless.is_file():
+            return None
         time.sleep(0.3)
     raise gn.Refused(f"no answer in {int(seconds)} s: {path.name}")
 
@@ -306,7 +329,10 @@ class Seller:
         node.open_deal(schain, schain.respond(now(), f"sell {terms.item} at the listed price", verified["records"][-1]["digest"]))
         write_atomic(outbox / f"{deal_id}.s1.json", json.dumps(node.half(deal_id)).encode())
         self.say("deal opened: its terms checked, its first half sent")
-        m2 = wait_file(inbox / f"{deal_id}.m2.json", 180)
+        m2 = wait_file(inbox / f"{deal_id}.m2.json", SELLER_PAID_HALF_WAIT_S, unless=withdrawn(inbox, deal_id))
+        if m2 is None:
+            self.say("the buyer ended this order before paying: nothing was paid, and this seller is free for the next one")
+            return
         deals._reconcile(node, m2, maya)
         self.say("the buyer's records after payment checked and stored")
         node.ask_half(deal_id)
@@ -410,13 +436,28 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
     wire = peer.home / "stage" / "wire"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     deal_id = chain.deal_id
+    asked_at = time.time()  # no later than the seller's own start of its wait for the paid half
     write_atomic(wire / peer.id / f"{deal_id}.m1.json", json.dumps(maya.half(deal_id)).encode())
     s1 = wait_file(wire / "maya" / f"{deal_id}.s1.json", seller_wait)
     deals._reconcile(maya, s1, peer)
     outcome = None
     if limit is not None:
-        outcome = rules.gate(maya, maya.deal(deal_id), limit, now(), approve, ask_always)  # a decline raises RuleHeld: nothing is paid
-    payment = rail.pay(price_msat)
+        try:  # a decline raises RuleHeld: nothing is paid
+            outcome = rules.gate(maya, maya.deal(deal_id), limit, now(), approve, ask_always)
+        except BaseException:  # the seller is waiting for a paid half that will not come: let it go now (#289)
+            write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
+            raise
+    if time.time() - asked_at > SELLER_PAID_HALF_WAIT_S - pay.MAX_PAY_S - AFTER_PAY_S:
+        # Never pay a seller that may stop waiting before the payment arrives: the bound above should make this
+        # unreachable, and this keeps it so if a step gets slower or a constant changes (#289).
+        write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
+        raise gn.Refused("too late to pay safely: the seller may stop waiting before the payment arrives. Nothing was "
+                         "paid; order again to try")
+    try:
+        payment = rail.pay(price_msat)
+    except pay.NotSent:  # no money moved: let the seller go now; any other failure may have paid, so it keeps waiting
+        write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
+        raise
     if on_paid is not None:
         on_paid(payment)  # at once: what follows (the seller's half, the close) can fail after the money moved
     maya.seal(maya.deal(deal_id), rules.pay(maya.deal(deal_id), now(), payment.reference, outcome, clicked))
