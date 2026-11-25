@@ -164,10 +164,9 @@ PY
 
 job_ard_demo() {
   # The tests' directory as a variable, for the same reason as in job_tau2_live.
-  local w=tests.yml eb_ref ce_tag viewer eb ce deal py port t=demo/ard/tests
+  local w=tests.yml eb_ref ce_tag eb ce deal py port t=demo/ard/tests
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
-  viewer=$(pin $w ard-demo CAPSULE_VIEWER_REF)
   eb=$(checkout evidencebook "$eb_ref")
   ce=$(engine "$ce_tag")
   # capsulectl-deal is built from the pinned evidencebook checkout, as CI builds it.
@@ -176,8 +175,7 @@ job_ard_demo() {
     mkdir -p "$deps/bin"
     (cd "$eb/capsulectl" && go build -o "$deal" ./cmd/capsulectl-deal)
   fi
-  py=$(venv "ard-${viewer:0:12}" cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist \
-    "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@$viewer")
+  py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
     python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
   # Both deals end to end against Action State's hosted witness (network), as CI runs them.
