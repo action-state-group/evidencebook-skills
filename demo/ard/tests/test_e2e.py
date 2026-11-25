@@ -216,7 +216,8 @@ def test_a_seller_window_closed_at_pay_time_delivers_when_it_reopens(world):
     said: list[str] = []
     got = _until(lambda: buyer.pick_up_deliveries(w["home"], second, said.append), 300)
     assert got == [deal.deal_id]
-    assert any("200 of 200" in x for x in said) and "Maya's statement sent: she received what she paid for." in said
+    assert any("200 of 200" in x for x in said) and any(x.startswith("Nothing has been sent in Maya's name") for x in said)
+    assert not second.notes(buyer.RECEIVED_SAID)  # F10: nothing said in her name without her yes
     assert buyer.pick_up_deliveries(w["home"], second, said.append) == []  # once only
 
 

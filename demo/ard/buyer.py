@@ -339,8 +339,8 @@ def paid(home: Path, deal: Deal) -> bool:
 
 def pick_up_deliveries(home: Path, maya: pt.Party, say: Callable[[str], None]) -> list[str]:
     """For each of Maya's paid deals whose delivery the payment tool did not see (the seller's window was closed, say):
-    take the delivery once it is on the stage, say what was shipped, and send Maya's statement when all of it came.
-    Returns the deals picked up now."""
+    take the delivery once it is on the stage and say what was shipped. Nothing is sent in Maya's name
+    (:func:`after_delivery`; her own yes does that, F10). Returns the deals picked up now."""
     done = []
     for deal in deals_from_notes(maya):
         if not paid(home, deal) or any(n["statement"]["deal_id"] == deal.deal_id for n in maya.notes(flow.DELIVERED_SEEN)):
@@ -404,12 +404,36 @@ def received_said(maya: pt.Party, deal: Deal) -> bool:
     return any(n["statement"]["deal_id"] == deal.deal_id for n in maya.notes(RECEIVED_SAID))
 
 
+def disputed(maya: pt.Party, deal: Deal) -> bool:
+    """Whether Maya disputed this deal's delivery (:func:`dispute` notes it): her statement then says it was not met."""
+    return any(n["statement"]["deal_id"] == deal.deal_id for n in maya.notes(flow.CASE))
+
+
+def to_confirm(maya: pt.Party, deals: list[Deal]) -> list[Deal]:
+    """Of these deals with one seller, those whose receipt Maya can still confirm: not yet said, not disputed."""
+    return [d for d in deals if not received_said(maya, d) and not disputed(maya, d)]
+
+
+def confirm_by_question(home: Path, maya: pt.Party, deal: Deal, seller_label: str, ask: Callable[[str], bool],
+                        say: Callable[[str], None]) -> bool:
+    """The run script's own receipt step: ask Maya, and only her yes sends her statement. True when it was sent."""
+    if not ask(f"Did you receive what you paid for from {seller_label}? Choosing yes sends {seller_label} your "
+               "statement that you received it."):
+        say("Nothing was sent in Maya's name.")
+        return False
+    close_received(home, maya, deal)
+    say("Maya's statement sent: she received what she paid for.")
+    return True
+
+
 def close_received(home: Path, maya: pt.Party, deal: Deal) -> None:
     """Maya said she got what she paid for: her statement that both rows were met, handed to the seller. Called only
     after her own yes (desktop_server.ard_confirm_received's dialog, or the run script's question), never on a
     delivery's arrival."""
     if received_said(maya, deal):
         return
+    if disputed(maya, deal):
+        raise pt.Refused("Maya disputed this delivery: her dispute stands, and nothing was sent")
     wire.send(home, deal.seller, deal.deal_id, "statement",
               maya.statement(deal.deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
     maya.note(RECEIVED_SAID, {"deal_id": deal.deal_id}, subject_ref=deal.deal_id)
