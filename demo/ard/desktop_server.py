@@ -257,7 +257,7 @@ def _tool(*roles: str, description: str | None = None):
                         print()
                     fn(*args, **kwargs)
             except (SystemExit, Exception) as exc:
-                return (buf.getvalue() + f"\nREFUSED: {exc}").strip()
+                return (buf.getvalue() + f"\nREFUSED: {_refusal(exc)}").strip()
             return buf.getvalue().strip()
         run.__signature__ = inspect.signature(fn).replace(return_annotation=str)
         run.__annotations__ = {**fn.__annotations__, "return": str}
@@ -266,6 +266,23 @@ def _tool(*roles: str, description: str | None = None):
             return server.tool(description=description)(run)
         return run
     return deco
+
+
+def _refusal(exc: BaseException) -> str:
+    """A tool's refusal without raw output (evidencebook-skills#327). The demo's refusals and capsulectl's error words
+    are written for a person and stay; a refusal that carries a verb's raw output (JSON, or a long dump) goes to this
+    window's log and reads as one plain line."""
+    text = str(exc)
+    if isinstance(exc, pt.Refused) and ("{" in text or len(text) > 400):
+        try:
+            d = _home() / ROLE
+            d.mkdir(parents=True, exist_ok=True)
+            with open(d / "agent.log", "a") as fh:
+                fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  a tool refused: {exc!r}\n")
+        except OSError:
+            pass
+        return "capsulectl refused this step (the reason is in this party's log, agent.log); nothing was changed"
+    return text
 
 
 def _seller_key(name: str) -> str:

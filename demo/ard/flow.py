@@ -375,29 +375,39 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
             arrived = file.stat().st_mtime
             if not mark.exists() or arrived > mark.stat().st_mtime:
                 when = _stamped(p.receive(file))
-                # marked only once taken, at the version taken: a failed receive is tried again next round, and a file
-                # that arrives again meanwhile is still newer than the mark
-                mark.parent.mkdir(exist_ok=True)
-                mark.touch()
-                os.utime(mark, (arrived, arrived))
                 if when:
                     p.note(RULING_STAMPED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
                     stamped.add(deal_id)
                     say(f"the ruling on deal {deal_id[5:13]} was time-stamped by {pt.WITNESS_NAME} at "
                         f"{screens.local_time(when, date=True)}")
+                # marked only once taken and noted, at the version taken: a failure is tried again next round, and a
+                # file that arrives again meanwhile is still newer than the mark
+                mark.parent.mkdir(exist_ok=True)
+                mark.touch()
+                os.utime(mark, (arrived, arrived))
         if deal_id not in sent:
             what = "sending this party's book, with the ruling entered, to the adjudicator"
             try:
                 copy = adj.send_book(home, p, deal_id, side, say)
-            except pt.Refused as exc:  # the ruling stays entered; the book goes on a later round
+                p.note(BOOK_SENT, {"deal_id": deal_id, "copy": str(copy)}, subject_ref=deal_id)
+            except Exception as exc:  # the ruling stays entered; the book goes on a later round
                 p.log(f"{what}: {exc!r}")
                 say(screens.trying_again(what, exc))
                 continue
-            p.note(BOOK_SENT, {"deal_id": deal_id, "copy": str(copy)}, subject_ref=deal_id)
             sent[deal_id] = str(copy)
-        elif deal_id not in proved and sent[deal_id] and pt.witnessed():
-            if adj.send_proof_once_witnessed(home, p, deal_id, Path(sent[deal_id]), side, say):
-                p.note(PROOF_SENT, {"deal_id": deal_id}, subject_ref=deal_id)
+        elif deal_id not in proved and pt.witnessed():
+            what = "sending the adjudicator this party's book's time-stamp"
+            # the copy sent; a note from before evidencebook-skills#328 names none: the copy the adjudicator holds
+            copy = Path(sent[deal_id] or wire.path(home, adj.ADJUDICATOR, deal_id, f"book-{side}"))
+            try:
+                got = adj.send_proof_once_witnessed(home, p, deal_id, copy, side, say)
+            except Exception as exc:  # tried again on a later round
+                p.log(f"{what}: {exc!r}")
+                say(screens.trying_again(what, exc))
+                continue
+            if got:
+                p.note(PROOF_SENT, {"deal_id": deal_id, "copy": "" if got == adj.GAVE_UP else str(got)},
+                       subject_ref=deal_id)
                 proved.add(deal_id)
     return done
 
@@ -496,12 +506,12 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
 def entry_lines(deal_id: str, rows: list[dict], names: dict[str, str]) -> list[str]:
     """Whether each party entered the adjudicator's ruling, from ``deal ruling entries`` (``rows``), saying which record
     a missing stamp is on (evidencebook-skills#328): first the ruling's own stamp (its witnessed time, which capsulectl
-    reads from the copies sent back), then each party's entry, keeping every state capsulectl tells apart
-    (evidencebook ``xdealv1`` entry states, ``deal_v1_entries.go``)."""
+    reads from the adjudicator's own case book and reports with each party's row), then each party's entry, keeping
+    every state capsulectl tells apart (evidencebook ``xdealv1`` entry states, ``deal_v1_entries.go``)."""
     short = deal_id[5:13]
     if not rows:
-        return [f"deal {short}: no party has sent its book back yet, so neither the ruling's time-stamp nor its entry "
-                "can be read from them"]
+        return [f"deal {short}: no party has sent its book back yet; the ruling's time-stamp and each entry show once "
+                "one has"]
     at = next((r["ruling_witnessed_at"] for r in rows if r.get("ruling_witnessed_at")), "")
     out = [f"deal {short}: the ruling was time-stamped by {pt.WITNESS_NAME} at {screens.local_time(at, date=True)}"
            if at else f"deal {short}: the ruling is not time-stamped yet ({pt.WITNESS_NAME} has not taken its stamp)"]

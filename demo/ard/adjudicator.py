@@ -340,23 +340,47 @@ def _receipts(proof: Path) -> bool:
         return False
 
 
-def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path, side: str, say) -> bool:
-    """For a book sent before the witness took the stamp it rests on: at most every :data:`PROOF_EVERY_S`, deliver
-    pending stamps (``deal tick``) and make that same copy's stamp proof again; once it carries the witness's receipt,
-    send it to the adjudicator, so ``deal ruling entries`` shows the entry time-stamped (evidencebook-skills#328). The
-    proof is always of the copy already sent: capsulectl binds a proof to its copy. True when it was sent."""
+def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path, side: str, say) -> Path | str | None:
+    """For a book sent before the witness took the stamp it rests on, at most every :data:`PROOF_EVERY_S`: deliver
+    pending stamps (``deal tick``), make that copy's stamp proof again and, once it carries the witness's receipt, send it
+    to the adjudicator, so ``deal ruling entries`` shows the entry time-stamped (evidencebook-skills#328). A proof is
+    always of its own copy (capsulectl binds them). When the book has changed since (a later statement or ruling file),
+    no later stamp covers the old copy, so a new copy is made and, once its own proof carries a receipt, both go again.
+
+    Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` after :data:`PROOF_GIVE_UP_S` (logged), or None
+    when there is nothing new this round."""
     mark = p.dir / "handled" / f"{deal_id}.proof-tried"
-    if mark.exists() and time.time() - mark.stat().st_mtime < PROOF_EVERY_S:
-        return False
-    mark.parent.mkdir(exist_ok=True)
-    mark.touch()
-    if not copy.is_file():
-        return True  # a copy no longer on disk (an older home): nothing to prove; never tried again
+    now = time.time()
+    if mark.exists():
+        if now - mark.stat().st_mtime < PROOF_EVERY_S:
+            return None
+        first = float(mark.read_text() or now)
+    else:
+        mark.parent.mkdir(exist_ok=True)
+        first = now
+    mark.write_text(str(first))
+    if now - first > PROOF_GIVE_UP_S:
+        p.log(f"deal {deal_id}: no witness receipt for this party's book after {PROOF_GIVE_UP_S} s; stopped trying")
+        return GAVE_UP
     p.tick()
-    proof = p.proof(deal_id, copy)
-    if not _receipts(proof):
-        return False
-    wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
-    say(f"this party's book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by {pt.WITNESS_NAME}; "
-        "its stamp proof sent to the adjudicator")
-    return True
+    for c in ([copy] if copy.is_file() else []) + [None]:
+        if c is None:  # the book changed since that copy: a new one, on the checkpoints there are
+            try:
+                c = p.bundle(deal_id, "adjudicator", "the deal's adjudicator")
+            except pt.Refused:
+                return None  # a record after its last checkpoint: the next tick covers it
+        proof = p.proof(deal_id, c)
+        if _receipts(proof):
+            if c != copy:
+                wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", c)
+            wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
+            say(f"this party's book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by "
+                f"{pt.WITNESS_NAME}; sent to the adjudicator")
+            return c
+    return None
+
+
+#: How long a party keeps looking for its book's witness receipt (send_proof_once_witnessed).
+PROOF_GIVE_UP_S = 900
+#: send_proof_once_witnessed stopped looking.
+GAVE_UP = "gave up"

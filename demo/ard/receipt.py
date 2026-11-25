@@ -104,9 +104,12 @@ def witness_line(witnessed: dict | None, name: str) -> str:
         when = f" at {screens.local_time(at, date=True)}" if at else ""
         return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as capsulectl verify reported on {name}'s own book."
     if status == "failed":
-        return (f"  Not time-stamped: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
+        return (f"  No witness time: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
                 "book.")
-    return f"  Not time-stamped yet: {pt.WITNESS_NAME} has not taken {name}'s latest stamp; ask again in a minute."
+    if "no witness receipt is held" in (witnessed or {}).get("reason", "no witness receipt is held"):
+        return f"  Not time-stamped yet: {pt.WITNESS_NAME} has not taken {name}'s latest stamp; ask again in a minute."
+    # withheld for another reason (a receipt it could not check under the directory): no claim either way
+    return f"  No witness time: capsulectl verify reported none it could check for {name}'s own book."
 
 
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:

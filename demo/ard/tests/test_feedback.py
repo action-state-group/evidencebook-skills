@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -163,8 +164,7 @@ def test_every_entry_state_stays_apart(row, want):
 
 def test_no_book_back_yet_says_so():
     assert flow.entry_lines(DEAL, [], NAMES) == [
-        "deal 01234567: no party has sent its book back yet, so neither the ruling's time-stamp nor its entry can be read "
-        "from them"]
+        "deal 01234567: no party has sent its book back yet; the ruling's time-stamp and each entry show once one has"]
 
 
 class Book:
@@ -258,15 +258,175 @@ def test_a_stamp_proof_goes_again_only_once_it_carries_the_receipt(tmp_path, mon
     monkeypatch.setattr(adj.wire, "send", lambda home, to, deal_id, kind, f: sent.append(kind))
     clock = [1000.0]
     monkeypatch.setattr(adj.time, "time", lambda: clock[0])
-    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is False
-    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is False
+    P.bundle = lambda self, deal_id, share, to: (_ for _ in ()).throw(pt.Refused("after its last checkpoint"))
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", lambda *_: None) is None
     assert ticks == [1]  # throttled: not every round
     import os
     os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))  # PROOF_EVERY_S later
     receipts[0] = [{"receipt": "r"}]
     said = []
-    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", said.append) is True
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", said.append) == copy
     assert sent == ["proof-buyer"] and "now time-stamped" in said[0]
+
+
+def test_a_changed_book_goes_again_with_a_time_stamped_copy_and_the_search_ends(tmp_path, monkeypatch):
+    """Claude's round 1: the old copy's checkpoint never gets a receipt once the book changed; a new copy does."""
+    old, new = tmp_path / "old.json", tmp_path / "new.json"
+    old.write_text("{}")
+    new.write_text("{}")
+    sent = []
+
+    class P:
+        dir = tmp_path
+
+        def tick(self):
+            pass
+
+        def bundle(self, deal_id, share, to):
+            return new
+
+        def proof(self, deal_id, c):
+            out = tmp_path / f"proof-{c.stem}.json"
+            out.write_text(json.dumps({"stamp_proof": {}, "witness_receipts": [{"r": 1}] if c == new else []}))
+            return out
+
+        def log(self, line):
+            pass
+    monkeypatch.setattr(adj.wire, "send", lambda home, to, deal_id, kind, f: sent.append((kind, Path(f).name)))
+    clock = [1000.0]
+    monkeypatch.setattr(adj.time, "time", lambda: clock[0])
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) == new
+    assert sent == [("book-seller", "new.json"), ("proof-seller", "proof-new.json")]
+    clock[0] += adj.PROOF_GIVE_UP_S + 1
+    import os
+    os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) == adj.GAVE_UP
+
+
+def test_a_book_noted_before_this_change_is_proved_from_the_adjudicators_copy(tmp_path, monkeypatch):
+    """Codex's round 1: a BOOK_SENT note with no copy uses the book the adjudicator holds."""
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    ruling = tmp_path / "ruling.json"
+    ruling.write_text("{}")
+    monkeypatch.setattr(flow.wire, "pending", lambda home, me, kind: [(DEAL, ruling)])
+    got = []
+    monkeypatch.setattr(flow.adj, "send_proof_once_witnessed",
+                        lambda home, p, deal_id, copy, side, say: got.append(copy) or None)
+    p = Book(tmp_path)
+    p.note(flow.RULING_ENTERED, {"deal_id": DEAL, "stamped_at": "2026-11-25T22:25:00Z"})
+    p.note(flow.BOOK_SENT, {"deal_id": DEAL})
+    flow.enter_rulings(tmp_path, p, "buyer", "kestrel", lambda *_: None)
+    assert got == [wire.path(tmp_path, adj.ADJUDICATOR, DEAL, "book-buyer")]
+
+
+def test_a_proof_step_that_fails_is_named_as_itself_not_as_entering_the_ruling(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    ruling = tmp_path / "ruling.json"
+    ruling.write_text("{}")
+    monkeypatch.setattr(flow.wire, "pending", lambda home, me, kind: [(DEAL, ruling)])
+    monkeypatch.setattr(flow.adj, "send_proof_once_witnessed",
+                        lambda *a: (_ for _ in ()).throw(OSError("disk full")))
+    p, said = Book(tmp_path), []
+    p.note(flow.RULING_ENTERED, {"deal_id": DEAL, "stamped_at": "2026-11-25T22:25:00Z"})
+    p.note(flow.BOOK_SENT, {"deal_id": DEAL, "copy": str(tmp_path / "c.json")})
+    flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
+    assert said == ["sending the adjudicator this party's book's time-stamp: not done yet (the reason is in this "
+                    "party's log, agent.log); trying again"]
+    assert "disk full" in p.logged[0]
+
+
+def test_a_local_checkpoint_failure_is_not_called_a_slow_witness(tmp_path, monkeypatch):
+    """Codex's round 1: only a checkpoint cut and not taken is the witness's."""
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    clock = [0.0]
+    monkeypatch.setattr(pt.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(pt.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    p = pt.Party.__new__(pt.Party)
+    p.name, p.dir = "maya", tmp_path
+
+    def broken():
+        clock[0] += 5
+        raise pt.Refused("local profile is invalid")
+    p.stamp = broken
+    with pytest.raises(pt.Refused) as got:
+        p.wait_checkpoint(12)
+    assert not isinstance(got.value, pt.WitnessSlow) and str(got.value) == "local profile is invalid"
+
+
+def test_a_late_ruling_whose_note_failed_is_taken_again(tmp_path, monkeypatch):
+    """Codex's round 1: the mark moves only after the stamp's note is kept."""
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    ruling = tmp_path / "ruling.json"
+    ruling.write_text("{}")
+    monkeypatch.setattr(flow.wire, "pending", lambda home, me, kind: [(DEAL, ruling)])
+    p = Book(tmp_path)
+    p.receive = lambda file, out="": {"stamped_at": "2026-11-25T22:25:00Z"}
+    p.note(flow.RULING_ENTERED, {"deal_id": DEAL, "stamped_at": ""})
+    p.note(flow.BOOK_SENT, {"deal_id": DEAL, "copy": ""})
+    p.note(flow.PROOF_SENT, {"deal_id": DEAL})
+    real, fails = p.note, [1]
+
+    def note(kind, statement, **kw):
+        if kind == flow.RULING_STAMPED and fails[0]:
+            fails[0] -= 1
+            raise OSError("store busy")
+        return real(kind, statement, **kw)
+    p.note = note
+    with pytest.raises(OSError):
+        flow.enter_rulings(tmp_path, p, "buyer", "kestrel", lambda *_: None)
+    flow.enter_rulings(tmp_path, p, "buyer", "kestrel", lambda *_: None)
+    assert p.notes(flow.RULING_STAMPED)
+
+
+def test_the_adjudicators_window_starts_its_ask_loop_when_it_opens(tmp_path, monkeypatch):
+    """Codex's round 1: opening the adjudicator's window starts the loop, with no ard_case call."""
+    ds = pytest.importorskip("desktop_server")
+    started = []
+    monkeypatch.setattr(ds, "_seller_lock", None)
+    monkeypatch.setattr(ds, "_lock", lambda role: object())
+    monkeypatch.setattr(ds.stage, "ensure_stage", lambda home: None)
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+
+    class T:
+        def __init__(self, target, daemon):
+            started.append(target)
+
+        def start(self):
+            pass
+    monkeypatch.setattr(ds.threading, "Thread", T)
+    ds._adjudicator()
+    assert started == [ds._ask_on_arrival]
+
+
+def test_a_seller_loop_keeps_running_after_a_step_fails(tmp_path):
+    """Codex's round 1: a failure inside the real loop is one plain line and the loop goes on."""
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent.log, agent._lock, agent._stop = [], threading.Lock(), threading.Event()
+    agent.party = type("P", (), {"log": lambda self, line: None})()
+    rounds = []
+
+    def boom():
+        rounds.append(1)
+        if len(rounds) >= 3:
+            agent._stop.set()
+        raise pt.Refused('no checkpoint (last: {"cadence_log": []})')
+    for name in ("_offers", "_agreements", "_payments", "_statements", "_disputes", "_requests", "_rulings", "_named"):
+        setattr(agent, name, lambda: None)
+    agent._offers = boom
+    agent.republish = lambda now=False: (_ for _ in ()).throw(RuntimeError("card"))
+    agent._loop()
+    assert len(rounds) == 3 and all("{" not in line for line in agent.log)
+    assert any("taking the buyer's offer: not done yet" in line for line in agent.log)
+    assert any("publishing this seller's History card: not done yet" in line for line in agent.log)
+
+
+@pytest.mark.parametrize("text,plain", [('no checkpoint (last: {"a": 1})', True), ("Maya disputed this delivery", False)])
+def test_a_tool_refusal_with_raw_output_is_one_plain_line(tmp_path, monkeypatch, text, plain):
+    ds = pytest.importorskip("desktop_server")
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+    out = ds._refusal(pt.Refused(text))
+    assert (out != text) is plain and "{" not in out
 
 
 # -- #329: the chat receipt's witness line ---------------------------------------------------------
@@ -276,9 +436,13 @@ def test_a_stamp_proof_goes_again_only_once_it_carries_the_receipt(tmp_path, mon
      "  Time-stamped by Action State's witness at {t}, as capsulectl verify reported on Maya's own book."),
     ({"status": "withheld", "reason": "no witness receipt is held for this checkpoint yet"},
      "  Not time-stamped yet: Action State's witness has not taken Maya's latest stamp; ask again in a minute."),
+    ({"status": "withheld", "reason": "no receipt verifies under the witness directory"},
+     "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
+    ({"status": "verified", "witness": "Action State's witness"},
+     "  Time-stamped by Action State's witness, as capsulectl verify reported on Maya's own book."),
     (None, "  Not time-stamped yet: Action State's witness has not taken Maya's latest stamp; ask again in a minute."),
     ({"status": "failed", "reason": "the stamp proof does not verify"},
-     "  Not time-stamped: capsulectl verify could not check Action State's witness's receipt for Maya's own book."),
+     "  No witness time: capsulectl verify could not check Action State's witness's receipt for Maya's own book."),
 ])
 def test_the_chat_receipt_says_the_witness_time_as_verify_reported_it(monkeypatch, witnessed, want):
     monkeypatch.setenv("ARD_WITNESS", "public")

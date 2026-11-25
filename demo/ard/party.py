@@ -223,17 +223,19 @@ class Party:
         (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
         ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
         then mid-delivery), and what it did not deliver goes with the next tick."""
-        stop, wait = time.monotonic() + seconds, StampWait()
+        stop, wait, failed = time.monotonic() + seconds, StampWait(), None
         while True:
             try:
-                t = self.stamp()
+                t, failed = self.stamp(), None
             except Refused as exc:
-                t = {"error": str(exc)}
+                t, failed = {"error": str(exc)}, exc
             if wait.add(t):
                 return t
             time.sleep(1)
             if stop - time.monotonic() < STAMP_TRY_S:
                 self.log(f"no stamp taken in {int(seconds)} s; last tick: {json.dumps(t)}")
+                if failed is not None and wait.first is None:  # no checkpoint was cut: this party's own failure
+                    raise failed
                 raise WitnessSlow(f"{WITNESS_NAME} took no stamp within {int(seconds)} s")
             if say:
                 say("this party's checkpoint did not go through; trying again")
