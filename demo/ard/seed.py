@@ -142,7 +142,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
                 got = seller.stamp()
             except pt.Refused as exc:
                 got = {"error": str(exc)}
-            if got.get("state") == "ticked" and (got.get("delivered") or not pt.witnessed()) and not got.get("pending"):
+            if pt.taken(got):
                 return
             if time.time() > window_end - 5:
                 errors.append(f"{name}: its sample deals were not stamped by the witness within their window ({MAKE_S} s): "

@@ -487,7 +487,7 @@ def ard_rule(seller: str) -> None:
         if a.stamp({**raw, "ruling": r}):
             print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
         elif pt.witnessed():
-            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 20 seconds (no network?). Run this "
+            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 30 seconds (no network?). Run this "
                   "again to send it with its stamp.")
         print("Sent to both parties; each enters it in its own records.")
         return

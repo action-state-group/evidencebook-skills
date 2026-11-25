@@ -61,6 +61,14 @@ def witnessed() -> bool:
     return os.environ.get("ARD_WITNESS", "public") != "off"
 
 
+def taken(tick: dict) -> bool:
+    """Whether a tick cut a checkpoint and the witness took it (its receipt is in hand), or there is no witness. Older
+    checkpoints the witness refused may stay pending: the newest covers every record before it."""
+    if tick.get("state") != "ticked":
+        return False
+    return not witnessed() or tick.get("witness") == "not_configured" or tick.get("checkpoint") in (tick.get("delivered") or [])
+
+
 def witness_directory() -> dict:
     """The witness directory ``verify --bundle --witness-directory`` and the adjudicator take: the one hosted witness."""
     return {"witnesses": [{"name": WITNESS_NAME, "endpoint": WITNESS_URL, "key_ids": [WITNESS_KEY]}]}
@@ -179,14 +187,15 @@ class Party:
         return self.run("tick", "--now")
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
-        """Take a checkpoint now (:meth:`stamp`), taken again every few seconds if one fails, up to ``seconds``."""
+        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again every few seconds
+        while it does not (it answers slowly or with an error under load), up to ``seconds``."""
         stop = time.monotonic() + seconds
         while True:
             try:
                 t = self.stamp()
             except Refused as exc:
                 t = {"error": str(exc)}
-            if t.get("state") == "ticked":
+            if taken(t):
                 return t
             if time.monotonic() >= stop:
                 raise Refused(f"{self.name}: no checkpoint in {int(seconds)} s (last: {json.dumps(t)[:300]})")

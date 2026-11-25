@@ -100,7 +100,7 @@ def render(bundle: dict, output: dict) -> str:
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
     """Write the party's receipt page for a deal, and return its path."""
     try:
-        copy = p.bundle(deal_id, "keep", wait=20)
+        copy = p.bundle(deal_id, "keep", wait=30)
     except pt.Refused as exc:
         raise ReceiptError(str(exc)) from None
     output = p.verify(copy)

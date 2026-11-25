@@ -195,7 +195,7 @@ class Adjudicator:
         wire.send_json(self.home, ADJUDICATOR, case["deal_id"], "ruling", record)
         return record
 
-    def stamp(self, case: dict, seconds: float = 20) -> bool:
+    def stamp(self, case: dict, seconds: float = 30) -> bool:
         """Take a checkpoint now (on demand) so the witness stamps the ruling, write the ruling file again with the
         receipt, and hand it to both parties. True when the stamp was delivered within ``seconds`` (never without a
         witness); the ruling goes to the parties either way."""
@@ -208,7 +208,7 @@ class Adjudicator:
                     t = p.stamp()
                 except pt.Refused:
                     t = {}
-                if t.get("state") == "ticked" and t.get("delivered") and not t.get("pending"):
+                if pt.taken(t):
                     stamped = True
                     break
                 time.sleep(2)
@@ -252,13 +252,19 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
         if mark.exists():
             continue
         out = p.tmp("answer.json")
+        # An answer rests on a checkpoint, as a report does, and its records are timed only by a stamp the witness took:
+        # stamp now, and again if the witness did not take it, so the adjudicator reads every record timed.
+        try:
+            p.wait_checkpoint(30)
+        except pt.Refused as exc:
+            say(f"the adjudicator's request for deal {deal_id[5:13]}: no stamp yet ({exc}); answered on the next round")
+            continue
         try:
             got = p.run("respond", "--request", str(f), "--requester", named_key(home), "--output", out)
         except pt.Refused as exc:
             if "after its last checkpoint" not in str(exc):
                 raise
-            p.stamp()  # an answer rests on a checkpoint, as a report does: stamped now, answered on the next round
-            continue
+            continue  # a record sealed since the stamp: stamped again on the next round
         if got.get("outcome") != "artifact":
             say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: {got.get('reason', got)}")
             mark.parent.mkdir(exist_ok=True)
@@ -276,7 +282,7 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
 def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> None:
     """After entering a ruling, send the adjudicator this party's copy (``deal report --share adjudicator``) so it can read
     the entry (``deal ruling entries``)."""
-    copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=20)
+    copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=30)
     wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", copy)
     wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", p.proof(deal_id, copy))
     say("this party's book, with the ruling entered, sent to the adjudicator")
