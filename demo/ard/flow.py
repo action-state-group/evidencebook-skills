@@ -293,6 +293,10 @@ class SellerAgent:
     def _requests(self) -> None:
         adj.answer_requests(self.home, self.party, self.name, "seller", self.say)
 
+    def take_rulings(self) -> None:
+        """Take any ruling file waiting for this seller now (as its loop does each round): for a run that closes."""
+        self._rulings()
+
     def _rulings(self) -> None:
         enter_rulings(self.home, self.party, "seller", self.buyer_of, self.say)
 

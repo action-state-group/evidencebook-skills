@@ -620,3 +620,28 @@ def test_ruling_resends_never_overlap(monkeypatch):
     for t in threads:
         t.join(5)
     assert most[0] == 1
+
+
+@pytest.mark.parametrize("wait", [True, False])
+def test_a_closing_run_lets_both_sides_take_a_stamped_ruling(monkeypatch, wait):
+    """#308 review: a ruling sent again with its stamp, while the run went on or as it closes, is taken by Maya and by
+    each seller before the run stops; an interrupted run (wait=False) skips that and still stops everything."""
+    import demo
+
+    took, stopped = [], []
+
+    class Agent:
+        def take_rulings(self):
+            took.append("seller")
+
+        def stop(self):
+            stopped.append("seller")
+    s = demo.Script.__new__(demo.Script)
+    s.home, s.maya, s.agents = "home", object(), {"kestrel": Agent(), "alder": Agent()}
+    s.stage = type("St", (), {"close": lambda self: stopped.append("stage")})()
+    monkeypatch.setattr(demo.adj, "LATER", [])  # the background stamp already finished
+    monkeypatch.setattr(demo.buyer, "deals_from_notes", lambda m: [type("D", (), {"seller": "kestrel"})()])
+    monkeypatch.setattr(demo.flow, "enter_rulings", lambda home, p, side, other, say: took.append(f"maya:{other}"))
+    s.close(wait=wait)
+    assert took == (["maya:kestrel", "seller", "seller"] if wait else [])
+    assert stopped == ["seller", "seller", "stage"]

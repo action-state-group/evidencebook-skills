@@ -85,20 +85,29 @@ class Script:
         self.entries: list[dict] = []
         self.keys: dict[str, str] = {}
 
-    def close(self) -> None:
-        # A ruling stamp still being asked for in the background (adjudicator.LATER, #307): wait for it, so the ruling
-        # with its stamp reaches both parties, and Maya enters it, before this run's processes stop.
-        pending = [t for t in adj.LATER if t.is_alive()]
-        if pending:
-            print(f"waiting up to {adj.LATER_S // 60} minutes for {pt.WITNESS_NAME} to stamp the ruling before closing")
-            stop = time.monotonic() + adj.LATER_S
-            for t in pending:
-                t.join(max(stop - time.monotonic(), 0))
-            for deal in buyer.deals_from_notes(self.maya):
-                flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
-        for a in self.agents.values():
-            a.stop()
-        self.stage.close()
+    def close(self, wait: bool = True) -> None:
+        """Stop the run. With ``wait``, first wait for a ruling stamp still being asked for in the background
+        (adjudicator.LATER, #307), so the ruling with its stamp reaches both parties and Maya enters it; an
+        interrupted run (Ctrl-C) does not wait, and a second Ctrl-C during the wait stops it too."""
+        try:
+            pending = [t for t in adj.LATER if t.is_alive()] if wait else []
+            if pending:
+                print(f"waiting up to {adj.LATER_S // 60} minutes for {pt.WITNESS_NAME} to stamp the ruling before "
+                      "closing (Ctrl-C stops without it)")
+                stop = time.monotonic() + adj.LATER_S
+                for t in pending:
+                    t.join(max(stop - time.monotonic(), 0))
+            if wait:  # a ruling sent again with its stamp, now or earlier in the run: each side takes it before stopping
+                for deal in buyer.deals_from_notes(self.maya):
+                    flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
+                for a in self.agents.values():
+                    a.take_rulings()
+        except KeyboardInterrupt:
+            print("\nstopped without the ruling's stamp")
+        finally:
+            for a in self.agents.values():
+                a.stop()
+            self.stage.close()
 
     def ask(self, question: str) -> bool:
         print(f"\n{question}")
@@ -215,6 +224,7 @@ def cmd_run(args) -> int:
     if args.auto and real:
         print("--auto answers every question yes, so it is refused on a rail that moves real money")
         return 2
+    interrupted = False
     s = Script(home, pay.from_env(args.rail), args.auto, real)
     try:
         s.discover()
@@ -236,10 +246,11 @@ def cmd_run(args) -> int:
                 buyer.confirm_by_question(home, s.maya, d2, SELLERS[d2.seller]["label"], s.ask, print)
         return 0
     except KeyboardInterrupt:
+        interrupted = True
         print("\ninterrupted: the deals so far are kept; run `demo.py reset` and `demo.py seed` to start over")
         return 130
     finally:
-        s.close()
+        s.close(wait=not interrupted)
 
 
 def main(argv: list[str] | None = None) -> int:
