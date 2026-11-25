@@ -455,10 +455,16 @@ Before the run, in the shell that starts the windows, set the limit to the first
    Order 200 more badges from Alder Print Co.
    ```
 
+   **Expect:** Maya asks first, in one sentence naming Alder Print Co., 2,000 msat and the rail, with "Want me to order again?" (the dialog is the second check, never the only one). Answer:
+
+   ```
+   Yes.
+   ```
+
    **Expect:** one dialog after Maya's deal check, titled "The Everyday Rules held this order for your OK", with the buttons Don't buy (the default) and Buy anyway. Its text, one line each: "200 conference badges, delivered by Friday from Alder Print Co. for 2,000 msat, on the simulated rail: no money moves. Nothing has been paid yet.", "Over your weekly limit: 4,000 msat with this order, limit 2,000 msat", "The payment is not refundable", "More than a quarter of the price paid up front (2,000 msat)", "The same act was taken in another deal inside the window", and "Your answer is saved on the receipt. Change your rules any time in Everyday Rules." On the real rail the first line reads "..., over Lightning: this moves real money, to a wallet Alder Print Co. and Kestrel Print share. Nothing has been paid yet." Say aloud: every rule that asks is in this one question, and nothing is paid until the answer. When the weekly limit is the only reason, the question is Steven's limit question instead (not reached in this run, where rules 8 and 22 ask on every order): titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and "Change your limit any time in Everyday Rules." With the limit set, the first order (step 12) is the same one dialog, with that order's reasons ("No earlier payment to this merchant from this profile", "The payment is not refundable", "More than a quarter of the price paid up front (2,000 msat)"), in place of the payment dialog.
 
    Click Don't buy.
-   **Expect:** nothing is paid, Maya tells you which rules held the order ("Held for your OK at deal check, nothing paid. …"), the wallet balances do not change and Maya's History card still counts 1 deal.
+   **Expect:** nothing is paid, Maya tells you every reason the dialog listed ("Held for your OK at deal check, nothing paid. …"), in the card's words (deals that didn't go as agreed, never "failed deals"), the wallet balances do not change and Maya's History card still counts 1 deal.
 
    Ask for the order again:
 
@@ -466,7 +472,7 @@ Before the run, in the shell that starts the windows, set the limit to the first
    Order 200 more badges from Alder Print Co.
    ```
 
-   **Expect:** no dialog yet. The payment tool refuses the first call after Don't buy, so Maya asks you for a fresh yes ("Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"; on the real rail, "over Lightning, which moves real money?"). Answer:
+   **Expect:** no dialog yet. Maya asks again before paying, and the payment tool refuses the first call after Don't buy, so Maya asks you for a fresh yes ("Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"; on the real rail, "over Lightning, which moves real money?"). Answer each question with `Yes.`, as below:
 
    ```
    Yes.
