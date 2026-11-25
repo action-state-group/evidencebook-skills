@@ -111,11 +111,14 @@ def proof_lines(p: pt.Party, deal_id: str) -> list[str]:
 
 
 def witness_time(proof: dict) -> str:
-    """The witness's own time on the first receipt of a ``checkpoint proof`` file: the ``iat`` claim (6) in the CWT
+    """The witness's own time on Action State's witness's receipt in a ``checkpoint proof`` file (capsulectl counts it
+    in ``named_witness_receipts`` only once it verifies under the profile's pinned key): the ``iat`` claim (6) in the CWT
     claims (header label 15, RFC 9597) of the COSE receipt's protected header, as UTC; "" when it carries none."""
     import base64
     from datetime import datetime, timezone
     for r in proof.get("witness_receipts", []):
+        if r.get("ts_url", "").rstrip("/") != pt.WITNESS_URL:
+            continue  # a receipt from another witness: its time is not Action State's witness's
         raw = base64.b64decode(r["receipt"] + "=" * (-len(r["receipt"]) % 4))
         sign1, _ = _cbor(raw, 0)
         protected = sign1[0] if isinstance(sign1, list) else b""

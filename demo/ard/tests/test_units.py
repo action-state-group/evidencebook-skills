@@ -364,7 +364,10 @@ def _receipt(iat: int) -> str:
 
 def test_the_witness_time_is_the_receipts_own_iat():
     import receipt
-    assert receipt.witness_time({"witness_receipts": [{"receipt": _receipt(1795620316)}]}) == "2026-11-25T15:25:16Z"
+    hosted = {"ts_url": "https://witness.agentactioncapsule.org", "receipt": _receipt(1795620316)}
+    other = {"ts_url": "https://other.example", "receipt": _receipt(1795600000)}
+    assert receipt.witness_time({"witness_receipts": [other, hosted]}) == "2026-11-25T15:25:16Z"
+    assert receipt.witness_time({"witness_receipts": [other]}) == ""  # never another witness's time
     assert receipt.witness_time({"witness_receipts": []}) == ""
 
 
@@ -394,7 +397,8 @@ def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, hal
 
         def run(self, *args):
             out = args[args.index("--out") + 1]
-            Path(out).write_text(json.dumps({"witness_receipts": [{"receipt": _receipt(1795620316)}] * receipts}))
+            Path(out).write_text(json.dumps({"witness_receipts": [{"ts_url": "https://witness.agentactioncapsule.org",
+                                                                   "receipt": _receipt(1795620316)}] * receipts}))
             return {"named_witness_receipts": receipts}
     from pathlib import Path
     assert receipt.proof_lines(P(), "deal-0123456789abcdef") == expect
