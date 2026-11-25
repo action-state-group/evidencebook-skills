@@ -131,7 +131,7 @@ def test_the_first_order_goes_ahead_and_the_second_is_held_for_the_persons_ok_an
         deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "",
                        pay=lambda: paid.append("2") or "ref-2", limit=2000, approve=lambda o: asked.append(o) or False)
     assert paid == ["1"], "the payment is never called for a declined order"
-    assert len(asked) == 1 and asked[0].held and "over the 7-day limit you set" in asked[0].reasons[0]
+    assert len(asked) == 1 and asked[0].held and asked[0].reasons[0] == "over your weekly limit: 4,000 msat with this order, limit 2,000 msat"
     assert "declined" in str(held.value) and "limit 2,000 msat" in held.value.reasons[0]
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert [c["history"] for c in calls] == [0, 1] and all(c["record_type"] == "check" for c in calls)
@@ -225,11 +225,11 @@ def test_the_real_everyday_rules_block_the_second_order_over_the_limit(tmp_path)
     deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, approve=lambda o: first.append(o) or True)
     # a first order to a seller not paid before is held too (rules 6 and 8, one ask), not only an order over the limit
     assert first[0].reasons == ["no earlier payment to this merchant from this profile", "the payment is not refundable",
-                                "the up-front amount 2000 is above the share limit"]
+                                "more than a quarter of the price paid up front (2,000 msat)"]
     with pytest.raises(rules.RuleHeld) as held:
         deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("a declined order is not paid"), limit=2000,
                        approve=lambda o: False)
-    assert "limit you set" in held.value.reasons[0] and "2,000" in held.value.reasons[0] and "4,000" in held.value.reasons[0]
+    assert held.value.reasons[0] == "over your weekly limit: 4,000 msat with this order, limit 2,000 msat"
     maya.close(); alder.close()
 
 
@@ -296,11 +296,12 @@ def test_a_held_order_the_person_approves_seals_the_rules_escalation_and_their_a
     assert rs["history"] == {"days": 7, "acts": 1, "complete": True}
     assert all(set(f) <= set(rules.SEALED_FINDING) for f in rs["findings"]), "the engine's words are not sealed"
     assert {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail", "limit": 2000, "value": 4000} in rs["findings"]
-    # the Approve click answers the hold: the person's words, committed, the opening kept in Maya's own local record
+    # the Buy anyway click answers the hold: the person's words, committed, the opening kept in Maya's own local record
     assert approval["approver"] == "user" and approval["choice"] == "proceed"
     local = _local(maya, second, "approval")
-    assert local["said"] == screens.rules_ask(["the 7-day total with this purchase is over the 7-day limit you set "
-                                               "(limit 2,000 msat, this order would bring it to 4,000 msat)"]) + "\nAnswer: Approve"
+    title, text = screens.hold_question(ITEM, 2000, {"weekly": (2000, 4000)},
+                                        ["over your weekly limit: 4,000 msat with this order, limit 2,000 msat"], True)
+    assert local["said"] == f"{title}\n{text}\nAnswer: Buy anyway"
     assert approval["said_commitment"] == deal.commit_text(local["nonces"]["said"], local["said"])
     maya.close(); alder.close()
 
@@ -491,6 +492,6 @@ def test_the_real_rules_know_a_seller_paid_before_and_flag_the_repeated_payment(
     assert by_id["r02-ordinary-purchase"] == "pass" and by_id["r06-new-merchant"] == "pass", "a seller paid before is not new"
     assert by_id["r27-no-commitment-beyond-task-bounds"] == "fail", "the same act in another deal is flagged"
     assert by_id["r08-non-refundable-or-hard-to-undo"] == "fail" and outcome.held is True
-    assert outcome.reasons == ["the payment is not refundable", "the up-front amount 2000 is above the share limit",
+    assert outcome.reasons == ["the payment is not refundable", "more than a quarter of the price paid up front (2,000 msat)",
                                "the same act was taken in another deal inside the window"]
     maya.close(); alder.close()

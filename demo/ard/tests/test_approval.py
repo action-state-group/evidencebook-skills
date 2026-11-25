@@ -56,7 +56,7 @@ def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
 def test_summary_wording_names_the_rail():
     # the text the presenter reads: real money on the real rails, none on the simulated one, and no word of a demo
     src = open(ds.__file__).read()
-    assert 'over Lightning: this moves real money, to a wallet {shared} share."' in src and 'on the simulated rail: no money moves."' in src
+    assert 'over Lightning: this moves real money, to a wallet {shared} share"' in src and '"on the simulated rail: no money moves"' in src
     assert '"over Lightning, which moves real money?"' in src and "REAL Lightning rail" not in src
     assert "settles to the demo" not in src and "ARD demo: approve" not in src
 
@@ -77,25 +77,27 @@ def hold_answer(monkeypatch, returncode=0, stdout="", raises=None):
     def run(cmd, **kw):
         if raises:
             raise raises
-        assert cmd[0] == "osascript" and "Decline" in cmd[2] and 'default button "Decline"' in cmd[2]
+        assert cmd[0] == "osascript" and 'buttons {"Don\'t buy", "Buy anyway"}' in cmd[2]
+        assert 'default button "Don\'t buy"' in cmd[2] and 'cancel button "Don\'t buy"' in cmd[2]
+        assert 'with title "This order goes over your weekly limit"' in cmd[2]
         return types.SimpleNamespace(returncode=returncode, stdout=stdout)
 
     monkeypatch.setattr(subprocess, "run", run)
 
 
-def test_only_the_approve_button_approves_a_held_order(monkeypatch):
-    hold_answer(monkeypatch, stdout="button returned:Approve, gave up:false\n")
-    assert ds.approve_hold("Held for your OK") is True
+def test_only_the_buy_anyway_button_approves_a_held_order(monkeypatch):
+    hold_answer(monkeypatch, stdout="button returned:Buy anyway, gave up:false\n")
+    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is True
 
 
 @pytest.mark.parametrize("kw", [
     {"returncode": 1, "stdout": ""},
-    {"stdout": "button returned:Decline, gave up:false\n"},
-    {"stdout": "button returned:Approve, gave up:true\n"},
-    {"returncode": 1, "stdout": "button returned:Approve"},
+    {"stdout": "button returned:Don't buy, gave up:false\n"},
+    {"stdout": "button returned:Buy anyway, gave up:true\n"},
+    {"returncode": 1, "stdout": "button returned:Buy anyway"},
     {"raises": OSError("no osascript")},
     {"raises": subprocess.TimeoutExpired("osascript", 200)},
 ])
 def test_anything_else_declines_a_held_order(monkeypatch, kw):
     hold_answer(monkeypatch, **kw)
-    assert ds.approve_hold("Held for your OK") is False
+    assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is False

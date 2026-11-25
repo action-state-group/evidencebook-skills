@@ -104,13 +104,38 @@ def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
 
 
-def rules_ask(reasons: list[str], over_limit: bool = True) -> str:
-    """The question the approval dialog asks when the Everyday Rules hold an order (hand run 2026-11-24: the answer was
-    asked after the screen already said "held ... nothing paid", and nothing said what happened after Approve).
-    ``over_limit``: every reason is a spending limit the person set; otherwise another ASK rule holds it too (Sherlock2,
-    2026-11-23: any failing ASK rule is one ask listing every reason in the rule's own words)."""
-    lead = "This order is over a spending limit you set: " if over_limit else "The Everyday Rules held this order for your OK: "
-    return lead + "; ".join(reasons) + ". Nothing has been paid yet. Approve this order anyway, or decline?"
+#: The foot of the spending-limit question (Steven's design, evidencebook-skills#270 item 2).
+LIMIT_FOOT = "Your answer is saved on the receipt. Change your limit any time in Everyday Rules."
+#: The foot when a rule other than the limit holds the order (#270 item 3).
+RULES_FOOT = "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
+HELD_TITLE = "The Everyday Rules held this order for your OK"  # Sherlock2 on #237
+
+
+def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], over_limit: bool,
+                  seller: str | None = None, rail: str | None = None) -> tuple[str, str]:
+    """The one question for an order the Everyday Rules hold, as a dialog's title and text (evidencebook-skills#270,
+    Steven's "Spending-limit question"). Over a limit alone it shows the figures from the sealed caps findings
+    (``limits``: ``weekly`` and ``per_order``, each the finding's ``(limit, value)``, never recomputed); when another rule
+    holds the order too, it lists every reason in their place (Steven, 2026-11-23: one ask, every reason). ``rail`` is
+    the payment's rail clause, such as "on the simulated rail: no money moves"."""
+    weekly, per_order = limits.get("weekly"), limits.get("per_order")
+    if over_limit and weekly:
+        cap, total = weekly
+        spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
+        title = "This order goes over your weekly limit"
+        figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
+        foot = LIMIT_FOOT
+    elif over_limit and per_order:
+        cap, value = per_order
+        this, limit = msat(value), msat(cap)
+        title = "This order goes over your per-order limit"
+        figures = [f"This order: {this}", f"Your per-order limit: {limit}"]
+        foot = LIMIT_FOOT
+    else:
+        title, figures, foot = HELD_TITLE, [r[:1].upper() + r[1:] for r in reasons], RULES_FOOT  # each with a capital (Sherlock2 on #270)
+    what = f"{item} from {seller}" if seller else item
+    line = f"{what} for {msat(price_msat)}" + (f", {rail}" if rail else "") + ". Nothing has been paid yet."
+    return title, "\n".join([line, *figures, foot])
 
 
 def rules_approved(reasons: list[str], over_limit: bool = True) -> str:

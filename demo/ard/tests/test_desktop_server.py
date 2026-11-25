@@ -143,13 +143,15 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
     monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
     asked = []
-    monkeypatch.setattr(tools, "approve_hold", lambda summary: asked.append(summary) or False)
+    monkeypatch.setattr(tools, "approve_hold", lambda title, text: asked.append(f"{title}\n{text}") or False)
     second = tools.ard_pay("alder")
-    assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second and "limit you set" in second
-    assert "limit 2,000 msat" in second and "4,000 msat" in second and "declined" in second
-    assert len(asked) == 1 and "Approve this order anyway, or decline?" in asked[0]
-    # one dialog: the payment, then every reason; a limit with the other ASK rules is not only "over a spending limit"
-    assert asked[0].startswith("Pay Alder Print Co.") and "The Everyday Rules held this order for your OK: " in asked[0]
+    assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second
+    assert "over your weekly limit: 4,000 msat with this order, limit 2,000 msat" in second and "declined" in second
+    assert len(asked) == 1 and asked[0].endswith("Change your rules any time in Everyday Rules.")
+    # one dialog: the order, then every reason; a limit with the other ASK rules lists the limit as one reason (#270)
+    assert asked[0].startswith("The Everyday Rules held this order for your OK\n200 conference badges, delivered by Friday "
+                               "from Alder Print Co. for 2,000 msat, on the simulated rail: no money moves. Nothing has "
+                               "been paid yet.\nOver your weekly limit: 4,000 msat with this order, limit 2,000 msat\n")
     assert tools._session.run.rail.paid == [2000]
     # a held order the person declines is not an attempted payment, and the earlier order stays paid
     assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
@@ -172,17 +174,24 @@ def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
     monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the payment dialog is not shown first under a limit"))
     asked = []
-    monkeypatch.setattr(tools, "approve_hold", lambda summary: asked.append(summary) or False)
+    monkeypatch.setattr(tools, "approve_hold", lambda title, text: asked.append(f"{title}\n{text}") or False)
     declined = tools.ard_pay("alder")
     assert "REFUSED:" in declined and "declined" in declined and len(asked) == 1
     # the one question names the payment, the limit, and the other failing rules in their own words
-    assert "Pay Alder Print Co." in asked[0] and "The Everyday Rules held this order for your OK:" in asked[0] and "limit you set" in asked[0]
-    assert "the payment is not refundable" in asked[0] and "the same act was taken in another deal" in asked[0]
-    assert "the up-front amount 2000 is above the share limit" in asked[0]
+    assert "from Alder Print Co." in asked[0] and asked[0].startswith("The Everyday Rules held this order for your OK\n")
+    assert "\nOver your weekly limit: 4,000 msat with this order, limit 2,000 msat\n" in asked[0]
+    assert "\nThe payment is not refundable\n" in asked[0] and "\nThe same act was taken in another deal" in asked[0]
+    # the whole question, as RUNBOOK step 18 quotes it (#270; #272 item 1: the up-front amount with comma and unit)
+    assert asked[0] == (
+        "The Everyday Rules held this order for your OK\n200 conference badges, delivered by Friday from Alder Print Co. "
+        "for 2,000 msat, on the simulated rail: no money moves. Nothing has been paid yet.\nOver your weekly limit: 4,000 "
+        "msat with this order, limit 2,000 msat\nThe payment is not refundable\nMore than a quarter of the price paid up "
+        "front (2,000 msat)\nThe same act was taken in another deal inside the window\nYour answer is saved on the "
+        "receipt. Change your rules any time in Everyday Rules.")
     assert "alder" in s.paid and "alder" not in s.attempted and s.run.rail.paid == [2000]
     # a decline, like a cancelled payment dialog, leaves the next call to hand the agent the question: no dialog opens
     assert "opens no dialog" in tools.ard_pay("alder") and len(asked) == 1
-    monkeypatch.setattr(tools, "approve_hold", lambda summary: True)
+    monkeypatch.setattr(tools, "approve_hold", lambda title, text: True)
     approved = tools.ard_pay("alder")
     assert "You approved this held order" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
