@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills efbe791 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0: the receipt pages, and the History page vendors 0.25.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills a4e554d · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0: the receipt pages, and the History page vendors 0.25.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: run by hand at 28118b6 on the simulated rail with `ARD_LIMIT_MSAT=2000` (Steven, 2026-11-24, Goose Desktop 1.59.2, macOS, a new demo home): steps 1 to 19 except step 16 and the optional steps, both orders' one dialog, the second order's Decline (nothing paid), the fresh yes after it and Approve, and both receipts' approval lines. That run found one wrong line, an extra "another of the rules' checks" reason in each receipt's step 3. Changed since then: that line's fix (Steven's patch, evidencebook-skills#237) and the History page on capsule-viewer 0.25.0 (#271). It has not been run by hand at this pin (efbe791), and the real-payment steps have not been run at these pins at all. An earlier run at 859c27b plus fixes covered setup from a clean Goose with Goose on its own settings folder (GOOSE_PATH_ROOT) and the pinned adapter found through GOOSE_SEARCH_PATHS. The demo's automated tests pass at these pins in CI.
+Status: run by hand at 28118b6 on the simulated rail with `ARD_LIMIT_MSAT=2000` (Steven, 2026-11-24, Goose Desktop 1.59.2, macOS, a new demo home): steps 1 to 19 except step 16 and the optional steps, both orders' one dialog, the second order's Decline (nothing paid), the fresh yes after it and Approve, and both receipts' approval lines. That run found one wrong line, an extra "another of the rules' checks" reason in each receipt's step 3. Changed since then: that line's fix (Steven's patch, evidencebook-skills#237), the History page on capsule-viewer 0.25.0 (#271), and the locked agent (#279: each window's agent gets only ToolSearch and its own ard tools, checked by hand in Maya's window of Goose Desktop at 56aea1e on 2026-11-24, step 9's tool list). The full run has not been done by hand at this pin (a4e554d), and the real-payment steps have not been run at these pins at all. An earlier run at 859c27b plus fixes covered setup from a clean Goose with Goose on its own settings folder (GOOSE_PATH_ROOT) and the pinned adapter found through GOOSE_SEARCH_PATHS. The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -119,7 +119,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q efbe7918273c3d3ee9892bbdbb658054f36b0cdc
+   git -C evidencebook-skills checkout -q a4e554d5e21847588c40e929005645c8df5cfe07
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/capsule-engine
@@ -150,7 +150,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 2. Already cloned? Move the checkout to this pin instead, then rerun the pip line from step 1, so the venv gets the pinned capsule-viewer. Without it, an earlier capsule-viewer stays installed and the receipt pages are the old ones (evidencebook-skills#239).
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach efbe7918273c3d3ee9892bbdbb658054f36b0cdc
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach a4e554d5e21847588c40e929005645c8df5cfe07
    cd $HOME/ard-demo/evidencebook-skills && .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@89b75d6ab5f34bada727082758562071d494ce0b"
    ```
 
@@ -310,7 +310,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at efbe791.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at a4e554d.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
