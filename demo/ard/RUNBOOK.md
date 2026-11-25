@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills: run the commit you checked out. Last run by hand on 2026-11-25 at cd33ab8; #305 (6b8897d) adds the review fixes since then, not yet run by hand · evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: run by hand on 2026-11-25 on a Mac at these pins (evidencebook-skills cd33ab8, before this guide's last fixes): steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Fixed since, not yet run by hand: the 10-minute dialogs, local times, and both agents' ruling and witness wording. Open: the windows open stacked, not tiled; the buyer's agent sent "received" without Maya's yes (evidencebook-skills#306). The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
+Status: last run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, with the other pins above: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Fixed since, not yet run by hand: the 10-minute dialogs, local times, and both agents' ruling and witness wording. Open: the windows open stacked, not tiled; the buyer's agent sent "received" without Maya's yes (evidencebook-skills#306). The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
 
 ## What you will see
 
@@ -112,12 +112,11 @@ The registry, the seller sites and the 24 sample deals are local stand-ins, and 
 
 ## Set up, once
 
-1. Clone and build everything under `~/ard-demo` (about 5 minutes). Another folder works if you change the paths in the next section to match. Paste each block below into the same terminal window, one block at a time, and wait for each to finish before pasting the next.
+1. Clone and build everything under `~/ard-demo` (about 5 minutes). Paste each block below into the same terminal window, one block at a time, and wait for each to finish before pasting the next.
 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills rev-parse --short HEAD
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook fetch -q origin 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
    git -C evidencebook checkout -q 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
