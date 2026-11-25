@@ -379,7 +379,10 @@ def _refuse_on(others: dict[int, str], inside: set[int], home: Path, ours: set[i
                            f"names {home} nor runs from {HERE}, so reset leaves it alone: stop it, then reset again.")
     if others:
         listed = "; ".join(f"pid {pid} ({_command(pid) or 'gone'}) holds {name}" for pid, name in sorted(others.items()))
-        raise ResetRefused(f"other processes hold files under {home}: {listed}. Close them, then reset again.")
+        raise ResetRefused(f"other processes hold files under {home}: {listed}. Close them, then reset again. An app "
+                           "that keeps a folder of it open (the Claude app, for a folder connected to a session) lets go "
+                           "once the folder is removed from that session or the app quits. Or leave this home: set "
+                           "ARD_HOME to a new folder in every terminal, then reset and seed there.")
     if inside:
         listed = ", ".join(f"pid {pid} ({_command(pid) or 'gone'})" for pid in sorted(inside))
         raise ResetRefused(f"these are working in {home}: {listed}. cd out of it (a terminal: cd ~), then reset again.")

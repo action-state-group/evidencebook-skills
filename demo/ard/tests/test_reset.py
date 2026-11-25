@@ -466,3 +466,15 @@ def test_reset_deletes_only_the_noted_recipes_trust_and_never_by_time(tmp_path):
     outside.write_text("t")
     (root / reset.DEMO_TRUST).write_text(json.dumps(["../x" + "0" * 60]))  # 64 characters, not a hash: ignored
     assert reset.clear_recipe_trust(root, user) == 0 and outside.exists()
+
+
+def test_a_home_another_app_holds_names_the_ways_out(monkeypatch, tmp_path):
+    # Steven's upgrade run (2026-11-25): the Claude app held the demo's pages folder open, and reset refused with no
+    # way out; the refusal now says how an app lets go, and that a new ARD_HOME avoids it
+    monkeypatch.setattr(reset, "_listeners", lambda: {})
+    monkeypatch.setattr(reset, "_command", lambda pid: "/Applications/Claude.app/Contents/MacOS/Claude")
+    with pytest.raises(reset.ResetRefused) as e:
+        reset._refuse_on({4242: str(tmp_path / "pages")}, set(), tmp_path, set())
+    said = str(e.value)
+    assert "pid 4242 (/Applications/Claude.app/Contents/MacOS/Claude) holds" in said
+    assert "removed from that session or the app quits" in said and "set ARD_HOME to a new folder" in said
