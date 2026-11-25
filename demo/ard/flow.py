@@ -401,14 +401,13 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
             copy = Path(sent[deal_id] or wire.path(home, adj.ADJUDICATOR, deal_id, f"book-{side}"))
             try:
                 got = adj.send_proof_once_witnessed(home, p, deal_id, copy, side, say)
+                if got and got != adj.GAVE_UP:
+                    p.note(PROOF_SENT, {"deal_id": deal_id, "copy": str(got)}, subject_ref=deal_id)
+                    proved.add(deal_id)
             except Exception as exc:  # tried again on a later round
                 p.log(f"{what}: {exc!r}")
                 say(screens.trying_again(what, exc))
                 continue
-            if got:
-                p.note(PROOF_SENT, {"deal_id": deal_id, "copy": "" if got == adj.GAVE_UP else str(got)},
-                       subject_ref=deal_id)
-                proved.add(deal_id)
     return done
 
 

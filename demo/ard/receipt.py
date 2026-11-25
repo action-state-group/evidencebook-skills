@@ -106,7 +106,7 @@ def witness_line(witnessed: dict | None, name: str) -> str:
     if status == "failed":
         return (f"  No witness time: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
                 "book.")
-    if "no witness receipt is held" in (witnessed or {}).get("reason", "no witness receipt is held"):
+    if "no witness receipt is held" in (witnessed or {}).get("reason", ""):
         return f"  Not time-stamped yet: {pt.WITNESS_NAME} has not taken {name}'s latest stamp; ask again in a minute."
     # withheld for another reason (a receipt it could not check under the directory): no claim either way
     return f"  No witness time: capsulectl verify reported none it could check for {name}'s own book."

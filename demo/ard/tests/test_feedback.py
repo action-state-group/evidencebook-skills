@@ -267,7 +267,7 @@ def test_a_stamp_proof_goes_again_only_once_it_carries_the_receipt(tmp_path, mon
     receipts[0] = [{"receipt": "r"}]
     said = []
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, copy, "buyer", said.append) == copy
-    assert sent == ["proof-buyer"] and "now time-stamped" in said[0]
+    assert sent == ["book-buyer", "proof-buyer"] and "now time-stamped" in said[0]
 
 
 def test_a_changed_book_goes_again_with_a_time_stamped_copy_and_the_search_ends(tmp_path, monkeypatch):
@@ -301,7 +301,12 @@ def test_a_changed_book_goes_again_with_a_time_stamped_copy_and_the_search_ends(
     clock[0] += adj.PROOF_GIVE_UP_S + 1
     import os
     os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))
-    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) == adj.GAVE_UP
+    said = []
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) == adj.GAVE_UP
+    assert "Reopening this window tries again" in said[0]
+    assert not (tmp_path / "handled" / f"{DEAL}.proof-tried").exists()  # a reopened window starts again
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) is None  # not this process
+    adj._GAVE_UP.clear()
 
 
 def test_a_book_noted_before_this_change_is_proved_from_the_adjudicators_copy(tmp_path, monkeypatch):
@@ -440,7 +445,8 @@ def test_a_tool_refusal_with_raw_output_is_one_plain_line(tmp_path, monkeypatch,
      "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
     ({"status": "verified", "witness": "Action State's witness"},
      "  Time-stamped by Action State's witness, as capsulectl verify reported on Maya's own book."),
-    (None, "  Not time-stamped yet: Action State's witness has not taken Maya's latest stamp; ask again in a minute."),
+    (None, "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
+    ({"status": "withheld"}, "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
     ({"status": "failed", "reason": "the stamp proof does not verify"},
      "  No witness time: capsulectl verify could not check Action State's witness's receipt for Maya's own book."),
 ])
@@ -475,7 +481,7 @@ def test_the_chat_receipt_waits_as_the_page_does_and_verifies_its_copy_with_its_
         def verify(self, copy, proof=None):
             calls.append(("verify", copy, proof))
             ext = {"counterparty_half": half} if half else {}
-            ext["witnessed"] = {"status": "withheld"}
+            ext["witnessed"] = {"status": "withheld", "reason": "no witness receipt is held for this checkpoint yet"}
             return {"verdict": verdict, "extensions": [ext]}
     lines = receipt.proof_lines(P(), DEAL, "Maya")
     assert calls == [("wait", receipt.PAGE_WAIT_S), "bundle", ("proof", tmp_path / "copy.json"),
@@ -496,3 +502,65 @@ def test_a_receipt_not_ready_says_so_plainly_and_logs_why(tmp_path, monkeypatch)
             logged.append(line)
     assert receipt.proof_lines(P(), DEAL, "Maya") == ["  This copy is not ready to check yet; ask again in a minute."]
     assert "after its last checkpoint" in logged[0]
+
+
+def test_a_half_sent_book_and_proof_go_again_as_a_pair(tmp_path, monkeypatch):
+    """Codex's round 2: a retry after the proof failed to go sends the chosen copy's book beside its own proof."""
+    old = tmp_path / "old.json"
+    old.write_text("{}")
+    sent, fail = [], [1]
+
+    class P:
+        dir = tmp_path
+
+        def tick(self):
+            pass
+
+        def proof(self, deal_id, c):
+            out = tmp_path / "proof.json"
+            out.write_text(json.dumps({"stamp_proof": {}, "witness_receipts": [{"r": 1}]}))
+            return out
+
+        def log(self, line):
+            pass
+
+    def send(home, to, deal_id, kind, f):
+        if kind.startswith("proof") and fail[0]:
+            fail[0] -= 1
+            raise OSError("disk full")
+        sent.append(kind)
+    monkeypatch.setattr(adj.wire, "send", send)
+    clock = [1000.0]
+    monkeypatch.setattr(adj.time, "time", lambda: clock[0])
+    with pytest.raises(OSError):
+        adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "buyer", lambda *_: None)
+    import os
+    os.utime(tmp_path / "handled" / f"{DEAL}.proof-tried", (0, 0))
+    assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "buyer", lambda *_: None) == old
+    assert sent == ["book-buyer", "book-buyer", "proof-buyer"]
+
+
+def test_giving_up_is_not_noted_as_sent_and_a_note_failure_is_the_proof_steps_own(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    ruling = tmp_path / "ruling.json"
+    ruling.write_text("{}")
+    monkeypatch.setattr(flow.wire, "pending", lambda home, me, kind: [(DEAL, ruling)])
+    answers = [adj.GAVE_UP, tmp_path / "c.json"]
+    monkeypatch.setattr(flow.adj, "send_proof_once_witnessed", lambda *a: answers.pop(0))
+    p, said = Book(tmp_path), []
+    p.note(flow.RULING_ENTERED, {"deal_id": DEAL, "stamped_at": "2026-11-25T22:25:00Z"})
+    p.note(flow.BOOK_SENT, {"deal_id": DEAL, "copy": str(tmp_path / "c.json")})
+    flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
+    assert not p.notes(flow.PROOF_SENT)
+    real = p.note
+    p.note = lambda kind, st, **kw: (_ for _ in ()).throw(OSError("store busy")) if kind == flow.PROOF_SENT else real(kind, st)
+    flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
+    assert said[-1].startswith("sending the adjudicator this party's book's time-stamp: not done yet")
+
+
+def test_a_wrapped_refusal_with_raw_output_is_plain_too(tmp_path, monkeypatch):
+    """Codex's round 2: ard_rule wraps capsulectl's refusal in a RuntimeError."""
+    ds = pytest.importorskip("desktop_server")
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+    out = ds._refusal(RuntimeError('capsulectl refused the ruling: {"error": "x"}'))
+    assert out == "this step was refused (the reason is in this party's log, agent.log)"

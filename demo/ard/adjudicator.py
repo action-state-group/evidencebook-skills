@@ -347,8 +347,8 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
     always of its own copy (capsulectl binds them). When the book has changed since (a later statement or ruling file),
     no later stamp covers the old copy, so a new copy is made and, once its own proof carries a receipt, both go again.
 
-    Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` after :data:`PROOF_GIVE_UP_S` (logged), or None
-    when there is nothing new this round."""
+    Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` once after :data:`PROOF_GIVE_UP_S` (said, and
+    not tried again by this process), or None when there is nothing new this round."""
     mark = p.dir / "handled" / f"{deal_id}.proof-tried"
     now = time.time()
     if mark.exists():
@@ -359,8 +359,16 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
         mark.parent.mkdir(exist_ok=True)
         first = now
     mark.write_text(str(first))
+    if (p.dir, deal_id) in _GAVE_UP:
+        return None
     if now - first > PROOF_GIVE_UP_S:
+        # not a delivery: nothing is noted, so a reopened window (a new process, the mark cleared) tries again
         p.log(f"deal {deal_id}: no witness receipt for this party's book after {PROOF_GIVE_UP_S} s; stopped trying")
+        _GAVE_UP.add((p.dir, deal_id))
+        mark.unlink(missing_ok=True)
+        say(f"this party's book of deal {deal_id[5:13]}: {pt.WITNESS_NAME} has not time-stamped it in "
+            f"{PROOF_GIVE_UP_S // 60} minutes; the ruling is entered, its entry not time-stamped. Reopening this window "
+            "tries again.")
         return GAVE_UP
     p.tick()
     for c in ([copy] if copy.is_file() else []) + [None]:
@@ -371,8 +379,9 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
                 return None  # a record after its last checkpoint: the next tick covers it
         proof = p.proof(deal_id, c)
         if _receipts(proof):
-            if c != copy:
-                wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", c)
+            # the book and its own proof go together every time, so a retry after a half-sent pair never leaves the
+            # adjudicator one copy's proof beside another copy's book
+            wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", c)
             wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
             say(f"this party's book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by "
                 f"{pt.WITNESS_NAME}; sent to the adjudicator")
@@ -382,5 +391,6 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
 
 #: How long a party keeps looking for its book's witness receipt (send_proof_once_witnessed).
 PROOF_GIVE_UP_S = 900
-#: send_proof_once_witnessed stopped looking.
+#: send_proof_once_witnessed stopped looking, in this process (:data:`_GAVE_UP`).
 GAVE_UP = "gave up"
+_GAVE_UP: set[tuple[Path, str]] = set()
