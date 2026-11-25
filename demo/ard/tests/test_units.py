@@ -295,4 +295,14 @@ def test_a_stamp_is_tried_again_only_with_time_left(monkeypatch):
     p.stamp = slow_refused
     with pytest.raises(pt.Refused):
         p.wait_checkpoint(12)
-    assert tries == [0.0, 6.0] and clock[0] == 11.0  # a third try (at 12 s) would not end by the bound
+    assert tries == [0.0, 6.0] and clock[0] == 12.0  # a third try (at 12 s) would not end by the bound
+    clock[0], tries[:] = 0.0, []
+
+    def slower():
+        tries.append(clock[0])
+        clock[0] += 6
+        return {"state": "ticked", "checkpoint": 1, "delivered": []}
+    p.stamp = slower
+    with pytest.raises(pt.Refused):
+        p.wait_checkpoint(12)
+    assert tries == [0.0]  # after a 6 s try and the pause, 5 s are left: no second try

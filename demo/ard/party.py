@@ -202,12 +202,12 @@ class Party:
                 t = {"error": str(exc)}
             if taken(t):
                 return t
+            time.sleep(1)
             if stop - time.monotonic() < STAMP_TRY_S:
                 raise Refused(f"{self.name}: no checkpoint in {int(seconds)} s (last: {json.dumps(t)[:300]})")
             if say:
                 say("this party's checkpoint did not go through; trying again")
                 say = None
-            time.sleep(1)
 
     def card_bundle(self, shared: bool) -> Path:
         """The party's :data:`CARD_DERIVATION` card as a bundle, as of its newest checkpoint: the shared copy (the card,
