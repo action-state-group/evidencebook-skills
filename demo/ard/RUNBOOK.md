@@ -360,7 +360,9 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    **Expect:** "Dispute raised on this deal's delivery. Sent to Kestrel Print and to the adjudicator your agreement names. Nothing is refunded by this step."
 
 8. Cmd+` to Kestrel's window, type `What happened?`.
-   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …: the adjudicator will ask for this seller's books". After step 9, also "the adjudicator asked for this party's books of deal …: sent in full (its own book and the copy it holds of the other side's)".
+   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …: the adjudicator will ask for this seller's books". Once the adjudicator has asked (it asks as soon as the dispute arrives), also "the adjudicator asked for this party's books of deal …: sent in full (its own book and the copy it holds of the other side's)".
+
+   **Steps 9 to 11 wait on Action State's witness.** When it answers slowly, an answer can say "no answer yet", "not yet", "not time-stamped yet" or "trying again". Wait a minute and ask the same question again; nothing needs doing in another window. A window never shows a raw error: a step that fails says so in one line and tries again on its own.
 
 9. Cmd+` to the adjudicator's window, type:
 
@@ -368,7 +370,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me the case.
    ```
 
-   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "own book and the copy held of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". It waits up to 30 seconds for the answers; if one says "no answer yet", ask again.
+   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "own book and the copy held of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". The adjudicator asked for the books when the dispute arrived (step 7), so they are usually in by now; it waits up to 30 seconds more for any still out. If one says "no answer yet", wait a minute and ask again.
 
 10. Type, then answer the dialog.
 
@@ -379,7 +381,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped.", "Sent to both parties; each enters it in its own records." (when the witness is slow or out of reach: "Not yet time-stamped: Action State's witness did not answer within 12 seconds. Both parties have the ruling without a stamp. This window keeps asking for 3 minutes and, once stamped, sends the ruling to both parties again with its stamp. Keep this window open until then. If none comes by then, run this again.").
 
 11. After a few seconds, type `Did both parties enter it?`.
-    **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
+    **Expect:** "deal …: the ruling was time-stamped by Action State's witness at …", then "Maya: entered it; the entry is time-stamped by Action State's witness" and the same for Kestrel Print. With a slow witness a line can say "not time-stamped yet" or "has not sent its book back yet": wait a minute and ask again, since each party sends its book and its stamp on its own. Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
     **Expect:** "11 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 10 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
@@ -521,4 +523,6 @@ To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the window
 
 6. **Maya finds only one seller.** A seller publishes its entry when its window starts. Wait until both seller windows are open, then ask again.
 
-7. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes. Once, after moving to this version from one before evidencebook-skills#277: the first reset finds no note of the demo's recipes and deletes no trust, so the next windows may open without a Trust prompt; from the next reset on, it is asked again.
+7. **A window says a step is "not done yet (the reason is in this party's log, agent.log); trying again".** The window keeps trying on its own. The full error is in that party's log: `~/.config/ard-commerce-demo/<maya|alder|kestrel|adjudicator>/agent.log` (under `$ARD_HOME` if you set it).
+
+8. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes. Once, after moving to this version from one before evidencebook-skills#277: the first reset finds no note of the demo's recipes and deletes no trust, so the next windows may open without a Trust prompt; from the next reset on, it is asked again.

@@ -180,26 +180,30 @@ class Session:
         self.declined: dict[str, str] = {}
         self.pay_lock = threading.Lock()
         self.log: list[str] = []
+        self.failing: set[str] = set()  # the trying-again lines said since the last other line
         threading.Thread(target=self._rulings, daemon=True).start()
 
     def say(self, line: str) -> None:
-        if not self.log or self.log[-1] != line:  # a retry that fails the same way every round says so once
+        if not screens.once_per_failure(self.failing, line):  # a step that keeps failing says so once
+            return
+        if not self.log or self.log[-1] != line:
             self.log.append(line)
 
     def _rulings(self) -> None:
         """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
         while True:
             for what, step in (
-                    ("answer the adjudicator's request", lambda: adj.answer_requests(self.home, self.maya, BUYER, "buyer",
-                                                                                     self.say)),
-                    ("enter the adjudicator's ruling",
+                    ("answering the adjudicator's request for Maya's books",
+                     lambda: adj.answer_requests(self.home, self.maya, BUYER, "buyer", self.say)),
+                    ("entering the adjudicator's ruling",
                      lambda: flow.enter_rulings(self.home, self.maya, "buyer", buyer.seller_of(self.maya), self.say)),
-                    ("keep the seller's statements", lambda: buyer.seller_statements(self.home, self.maya)),
-                    ("take a delivery", self._deliveries)):
+                    ("keeping the seller's statements", lambda: buyer.seller_statements(self.home, self.maya)),
+                    ("taking the seller's delivery", self._deliveries)):
                 try:
                     step()
-                except Exception as exc:  # shown in the next tool's output
-                    self.say(f"could not {what} yet: {exc}")
+                except Exception as exc:  # one plain line in the next tool's output; the error itself in Maya's log
+                    self.maya.log(f"{what}: {exc!r}")
+                    self.say(screens.trying_again(what, exc))
             time.sleep(3)
 
     def _deliveries(self) -> None:
@@ -505,7 +509,26 @@ def _adjudicator() -> adj.Adjudicator:
     if _seller_lock is None:
         _seller_lock = _lock(ADJUDICATOR)
         stage.ensure_stage(_home())
+        threading.Thread(target=_ask_on_arrival, daemon=True).start()
     return adj.Adjudicator(_home())
+
+
+#: How often the adjudicator's window looks for a dispute that has arrived (_ask_on_arrival).
+ASK_EVERY_S = 3
+
+
+def _ask_on_arrival() -> None:
+    """The adjudicator asks each side for its books as soon as a dispute arrives, not when the case is first opened
+    (evidencebook-skills#326), so the first ``ard_case`` already finds the answers coming in. Asking is idempotent
+    (``Adjudicator.ask`` skips a case it already asked about); a failure is written to the adjudicator's log and tried
+    again on the next round."""
+    a = adj.Adjudicator(_home())
+    while True:
+        try:
+            a.ask()
+        except Exception as exc:  # noqa: BLE001: a background step never ends the window's server
+            a.party.log(f"asking for books: {exc!r}")
+        time.sleep(ASK_EVERY_S)
 
 
 @_tool("adjudicator")
@@ -562,19 +585,16 @@ def ard_rule(seller: str) -> None:
 
 @_tool("adjudicator")
 def ard_case_activity() -> None:
-    """Whether each party entered this adjudicator's ruling in its own records, read from the books they sent back."""
+    """Whether each party entered this adjudicator's ruling in its own records, read from the books they sent back:
+    the ruling's own time-stamp, then each party's entry and whether it is time-stamped. A book or a stamp that has not
+    come back yet comes on its own: ask again in a minute."""
     a = _adjudicator()
     ruled = [c for c in a.cases() if c["ruling"]]
     if not ruled:
         print("no ruling yet")
         return
     for c in ruled:
-        names = flow.case_names(c)
-        rows = a.entries(c)
-        if not rows:
-            print(f"deal {c['deal_id'][5:13]}: no party has sent its book back yet")
-        for x in rows:
-            print(f"deal {c['deal_id'][5:13]}  {names.get(x['party'], x['party'])}: {x['words']}")
+        print("\n".join(flow.entry_lines(c["deal_id"], a.entries(c), flow.case_names(c))))
 
 
 # -- every party: its own card and receipt ---------------------------------------------------------------
@@ -625,8 +645,8 @@ def ard_show_receipt() -> None:
 @_tool("maya", "alder", "kestrel")
 def ard_open_receipt_page() -> None:
     """Open THIS window's own receipt for its latest deal as a page in the browser, for the audience: capsulectl's own
-    page of its copy of the deal (deal report --html), with capsulectl's verify report and the witness time it verified,
-    with nothing added."""
+    page of its copy of the deal (deal report --html), with capsulectl's verify report, with nothing added. Its witness
+    line is the same as ard_show_receipt's: it says a time only when capsulectl verify reported one."""
     import pages
     import receipt
 
@@ -637,7 +657,8 @@ def ard_open_receipt_page() -> None:
     try:
         path = receipt.receipt_page(p, name, deal_id, rail=_rail_name(), seller=ROLE in SELLERS)
     except receipt.ReceiptError as exc:
-        print(f"{name}: no receipt page yet: {exc}")
+        p.log(f"receipt page of {deal_id}: {exc!r}")
+        print(f"{name}: no receipt page yet; ask again in a minute.")
         return
     opened = pages.open_page(path)
     print(f"{name}: its receipt page " + ("opened in the browser on the presenter's screen; nothing else is needed "

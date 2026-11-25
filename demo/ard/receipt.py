@@ -37,7 +37,8 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     try:
         rep = p.report(deal_id)
     except pt.Refused as exc:
-        return f"{name}: its receipt for deal {deal_id[5:13]} is not ready yet: {exc}"
+        p.log(f"receipt of {deal_id}: {exc!r}")
+        return f"{name}: its receipt for deal {deal_id[5:13]} is not ready yet; ask again in a minute."
     report = rep.get("report", rep)
     lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
     for row in report.get("rows", []):
@@ -50,7 +51,7 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
         elif row.get("value"):
             line += f" ({'met' if row['value'] == 'met' else 'not met'})"
         lines.append(line)
-    lines += proof_lines(p, deal_id)
+    lines += proof_lines(p, deal_id, name)
     if seller and real:
         owed = next((r.get("owed", {}).get("amount_minor") for r in report.get("rows", []) if r["id"] == pt.PAID), None)
         if owed:
@@ -60,115 +61,52 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     return "\n".join(lines)
 
 
-def proof_lines(p: pt.Party, deal_id: str) -> list[str]:
+def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str]:
     """What the party's own copy proves, in the receipt's words (Sherlock2's what-confirmation on #242):
 
     - "Signed by both sides" only when ``capsulectl deal verify --bundle`` passes on the whole copy and its
       ``counterparty_half`` verifies (evidencebook #885-#887); never "countersigned".
-    - "Time-stamped by Action State's witness at <time>" only when ``capsulectl deal checkpoint proof`` holds a receipt
-      from a witness the agreement names for the checkpoint the copy rests on, which covers the copy's last record; the
-      time is the witness's own (the receipt's ``iat``)."""
+    - The witness time exactly as the receipt page gets it (evidencebook-skills#329): a stamp waited for as the page
+      waits (:data:`PAGE_WAIT_S`), then ``verify --bundle --stamp-proof --witness-directory`` on the copy and its own
+      proof, whose ``witnessed`` result the page draws, said in attributed voice (u219, 2026-11-25: "as capsulectl verify
+      reported on your own book")."""
+    if pt.witnessed():
+        try:
+            p.wait_checkpoint(PAGE_WAIT_S)
+        except pt.Refused:
+            pass  # the copy below rests on the newest checkpoint; verify says whether the witness took it
     try:
         copy = p.bundle(deal_id)
-        checked = p.verify(copy)
+        checked = p.verify(copy, p.proof(deal_id, copy) if pt.witnessed() else None)
     except pt.Refused as exc:
-        return [f"  This copy is not ready to check yet: {exc}"]
-    half = next((e.get("counterparty_half") for e in checked.get("extensions", []) if e.get("counterparty_half")), None)
+        p.log(f"receipt of {deal_id}: {exc!r}")
+        return ["  This copy is not ready to check yet; ask again in a minute."]
+    entries = checked.get("extensions", [])
+    half = next((e.get("counterparty_half") for e in entries if e.get("counterparty_half")), None)
     if checked.get("verdict") != "VALID":
         lines = [f"  This copy did not verify (capsulectl deal verify: {checked.get('verdict')})."]
     elif half and half.get("status") == "verified":
         lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
     else:
         lines = ["  The other side's half is not in this copy."]
-    stamped, when = False, ""
-    try:
-        out = p.tmp("proof.json")
-        got = p.run("checkpoint", "proof", "--deal", deal_id, "--copy", str(copy), "--out", out)
-        if got.get("named_witness_receipts"):
-            stamped, when = True, witness_time(json.loads(Path(out).read_text()))
-    except (pt.Refused, OSError, ValueError):
-        stamped, when = False, ""
-    if stamped and when:
-        lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)}.")
-    elif stamped:  # a receipt that verifies but carries no time: stamped, its time not stated
-        lines.append(f"  Time-stamped by {pt.WITNESS_NAME}; its receipt states no time.")
-    else:
-        lines.append(f"  Not time-stamped yet: the next checkpoint sends it to {pt.WITNESS_NAME}.")
-    return lines
+    return lines + [witness_line(next((e.get("witnessed") for e in entries if e.get("witnessed")), None), name)]
 
 
-def witness_time(proof: dict) -> str:
-    """The witness's own time on Action State's witness's receipt in a ``checkpoint proof`` file (capsulectl counts it
-    in ``named_witness_receipts`` only once it verifies under the profile's pinned key): the ``iat`` claim (6) in the CWT
-    claims (header label 15, RFC 9597) of the COSE receipt's protected header, as UTC; "" when it carries none."""
-    import base64
-    from datetime import datetime, timezone
-    for r in proof.get("witness_receipts", []):
-        if r.get("ts_url", "").rstrip("/") != pt.WITNESS_URL:
-            continue  # a receipt from another witness: its time is not Action State's witness's
-        try:
-            raw = base64.b64decode(r["receipt"] + "=" * (-len(r["receipt"]) % 4))
-            sign1, _ = _cbor(raw, 0)
-            protected = sign1[0] if isinstance(sign1, list) and sign1 and isinstance(sign1[0], bytes) else b""
-            header, _ = _cbor(protected, 0) if protected else ({}, 0)
-        except (ValueError, KeyError, TypeError):
-            continue  # a receipt this reader cannot read gives no time; capsulectl already verified it
-        claims = header.get(15, {}) if isinstance(header, dict) else {}
-        iat = claims.get(6) if isinstance(claims, dict) else None
-        if isinstance(iat, int):
-            try:
-                return datetime.fromtimestamp(iat, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            except (OverflowError, OSError, ValueError):
-                continue  # a time no clock can show
-    return ""
-
-
-def _cbor(b: bytes, i: int, depth: int = 0):
-    """A small CBOR reader (RFC 8949) for a COSE receipt's header: integers, byte and text strings, arrays, maps, tags.
-    Any input it cannot read (truncated, too deep, an indefinite length) raises ValueError."""
-    if depth > 16:
-        raise ValueError("CBOR nested too deep")
-    if i >= len(b):
-        raise ValueError("CBOR truncated")
-    major, info = b[i] >> 5, b[i] & 31
-    i += 1
-    if info < 24:
-        n = info
-    elif info in (24, 25, 26, 27):
-        size = 1 << (info - 24)
-        if i + size > len(b):
-            raise ValueError("CBOR truncated")
-        n, i = int.from_bytes(b[i:i + size], "big"), i + size
-    else:
-        raise ValueError("indefinite or reserved CBOR length")
-    if major == 0:
-        return n, i
-    if major == 1:
-        return -1 - n, i
-    if major in (2, 3):
-        if i + n > len(b):
-            raise ValueError("CBOR truncated")
-        v = b[i:i + n]
-        try:
-            return (v if major == 2 else v.decode()), i + n
-        except UnicodeDecodeError:
-            raise ValueError("CBOR text is not UTF-8") from None
-    if major == 4:
-        out = []
-        for _ in range(n):
-            v, i = _cbor(b, i, depth + 1)
-            out.append(v)
-        return out, i
-    if major == 5:
-        m = {}
-        for _ in range(n):
-            k, i = _cbor(b, i, depth + 1)
-            v, i = _cbor(b, i, depth + 1)
-            m[k if not isinstance(k, (list, dict)) else str(k)] = v
-        return m, i
-    if major == 6:
-        return _cbor(b, i, depth + 1)
-    return None, i  # simple values and floats: not read here
+def witness_line(witnessed: dict | None, name: str) -> str:
+    """The receipt's witness line from verify's ``witnessed`` result for the copy (evidencebook ``deal_v1_witnessed.go``):
+    ``verified`` with the witness's own time, ``withheld`` (no receipt held yet), ``failed`` (a receipt or the proof did
+    not verify), kept apart."""
+    if not pt.witnessed():
+        return "  Not time-stamped: this run names no witness (ARD_WITNESS=off)."
+    status = (witnessed or {}).get("status", "withheld")
+    if status == "verified":
+        at = witnessed.get("at", "")
+        when = f" at {screens.local_time(at, date=True)}" if at else ""
+        return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as capsulectl verify reported on {name}'s own book."
+    if status == "failed":
+        return (f"  Not time-stamped: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
+                "book.")
+    return f"  Not time-stamped yet: {pt.WITNESS_NAME} has not taken {name}'s latest stamp; ask again in a minute."
 
 
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
