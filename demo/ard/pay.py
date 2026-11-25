@@ -67,6 +67,15 @@ class Payment:
     raw: dict
 
 
+#: How long each rail's own calls may take: the Lightning node's control calls, and ln-pay-local's invoice and send.
+CONTROL_TIMEOUT_S = 90
+INVOICE_TIMEOUT_S = 150
+SEND_TIMEOUT_S = 180
+#: The longest one :meth:`Rail.pay` can take on any rail (Lightning: fund then send; local: invoice then send), so a
+#: seller can wait long enough for a payment that has started (evidencebook-skills#289).
+MAX_PAY_S = max(2 * CONTROL_TIMEOUT_S, INVOICE_TIMEOUT_S + SEND_TIMEOUT_S)
+
+
 class Rail:
     #: The rail token a deal paid on this rail seals as ``recourse.rail`` (an x-deal-v0 ns_token).
     SEALED = "lightning"
@@ -82,7 +91,7 @@ class Rail:
 class LightningRail(Rail):
     SELLER, BUYER = "mc53-u755-provider", "mc53-u755-payer"  # Shockley, Brattain
 
-    def _control(self, host: str, payload: dict, timeout: int = 90) -> dict:
+    def _control(self, host: str, payload: dict, timeout: int = CONTROL_TIMEOUT_S) -> dict:
         remote = (f"sudo -u intangible {BIN} plugins call pay-lightning control --port 3131 "
                   f"--input '{json.dumps(payload, separators=(',', ':'))}'")
         run = subprocess.run(["gcloud", "compute", "ssh", host, "--zone", ZONE, "--project", PROJECT, "--command", remote],
@@ -127,7 +136,7 @@ class LocalRail(Rail):
     def __init__(self, program: str, buyer_wallet: str, seller_wallet: str, max_fee_msat: int = MAX_FEE_MSAT):
         self.program, self.buyer, self.seller, self.max_fee_msat = program, buyer_wallet, seller_wallet, max_fee_msat
 
-    def _run(self, *args: str, timeout: int = 150) -> dict:
+    def _run(self, *args: str, timeout: int = INVOICE_TIMEOUT_S) -> dict:
         run = subprocess.run([self.program, *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=timeout)
         out = run.stdout.strip()
         if run.returncode != 0 or not out:
@@ -148,7 +157,7 @@ class LocalRail(Rail):
         stated = invoice_msat(invoice)  # the invoice itself, not the program's account of it
         if stated != amount_msat:
             raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
-        sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=180)
+        sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=SEND_TIMEOUT_S)
         status = str(sent.get("status", ""))
         if status != "succeeded":
             raise RailError(f"the buyer's wallet did not pay: status {status or 'unknown'}")

@@ -135,7 +135,7 @@ def approve_payment(summary: str) -> bool:
     script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
               f'default button "Cancel" cancel button "Cancel" with icon caution giving up after {parties.DIALOG_GIVE_UP_S}')
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + 20)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
@@ -151,7 +151,7 @@ def approve_hold(title: str, text: str) -> bool:
               "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
               f"with icon caution giving up after {parties.DIALOG_GIVE_UP_S}")
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + 20)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
     except (OSError, subprocess.SubprocessError):
         return False
     return run.returncode == 0 and "button returned:Buy anyway" in run.stdout and "gave up:true" not in run.stdout
@@ -298,11 +298,11 @@ _DIALOG = ("the presenter answers it: Pay or Cancel, or Buy anyway or Don't buy 
            "Do not retry or call it again while it waits")
 if os.environ.get("ARD_RAIL") in ("lightning", "local"):
     _PAY = ("Step 6-7: open the deal for the picked seller and pay it over the real Lightning rail (2,000 msat for Alder). "
-            "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until "
+            "THIS MOVES REAL MONEY. A dialog appears on the presenter's screen (it gives up after 3 minutes) and this call blocks until "
             f"{_DIALOG}, and tell the presenter to answer the dialog. Refused unless ard_pick sealed this seller.")
 else:
     _PAY = ("Step 6-7: open the deal for the picked seller and pay it on the SIMULATED rail: no money moves. "
-            "A dialog appears on the presenter's screen and this call blocks, for up to 3 minutes, until "
+            "A dialog appears on the presenter's screen (it gives up after 3 minutes) and this call blocks until "
             f"{_DIALOG}. Refused unless ard_pick sealed this seller.")
 
 
