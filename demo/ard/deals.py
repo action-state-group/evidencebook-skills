@@ -35,9 +35,10 @@ def run_deal(buyer: gn.Node, seller: gn.Node, terms: dr.Terms, asked: str, payme
     ``opened`` is a deal chain the caller already opened (and sealed its first step) under its own rule.
     ``pay`` is called between the buyer's reconcile and its ``pay`` record when given (the live
     payment); its result is the payment reference sealed. With ``limit`` (the person's spending limit, msat) the
-    buyer's check is sealed and put to the Everyday Rules first; an order over the limit is held for the person's OK
-    (``approve``; none: declined) and a decline raises :class:`rules.RuleHeld` before ``pay`` is called. ``clicked`` is the
-    person's Pay click in the payment dialog, which the approval record names (none: the gate was off). Returns the deal id."""
+    buyer's check is sealed and put to the Everyday Rules first; an order they hold is put to the person (``approve``;
+    none: declined), with ``ask_always`` every order is, and a decline raises :class:`rules.RuleHeld` before ``pay`` is
+    called. ``clicked`` is the person's Pay click in the payment dialog when no limit is set, which the approval record
+    names (none: the gate was off). Returns the deal id."""
     deal_id = deal_id or f"deal-{os.urandom(8).hex()}"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     if opened is not None:  # Maya's deal, opened from her sealed pick

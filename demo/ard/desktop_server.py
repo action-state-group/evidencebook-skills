@@ -142,7 +142,7 @@ def approve_payment(summary: str) -> bool:
 
 
 def approve_hold(summary: str) -> bool:
-    """The person's answer to an order the Everyday Rules held under their spending limit: a native dialog, as
+    """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
     :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
     import subprocess
 
@@ -353,7 +353,7 @@ def ard_pay(seller: str) -> None:
                 # call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
-                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
+                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
                     f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
                     + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
                     + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '

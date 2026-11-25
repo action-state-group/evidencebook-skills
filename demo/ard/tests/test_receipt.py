@@ -380,6 +380,24 @@ def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit
         == "Checked: pass, 0 difference(s)"
 
 
+def test_rules_22_and_27_have_plain_words_and_rule_22_names_the_limit_its_amounts_fail():
+    """Sherlock2 on #237: rule 27 "a repeat of a recent payment to this seller"; rule 22 by the limit it failed (above
+    25% of the price, or above 100.00), read from the sealed check's amounts since the sealed finding does not say."""
+    found = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
+        {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"},
+        {"id": "r08", "check": "refundability/1.1.0", "verdict": "fail"},
+        {"id": "r22", "check": "upfront_amount/1.1.0", "verdict": "fail"},
+        {"id": "r27", "check": "dedupe/1.0.0", "verdict": "fail"}]}}
+    whole = {"upfront_amount_minor": 2000, "terms": {"price_minor": 2000}}
+    assert receipt._line("verdict", found, True, whole).endswith(
+        ": over your limit, a payment that cannot be undone, more than a quarter of the price paid up front and a repeat "
+        "of a recent payment to this seller, so the order was held for your approval")
+    assert receipt._upfront_words({"upfront_amount_minor": 501, "terms": {"price_minor": 2000}}).startswith("more than a quarter")
+    assert receipt._upfront_words({"upfront_amount_minor": 500, "terms": {"price_minor": 2000}}) == "another of the rules' checks"
+    assert receipt._upfront_words({"upfront_amount_minor": 10_001, "terms": {"price_minor": 100_000}}) == "a large amount paid up front"
+    assert receipt._upfront_words(None) == "another of the rules' checks"
+
+
 @pages_only
 def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_person_approved(seeded, tmp_path, monkeypatch):
     """#261: the buyer's receipt for an order the spending limit held and the person approved verifies, and its step
@@ -413,8 +431,8 @@ def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_per
 @pytest.mark.parametrize("clicked,limit,approver", [(True, False, "user"), (False, True, "agent_card")])
 def test_each_new_approval_shape_verifies_on_the_buyers_receipt(seeded, tmp_path, monkeypatch, clicked, limit, approver):
     """#265 review: capsulectl verify --bundle (the Go profile checker) takes a no-limit Pay click (`user`, the act
-    disposed by the human) and a pause with no click (`agent_card`, no decide Capsule on the act): a failing DO rule
-    pauses without holding (#230: a failing ASK rule holds and is put to the person)."""
+    disposed by the human) and a pause no one answered (`agent_card`, no decide Capsule on the act). Under a limit every
+    escalate is now held and put to the person (#230), so that pause is forced here."""
     import deals
     import rules
     from test_rules import stub_engine
@@ -425,6 +443,8 @@ def test_each_new_approval_shape_verifies_on_the_buyers_receipt(seeded, tmp_path
     world, _ = seeded
     maya, alder = world.nodes["maya"], world.nodes["alder"]
     price = SELLERS["alder"]["price_msat"]
+    real_check = rules.check
+    monkeypatch.setattr(rules, "check", lambda *a, **k: __import__("dataclasses").replace(real_check(*a, **k), held=False))
     click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay") if clicked else None
     deal_id = deals.run_deal(maya, alder, terms(ITEM, price, CURRENCY, pay.FakeRail.SEALED), ASK, "", pay=lambda: "ref-x",
                              limit=price if limit else None, clicked=click)

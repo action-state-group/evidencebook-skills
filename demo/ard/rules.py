@@ -135,7 +135,7 @@ def pay_after_check(chain: dr.DealChain, at: datetime, reference: str, outcome: 
     the ``pay`` act naming the payment reference by its commitment.
 
     ``outcome`` is what the deal check said under the person's limit (none: no limit, ``rules: not_configured``).
-    ``clicked`` is the person's Pay click in the payment dialog (none: the gate was off). The approval is the
+    ``clicked`` is the person's Pay click in the payment dialog with no limit set (none: the gate was off). The approval is the
     person's (``user``) when they answered: the Approve click on a held order, else the Pay click; with no answer it
     is ``standing_intent`` on a passing check, and ``agent_card`` on a paused one (x-deal-v0 section 6: a pause
     always needs an answer, and standing intent approves only a pass)."""
@@ -241,10 +241,10 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     person's ``limit``. Raises :class:`RulesError` when the engine could not answer."""
     book = node.shelf.open(f"deal/{chain.deal_id}")
     payloads = node.deal_payloads(chain.deal_id)
-    history = _paid_acts(node, chain.deal_id)
-    complete = len(history) <= MAX_HISTORY
-    history = history[:MAX_HISTORY]
     try:
+        history = _paid_acts(node, chain.deal_id)  # fingerprints each earlier seller: inside, so it maps like the record
+        complete = len(history) <= MAX_HISTORY
+        history = history[:MAX_HISTORY]
         inp = {"schema": "external-check-input/v0", "party_role": "buyer",
                "record": _record(node, book, payloads, check_step_index, chain.peer), "history": history,
                "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": complete}}
@@ -283,7 +283,13 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
         sealed["grade"] = result["grade"]
     seen = [{k: f[k] for k in ("id", "check", "verdict", "reason", "limit", "value") if f.get(k) is not None}
             for f in result["findings"]]
-    return Outcome(result["verdict"], bool(asking), limit, chain.terms.price_minor, reasons, asks,
+    # The engine's escalate holds too when no failing ASK rule made it (only a DO rule failed, or an ASK rule could not be
+    # evaluated): the pause is put to the person, so the approval of it is an answer to a hold, as the receipt says.
+    held = bool(asking) or result["verdict"] == "escalate"
+    if held and not reasons:
+        reasons = list(dict.fromkeys(_words(f) for f in result["findings"] if f["verdict"] in ("fail", "not_evaluable")
+                                     and f.get("reason") and f.get("reason") != DECLARED)) or ["the Everyday Rules asked for your OK"]
+    return Outcome(result["verdict"], held, limit, chain.terms.price_minor, reasons, asks,
                    refused=[_words(f) for f in refusing], ruleset=result["ruleset_id"], findings=seen, rules=sealed,
                    differences=_differences(result),
                    over_limit=bool(asking) and all(str(f.get("check", "")).startswith("caps/") for f in asking))

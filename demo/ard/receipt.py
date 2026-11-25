@@ -83,10 +83,28 @@ def _held_by_limit(verdict: dict | None) -> bool:
         f.get("verdict") == "fail" and str(f.get("check", "")).startswith("caps/") for f in rules.get("findings") or [])
 
 
-#: Plain words for the Everyday Rules' checks a first order can fail, by the check's name (Sherlock2 on #265).
+#: Plain words for the Everyday Rules' checks an order can fail, by the check's name (Sherlock2 on #265; ``dedupe``,
+#: rule 27, Sherlock2 on #237). ``upfront_amount`` (rule 22) has two, by the limit it failed: :func:`_upfront_words`.
 _ASK_WORDS = {"counterparty_seen_before": "a seller you have not paid before",
               "refundability": "a payment that cannot be undone", "recurring_charge": "a recurring charge",
-              "material_fields_changed": "terms that changed", "caps": "over your limit"}
+              "material_fields_changed": "terms that changed", "caps": "over your limit",
+              "dedupe": "a repeat of a recent payment to this seller"}
+#: Rule 22's two limits (capsule-engine go/v0.7.0, go/packs/everyday-0.3.8/pack-source.yaml, r22): a stated deposit
+#: above 25% of the total, or above 100.00 (10,000 minor units).
+UPFRONT_SHARE_BPS, UPFRONT_FIXED_MINOR = 2500, 10_000
+
+
+def _upfront_words(check: dict | None) -> str:
+    """Rule 22 in plain words, for the limit the sealed check's own amounts fail (Sherlock2 on #237: one wording for both
+    would be false when the other limit is the one that failed). The sealed finding does not say which; the check
+    record states the up-front amount and the price, so the receipt reads them."""
+    body = check or {}
+    upfront, total = body.get("upfront_amount_minor"), (body.get("terms") or {}).get("price_minor")
+    if isinstance(upfront, int) and isinstance(total, int) and total > 0 and upfront * 10_000 > total * UPFRONT_SHARE_BPS:
+        return "more than a quarter of the price paid up front"
+    if isinstance(upfront, int) and upfront > UPFRONT_FIXED_MINOR:
+        return "a large amount paid up front"
+    return "another of the rules' checks"
 
 
 def _rules_name(ruleset_id: str) -> str:
@@ -96,12 +114,14 @@ def _rules_name(ruleset_id: str) -> str:
     return f"your rules ({ruleset_id})"
 
 
-def _asks(rules: dict) -> tuple[str, int]:
-    """The failing checks in plain words, each once, in the order the rules reported them, and how many."""
+def _asks(rules: dict, check: dict | None = None) -> tuple[str, int]:
+    """The failing checks in plain words, each once, in the order the rules reported them, and how many. ``check`` is
+    the body of the check record the verdict checks (rule 22's words read its amounts)."""
     words: list[str] = []
     for f in rules.get("findings") or []:
         if f.get("verdict") in ("fail", "not_evaluable"):
-            w = _ASK_WORDS.get(str(f.get("check", "")).split("/")[0], "another of the rules' checks")
+            name = str(f.get("check", "")).split("/")[0]
+            w = _upfront_words(check) if name == "upfront_amount" else _ASK_WORDS.get(name, "another of the rules' checks")
             if w not in words:
                 words.append(w)
     if not words:
@@ -110,7 +130,8 @@ def _asks(rules: dict) -> tuple[str, int]:
 
 
 def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) -> str:
-    """A step's line on the receipt. ``answered`` is, for an approval, the body of the verdict it answers."""
+    """A step's line on the receipt. ``answered`` is, for an approval, the body of the verdict it answers, and for a
+    verdict, the body of the check record it checks."""
     amount = body.get("amount_minor")
     action = body.get("action")
     if kind == "baseline":
@@ -126,7 +147,7 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
             name = _rules_name(str(rules.get("ruleset_id", "")))
             if rules.get("verdict") == "allow":
                 return f"Checked against {name}: allowed"
-            asks, n = _asks(rules)
+            asks, n = _asks(rules, answered)
             if _held_by_limit(body):  # with the other failing checks, if any (#230: one ask lists every reason)
                 return f"Checked against {name}: {asks}, so the order was held for your approval"
             return f"Checked against {name}: {asks}, which {'needs' if n == 1 else 'need'} your approval"
@@ -192,13 +213,15 @@ def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of:
     simulated = not real
     first = payloads[0]["body"]
     item = first["terms"]["item"]
-    steps, verdict = [], None
+    steps, verdict, checked = [], None, None
     for i, (r, p) in enumerate(zip(records, payloads)):
         kind = _kind(p)
         steps.append({"capsule_id": r.record_id, "kind": _KIND.get(kind, "other"), "n": i + 1, "at": _at(p),
-                      "line": _line(kind, p.get("body", {}), simulated, verdict)})
+                      "line": _line(kind, p.get("body", {}), simulated, checked if kind == "verdict" else verdict)})
         if kind == "verdict":
             verdict = p.get("body", {})
+        elif kind == "check":
+            checked = p.get("body", {})
     acts = [(r, p) for r, p in zip(records, payloads) if _kind(p) == "action"]
     close = next(p for p in reversed(payloads) if _kind(p) == "close")
     not_held = any(_kind(p) == OUTCOME_NOTE and p.get("body", {}).get("outcome") == "did_not_hold" for p in payloads)

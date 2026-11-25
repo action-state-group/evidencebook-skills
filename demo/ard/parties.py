@@ -404,9 +404,9 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
                limit: int | None = None, approve=None, clicked: rules.Answer | None = None,
                ask_always: bool = False) -> object:
     """Maya's half of :func:`deals.run_deal`: open, wait for the seller's half, pay, exchange halves, close.
-    With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order over it is held for
-    her OK (``approve``) and a decline raises :class:`rules.RuleHeld`: nothing is paid. ``clicked`` is her Pay click,
-    which the approval record names. Returns the payment."""
+    With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order they hold is put to
+    her (``approve``), with ``ask_always`` every order is, and a decline raises :class:`rules.RuleHeld`: nothing is paid.
+    ``clicked`` is her Pay click when no limit is set, which the approval record names. Returns the payment."""
     wire = peer.home / "stage" / "wire"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     deal_id = chain.deal_id

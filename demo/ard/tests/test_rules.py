@@ -5,6 +5,7 @@ second order."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 import os
@@ -327,8 +328,9 @@ def test_with_no_limit_and_no_click_the_records_are_todays(tmp_path):
 
 def test_a_pack_ask_pauses_the_check_and_the_persons_answer_to_the_hold_approves_it(tmp_path, monkeypatch):
     """The real Everyday Rules escalate the first order too (a new merchant, a payment that cannot be undone): each is an
-    ASK rule, so the order is held and the person's Approve answers the pause (#230). A pause no ASK rule makes (a DO rule
-    only) with no click (the gate off, tests only) is the agent card's answer, since standing intent approves only a pass."""
+    ASK rule, so the order is held and the person's Approve answers the pause (#230). An escalate no ASK rule makes (a DO
+    rule only) is held too, with that rule's words. A pause no one was asked about (the demo no longer makes one; forced
+    here) is the agent card's answer, since standing intent approves only a pass."""
     engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
@@ -340,6 +342,10 @@ def test_a_pack_ask_pauses_the_check_and_the_persons_answer_to_the_hold_approves
     assert held["verdict"]["body"]["result"] == "pause" and held["approval"]["body"]["approver"] == "user"
     assert held["verdict"]["body"]["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r06_new_merchant"}]
     engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, do_fail=True)
+    with pytest.raises(rules.RuleHeld, match="no earlier payment to this merchant$"):
+        deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("not paid"), limit=2000)
+    real = rules.check
+    monkeypatch.setattr(rules, "check", lambda *a, **k: dataclasses.replace(real(*a, **k), held=False))
     unclicked = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000))
     assert unclicked["verdict"]["body"]["result"] == "pause"
     assert unclicked["approval"]["body"] == {"choice": "proceed", "proceed": True, "approver": "agent_card"}
