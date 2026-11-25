@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import party as pt
 from adjudicator import CHALLENGE_DAYS
-from cast import DEALS_EACH
+from cast import SAMPLE_DEALS
 
 if TYPE_CHECKING:
     from buyer import Assessment, Evidence
@@ -25,7 +25,9 @@ ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick 
                    "and nothing is paid above a seller's limit")
 #: Said wherever a seller's card is shown as signed or time-stamped: its first deals are the seed's sample history, so a
 #: witnessed count never reads as real trade (the twin's plan review, checked by the coordinator, 2026-11-25).
-SAMPLE_NOTE = f"Its first {DEALS_EACH} deals are sample history the operator made before this run."
+def sample_note(seller: str) -> str:
+    """Said wherever a seller's card is shown: how many of its deals are the sample history ``demo.py seed`` made."""
+    return f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before this run."
 WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
                 "witness is not independent of them.")
 #: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
@@ -83,11 +85,11 @@ def card_line(card: dict) -> str:
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
-def signed_line(name: str, witness_checked: bool = False) -> str:
+def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:
-        return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts. {SAMPLE_NOTE}"
-    return f"Signed by {name}. These are the seller's own counts. {SAMPLE_NOTE}"
+        return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts. {sample_note(seller)}"
+    return f"Signed by {name}. These are the seller's own counts. {sample_note(seller)}"
 
 
 def own_ruling(a: Assessment) -> dict | None:

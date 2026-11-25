@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ARD two-seller demo: Maya buys 200 conference badges twice from sellers found through ARD.
 
-    python demo.py seed            # once, before anyone watches: the sample history (12 + 12 deals), under a minute
+    python demo.py seed            # once, before anyone watches: the sample history (15 + 10 deals), under a minute
     python demo.py run [--rail lightning]
     python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 
@@ -141,7 +141,7 @@ class Script:
             if ev.card is None:
                 continue
             print(f"  History card: {screens.card_line(ev.card)}")
-            print(f"  {screens.signed_line(e['name'], ev.read is not None and ev.read.witness_status == 'pass')}")
+            print(f"  {screens.signed_line(e['name'], e['id'], ev.read is not None and ev.read.witness_status == 'pass')}")
             a = buyer.assess(self.maya, ev, self.keys[e["id"]], e["offer"]["price_msat"], self.pack)
             made[e["id"]] = a
             ceiling = self.pack.ceiling_msat(a.tier) if a.tier else None

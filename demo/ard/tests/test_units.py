@@ -76,8 +76,8 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 
 def test_no_line_a_person_reads_names_the_demo():
     lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
-             screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
-             screens.SAMPLE_NOTE,
+             screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print", "kestrel"),
+             screens.signed_line("Kestrel Print", "kestrel", True), screens.sample_note("kestrel"),
              pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
 
@@ -393,11 +393,24 @@ def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, hal
 
 
 def test_a_sellers_card_says_its_first_deals_are_sample_history():
-    from cast import DEALS_EACH
-    for line in (screens.signed_line("Alder Print Co."), screens.signed_line("Alder Print Co.", True)):
-        assert line.endswith(f"Its first {DEALS_EACH} deals are sample history the operator made before this run.")
-    assert pages.labels(card(), witnessed=True, sample=True)[-1] == screens.SAMPLE_NOTE
-    assert screens.SAMPLE_NOTE not in pages.labels(card(), witnessed=True)  # a buyer's own card has no sample deals
+    from cast import SAMPLE_DEALS
+    for seller, label in (("alder", "Alder Print Co."), ("kestrel", "Kestrel Print")):
+        for line in (screens.signed_line(label, seller), screens.signed_line(label, seller, True)):
+            assert line.endswith(f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before "
+                                 "this run.")
+        assert pages.labels(card(), witnessed=True, sample=seller)[-1] == screens.sample_note(seller)
+    assert not any("sample history" in x for x in pages.labels(card(), witnessed=True))  # a buyer's card has none
+
+
+def test_the_sellers_sample_histories_differ_and_neither_falls_below_the_packs_band_minimum():
+    """#317 (Steven's ruling): the two cards give a choice, a deeper history against a lower price; Kestrel keeps at
+    least the band-history row's k, so its 1,000 msat deal is not limited before deal 1."""
+    import yaml
+
+    from cast import SAMPLE_DEALS
+    rows = yaml.safe_load((packs.HERE / "pack" / "pack-source.yaml").read_text())["rows"]
+    k = next(r for r in rows if r["id"] == "band-history")["params"]["k"]
+    assert SAMPLE_DEALS["alder"] > SAMPLE_DEALS["kestrel"] >= k
 
 
 def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
@@ -558,7 +571,7 @@ def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeyp
     monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
     monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
     out = ds.ard_show_card()
-    assert (screens.SAMPLE_NOTE in out) == noted, out
+    assert ("sample history" in out) == noted, out
 
 
 def test_the_tool_timeout_covers_the_longest_call():

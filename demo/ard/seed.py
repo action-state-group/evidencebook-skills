@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The sample history, made before the demo: 12 deals between each seller and its own sample buyer, each a real x-deal-v1
+"""The sample history, made before the demo: each seller's deals with its own sample buyer, as many as
+``cast.SAMPLE_DEALS`` says (Alder 15, Kestrel 10, #317), each a real x-deal-v1
 deal made with capsulectl-deal (offer, admission, intent, agreement, payment legs, delivery, both sides' statements),
 naming the demo's adjudicator and Action State's witness like every live deal. No money moves: the payment reference is
 a made-up sample one. Every deal holds.
@@ -24,7 +25,7 @@ from typing import Callable
 import adjudicator as adj
 import flow
 import party as pt
-from cast import DEALS_EACH, HELD_FROM, SELLERS, sample_buyer
+from cast import HELD_FROM, SAMPLE_DEALS, SELLERS, sample_buyer
 
 #: Every sample deal is due, and its contest window ends, this many seconds after the seed starts: room to make all of
 #: them and have the witness take their stamp, on a slow witness too. The seed itself ends as soon as the stamps are
@@ -101,7 +102,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
             card, _, _ = flow.read_card(ps[name].card_bundle(shared=True))
         except pt.Refused:
             continue
-        if card["outcomes"]["did_not_hold"] or card["disputes"]["received"]["of"] or card["outcomes"]["of"] > DEALS_EACH:
+        if card["outcomes"]["did_not_hold"] or card["disputes"]["received"]["of"] or card["outcomes"]["of"] > SAMPLE_DEALS[name]:
             raise SystemExit(f"{name}'s card already counts deals of a run ({card['outcomes']['of']} deals, "
                              f"{card['disputes']['received']['of']} disputes): run `demo.py reset`, then `demo.py seed`")
 
@@ -122,7 +123,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         seller, buyer, price = ps[name], ps[sample_buyer(name)], SELLERS[name]["price_msat"]
 
         def stream(k: int) -> None:
-            for i in range(k, DEALS_EACH, STREAMS):
+            for i in range(k, SAMPLE_DEALS[name], STREAMS):
                 try:
                     sample_deal(buyer, seller, price, named, window_end)
                 except Exception as exc:
@@ -164,7 +165,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
                 return
             time.sleep(1)
 
-    say(f"making {DEALS_EACH} sample deals for each seller")
+    say("making the sample deals: " + ", ".join(f"{n} {SAMPLE_DEALS[n]}" for n in SELLERS))
     threads = [threading.Thread(target=run, args=(n,)) for n in SELLERS]
     for t in threads:
         t.start()
