@@ -157,7 +157,7 @@ receipt holds no payment step: the payment is the buyer's act, so only Maya's re
 
 The History card as a page. `ard_open_card_page` writes that party's own card as a page under `$ARD_HOME/pages/` and
 opens it in the browser (`ARD_OPEN_PAGES=0` writes it without opening): capsule-viewer's History view (`history-view/v0`),
-drawn by the released `history-view.iife.js` of capsule-viewer 0.23.0 vendored in `vendor/` and pinned by its sha256, from
+drawn by the released `history-view.iife.js` of capsule-viewer 0.25.0 vendored in `vendor/` and pinned by its sha256, from
 a model the party builds from its own card (`pages.py`). The page fetches nothing and carries no demo banner (Ethan, 2026-11-17: the presenter says "sample history,
 simulated payment" once at the start); it keeps only the label a count needs, such as Kestrel's did-not-hold counted
 from its own note.
