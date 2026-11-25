@@ -248,6 +248,17 @@ def notification_title(seller_label: str) -> str:
     return f"{seller_label}'s agent (run by the operator)"
 
 
+def _log(line: str) -> None:
+    """A line in this window's party log (``<home>/<role>/agent.log``); never raises."""
+    try:
+        d = _home() / ROLE
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / "agent.log", "a") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  {line}\n")
+    except OSError:
+        pass
+
+
 def notify(seller_label: str, line: str) -> None:
     """A desktop notification on the presenter's screen for a seller event (evidencebook-skills#336: the host may show
     one). Its title names the seller's agent and the operator who runs it (u120), so it never reads as the seller
@@ -255,8 +266,18 @@ def notify(seller_label: str, line: str) -> None:
     ``ARD_NOTIFY=0`` turns it off."""
     title = notification_title(seller_label)
     script = f'display notification "{dialog_text(line)}" with title "{dialog_text(title)}"'
-    subprocess.Popen(["osascript", "-e", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    run = subprocess.Popen(["osascript", "-e", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, text=True, start_new_session=True)
+
+    def reap() -> None:  # in the background, so the seller's agent never waits; a failure is logged, not shown
+        try:
+            _, err = run.communicate(timeout=30)
+            if run.returncode:
+                _log(f"notification not shown (osascript exit {run.returncode}): {err.strip()}")
+        except subprocess.TimeoutExpired:
+            run.kill()
+            _log("notification not shown: osascript did not finish in 30 s")
+    threading.Thread(target=reap, daemon=True).start()
 
 
 def _tool(*roles: str, description: str | None = None):
@@ -292,13 +313,7 @@ def _refusal(exc: BaseException) -> str:
     did before it was refused."""
     text = str(exc)
     if "{" in text or len(text) > 400:  # whatever wrapped it (ard_rule wraps capsulectl's refusal in a RuntimeError)
-        try:
-            d = _home() / ROLE
-            d.mkdir(parents=True, exist_ok=True)
-            with open(d / "agent.log", "a") as fh:
-                fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  a tool refused: {exc!r}\n")
-        except OSError:
-            pass
+        _log(f"a tool refused: {exc!r}")
         return "this step was refused (the reason is in this party's log, agent.log)"
     return text
 
@@ -524,21 +539,21 @@ def ard_dispute(seller: str, deal: str = "") -> None:
     s = session()
     key = _seller_key(seller)
     name = SELLERS[key]["label"]
-    mine = [d for d in s.deals if d.seller == key]
+    # only deals she paid: an offer that was withdrawn before payment is no deal to dispute
+    mine = [d for d in s.deals if d.seller == key and buyer.paid(s.home, d)]
     if not mine:
-        raise RuntimeError(f"Maya has no deal with {name} in this run")
+        raise RuntimeError(f"Maya paid {name} nothing in this run, so there is nothing to dispute")
     if deal:
         found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
         if len(found) != 1:
             raise RuntimeError(f"{'no' if not found else 'more than one'} deal with {name} matches {deal!r}: her deals "
                                "with it are " + ", ".join(d.deal_id[5:13] for d in mine))
         target = found[0]
+    elif len(mine) > 1:  # never a guess between two orders that look the same in the dialog
+        raise RuntimeError(f"Maya has {len(mine)} deals with {name} (" + ", ".join(d.deal_id[5:13] for d in mine) +
+                           "): ask her which, then pass it as deal")
     else:
-        open_ = buyer.to_confirm(s.maya, mine)
-        if len(open_) > 1:
-            raise RuntimeError(f"Maya has {len(open_)} deals with {name} she can still dispute (" +
-                               ", ".join(d.deal_id[5:13] for d in open_) + "): ask her which, then pass it as deal")
-        target = open_[0] if open_ else mine[-1]
+        target = mine[0]
     if buyer.disputed(s.maya, target):
         print(f"Maya already disputed this delivery: {name} and the adjudicator have it (deal {target.deal_id[5:13]}).")
         return
@@ -549,7 +564,8 @@ def ard_dispute(seller: str, deal: str = "") -> None:
         observed = buyer.take_delivery(s.home, s.maya, target)
     record = (f"Its delivery record says {buyer.shipped(observed)} were shipped." if observed is not None
               else f"{name} has sent no delivery record yet.")
-    text = (f"Dispute your delivery from {name}? {record} Choosing Dispute sends {name} and the adjudicator your signed "
+    which = f" (deal {target.deal_id[5:13]})" if len([d for d in s.deals if d.seller == key]) > 1 else ""
+    text = (f"Dispute your delivery from {name}{which}? {record} Choosing Dispute sends {name} and the adjudicator your signed "
             "statement that the delivery was not met. It moves no money.")
     how = "yes" if gate_off() else dialog_answer("Dispute this delivery", text, "Dispute")
     if how != "yes":

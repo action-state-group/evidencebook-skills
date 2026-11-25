@@ -106,7 +106,7 @@ TOOL_TIMEOUT_S = 1380
 def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}",
            f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}", f"CAPSULECTL_DEAL={os.environ['CAPSULECTL_DEAL']}"]
-    for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS"):
+    for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS", "ARD_NOTIFY"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
     if role == "maya" and os.environ.get("ARD_LIMIT_MSAT"):  # the buyer's spending limit (limits.py)

@@ -27,6 +27,8 @@ def maya(tmp_path, monkeypatch):
     s.home, s.maya, s.deals, s.pay_lock = tmp_path, m, [KESTREL], threading.Lock()
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.delenv("ARD_APPROVAL", raising=False)
+    s.paid = {KESTREL.deal_id}
+    monkeypatch.setattr(buyer, "paid", lambda home, deal: deal.deal_id in s.paid)
     return s
 
 
@@ -72,8 +74,26 @@ def test_two_open_deals_with_one_seller_are_asked_which(maya, monkeypatch):
     other = buyer.Deal(deal_id="deal-1111111111111111", seller="kestrel", seller_key="k" * 64, price_msat=1000,
                        offer="o", rail="simulated", me="maya")
     maya.deals.append(other)
+    maya.paid.add(other.deal_id)
     monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: pytest.fail("no dialog"))
     assert "ask her which, then pass it as deal" in ds.ard_dispute("kestrel")
+    maya.maya.note(flow.CASE, {"deal_id": other.deal_id})  # one of them already disputed: still never a guess
+    assert "ask her which, then pass it as deal" in ds.ard_dispute("kestrel")
+
+
+def test_an_offer_never_paid_is_no_deal_to_dispute(maya, monkeypatch):
+    """Claude's round 1: a withdrawn offer comes back from her notes on reopening; it opens no dialog."""
+    withdrawn = buyer.Deal(deal_id="deal-2222222222222222", seller="kestrel", seller_key="k" * 64, price_msat=1000,
+                           offer="o", rail="simulated", me="maya")
+    maya.deals[:] = [withdrawn]
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: pytest.fail("no dialog"))
+    assert "REFUSED: Maya paid Kestrel Print nothing in this run, so there is nothing to dispute" in ds.ard_dispute("kestrel")
+    maya.deals.append(KESTREL)  # with a paid one too, the paid one is the only choice, and the dialog names it
+    monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: None)
+    asked = []
+    monkeypatch.setattr(ds, "dialog_answer", lambda title, text, yes, no="Cancel": asked.append(text) or "no")
+    ds.ard_dispute("kestrel")
+    assert asked[0].startswith("Dispute your delivery from Kestrel Print (deal fedcba98)?")
 
 
 RULED = {"rows": [{"id": "paid_as_agreed", "status": "agreed"},
@@ -115,6 +135,51 @@ def test_a_failing_notification_never_stops_the_seller(tmp_path):
     s = Seller(tmp_path, notify=broken).agent
     s.event("paid: the buyer says it paid 1,000 msat")
     assert s.log[-1].endswith("paid: the buyer says it paid 1,000 msat")
+
+
+def test_a_notification_that_fails_after_it_started_is_logged(tmp_path, monkeypatch):
+    """Codex's round 1: osascript that starts and then exits non-zero is logged, never waited on by the seller."""
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))
+    monkeypatch.setattr(ds, "ROLE", "kestrel")
+
+    class Run:
+        returncode = 1
+
+        def __init__(self, *a, **k):
+            pass
+
+        def communicate(self, timeout=None):
+            return "", "execution error: not allowed"
+    monkeypatch.setattr(ds.subprocess, "Popen", Run)
+    threads = []
+    real = ds.threading.Thread
+
+    def capture(target, daemon):
+        t = real(target=target, daemon=daemon)
+        threads.append(t)
+        return t
+    monkeypatch.setattr(ds.threading, "Thread", capture)
+    ds.notify("Kestrel Print", "paid: the buyer says it paid 1,000 msat")
+    for t in threads:
+        t.join(5)
+    assert "notification not shown (osascript exit 1): execution error: not allowed" in \
+        (tmp_path / "kestrel" / "agent.log").read_text()
+
+
+def test_a_card_that_fails_its_checks_names_no_key_or_derivation(tmp_path, monkeypatch):
+    """Codex's round 1: the failure lines are as plain as the success line."""
+    import json
+    import party as pt
+    rec = {"capsule_id": "c", "key_id": "f" * 64}
+    doc = {"records": [rec], "disclosures": {"c": {"agent_input": {"derivation": "standard_history/2"}}},
+           "extensions": {"x-standard-history/v0": {"as_of": {"anchor": "a" * 64, "anchor_time": "2026-11-25T22:00:00Z"}}}}
+    (tmp_path / "stage" / "cards").mkdir(parents=True)
+    (tmp_path / "stage" / "cards" / "kestrel.json").write_text(json.dumps(doc))
+    reader = type("R", (), {"tmp": lambda self, name: str(tmp_path / name), "verify": lambda self, f: {"verdict": "VALID"}})()
+    for key in ("e" * 64, "f" * 64):
+        with pytest.raises(pt.Refused) as got:
+            flow.fetch_card(tmp_path, reader, "kestrel", key)
+        assert "…" not in str(got.value) and "standard_history" not in str(got.value) and "ffff" not in str(got.value)
 
 
 def test_the_notification_names_the_sellers_agent_and_the_operator_not_the_demo():

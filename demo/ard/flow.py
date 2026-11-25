@@ -92,9 +92,9 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
     if out.get("verdict") != "VALID":
         raise pt.Refused(f"{label(seller)}'s card does not verify: {out.get('verdict')}")
     if signer != key_id:
-        raise pt.Refused(f"{label(seller)}'s card is signed by {signer[:8]}…, not the key its commitment names")
+        raise pt.Refused(f"{label(seller)}'s card is not signed by the key its commitment names")
     if card.get("derivation") != pt.CARD_DERIVATION:
-        raise pt.Refused(f"{label(seller)}'s card is {card.get('derivation')}, not {pt.CARD_DERIVATION}")
+        raise pt.Refused(f"{label(seller)}'s card is not the kind of History card this buyer reads")
     return CardRead(card, as_of["anchor"], as_of["anchor_time"], signer, out["verdict"],
                     out.get("witnesses", {}).get("status", ""), local)
 
