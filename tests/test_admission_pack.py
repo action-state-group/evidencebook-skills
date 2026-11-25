@@ -912,10 +912,15 @@ class ArdDemoBuyer(unittest.TestCase):
         # on_unread interim, since the demo's /3 card carries it (profile section 3.3).
         self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "selection", "no-unanswered-dispute"})
         self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
-        self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]], ["disputes-against"])
+        self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]],
+                         ["card-verified", "card-fresh", "disputes-against"])
         self.assertEqual({k: v for k, v in base_rows["disputes-against"].items() if k != "on_unread"},
                          demo_rows["disputes-against"])
         self.assertNotIn("on_unread", demo_rows["disputes-against"])
+        # Steven, 2026-11-25, Q6 (buzz 5c625586): the demo's pack asks for no served summary; nothing else differs
+        for row in ("card-verified", "card-fresh"):
+            self.assertEqual({k: v for k, v in base_rows[row].items() if k != "ask"}, demo_rows[row])
+        self.assertNotIn("served_summary", (ARD_DEMO / "pack-source.yaml").read_text().replace("Q6", ""))
 
     def test_a_lost_dispute_limits_and_the_witness_is_the_hosted_one(self):
         row = next(r for r in self.pack["rows"] if r["id"] == "disputes-against")

@@ -108,15 +108,14 @@ rows:
 
   # T1: the card is required, fresh and witnessed, with claims held shown
   # with their denominator and a controller declared. A missing or stale card
-  # is asked for (one ask answers every row that needs it); a refused or
-  # unanswered ask limits to T0.
+  # limits to T0; the pack asks for no served summary (Steven, 2026-11-25, Q6:
+  # buzz 5c625586).
   - id: card-verified
     statement: The counterparty's card verifies under the key that presents it.
     source: card
     check: card.verified
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: served_summary/1}
   - id: card-fresh
     statement: The card's latest checkpoint is at most 7 days old.
     source: card
@@ -124,7 +123,6 @@ rows:
     params: {max_age_s: 604800}  # placeholder
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: served_summary/1}
   - id: card-witnessed
     statement: A witness in this pack's trust roots receipted the card's latest checkpoint.
     source: card
