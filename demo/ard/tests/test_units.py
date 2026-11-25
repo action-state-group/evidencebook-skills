@@ -401,8 +401,9 @@ def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, hal
 
 
 def test_a_sellers_card_says_its_first_deals_are_sample_history():
+    from cast import DEALS_EACH
     for line in (screens.signed_line("Alder Print Co."), screens.signed_line("Alder Print Co.", True)):
-        assert line.endswith("Its first 24 deals are sample history the operator made before this run.")
+        assert line.endswith(f"Its first {DEALS_EACH} deals are sample history the operator made before this run.")
     assert pages.labels(card(), witnessed=True, sample=True)[-1] == screens.SAMPLE_NOTE
     assert screens.SAMPLE_NOTE not in pages.labels(card(), witnessed=True)  # a buyer's own card has no sample deals
 
