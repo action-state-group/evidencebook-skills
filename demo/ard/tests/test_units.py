@@ -840,3 +840,20 @@ def test_a_seeded_home_is_refused_only_past_each_sellers_own_count(tmp_path, mon
     else:
         seed.seed(tmp_path, say=said.append)
         assert said == ["already seeded: the sample history is made and stamped"]
+
+
+    assert adj.answer_requests(tmp_path, P(), "maya", "buyer", lambda *_: None) == ["deal-0123456789abcdef"]
+    assert sent == ["answer-buyer"]
+
+
+def test_the_viewer_drift_check_fails_only_when_the_vendored_copy_is_behind():
+    # evidencebook-skills#316: a vendored History script older than capsule-viewer's newest ts/v* release fails CI
+    import viewer_drift
+    tags = ["abc\trefs/tags/ts/v0.25.0", "def\trefs/tags/ts/v0.27.2", "def\trefs/tags/ts/v0.27.2^{}", "x\trefs/tags/go/v0.30.0",
+            "y\trefs/tags/ts/v0.27.10"]
+    assert viewer_drift.newest(tags) == "0.27.10"
+    assert viewer_drift.behind("0.27.2", tags) == "0.27.10"
+    assert viewer_drift.behind("0.27.10", tags) is None
+    assert viewer_drift.behind("0.25.0", ["refs/tags/ts/v0.25.0"]) is None
+    assert viewer_drift.behind("0.25.0", []) is None
+    assert viewer_drift.vendored_version() == pages.VIEWER.removeprefix("capsule-viewer-") == "0.27.2"

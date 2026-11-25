@@ -43,7 +43,7 @@ jobs:
     env:
       EVIDENCEBOOK_REF: 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e  # main: #935 (deal report --html) and #933 (deal tick --now)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_VIEWER_REF: 130877b1f19753a8f3faf72d4b52d2dc9fdb1ada  # main, the merge of capsule-viewer#422: the page runtime of #420 and #421
+      CAPSULE_VIEWER_REF: 125957929578f651d3ab474c56c87e0ad74b324e  # main, with #427 (the receipt page's local times)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,6 +68,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
+      - name: the vendored capsule-viewer History script is its newest release (evidencebook-skills#316)
+        run: python demo/ard/viewer_drift.py
       - id: bins
         uses: actions/cache@v4
         with:

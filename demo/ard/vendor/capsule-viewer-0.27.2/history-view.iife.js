@@ -86,8 +86,8 @@ var HistoryView = (() => {
       "hero.unreadable": "This page could not read the answer, so it shows none of it.",
       "hero.deals.one": "{n} deal, newest first",
       "hero.deals.other": "{n} deals, newest first",
-      "hero.deals.picked.one": "1 deal {name} picked \xB7 steps recorded, not outcomes",
-      "hero.deals.picked.other": "{n} deals {name} picked \xB7 steps recorded, not outcomes",
+      "hero.deals.picked.one": "1 deal {name} picked \xB7 this side's record, not confirmed outcomes",
+      "hero.deals.picked.other": "{n} deals {name} picked \xB7 this side's record, not confirmed outcomes",
       "hero.none.deals": "There are no deals in this store yet.",
       "chip.signatures.pass": "Checkpoint signatures check",
       "chip.signatures.pass.all": "Every signature checks",
@@ -128,8 +128,9 @@ var HistoryView = (() => {
       "callout.heading": "What this does not show",
       "callout.checkpoints": "These checkpoints show when this node's log was cut and how much it holds. They don't show what any exchange said or how it went, and this is not a judgment of the node.",
       "callout.checkpoints.time": "The exact time of each exchange. Checkpoint times are rounded to the minute, and each side of an exchange gets its own checkpoint, so two can share a time.",
-      "callout.deals": "\u201CSteps recorded\u201D is this side's record of each deal, not a confirmed outcome.",
-      "callout.deals.picked": "{name} picked these; it isn't every deal. \u201CSteps recorded\u201D is {name}'s side's record, not a confirmed outcome.",
+      "callout.deals": "Each deal's outcome here is what this side recorded, not a confirmed outcome.",
+      "callout.deals.named": "Each deal's outcome here is what {name} recorded, not a confirmed outcome.",
+      "callout.deals.picked": "{name} picked these; it isn't every deal. Each outcome is what {name}'s side recorded, not a confirmed outcome.",
       "shares.heading": "What this node shares",
       "shares.summary": "With anyone who asks: a summary of its checkpoints, meaning how much it has recorded and when, and nothing about any exchange.",
       "shares.standard.on": "With anyone: the Service History.",
@@ -723,6 +724,8 @@ var HistoryView = (() => {
           r.refuse(`${path}.id`, "is listed twice");
         if (id && status) checks.push({ id, status, unregistered });
       });
+      if (kind === "deal" && !checks.some((x) => x.id === "deal_report"))
+        checks.push({ id: "deal_report", status: "not_run" });
     } else r.refuse("input.checks", "is not a list");
     const periods = [];
     if ("periods" in o) {
@@ -885,6 +888,7 @@ var HistoryView = (() => {
     const witnessFailed = statusOf("witness") === "fail";
     const secondFailed = statusOf("second_signature") === "fail";
     const lockChecked = kind === "checkpoint" ? statusOf("checkpoint_signatures") === "pass" && statusOf("checkpoint_chain") === "pass" && statusOf("consistency") === "pass" : dealRecorded;
+    const personTitle = kind !== "checkpoint" && reader !== "owner" && audienceKind !== "shared";
     let title;
     if (kind === "checkpoint")
       title = stream !== void 0 ? say("header.title.stream", { node: short(node ?? ""), stream }) : say("header.title.node", { node: short(node ?? "") });
@@ -1072,12 +1076,7 @@ var HistoryView = (() => {
           el(
             "ul",
             { class: "cvh-stamps" },
-            dealRecorded ? stamp("stamp.recorded", true, "passed", null) : stamp(
-              "stamp.recorded",
-              false,
-              "not_checked",
-              say("slot.unchecked")
-            ),
+            dealRecorded ? stamp("stamp.recorded", true, "passed", null) : null,
             ...slotStamps(x)
           )
         );
@@ -1136,7 +1135,7 @@ var HistoryView = (() => {
       el(
         "p",
         null,
-        kind === "checkpoint" ? say("callout.checkpoints") : picked ? say("callout.deals.picked", { name: name ?? "" }) : say("callout.deals")
+        kind === "checkpoint" ? say("callout.checkpoints") : picked ? say("callout.deals.picked", { name: name ?? "" }) : personTitle ? say("callout.deals.named", { name: name ?? "" }) : say("callout.deals")
       ),
       kind === "checkpoint" && rows.length > 0 ? el("p", null, say("callout.checkpoints.time")) : null
     ) : null;

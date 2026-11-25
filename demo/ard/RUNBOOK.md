@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 1372f2e (main, with #935's receipt page and #933's `deal tick --now`; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 130877b (main, capsule-viewer#422: the receipt page of #420 and #421) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 1372f2e (main, with #935's receipt page and #933's `deal tick --now`; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 1259579 (main, with #427's local times on the receipt page; the History page vendors its 0.27.2 script) · Goose Desktop 1.59.2 · real rail: ln-pay-local 4b936bb
 
 Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); and the receipt page, capsulectl's own `deal report --html` (evidencebook#935) drawn by capsule-viewer 130877b (#310). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
 
@@ -153,8 +153,8 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    cd $HOME/ard-demo && mkdir -p bin && (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
-   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@130877b1f19753a8f3faf72d4b52d2dc9fdb1ada"
+   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@125957929578f651d3ab474c56c87e0ad74b324e"
+   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@125957929578f651d3ab474c56c87e0ad74b324e"
    ```
 
    **Expect:** pip ends with no error. The second line is needed: every capsule-viewer commit carries the same version number, so the first line alone keeps an earlier capsule-viewer.
@@ -202,15 +202,14 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 1. [Real] Install ln-pay-local. ln-pay-local is a small command-line wallet on Lexe's Lightning SDK.
 
    ```
-   git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local
-   git -C $HOME/ard-demo/ln-pay-local checkout -q 025d56672d92ea12fda5fe6c3fbb84dd1d40ddf7
+   [ -d $HOME/ard-demo/ln-pay-local ] || git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local; git -C $HOME/ard-demo/ln-pay-local fetch -q origin 4b936bb164d7dcea4db37075ad336d4a9f2ec102; git -C $HOME/ard-demo/ln-pay-local checkout -q 4b936bb164d7dcea4db37075ad336d4a9f2ec102
    cargo install --path $HOME/ard-demo/ln-pay-local --locked
    ln-pay-local --help
    ```
 
    **Expect:** one usage line starting `{"error": "usage: ln-pay-local init`.
 
-2. [Real] Make a buyer and a seller wallet. **Each writes a private seed file into its folder: back it up, never print or share it.**
+2. [Real] Make a buyer and a seller wallet. **Each registers a wallet account with Lexe and writes its private seed into its folder, unencrypted: back the folder up, never print or share it.**
 
    ```
    ln-pay-local init --wallet $HOME/ard-wallets/buyer

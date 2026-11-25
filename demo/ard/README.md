@@ -21,7 +21,7 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 | A deal | `buyer.py`, `flow.py` (`SellerAgent`), `wire.py` | offer naming the adjudicator and the witness, admit, intent, agree, check (Maya's dialog), payer and payee legs, delivery, statements; the parties hand each other the files the verbs write |
 | The dispute and the ruling | `buyer.dispute`, `flow.enter_rulings`, `adjudicator.py` | `deal dispute`, sent to the seller and the adjudicator; the adjudicator's request for each side's books and each side's full answer (`deal respond`: its own book and the copy it holds of the other side's); `deal ruling --answer` on the adjudicator's own capsulectl-deal profile, then its stamp; `deal receive` of the ruling; each side's book sent back for `deal ruling entries` |
 | The windows | `desktop_server.py`, `goose/open-windows.py`, `goose/locked` | one MCP server per window (`ARD_ROLE`: maya, alder, kestrel, adjudicator), each agent limited to its own tools |
-| The pages | `pages.py`, `receipt.py` | capsule-viewer's History view, vendored at 0.25.0; the receipt in words from capsulectl's report |
+| The pages | `pages.py`, `receipt.py` | capsule-viewer's History view, vendored at 0.27.2; the receipt in words from capsulectl's report, and as capsulectl's own page |
 | Payment | `pay.py` | the simulated rail, the Brattain and Shockley test nodes, or two local Lexe wallets (`ln-pay-local`); the invoice is made first, so Maya's check binds its payment hash |
 
 ## What is not there yet
