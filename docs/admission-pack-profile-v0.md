@@ -576,7 +576,8 @@ The new members are additive:
   `coverage_declaration_form`, `coverage_declaration_anchor`, `units`,
   `labels`, `period_alignment`, `period_anchor` or `period_floor`;
 - on a `card.disputes_against` row that reads `not_read` because a verified
-  card carries no dispute tally, `reason`: `no_dispute_tally`;
+  card carries no dispute tally, or the input gives its received disputes
+  without `decided` (§3.3), `reason`: `no_dispute_tally`;
 - `coverage`, only when the card carries served periods:
   `{kind: "stream_interval", population: "NOT_CHECKED"}`. The counts were not
   checked against records, so completeness is not established (ISH §4.2).
