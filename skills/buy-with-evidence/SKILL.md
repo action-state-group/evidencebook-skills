@@ -103,7 +103,7 @@ before paying is its own approval dialog.
   runs every party here, so it is not independent of them: say so, and never call the counts recomputed or confirmed
   by anyone else. Call the card time-stamped only when the screen says its receipt verifies; otherwise say its
   time-stamp is not checked here.
-- The demo gives GO, LIMIT or NO and has no ASK step. On the demo, LIMIT and NO end with nothing paid,
+- This host gives GO, LIMIT or NO and has no ASK step. Here, LIMIT and NO end with nothing paid,
   no smaller order is offered, and a pick the verdict does not allow opens no deal.
 - A dispute decided against a seller, on its card, limits it (LIMIT). A ruling the person holds against a seller, in
   their own records, blocks that seller for 180 days (NO): when both apply, say it is the same lost dispute only if the
@@ -121,7 +121,7 @@ before paying is its own approval dialog.
 - The assessment takes some inputs from the operator without checking them (which marketplace the seller is on,
   the list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's key); the
   screen says so. Do not present those as checked.
-- Say the card's counts exactly as the card gives them, in Steven's words; never guess a higher or lower number,
+- Say the card's counts exactly as the card gives them, in the words above; never guess a higher or lower number,
   and never call them failures.
 - Recommend a seller only after you have assessed every seller that passed its checks; before that, say what you
   found, not which seller you prefer.
