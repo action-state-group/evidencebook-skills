@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills e5c3224 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0, receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills c4e262a · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0, receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: run by hand once at 859c27b plus these fixes on the simulated rail (2026-11-24, Goose Desktop 1.59.2, macOS: setup from a clean Goose, the three windows, the pick, the deal, the receipt pages and the spending-limit hold on its Approve path); that run started Goose on its own settings folder (GOOSE_PATH_ROOT) with the pinned adapter found through GOOSE_SEARCH_PATHS. The Decline path has not been run by hand, and the real-payment steps have not been run at these pins at all. It has not yet been run by hand at this pin (e5c3224). The demo's automated tests pass at these pins in CI.
+Status: run by hand once at 859c27b plus these fixes on the simulated rail (2026-11-24, Goose Desktop 1.59.2, macOS: setup from a clean Goose, the three windows, the pick, the deal, the receipt pages and the spending-limit hold on its Approve path); that run started Goose on its own settings folder (GOOSE_PATH_ROOT) with the pinned adapter found through GOOSE_SEARCH_PATHS. The Decline path has not been run by hand, and the real-payment steps have not been run at these pins at all. It has not yet been run by hand at this pin (c4e262a), which adds the capsule-viewer 0.25.0 receipt pages (#264) and the receipt's approval and rules lines (#265). The demo's automated tests pass at these pins in CI.
 
 ## What you will see
 
@@ -119,7 +119,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
    ```
    mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
    git clone -q https://github.com/action-state-group/evidencebook-skills
-   git -C evidencebook-skills checkout -q e5c32245f6c90a608d815be06944813fdc752a4e
+   git -C evidencebook-skills checkout -q c4e262aa909a7be3a861b876fa7c6ea5d0a8092f
    git clone -q https://github.com/action-state-group/evidencebook
    git -C evidencebook checkout -q 5d29ccc5240bfe1d5d8b926dd5763d5882a30ea9
    git clone -q https://github.com/action-state-group/capsule-engine
@@ -150,7 +150,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 2. Already cloned? Move the checkout to this pin instead.
 
    ```
-   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach e5c32245f6c90a608d815be06944813fdc752a4e
+   git -C $HOME/ard-demo/evidencebook-skills fetch -q origin && git -C $HOME/ard-demo/evidencebook-skills checkout -q --detach c4e262aa909a7be3a861b876fa7c6ea5d0a8092f
    ```
 
 3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
@@ -307,7 +307,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    '
    ```
 
-   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at e5c3224.
+   **Expect:** Alder at 2,000 msat, Kestrel at 1,000 msat, Maya's first message only saying she is ready, and "matches the repo file exactly: yes" at c4e262a.
 
 8. Click Trust and Execute in all three windows, in any order.
    **Expect:** Alder 24 deals, all held; Kestrel 24, 22 held; Maya only says she is ready and searches nothing.
