@@ -118,6 +118,12 @@ class Session:
             raise
 
 
+def dialog_text(text: str) -> str:
+    """The words a native dialog shows for ``text``: AppleScript's string quoting takes no backslash or double quote,
+    so they are replaced. The approval record commits to these words, the ones the person saw."""
+    return text.replace("\\", " ").replace('"', "'")
+
+
 def approve_payment(summary: str) -> bool:
     """The presenter's approval, out of band: a native dialog on the presenter's screen that the agent neither reads
     nor answers through the chat (a code returned in the tool's output would reach the agent, which could reuse it in
@@ -125,7 +131,7 @@ def approve_payment(summary: str) -> bool:
     ``ARD_APPROVAL=none`` turns the gate off (tests only; the tool says so in its output)."""
     import subprocess
 
-    text = summary.replace("\\", " ").replace('"', "'")
+    text = dialog_text(summary)
     script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
               'default button "Cancel" cancel button "Cancel" with icon caution giving up after 180')
     try:
@@ -140,7 +146,7 @@ def approve_hold(summary: str) -> bool:
     :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
     import subprocess
 
-    text = summary.replace("\\", " ").replace('"', "'")
+    text = dialog_text(summary)
     script = (f'display dialog "{text}" with title "Held for your OK" buttons {{"Decline", "Approve"}} '
               'default button "Decline" cancel button "Decline" with icon caution giving up after 180')
     try:
@@ -150,11 +156,13 @@ def approve_hold(summary: str) -> bool:
     return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
 
 
-def _ask_about_hold(outcome: "rules.Outcome") -> bool:
-    approved = approve_hold(screens.rules_ask(outcome.reasons))
-    if approved:
-        print(screens.rules_approved(outcome.reasons))
-    return approved
+def _ask_about_hold(outcome: "rules.Outcome") -> "rules.Answer | None":
+    """The hold dialog; for an Approve, the words it showed and the button, which the approval record commits to."""
+    asked = screens.rules_ask(outcome.reasons)
+    if not approve_hold(asked):
+        return None
+    print(screens.rules_approved(outcome.reasons))
+    return rules.Answer(dialog_text(asked), "Approve")
 
 
 _session: Session | None = None
@@ -296,7 +304,7 @@ def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | No
     if not approve_payment(summary):
         raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
                            "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
-    return rules.Answer(summary, "Pay")
+    return rules.Answer(dialog_text(summary), "Pay")
 
 
 @_tool("maya", description=_PAY)
@@ -360,6 +368,9 @@ def ard_pay(seller: str) -> None:
         if isinstance(stopped, rules.RuleHeld):
             raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
                                "order and why, and that nothing was paid; do not try to pay around it.") from None
+        if isinstance(stopped, rules.RulesRefused):
+            raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the Everyday Rules did not allow this order; do not "
+                               "pay around it.") from None
         raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 

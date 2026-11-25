@@ -113,8 +113,8 @@ def rules_ask(reasons: list[str]) -> str:
 
 def rules_approved(reasons: list[str]) -> str:
     """What the screen says after the person approves a held order."""
-    return ("You approved this order over your limit (" + "; ".join(reasons) + "). Paying now. Your approval is "
-            "recorded in this deal's records, and the deal receipt shows it.")
+    return ("You approved this order over your limit (" + "; ".join(reasons) + "). Paying now. Your approval goes "
+            "into this deal's records and will show on its receipt.")  # Sherlock2 on #265: not recorded until paid
 
 
 def rules_held(reasons: list[str]) -> str:

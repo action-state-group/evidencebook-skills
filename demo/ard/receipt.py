@@ -83,6 +83,32 @@ def _held_by_limit(verdict: dict | None) -> bool:
         f.get("verdict") == "fail" and str(f.get("check", "")).startswith("caps/") for f in rules.get("findings") or [])
 
 
+#: Plain words for the Everyday Rules' checks a first order can fail, by the check's name (Sherlock2 on #265).
+_ASK_WORDS = {"counterparty_seen_before": "a seller you have not paid before",
+              "refundability": "a payment that cannot be undone", "recurring_charge": "a recurring charge",
+              "material_fields_changed": "terms that changed", "caps": "over your limit"}
+
+
+def _rules_name(ruleset_id: str) -> str:
+    """The ruleset as the receipt names it: the Everyday Rules by version, with the person's limit; another by its id."""
+    if ruleset_id.startswith("asg/everyday/"):
+        return f"the Everyday Rules ({ruleset_id.rsplit('/', 1)[1]}) and your spending limit"
+    return f"your rules ({ruleset_id})"
+
+
+def _asks(rules: dict) -> str:
+    """The failing checks in plain words, each once, in the order the rules reported them."""
+    words: list[str] = []
+    for f in rules.get("findings") or []:
+        if f.get("verdict") in ("fail", "not_evaluable"):
+            w = _ASK_WORDS.get(str(f.get("check", "")).split("/")[0], "another of the rules' checks")
+            if w not in words:
+                words.append(w)
+    if not words:
+        return "the rules asked"
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
 def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) -> str:
     """A step's line on the receipt. ``answered`` is, for an approval, the body of the verdict it answers."""
     amount = body.get("amount_minor")
@@ -96,13 +122,13 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
                 "commit": f"About to commit to the sale at {screens.msat(amount)}"}.get(action, f"Proposed: {action}")
     if kind == "verdict":
         rules = body.get("rules") or {}
-        if rules.get("status") == "evaluated":  # #261: say what the person's rules said, in plain words
+        if rules.get("status") == "evaluated":  # #261: say what the rules said, in plain words (Sherlock2 on #265)
+            name = _rules_name(str(rules.get("ruleset_id", "")))
             if rules.get("verdict") == "allow":
-                return f"Checked against your rules ({rules.get('ruleset_id')}): allowed"
+                return f"Checked against {name}: allowed"
             if _held_by_limit(body):
-                return (f"Checked against your rules ({rules.get('ruleset_id')}): over your spending limit, so the order "
-                        "was held for your approval")
-            return f"Checked against your rules ({rules.get('ruleset_id')}): they asked for your approval"
+                return f"Checked against {name}: over your limit, so the order was held for your approval"
+            return f"Checked against {name}: {_asks(rules)}, which need your approval"
         result = body.get("result") or body.get("disposition")
         return f"Checked: {result}, {len(body.get('differences') or body.get('findings') or [])} difference(s)"
     if kind == "approval":
@@ -110,6 +136,10 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
             return "The buyer accepted the offer"
         if body.get("approver") == "user" and _held_by_limit(answered):
             return "Held by your spending limit, then approved by you"  # Sherlock2 on #261
+        if body.get("approver") == "user" and (answered or {}).get("result") == "pause":
+            # The pack's other asks: no dialog named them, and the Pay click came first (Sherlock2's call A on #265,
+            # until #223 shows them in the dialog).
+            return "Approved by you (your Pay click, made before this check ran)"
         return {"user": "Approved by you",
                 "standing_intent": "Went ahead under the instructions you gave your agent",
                 "agent_card": "Went ahead on the agent's card"}.get(body.get("approver"), "Approved")

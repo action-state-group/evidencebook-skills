@@ -8,8 +8,8 @@ runs and the demo behaves as before. With it set, each order's check record is s
 (an order over the limit the person set) is HELD for the person's OK, not refused (Steven, ops u325, 2026-10-12: a failing
 caps check on a person-set limit is ESCALATE): the screen names the rule, the limit and the amount and asks the person
 to approve or decline. A decline pays nothing; an approval goes on to the payment. Either answer is sealed as a note of
-Maya's (:data:`CHECKED`). The pack's other asks (a new merchant, a payment that cannot be undone) are what the
-presenter's payment dialog already puts to the person, so they are listed, not held.
+Maya's (:data:`CHECKED`). The pack's other asks (a new merchant, a payment that cannot be undone) are not held: the
+person's Pay click, made before the check runs, answers them until evidencebook-skills#223 names them in the dialog.
 
 The check record is sealed before the payment and the act after it, so the deal check can stop the order. The
 evidencebook goose reference seals the check, its verdict, the approval and the act in one call
@@ -46,6 +46,10 @@ ACTION_CLASS = "money.purchase"
 
 class RulesError(RuntimeError):
     """The check could not run (no engine, an engine without ``--limits``, an input it refused). Nothing was paid."""
+
+
+class RulesRefused(RulesError):
+    """The rules answered ``deny`` or ``not_evaluable``: the check ran and the order cannot go ahead. Nothing was paid."""
 
 
 class RuleHeld(RuntimeError):
@@ -316,7 +320,9 @@ def seal_note(node, deal_id: str, outcome: Outcome) -> None:
 def gate(node, chain: dr.DealChain, limit: int, at: datetime,
          approve: Callable[[Outcome], bool] | None = None) -> Outcome:
     """Seal the check record and run the rules on it; return what they said once the order may go ahead. An order the
-    rules hold is put to the person through ``approve`` (no ``approve``: declined); a decline raises
+    rules hold is put to the person through ``approve``, which returns the :class:`Answer` it showed them for an
+    Approve (or a plain truthy value, when its words are :func:`screens.rules_ask`'s), and a falsy value for a decline
+    (no ``approve``: declined); a decline raises
     :class:`RuleHeld`: the check is sealed, nothing else, and nothing is paid. Either answer is sealed as a note. An
     approval is kept on the outcome as the person's :class:`Answer` (the dialog's words and Approve), for the approval
     record. A ``deny`` or a ``not_evaluable`` verdict pays nothing: there is no way to proceed."""
@@ -324,19 +330,21 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
     outcome = check(node, chain, len(node.deal_payloads(chain.deal_id)) - 1, limit)
     if outcome.verdict in ("deny", "not_evaluable"):
         seal_note(node, chain.deal_id, outcome)
-        raise RulesError(f"the Everyday Rules answered {outcome.verdict} on this order, so it cannot go ahead")
+        raise RulesRefused(f"the Everyday Rules answered {outcome.verdict} on this order, so it cannot go ahead")
     if outcome.held:
         try:
-            ok = approve is not None and bool(approve(outcome))
+            ok = approve(outcome) if approve is not None else False
         except Exception as exc:  # the question could not be put: nothing is paid and the order is not approved
             outcome.decision = "declined"
             seal_note(node, chain.deal_id, outcome)
             raise RulesError(f"the person could not be asked about the held order: {type(exc).__name__}: {exc}") from None
         outcome.decision = "approved" if ok else "declined"
-        if ok:
+        if isinstance(ok, Answer):
+            outcome.answer = ok  # the words the dialog actually showed
+        elif ok:
             import screens  # here, not at the top: screens imports buyer, which imports this module
 
-            outcome.answer = Answer(screens.rules_ask(outcome.reasons), "Approve")  # the hold dialog's words
+            outcome.answer = Answer(screens.rules_ask(outcome.reasons), "Approve")
     seal_note(node, chain.deal_id, outcome)
     if outcome.decision == "declined":
         raise RuleHeld("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons), outcome.reasons)

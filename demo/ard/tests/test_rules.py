@@ -328,3 +328,27 @@ def test_a_history_cut_at_the_cap_is_sealed_as_not_complete(tmp_path, monkeypatc
     second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000)
     assert _records(maya, second)["verdict"]["body"]["rules"]["history"] == {"days": 7, "acts": 0, "complete": False}
     maya.close(); alder.close()
+
+
+def test_the_approve_dialog_s_own_words_are_the_ones_committed(tmp_path, monkeypatch):
+    """#265 review: the hold callback returns the Answer it showed, so the commitment is to the dialog's words (the
+    dialog replaces a double quote, which AppleScript cannot carry), not to a rebuilt text."""
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    shown = rules.Answer("the words the dialog showed, with 'quotes'", "Approve")
+    second = deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000, approve=lambda o: shown)
+    assert _local(maya, second, "approval")["said"] == shown.said()
+    maya.close(); alder.close()
+
+
+def test_a_deny_is_a_refusal_not_a_check_that_could_not_run(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True, verdict="deny")
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    with pytest.raises(rules.RulesRefused):
+        deals.run_deal(maya, alder, terms(ITEM, 2000, CURRENCY, "simulated"), "ask", "", pay=lambda: pytest.fail("not paid"),
+                       limit=2000)
+    maya.close(); alder.close()

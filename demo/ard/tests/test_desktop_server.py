@@ -177,6 +177,15 @@ def test_a_declined_payment_dialog_on_a_second_order_keeps_the_seller_paid_and_a
     approved = tools.ard_pay("alder")
     assert "You approved this order over your limit" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
+    # #261: the deal's own records name the person's Approve click and what the rules said
+    import json as _json
+    maya = s.run.maya
+    deals_ = [{_json.loads(p)["x-deal-v0"]["record_type"]: _json.loads(p)["body"] for p in maya.deal_payloads(b[5:])}
+              for b in maya.shelf.books() if b.startswith("deal/") and b.count("/") == 1]
+    held = [d for d in deals_ if "approval" in d and any(f.get("check", "").startswith("caps/") and f["verdict"] == "fail"
+                                                         for f in d["verdict"].get("rules", {}).get("findings", []))]
+    assert len(held) == 1 and held[0]["approval"]["approver"] == "user" and "said_commitment" in held[0]["approval"]
+    assert held[0]["verdict"]["result"] == "pause" and held[0]["verdict"]["rules"]["verdict"] == "escalate"
 
 
 def test_a_declined_or_failed_order_on_the_multi_window_path_leaves_no_deal_id_behind(monkeypatch):
