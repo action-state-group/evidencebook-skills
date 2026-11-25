@@ -274,13 +274,12 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
         if mark.exists():
             continue
         out = p.tmp("answer.json")
-        # An answer rests on a checkpoint, as a report does, and its records are timed only by a stamp the witness took:
-        # stamp now, and again if the witness did not take it, so the adjudicator reads every record timed.
+        # An answer rests on a checkpoint, as a report does, and its records are timed by a stamp the witness took: stamp
+        # now (a stamp the witness did not take yet still lets the answer go; its delivery follows with a later tick).
         try:
             p.wait_checkpoint(12)
-        except pt.Refused as exc:
-            say(f"the adjudicator's request for deal {deal_id[5:13]}: no stamp yet ({exc}); answered on the next round")
-            continue
+        except pt.Refused:
+            pass
         try:
             got = p.run("respond", "--request", str(f), "--requester", named_key(home), "--output", out)
         except pt.Refused as exc:

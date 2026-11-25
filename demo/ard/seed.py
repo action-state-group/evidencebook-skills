@@ -145,15 +145,16 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         except Exception as exc:
             errors.append(f"{name}: {exc}")
             return
+        wait = pt.StampWait()
         while True:
             try:
                 got = seller.stamp()
             except pt.Refused as exc:
                 got = {"error": str(exc)}
-            # Taken before the window ends: the witness's receipt time is before this check. And nothing left pending,
-            # so the live run's first stamp has no backlog to deliver first (capsulectl delivers every pending
-            # checkpoint in one tick, one after another).
-            if pt.taken(got) and not got.get("pending") and time.time() < window_end:
+            # Taken before the window ends: the witness's receipt time is before this check. Any stamp of this wait the
+            # witness took covers every sample record (party.StampWait); one it answered with an error stays pending
+            # and goes with a later tick.
+            if wait.add(got) and time.time() < window_end:
                 finished.add(name)
                 return
             if time.time() > window_end - 5:

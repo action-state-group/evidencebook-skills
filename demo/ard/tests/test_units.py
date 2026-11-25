@@ -213,20 +213,6 @@ def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
 
 # -- stamps on demand (#297) -------------------------------------------------------------------------------------------
 
-def test_taken_means_the_witness_took_the_newest_checkpoint(monkeypatch):
-    import party as pt
-
-    monkeypatch.setenv("ARD_WITNESS", "public")
-    assert pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [9], "pending": [{"checkpoint": 4}]})
-    assert not pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [4], "pending": [{"checkpoint": 9}]})
-    assert not pt.taken({"state": "ticked", "checkpoint": 9})  # no delivery list: not taken
-    assert not pt.taken({"state": "not_due", "delivered": [9]})
-    assert not pt.taken({"error": "refused"})
-    assert pt.taken({"state": "ticked", "checkpoint": 9, "witness": "not_configured"})
-    monkeypatch.setenv("ARD_WITNESS", "off")
-    assert pt.taken({"state": "ticked", "checkpoint": 9})
-
-
 def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
     import party as pt
 
@@ -718,3 +704,48 @@ def test_the_buyer_skill_carries_pms_lines_on_counts_recommendations_and_limits(
                  "The person's budget stays with you: use it only in the assessment and at the pick; the deadline is "
                  "theirs to judge."):
         assert line in flat, line
+
+
+def test_a_stamp_wait_counts_only_a_checkpoint_it_cut(monkeypatch):
+    """main's red ard-demo (16636e5): any checkpoint this wait cut that the witness took covers the records sealed before
+    the wait; a checkpoint taken before the wait (an older number) never counts, and one left pending is no failure."""
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    w = pt.StampWait()
+    assert not w.add({"state": "ticked", "checkpoint": 109, "delivered": [100], "pending": [{"checkpoint": 109}]})
+    assert w.first == 109  # 100 was cut before this wait: it covers none of the new records
+    assert not w.add({"error": "refused"})
+    assert w.add({"state": "ticked", "checkpoint": 110, "delivered": [109], "pending": [{"checkpoint": 110}]})
+    w2 = pt.StampWait()
+    assert not w2.add({"state": "not_due", "delivered": [109]})  # cut nothing: nothing of this wait was taken
+    assert w2.first is None
+    monkeypatch.setenv("ARD_WITNESS", "off")
+    assert pt.StampWait().add({"state": "ticked", "checkpoint": 3})
+
+
+def test_an_answer_goes_even_when_its_stamp_was_not_taken(tmp_path, monkeypatch):
+    """The adjudicator's request is answered with the local checkpoint when the witness did not take the stamp in time;
+    its delivery follows with a later tick (main's red ard-demo: 'no 2 answers' after 300 s)."""
+    import party as pt
+
+    sent = []
+
+    class P:
+        name = "maya"
+        dir = tmp_path
+
+        def wait_checkpoint(self, seconds):
+            raise pt.Refused("no checkpoint in 12 s")
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            assert args[0] == "respond"
+            return {"outcome": "artifact"}
+    monkeypatch.setattr(adj.wire, "pending", lambda home, me, kind: [("deal-0123456789abcdef", tmp_path / "req.json")])
+    monkeypatch.setattr(adj, "named_key", lambda home: "k")
+    monkeypatch.setattr(adj.wire, "send", lambda home, to, deal_id, kind, f: sent.append(kind))
+    assert adj.answer_requests(tmp_path, P(), "maya", "buyer", lambda *_: None) == ["deal-0123456789abcdef"]
+    assert sent == ["answer-buyer"]
