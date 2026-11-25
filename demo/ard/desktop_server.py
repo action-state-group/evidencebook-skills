@@ -533,7 +533,7 @@ def ard_show_card() -> None:
     p, name = _own()
     p.stamp()
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
-    print(f"{name}: its own History card, as of its checkpoint at {as_of['anchor_time']}")
+    print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
 
 

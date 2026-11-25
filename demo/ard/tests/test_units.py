@@ -373,11 +373,11 @@ def test_the_witness_time_is_the_receipts_own_iat():
 
 @pytest.mark.parametrize("verdict,half,receipts,expect", [
     ("VALID", {"status": "verified"}, 1, ["  Signed by both sides: the other side's half verifies (capsulectl deal verify).",
-                                          "  Time-stamped by Action State's witness at 2026-11-25T15:25:16Z."]),
+                                          "  Time-stamped by Action State's witness at " + screens.local_time("2026-11-25T15:25:16Z", date=True) + "."]),
     ("VALID", None, 0, ["  The other side's half is not in this copy.",
                         "  Not time-stamped yet: the next checkpoint sends it to Action State's witness."]),
     ("INVALID", {"status": "verified"}, 1, ["  This copy did not verify (capsulectl deal verify: INVALID).",
-                                            "  Time-stamped by Action State's witness at 2026-11-25T15:25:16Z."]),
+                                            "  Time-stamped by Action State's witness at " + screens.local_time("2026-11-25T15:25:16Z", date=True) + "."]),
 ])
 def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, half, receipts, expect):
     # Sherlock2's what-confirmation on #242: "Signed by both sides" only when deal verify passes on the whole copy;
@@ -465,3 +465,17 @@ def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
             raise buyer.pt.Refused("stop here")
     with pytest.raises(receipt.ReceiptError, match="stop here"):
         receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+
+
+def test_times_show_in_local_time_with_the_zone(monkeypatch):
+    # run finding F7 (2026-11-25): a person reads local time; the records keep UTC
+    import time
+    monkeypatch.setenv("TZ", "America/Chicago")
+    time.tzset()
+    try:
+        assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
+        assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
+        assert screens.local_time("not a time") == "not a time"
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()

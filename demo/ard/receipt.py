@@ -56,7 +56,7 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     except pt.Refused as exc:
         return f"{name}: its receipt for deal {deal_id[5:13]} is not ready yet: {exc}"
     report = rep.get("report", rep)
-    lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {report.get('as_of', '')})"]
+    lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
     for row in report.get("rows", []):
         what = ROWS.get(row["id"], row["id"])
         status = STATUS.get(row.get("status", ""), row.get("status", ""))
@@ -105,7 +105,7 @@ def proof_lines(p: pt.Party, deal_id: str) -> list[str]:
             when = witness_time(json.loads(Path(out).read_text()))
     except (pt.Refused, OSError, ValueError):
         when = ""
-    lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {when}." if when else
+    lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)}." if when else
                  f"  Not time-stamped yet: the next checkpoint sends it to {pt.WITNESS_NAME}.")
     return lines
 

@@ -104,7 +104,7 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
         return ev
     ev.read, ev.card = r, r.card
     ev.ok("History card", f"{pt.CARD_DERIVATION}, signed by {r.signer[:8]}… (the key the commitment names), "
-                          f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {r.anchor_time}")
+                          f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {screens.local_time(r.anchor_time, date=True)}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
     elif r.witness_status in ("withheld", ""):  # none carried, or none reported: no verb hands a buyer one (#891)

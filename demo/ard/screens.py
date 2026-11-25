@@ -47,6 +47,18 @@ def seller_credit_note(price_msat: int) -> str:
             "its wallet provider may deduct a receiving fee.")
 
 
+def local_time(iso: str, date: bool = False) -> str:
+    """A record's UTC time as a person reads it: this Mac's local time with its zone ("12:16:32 CST"), with the date
+    when ``date`` is set ("2026-11-25 12:16:32 CST"). The records keep UTC; only what is shown changes (run finding F7,
+    2026-11-25). Anything that is not an ISO time is shown as it is."""
+    from datetime import datetime
+    try:
+        t = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+    except (ValueError, AttributeError):
+        return iso
+    return t.strftime(("%Y-%m-%d " if date else "") + "%H:%M:%S %Z")
+
+
 def msat(n: int) -> str:
     return f"{n:,} msat"
 
@@ -92,7 +104,7 @@ def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None
     decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
     ruled = own_ruling(a)
     if a.verdict == "NO" and ruled:
-        when = (ruled.get("at") or "")[:10]
+        when = local_time(ruled.get("at") or "", date=True).split(" ")[0] if ruled.get("at") else ""
         line = (f"NO: you hold a ruling against this seller (deal {ruled['deal_id'][5:13]}, delivery not met, ruled {when}). "
                 "Your rules block a seller you hold a ruling against for 180 days.")
         if against:
