@@ -176,7 +176,7 @@ records its count, and its denominator where one exists.
 | `stake.covers_deal` | stake | | collateral ≥ the deal, in the same band unit | no stake, a stake on a rail `trust_roots.rails` does not pin, or a different unit | |
 | `card.band_history_or_stake` | card | `k`, `step_decades`, `max_adverse_permille` | the deal is within the earned band plus `step_decades` decades, or a stake on a pinned rail covers it (§3.1) | no covering stake, and the card is not verified or carries no per-band counts | |
 | `card.open_disputes` | card | `max` | open disputes raised about the counterparty ≤ `max` (§3.3) | card not verified, or it carries no dispute tally | open / all received |
-| `card.disputes_against` | card | `max` | disputes others raised about the counterparty that were decided against it ≤ `max` (§3.3) | card not verified, or it carries no dispute tally or no decided disputes (§3.3) | against / decided |
+| `card.disputes_against` | card | `max` | disputes others raised about the counterparty that were decided against it ≤ `max` (§3.3) | card not verified, or it carries no dispute tally, or the input gives its received disputes without `decided` (§3.3) | against / decided |
 | `card.not_stapled` | card | | the card was asked for, not stapled to the holder's own message (§3.6) | card not verified | |
 | `card.witness_label` | card | | the verifier's label for the card's log is `witnessed` (§3.7) | card not verified | |
 | `card.log_key_accepted` | card | | the caller accepts the card's `checkpoint_key` as the log key for this responder (§3.7) | card not verified, or the caller has not decided | |
