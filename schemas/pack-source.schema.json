@@ -416,6 +416,7 @@
                   "stake.covers_deal",
                   "card.band_history_or_stake",
                   "card.open_disputes",
+                  "card.disputes_against",
                   "card.not_stapled",
                   "card.self_reported_served_periods",
                   "card.referee_verdicts",
@@ -459,6 +460,11 @@
                     "record"
                   ]
                 }
+              },
+              "on_unread": {
+                "enum": [
+                  "record"
+                ]
               },
               "ask": {
                 "type": "object"
