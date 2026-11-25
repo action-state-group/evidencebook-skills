@@ -8,19 +8,19 @@ Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evide
 
 ## What you will see
 
-Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 12 sample deals, all held, and no disputes. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
+Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Alder starts with 15 sample deals and Kestrel with 10, all held, and no disputes: a longer track record against half the price. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
-2. **History cards.** Each seller's card: 12 deals, every one went as agreed, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
+2. **History cards.** Alder's card: 15 deals, every one went as agreed, no disputes; Kestrel's: 10 deals, the same. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
 
 3. **Deal 1.** Both sellers are "Good to buy"; Maya picks Kestrel, the cheaper one, and pays 1,000 msat (a dialog asks you first). Kestrel's own delivery record says 150 of 200 badges were shipped. Maya disputes the delivery.
 
 4. **The adjudicator.** The adjudicator asks each side for its books, and each side's agent answers on its own: its own book and the copy it holds of the other side's. The adjudicator's window shows the case and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
 
-5. **Deal 2.** Kestrel's card now counts 13 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
+5. **Deal 2.** Kestrel's card now counts 11 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
 
-The registry, the seller sites and the 24 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
+The registry, the seller sites and the 25 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
 
 ## What you need
 
@@ -261,7 +261,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
    **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …". If it refuses, it says what to stop.
 
-2. Make the sample history. This is set-up: run it before anyone watches, at least two minutes before you open the windows. It takes about a minute: 12 sample deals per seller, with contest windows of seconds, and one witness stamp per seller. Each card counts its deals held from the first stamp after their windows end, which each seller's window takes as it opens; a window opened sooner waits for that minute and says so.
+2. Make the sample history. This is set-up: run it before anyone watches, at least two minutes before you open the windows. It takes about a minute: 15 sample deals for Alder and 10 for Kestrel, with contest windows of seconds, and one witness stamp per seller. Each card counts its deals held from the first stamp after their windows end, which each seller's window takes as it opens; a window opened sooner waits for that minute and says so.
 
    ```
    (cd demo/ard && ../../.venv/bin/python demo.py seed)
@@ -294,7 +294,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 6. If the windows are still not tiled: allow the access, click Maya's window, then by hand: Window, Move & Resize, Quarters.
 
 7. Click Trust and Execute in all four windows, in any order.
-   **Expect:** Alder and Kestrel each say 12 deals, all held; Maya and the adjudicator's assistant only say they are ready.
+   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya and the adjudicator's assistant only say they are ready.
 
 8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
@@ -324,7 +324,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** for each: "History card: 12 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 12 deals are sample history the operator made before this run." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
+   **Expect:** Alder: "History card: 15 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 15 deals are sample history the operator made before this run." Kestrel: the same with 10 deals and "Its first 10 deals …". The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
 
 4. Type.
 
@@ -332,7 +332,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Assess both sellers.
    ```
 
-   **Expect:** both "GO: … is within this pack's limit for it", Kestrel at 1,000 msat and Alder at 2,000 msat.
+   **Expect:** both "GO: … is within this pack's limit for it", Kestrel at 1,000 msat and Alder at 2,000 msat. Kestrel is half the price with 10 deals on its card; Alder has 15. Both pass Maya's rules.
 
 5. Type.
 
@@ -381,7 +381,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 12 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
+    **Expect:** "11 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 10 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type:
 
