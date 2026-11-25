@@ -10,7 +10,9 @@ It needs the network and runs only with ``ARD_E2E=1`` (CI's ard-demo job sets it
 the test, as ``demo.py run --auto`` does: never on a real rail."""
 from __future__ import annotations
 
+import json
 import os
+import re
 import time
 
 import pytest
@@ -169,6 +171,12 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     html = page.read_text()
     assert page.stat().st_size > 10000 and "<html" in html.lower()
     assert '"status":"verified","witness":"Action State\'s witness"' in html, "the page carries the witness time capsulectl verified"
+    # #273: the page carries its bundle, so `capsulectl verify --bundle RECEIPT.html` checks it as capsulectl's help
+    # says, and finds the same bundle the page's own verify report names.
+    checked = w["maya"].verify(page)
+    assert checked["verdict"] == "VALID", checked
+    carried = json.loads(re.search(r"capsulectlDealPage = Object\.freeze\((.*?)\);\n", html).group(1))
+    assert checked["bundle_digest"] == carried["verifier_report"]["bundle_digest"]
 
 
 def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(world):
