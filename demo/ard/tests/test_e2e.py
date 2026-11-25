@@ -304,3 +304,45 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
         return t if t.get("delivered") and not t.get("pending") else None
     done = _until(delivered, 420, step=10)
     assert done, (failed, ticks[-3:])
+
+
+def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, monkeypatch):
+    """evidencebook#890: with ``ARD_LIMIT_MSAT`` set, Maya's profile pins capsule-engine's Everyday Rules
+    (``guard check --limits``) as its rules checker, and capsulectl's ``deal check`` runs them on the payment, checked on
+    her offer before it is sent. Over her limit, the order is held: one question that lists every reason, with
+    capsulectl's card under it. Don't buy seals her no and cancels the unsent
+    offer, so Alder's book is as it was; Buy anyway seals her yes on the card she saw, and the order is sent and paid."""
+    import buyer
+    import flow
+    import pay
+    import screens
+    import wire
+
+    w = world
+    w["agents"]["alder"].stop()  # an earlier test may have closed its window: open it again
+    w["agents"]["alder"] = flow.SellerAgent(w["home"], "alder")
+    seller = w["agents"]["alder"].party
+    a = _assess(w, w["maya"])["alder"][1]
+    assert a.verdict == "GO"
+    limit = a.price_msat // 2  # this order alone is over it
+    monkeypatch.setenv("ARD_LIMIT_MSAT", str(limit))
+    deals, offers = len(seller.deals()), wire.pending(w["home"], "alder", "offer")
+    asked = []
+
+    def answer(how):
+        return lambda q: asked.append(q) or how
+    assert buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
+                              "Pay (test)", answer("no"), lambda *_: None, simulated=True) is None
+    q = asked[-1]
+    assert q.held is not None and (q.yes, q.no) == ("Buy anyway", "Don't buy")
+    over = f"over your per-order limit: this order {a.price_msat:,} msat, limit {limit:,} msat"
+    assert over in q.held.reasons and "per_order" in q.held.limits
+    assert f"{screens.CARD_HEAD}\nPAUSED FOR YOU" in q.text  # capsulectl's card, in full, under the question
+    assert len(seller.deals()) == deals and wire.pending(w["home"], "alder", "offer") == offers
+
+    made = buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
+                              "Pay (test)", answer("yes"), lambda *_: None, simulated=True)
+    assert made is not None
+    assert over in asked[-1].held.reasons
+    deal, _ = made
+    assert buyer.shipped(buyer.await_delivery(w["home"], w["maya"], deal))

@@ -168,27 +168,142 @@ def test_a_case_reads_the_silent_sellers_own_record_from_the_buyers_held_copy(tm
     assert flow.case_lines(c, names)[-1] == "  ruling recorded: not met, against Kestrel Print (ruling abababab…)"
 
 
-def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
-    # evidencebook-skills#289: the dialog comes first; a no sends nothing, and a yes opens the deal only then
-    calls = []
-    monkeypatch.setattr(buyer, "open_deal", lambda *a, **k: calls.append("open") or buyer.Deal("deal-01", "alder", "k", 1, "o"))
-    monkeypatch.setattr(buyer, "check_payment", lambda *a: calls.append("check") or {"proceed": True, "check_id": "c"})
+def _pay_world(monkeypatch, check):
+    """open_and_pay with every party and rail step recorded in ``calls``; the check returns ``check``."""
+    calls, sealed = [], []
+    monkeypatch.delenv("ARD_LIMIT_MSAT", raising=False)
+    monkeypatch.setattr(buyer, "draft_deal", lambda *a, **k: calls.append("draft") or buyer.Deal("deal-01", "alder", "k", 1000, "o"))
+    monkeypatch.setattr(buyer, "send_deal", lambda *a, **k: calls.append("send"))
+    monkeypatch.setattr(buyer, "cancel_draft", lambda *a, **k: calls.append("cancel"))
+    monkeypatch.setattr(buyer, "check_payment", lambda *a: calls.append("check") or check)
     monkeypatch.setattr(buyer, "pay", lambda *a, **k: calls.append("pay"))
 
     class Rail:
         SEALED = "simulated"
         checked_invoice = staticmethod(lambda msat: calls.append("invoice") or type("I", (), {"payment_hash": "h"})())
         pay_invoice = staticmethod(lambda inv: calls.append("paid") or type("P", (), {"reference": "r"})())
-    who = type("M", (), {"name": "maya"})()
+
+    class Who:
+        name = "maya"
+
+        def approve(self, deal_id, check, choice, said):
+            sealed.append((choice, said))
+    return calls, sealed, Rail, Who()
+
+
+def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
+    # evidencebook-skills#289: the payment is checked on the unsent offer and the dialog comes first; a no sends nothing
+    # (the unsent offer is cancelled), and a yes sends the offer only then
+    calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": True, "check_id": "c"})
     a = assessment("GO")
+    shown = []
 
     def ask(answer):
-        return lambda text: calls.append("ask") or answer
+        return lambda q: calls.append("ask") or shown.append(q) or answer
     assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(False), print, simulated=True) is None
-    assert calls == ["ask"]
+    assert calls == ["draft", "invoice", "check", "ask", "cancel"]
+    assert (shown[0].title, shown[0].text, shown[0].yes) == ("Approve this payment", "Pay?", "Pay")  # no card: a pass
     calls.clear()
     assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(True), print, simulated=True)
-    assert calls == ["ask", "open", "invoice", "check", "paid", "pay"]
+    assert calls == ["draft", "invoice", "check", "ask", "send", "paid", "pay"]
+    assert sealed == []  # a check that passed needs no answer sealed
+
+
+def test_a_paused_payment_shows_and_seals_the_card(monkeypatch):
+    # Sherlock2's ruling on evidencebook#890 (Option A): the card the answer is sealed with is on the screen, in full
+    card = "PAUSED FOR YOU\nPay 1,000 msat to Alder?"
+    calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": False, "check_id": "c", "card": card})
+    shown = []
+    assert buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?",
+                              lambda q: shown.append(q) or "yes", print, simulated=True)
+    assert shown[0].text == f"Pay?\n\n{screens.CARD_HEAD}\n{card}"
+    assert sealed == [("proceed", f"Approve this payment\n{shown[0].text}\nAnswer: Pay")]
+
+
+def test_only_a_no_to_a_paused_payment_is_sealed(monkeypatch):
+    # #239 finding 11: no answer is never sealed as a decline; a no is the person's hold
+    for how, want in (("no", [("hold", "Answer: Cancel")]), ("no_answer", []), ("not_shown", []), (False, [])):
+        calls, sealed, Rail, who = _pay_world(monkeypatch, {"proceed": False, "check_id": "c", "card": "C"})
+        assert buyer.open_and_pay(None, who, "alder", "k", assessment("GO"), {}, Rail, "Pay?", lambda q: how, print,
+                                  simulated=True) is None
+        assert calls[-1] == "cancel" and "send" not in calls and "paid" not in calls
+        assert [(c, s.rsplit("\n", 1)[1]) for c, s in sealed] == want
+
+
+def _rules(*findings, verdict="escalate", limit=2000):
+    caps = [{"id": "r05-spending-limits#per_purchase", "check": "caps/5.1.0", "verdict": "pass", "limit": limit, "value": 1000},
+            {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "pass", "limit": limit, "value": 1000}]
+    over = {f["id"]: f for f in findings}
+    return {"status": "evaluated", "verdict": verdict, "findings": [over.pop(c["id"], c) for c in caps] + list(over.values())}
+
+
+WEEKLY_OVER = {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail", "limit": 2000, "value": 3000,
+               "reason": "the 7-day total with this purchase is over the 7-day limit you set"}
+ORDER_OVER = {"id": "r05-spending-limits#per_purchase", "check": "caps/5.1.0", "verdict": "fail", "limit": 2000, "value": 3000}
+NEW_MERCHANT = {"id": "r06-new-merchant", "check": "counterparty_seen_before/4.0.0", "verdict": "fail",
+                "reason": "no earlier payment to this merchant from this profile"}
+ORDINARY = {"id": "r02-ordinary-purchase", "check": "counterparty_seen_before/4.0.0", "verdict": "fail",
+            "reason": "no earlier payment to this merchant from this profile"}
+
+
+def test_the_held_order_question_has_a_layout_for_each_hold():
+    import limits
+    cases = {
+        "weekly only": ([WEEKLY_OVER], "This order goes over your weekly limit",
+                        ["Spent this week: 2,000 msat", "With this order: 3,000 msat", "Your weekly limit: 2,000 msat"]),
+        "per-order only": ([ORDER_OVER], "This order goes over your per-order limit",
+                           ["This order: 3,000 msat", "Your per-order limit: 2,000 msat"]),
+        "both limits": ([WEEKLY_OVER, ORDER_OVER], screens.HELD_TITLE,
+                        ["Over your per-order limit: this order 3,000 msat, limit 2,000 msat",
+                         "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat"]),
+        "another rule only": ([NEW_MERCHANT, ORDINARY], screens.HELD_TITLE,
+                              ["No earlier payment to this merchant from this profile"]),
+        "a limit and another rule": ([WEEKLY_OVER, NEW_MERCHANT], screens.HELD_TITLE,
+                                     ["Over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+                                      "No earlier payment to this merchant from this profile"]),
+    }
+    for name, (findings, title, lines) in cases.items():
+        held = limits.read({"rules": _rules(*findings)}, 2000)
+        got_title, text = screens.hold_question("badges", 1000, held.limits, held.reasons, held.over_limit, "Alder")
+        assert got_title == title, name
+        body = text.split("\n")
+        assert body[0] == "badges from Alder for 1,000 msat. Nothing has been paid yet.", name
+        assert body[1:-1] == lines, name  # every reason, and a DO rule (r02) is not one
+        assert body[-1] in (screens.LIMIT_FOOT, screens.RULES_FOOT), name
+
+
+def test_the_limit_is_read_from_the_sealed_check():
+    import limits
+    assert limits.read({"rules": _rules(verdict="allow")}, 2000) is None  # within the limit
+    assert limits.read({"rules": {"status": "not_configured"}}, None) is None  # no limit set
+    with pytest.raises(limits.LimitError, match="was not checked"):
+        limits.read({"rules": {"status": "not_evaluated", "reason": "the rules checker refused the record"}}, 2000)
+    with pytest.raises(limits.LimitError, match="did not apply your spending limit"):
+        limits.read({"rules": _rules(verdict="allow", limit=50000)}, 2000)  # the pack's own figure: the file was not read
+
+
+def test_a_reason_reads_amounts_with_commas_and_units():
+    import limits
+    # Steven's 2026-11-24 run, #272 item 1: never a bare "2000"
+    assert limits.words({"id": "r22-unusual-counterparty-behaviour", "check": "upfront_amount/1.1.0", "verdict": "fail",
+                         "reason": "the up-front amount 2000 is above the share limit (25%)"}) == \
+        "the up-front amount 2,000 msat is above the share limit"
+    assert limits.words(NEW_MERCHANT) == "no earlier payment to this merchant from this profile"
+    assert limits.words({"id": "r27-x", "verdict": "fail", "reason": "r27 in 7 days"}) == "r27 in 7 days"
+
+
+def test_the_limit_comes_from_the_environment(monkeypatch):
+    import limits
+    monkeypatch.delenv("ARD_LIMIT_MSAT", raising=False)
+    assert limits.limit_msat() is None
+    monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
+    assert limits.limit_msat() == 2000
+    for bad in ("0", "-5", "2k"):
+        monkeypatch.setenv("ARD_LIMIT_MSAT", bad)
+        with pytest.raises(limits.LimitError):
+            limits.limit_msat()
+    assert limits.limits_profile(2000) == {"format": "policy-profile/v0", "packs": [{"pack": "asg/everyday", "parameters": {
+        "caps": {"caps_minor": {"money.purchase": 2000}, "per_action_minor": {"money.purchase": 2000}}}}]}
 
 
 def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
@@ -206,6 +321,9 @@ def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
 
         def note(self, *a, **k):
             return {"record_id": "r"}
+
+        def intent(self, *a, **k):
+            return "i" * 64
     with pytest.raises(buyer.pt.Refused, match="the offer is withdrawn, nothing was paid"):
         buyer.open_deal(tmp_path, Maya(), "alder", "k", assessment("GO"), {}, lambda *_: None, me="maya")
     assert wire.pending(tmp_path, "alder", "offer") == [] and wire.pending(tmp_path, "alder", "from") == []

@@ -353,8 +353,9 @@ def ard_pick(seller: str) -> None:
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
 _PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears on the presenter's screen first and this call "
-        "blocks, for up to 10 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it "
-        "waits. Only after Pay does it open the deal with the seller (the agreement names the deal's adjudicator and "
+        "blocks, for up to 10 minutes, until the presenter answers it (Pay or Cancel; Buy anyway or Don't buy when the "
+        "Everyday Rules hold the order): do not retry or call it again while it waits. Only after that yes does it send "
+        "the order to the seller (the agreement names the deal's adjudicator and "
         "Action State's witness) and pay it. Refused "
         "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
         "record says it shipped.")
@@ -379,22 +380,28 @@ def ard_pay(seller: str) -> None:
                 + ("over Lightning, which moves real money?" if _real() else "on the simulated rail, where no money moves?")
                 + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
                 "your turn, and call ard_pay again only after she says yes.")
-        answer: dict[str, str] = {}
+        answer: dict = {}
 
-        def ask(text: str) -> bool:
+        def ask(q: buyer.Question) -> str:
+            answer["q"] = q
             if gate_off():
-                return True
-            answer["how"] = dialog_answer("Approve this payment", text, "Pay")
-            return answer["how"] == "yes"
+                answer["how"] = "yes"
+            else:
+                answer["how"] = dialog_answer(q.title, q.text, q.yes, q.no)
+            return answer["how"]
         made = buyer.open_and_pay(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary, ask,
-                                  print, simulated=not _real(), said=dialog_text)
+                                  print, simulated=not _real(), said=dialog_text, rail_words=words)
+        held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)
             if how == NO:
                 s.declined.add(key)
+            reasons = (" " + screens.rules_held(held.reasons)) if held is not None else ""
             raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
-                               "was paid. Do not retry on your own; if Maya asks again, confirm with her first."
+                               "was paid." + reasons + " Do not retry on your own; if Maya asks again, confirm with her first."
                                + ("" if how == NO else " Never say she declined it."))
+        if held is not None:
+            print(screens.rules_approved(held.reasons, held.over_limit))
         deal, payment = made
         s.deals.append(deal)
         who = ("the simulated rail paid it (no money moved)" if not _real() else "the buyer's wallet paid it")

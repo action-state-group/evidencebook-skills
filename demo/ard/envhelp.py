@@ -43,6 +43,9 @@ VARS = (
         "/path/to/seller-wallet", ("local",), "dir"),
     Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
+    Var("ARD_LIMIT_MSAT", "Maya's spending limit in msat, for one order and over 7 days: the Everyday Rules (capsule-engine "
+        "guard check --limits) run as her rules checker at each payment's deal check, and an order over it, or held by "
+        "another rule, waits for Buy anyway; unset, no limit", "2000", ()),
     Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); by default each checkpoint goes to "
         "Action State's hosted witness, witness.agentactioncapsule.org, which receives hashes only", "off", ()),
 )
