@@ -108,7 +108,7 @@ def dialog_text(text: str) -> str:
 NO, NO_ANSWER, NOT_SHOWN = "no", "no_answer", "not_shown"
 #: What the person is told when the dialog did not end in yes (Sherlock2's words for no answer, #239 finding 11).
 NOT_YES = {NO: "the presenter declined it",
-           NO_ANSWER: "No answer in time",
+           NO_ANSWER: "no answer in time",
            NOT_SHOWN: "the dialog could not be shown"}
 
 

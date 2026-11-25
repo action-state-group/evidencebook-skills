@@ -353,3 +353,47 @@ def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_pat
     with pytest.raises(SystemExit, match="did not finish"):
         seed.seed(tmp_path, say=said.append)
     assert failed and not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
+def _receipt(iat: int) -> str:
+    """A COSE_Sign1 witness receipt whose protected header carries CWT claims {6: iat} (label 15)."""
+    import base64
+    protected = bytes([0xa2, 0x01, 0x26, 0x0f, 0xa1, 0x06, 0x1a]) + iat.to_bytes(4, "big")
+    sign1 = bytes([0xd2, 0x84, 0x40 + len(protected)]) + protected + bytes([0xa0, 0xf6, 0x41, 0x00])
+    return base64.b64encode(sign1).decode()
+
+
+def test_the_witness_time_is_the_receipts_own_iat():
+    import receipt
+    assert receipt.witness_time({"witness_receipts": [{"receipt": _receipt(1795620316)}]}) == "2026-11-25T15:25:16Z"
+    assert receipt.witness_time({"witness_receipts": []}) == ""
+
+
+@pytest.mark.parametrize("verdict,half,receipts,expect", [
+    ("VALID", {"status": "verified"}, 1, ["  Signed by both sides: the other side's half verifies (capsulectl deal verify).",
+                                          "  Time-stamped by Action State's witness at 2026-11-25T15:25:16Z."]),
+    ("VALID", None, 0, ["  The other side's half is not in this copy.",
+                        "  Not time-stamped yet: the next checkpoint sends it to Action State's witness."]),
+    ("INVALID", {"status": "verified"}, 1, ["  This copy did not verify (capsulectl deal verify: INVALID).",
+                                            "  Time-stamped by Action State's witness at 2026-11-25T15:25:16Z."]),
+])
+def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, half, receipts, expect):
+    # Sherlock2's what-confirmation on #242: "Signed by both sides" only when deal verify passes on the whole copy;
+    # "Time-stamped" only with a named witness's receipt for the checkpoint the copy rests on, at the witness's time
+    import json
+    import receipt
+
+    class P:
+        def bundle(self, deal_id):
+            return tmp_path / "copy.json"
+
+        def verify(self, copy):
+            return {"verdict": verdict, "extensions": [{"counterparty_half": half}] if half else []}
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            out = args[args.index("--out") + 1]
+            Path(out).write_text(json.dumps({"witness_receipts": [{"receipt": _receipt(1795620316)}] * receipts}))
+            return {"named_witness_receipts": receipts}
+    from pathlib import Path
+    assert receipt.proof_lines(P(), "deal-0123456789abcdef") == expect

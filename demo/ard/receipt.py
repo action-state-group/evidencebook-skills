@@ -62,6 +62,7 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
         elif row.get("value"):
             line += f" ({'met' if row['value'] == 'met' else 'not met'})"
         lines.append(line)
+    lines += proof_lines(p, deal_id)
     if seller and real:
         owed = next((r.get("owed", {}).get("amount_minor") for r in report.get("rows", []) if r["id"] == pt.PAID), None)
         if owed:
@@ -69,6 +70,92 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     if not real:
         lines.append("  Test money: this deal's payment was on a simulated rail. No real money moved.")
     return "\n".join(lines)
+
+
+def proof_lines(p: pt.Party, deal_id: str) -> list[str]:
+    """What the party's own copy proves, in the receipt's words (Sherlock2's what-confirmation on #242):
+
+    - "Signed by both sides" only when ``capsulectl deal verify --bundle`` passes on the whole copy and its
+      ``counterparty_half`` verifies (evidencebook #885-#887); never "countersigned".
+    - "Time-stamped by Action State's witness at <time>" only when ``capsulectl deal checkpoint proof`` holds a receipt
+      from a witness the agreement names for the checkpoint the copy rests on, which covers the copy's last record; the
+      time is the witness's own (the receipt's ``iat``)."""
+    try:
+        copy = p.bundle(deal_id)
+        checked = p.verify(copy)
+    except pt.Refused as exc:
+        return [f"  This copy is not ready to check yet: {exc}"]
+    half = next((e.get("counterparty_half") for e in checked.get("extensions", []) if e.get("counterparty_half")), None)
+    if checked.get("verdict") != "VALID":
+        lines = [f"  This copy did not verify (capsulectl deal verify: {checked.get('verdict')})."]
+    elif half and half.get("status") == "verified":
+        lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
+    else:
+        lines = ["  The other side's half is not in this copy."]
+    when = ""
+    try:
+        out = p.tmp("proof.json")
+        got = p.run("checkpoint", "proof", "--deal", deal_id, "--copy", str(copy), "--out", out)
+        if got.get("named_witness_receipts"):
+            when = witness_time(json.loads(Path(out).read_text()))
+    except (pt.Refused, OSError, ValueError):
+        when = ""
+    lines.append(f"  Time-stamped by {pt.WITNESS_NAME} at {when}." if when else
+                 f"  Not time-stamped yet: the next checkpoint sends it to {pt.WITNESS_NAME}.")
+    return lines
+
+
+def witness_time(proof: dict) -> str:
+    """The witness's own time on the first receipt of a ``checkpoint proof`` file: the ``iat`` claim (6) in the CWT
+    claims (header label 15, RFC 9597) of the COSE receipt's protected header, as UTC; "" when it carries none."""
+    import base64
+    from datetime import datetime, timezone
+    for r in proof.get("witness_receipts", []):
+        raw = base64.b64decode(r["receipt"] + "=" * (-len(r["receipt"]) % 4))
+        sign1, _ = _cbor(raw, 0)
+        protected = sign1[0] if isinstance(sign1, list) else b""
+        header, _ = _cbor(protected, 0) if protected else ({}, 0)
+        claims = header.get(15, {}) if isinstance(header, dict) else {}
+        iat = claims.get(6) if isinstance(claims, dict) else None
+        if isinstance(iat, int):
+            return datetime.fromtimestamp(iat, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return ""
+
+
+def _cbor(b: bytes, i: int):
+    """A small CBOR reader (RFC 8949) for a COSE receipt's header: integers, byte and text strings, arrays, maps, tags."""
+    major, info = b[i] >> 5, b[i] & 31
+    i += 1
+    if info < 24:
+        n = info
+    elif info in (24, 25, 26, 27):
+        size = 1 << (info - 24)
+        n, i = int.from_bytes(b[i:i + size], "big"), i + size
+    else:
+        raise ValueError("indefinite or reserved CBOR length")
+    if major == 0:
+        return n, i
+    if major == 1:
+        return -1 - n, i
+    if major in (2, 3):
+        v = b[i:i + n]
+        return (v if major == 2 else v.decode()), i + n
+    if major == 4:
+        out = []
+        for _ in range(n):
+            v, i = _cbor(b, i)
+            out.append(v)
+        return out, i
+    if major == 5:
+        m = {}
+        for _ in range(n):
+            k, i = _cbor(b, i)
+            v, i = _cbor(b, i)
+            m[k if not isinstance(k, (list, dict)) else str(k)] = v
+        return m, i
+    if major == 6:
+        return _cbor(b, i)
+    return None, i  # simple values and floats: not read here
 
 
 def render(bundle: dict, output: dict) -> str:
