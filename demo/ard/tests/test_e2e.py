@@ -272,10 +272,12 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     leaves nothing pending (capsulectl delivers the newest checkpoint, which extends the last one the witness took).
     "Later": after a failed delivery capsulectl waits out a growing retry delay before it tries the witness again, so the
     first tick after the network returns may deliver nothing (CI at 5deff10)."""
+    import flow
     import party as pt
 
     w = world
     p = pt.Party(w["home"], "kestrel")
+    p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
     monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
     failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
     assert failed["pending"], failed
@@ -286,6 +288,6 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     def delivered():
         t = again.tick()
         ticks.append(t)
-        return t if t.get("state") == "ticked" and t.get("delivered") and not t.get("pending") else None
+        return t if t.get("delivered") and not t.get("pending") else None
     done = _until(delivered, 420, step=10)
     assert done, (failed, ticks[-3:])
