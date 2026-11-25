@@ -130,6 +130,15 @@ def write_atomic(path: Path, data: bytes) -> None:
     tmp.replace(path)
 
 
+#: The longest the buyer's approval dialog waits for the person (``desktop_server.approve_payment`` and
+#: ``approve_hold`` give up after it). The buyer asks only after the seller has sent its first half, then pays, so the
+#: seller waits for the buyer's paid half for that long plus :data:`PAY_MARGIN_S`, the time a payment may take; a
+#: shorter wait let a person who answered near the end pay a seller that had stopped waiting (evidencebook-skills#289).
+DIALOG_GIVE_UP_S = 180
+PAY_MARGIN_S = 120
+SELLER_PAID_HALF_WAIT_S = DIALOG_GIVE_UP_S + PAY_MARGIN_S
+
+
 def wait_file(path: Path, seconds: float) -> dict:
     stop = time.time() + seconds
     while time.time() < stop:
@@ -306,7 +315,7 @@ class Seller:
         node.open_deal(schain, schain.respond(now(), f"sell {terms.item} at the listed price", verified["records"][-1]["digest"]))
         write_atomic(outbox / f"{deal_id}.s1.json", json.dumps(node.half(deal_id)).encode())
         self.say("deal opened: its terms checked, its first half sent")
-        m2 = wait_file(inbox / f"{deal_id}.m2.json", 180)
+        m2 = wait_file(inbox / f"{deal_id}.m2.json", SELLER_PAID_HALF_WAIT_S)  # outlasts the buyer's dialog
         deals._reconcile(node, m2, maya)
         self.say("the buyer's records after payment checked and stored")
         node.ask_half(deal_id)

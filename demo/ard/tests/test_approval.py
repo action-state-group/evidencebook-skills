@@ -50,7 +50,7 @@ def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
     ds.approve_payment("Pay X")
-    assert "giving up after 180" in seen[0]
+    assert f"giving up after {ds.parties.DIALOG_GIVE_UP_S}" in seen[0]
 
 
 def test_summary_wording_names_the_rail():
