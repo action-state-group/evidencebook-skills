@@ -113,7 +113,8 @@ NOT_YES = {NO: "the presenter declined it",
 
 
 #: How long a dialog waits for the presenter before it gives up (run finding F6a, 2026-11-25: 3 minutes was too short
-#: when a person first has to find the dialog). The window's MCP tool timeout (open-windows.py) is longer.
+#: when a person first has to find the dialog). The window's MCP tool timeout (open-windows.py TOOL_TIMEOUT_S) covers
+#: it and the rest of the longest call, ard_pay.
 DIALOG_GIVE_UP_S = 600
 
 
@@ -438,6 +439,7 @@ def ard_seller_activity() -> None:
         print("  " + line)
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
+    print("  " + screens.SAMPLE_NOTE)
 
 
 # -- the adjudicator ----------------------------------------------------------------------------------
@@ -535,6 +537,8 @@ def ard_show_card() -> None:
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
     print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
+    if ROLE in SELLERS:
+        print("  " + screens.SAMPLE_NOTE)
 
 
 def _own_deal() -> tuple[pt.Party, str, str | None]:

@@ -24,6 +24,9 @@ MAX_FEE_MSAT = 1000
 _INVOICE = re.compile(r"\bln(?:bc|tb|bcrt)[0-9a-z]+\b")
 
 
+#: How long the real rail waits for a payment to finish.
+PAY_WAIT_S = 180
+
 class RailError(RuntimeError):
     pass
 
@@ -214,7 +217,7 @@ class LocalRail(Rail):
 
     def pay_invoice(self, inv: Invoice) -> Payment:
         invoice, amount_msat = inv.text, inv.amount_msat
-        sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=180)
+        sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=PAY_WAIT_S)
         status = str(sent.get("status", ""))
         if status != "succeeded":
             raise RailError(f"the buyer's wallet did not pay: status {status or 'unknown'}")

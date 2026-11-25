@@ -354,6 +354,8 @@ def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_pat
     with pytest.raises(SystemExit, match="did not finish"):
         seed.seed(tmp_path, say=said.append)
     assert failed and not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
+
+
 def _receipt(iat: int) -> str:
     """A COSE_Sign1 witness receipt whose protected header carries CWT claims {6: iat} (label 15)."""
     import base64
@@ -467,18 +469,15 @@ def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
         receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
-def test_times_show_in_local_time_with_the_zone(monkeypatch):
+def test_times_show_in_local_time_with_the_zone(request, monkeypatch):
     # run finding F7 (2026-11-25): a person reads local time; the records keep UTC
     import time
     monkeypatch.setenv("TZ", "America/Chicago")
     time.tzset()
-    try:
-        assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
-        assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
-        assert screens.local_time("not a time") == "not a time"
-    finally:
-        monkeypatch.delenv("TZ")
-        time.tzset()
+    request.addfinalizer(time.tzset)  # runs after monkeypatch puts TZ back, so later tests see the restored zone
+    assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
+    assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
+    assert screens.local_time("not a time") == "not a time"
 
 
 def _receipt_without_time() -> str:
@@ -523,9 +522,41 @@ def test_a_stamped_receipt_without_a_time_still_says_time_stamped(tmp_path):
     b"\xd2\x84\x63\xff\xfe\xfd",      # text that is not UTF-8
     b"\xd2\x9f",                      # an indefinite-length array
     b"\xd2\x84\x01\x02\x03\x04",      # the first member is not a byte string
+    # a time no clock can show: CWT claims {6: 2**64 - 1}
+    b"\xd2\x84\x4d\xa1\x0f\xa1\x06\x1b" + b"\xff" * 8 + b"\xa0\xf6\x41\x00",
 ])
 def test_a_receipt_this_reader_cannot_read_gives_no_time_and_no_error(raw):
     import base64
     import receipt
     hosted = {"ts_url": "https://witness.agentactioncapsule.org", "receipt": base64.b64encode(raw).decode()}
     assert receipt.witness_time({"witness_receipts": [hosted]}) == ""
+
+
+@pytest.mark.parametrize("role,noted", [("kestrel", True), ("maya", False)])
+def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeypatch, role, noted):
+    # the stand-in on #305: SAMPLE_NOTE is said wherever a seller's card is shown, in words as on its page
+    import desktop_server as ds
+
+    class P:
+        def stamp(self):
+            pass
+
+        def card_bundle(self, shared):
+            return None
+    monkeypatch.setattr(ds, "ROLE", role)
+    monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
+    monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
+    out = ds.ard_show_card()
+    assert (screens.SAMPLE_NOTE in out) == noted, out
+
+
+def test_the_tool_timeout_covers_the_longest_call():
+    # the stand-in on #305: ard_pay waits for the dialog, the seller's agree, the payment and the delivery; Goose must
+    # not cut it off after the money has moved
+    import importlib.util
+    import desktop_server as ds
+    import pay
+    spec = importlib.util.spec_from_file_location("open_windows", __import__("pathlib").Path(__file__).parent.parent / "goose" / "open-windows.py")
+    ow = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ow)
+    assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.PAY_WAIT_S

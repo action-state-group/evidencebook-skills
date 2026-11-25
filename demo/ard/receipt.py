@@ -133,7 +133,10 @@ def witness_time(proof: dict) -> str:
         claims = header.get(15, {}) if isinstance(header, dict) else {}
         iat = claims.get(6) if isinstance(claims, dict) else None
         if isinstance(iat, int):
-            return datetime.fromtimestamp(iat, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            try:
+                return datetime.fromtimestamp(iat, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except (OverflowError, OSError, ValueError):
+                continue  # a time no clock can show
     return ""
 
 

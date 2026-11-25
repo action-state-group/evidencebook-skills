@@ -27,7 +27,6 @@ from pathlib import Path
 
 import party as pt
 import screens
-from cast import SELLERS
 
 HERE = Path(__file__).resolve().parent
 VIEWER = "capsule-viewer-0.25.0"
@@ -165,7 +164,7 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
                  if out.get("witnesses", {}).get("status") == "pass" else None)
     view = history_input(ext.get("deals", []), name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name in SELLERS),
+    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=seller),
                                                      f"History · {label}"))
 
 

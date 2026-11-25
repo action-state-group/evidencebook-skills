@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import party as pt
+from adjudicator import CHALLENGE_DAYS
 from cast import DEALS_EACH
 
 if TYPE_CHECKING:
@@ -155,5 +156,3 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
             f"ruling and "
             f"never replaces it.")
 
-
-from adjudicator import CHALLENGE_DAYS  # noqa: E402  (after the module's names: adjudicator imports nothing of screens)

@@ -361,7 +361,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
+    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 12 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type:
 
