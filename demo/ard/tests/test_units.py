@@ -418,6 +418,7 @@ def test_the_receipt_page_is_capsulectls_own_when_it_draws_one(monkeypatch, tmp_
     # refusal falls through to the page that says it can't be drawn
     import receipt
     monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
+    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", True)
     calls = []
 
     class P:
@@ -443,3 +444,20 @@ def test_the_receipt_page_is_capsulectls_own_when_it_draws_one(monkeypatch, tmp_
                              "deal-0123456789abcdef", rail="simulated", seller=False)
     with pytest.raises(receipt.ReceiptError, match="disk full"):
         receipt.receipt_page(P("disk full"), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+
+
+def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
+    # #242: capsulectl's first v1 page says "no witness" and "not countersigned" for a witnessed two-sided deal
+    import receipt
+    assert receipt.DRAW_V1_PAGE is False
+
+    class P:
+        name = "maya"
+
+        def run(self, *args):
+            raise AssertionError("no deal report --html while the page is off")
+
+        def bundle(self, *a, **k):
+            raise buyer.pt.Refused("stop here")
+    with pytest.raises(receipt.ReceiptError, match="stop here"):
+        receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
