@@ -123,3 +123,45 @@ def test_a_payment_that_failed_before_the_send_withdraws_and_any_other_failure_d
     with pytest.raises(type(error)):
         parties.buyer_deal(maya, peer, chain, types.SimpleNamespace(pay=failing), 2000)
     assert parties.withdrawn(tmp_path / "stage" / "wire" / "alder", "d1").is_file() is withdraws
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def time(self):
+        return self.now
+
+
+def _late_order(tmp_path, monkeypatch, answer_after: float):
+    """A held order whose person answers ``answer_after`` seconds after the buyer asked the seller to deal."""
+    clock = _Clock()
+    monkeypatch.setattr(parties.time, "time", clock.time)
+    monkeypatch.setattr(parties.deals, "_reconcile", lambda *a, **k: None)
+    monkeypatch.setattr(parties, "wait_file", lambda *a, **k: {})
+    def gate(*a, **k):
+        clock.now += answer_after  # the dialog, then the person's yes
+        return None
+    monkeypatch.setattr(parties.rules, "gate", gate)
+    paid = []
+    rail = types.SimpleNamespace(pay=lambda msat: paid.append(msat) or types.SimpleNamespace(status="succeeded", reference="r"))
+    maya = types.SimpleNamespace(half=lambda d: {}, deal=lambda d: None)
+    peer = types.SimpleNamespace(home=tmp_path, id="alder")
+    return maya, peer, rail, paid
+
+
+def test_a_yes_at_the_dialogs_last_second_is_still_paid_inside_the_sellers_wait(tmp_path, monkeypatch):
+    # #289's case: the person answers just before the dialog gives up; the seller must still be waiting for the payment
+    maya, peer, rail, paid = _late_order(tmp_path, monkeypatch,
+                                         parties.rules.CHECK_TIMEOUT_S + parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
+    with pytest.raises(AttributeError):  # the stub has no seal: the steps after the payment are not under test here
+        parties.buyer_deal(maya, peer, types.SimpleNamespace(deal_id="d1"), rail, 2000, limit=2000)
+    assert paid == [2000] and not parties.withdrawn(tmp_path / "stage" / "wire" / "alder", "d1").exists()
+
+
+def test_the_buyer_never_pays_when_the_seller_may_have_stopped_waiting(tmp_path, monkeypatch):
+    # if a step ever takes longer than its bound, the buyer withdraws instead of paying a seller that may be gone
+    maya, peer, rail, paid = _late_order(tmp_path, monkeypatch, parties.SELLER_PAID_HALF_WAIT_S - parties.pay.MAX_PAY_S - parties.AFTER_PAY_S + 1)
+    with pytest.raises(parties.gn.Refused, match="too late to pay safely"):
+        parties.buyer_deal(maya, peer, types.SimpleNamespace(deal_id="d1"), rail, 2000, limit=2000)
+    assert paid == [] and parties.withdrawn(tmp_path / "stage" / "wire" / "alder", "d1").is_file()

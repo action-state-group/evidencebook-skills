@@ -137,9 +137,11 @@ DIALOG_GIVE_UP_S = 180
 DIALOG_SLACK_S = 20
 #: How long the seller waits for the buyer's paid half after sending its own first half. Under a spending limit the
 #: buyer runs the deal check and asks the person only then, and then pays, so the wait covers each of those at its
-#: own timeout, plus a minute (evidencebook-skills#289: a 180 s wait let a person who answered late pay a seller that
+#: own timeout, plus :data:`AFTER_PAY_S` (evidencebook-skills#289: a 180 s wait let a person who answered late pay a seller that
 #: had stopped waiting). An order the buyer does not pay ends the wait at once: the buyer writes :func:`withdrawn`.
-SELLER_PAID_HALF_WAIT_S = rules.CHECK_TIMEOUT_S + DIALOG_GIVE_UP_S + DIALOG_SLACK_S + pay.MAX_PAY_S + 60
+#: Time kept for what the buyer does after the payment and before the paid half is out (its seals).
+AFTER_PAY_S = 60
+SELLER_PAID_HALF_WAIT_S = rules.CHECK_TIMEOUT_S + DIALOG_GIVE_UP_S + DIALOG_SLACK_S + pay.MAX_PAY_S + AFTER_PAY_S
 
 
 def withdrawn(inbox: Path, deal_id: str) -> Path:
@@ -434,6 +436,7 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
     wire = peer.home / "stage" / "wire"
     now = lambda: datetime.now(timezone.utc)  # noqa: E731
     deal_id = chain.deal_id
+    asked_at = time.time()  # no later than the seller's own start of its wait for the paid half
     write_atomic(wire / peer.id / f"{deal_id}.m1.json", json.dumps(maya.half(deal_id)).encode())
     s1 = wait_file(wire / "maya" / f"{deal_id}.s1.json", seller_wait)
     deals._reconcile(maya, s1, peer)
@@ -444,6 +447,12 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
         except BaseException:  # the seller is waiting for a paid half that will not come: let it go now (#289)
             write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
             raise
+    if time.time() - asked_at > SELLER_PAID_HALF_WAIT_S - pay.MAX_PAY_S - AFTER_PAY_S:
+        # Never pay a seller that may stop waiting before the payment arrives: the bound above should make this
+        # unreachable, and this keeps it so if a step gets slower or a constant changes (#289).
+        write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
+        raise gn.Refused("too late to pay safely: the seller may stop waiting before the payment arrives. Nothing was "
+                         "paid; order again to try")
     try:
         payment = rail.pay(price_msat)
     except pay.NotSent:  # no money moved: let the seller go now; any other failure may have paid, so it keeps waiting
