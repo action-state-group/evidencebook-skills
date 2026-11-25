@@ -23,7 +23,7 @@ needs_ctl = pytest.mark.skipif(not os.environ.get("CAPSULECTL_DEAL"), reason="CA
 def test_each_seller_file_holds_the_terms_the_code_used_to_fix():
     for name, price in (("alder", 2000), ("kestrel", 1000)):
         s = cast.SELLERS[name]
-        assert s["price_msat"] == price and s["item"] == cast.ITEM
+        assert s["price_msat"] == price and s["item"] == "200 conference badges, delivered by Friday"
         assert s["discloses"] == {"subjects": ["checkpoints", "full_history"], "derivations": ["history_card/2"],
                                   "human_gated": False, "answers_within": "PT1H"}
     assert cast.SELLERS["kestrel"]["shipped"] == "150 of 200 badges"  # the run's story stays in the code, not the file
@@ -46,12 +46,47 @@ def test_each_seller_file_says_it_holds_placeholders_and_only_disclosure_terms_a
     "label: X\noffer: {item: x, price_msat: 5, discount: 1}\ndiscloses: {subjects: [a], derivations: [b], "
     "human_gated: false, answers_within: PT1H}\n",
     "just text\n",
+    "label: X\noffer: {item: x, price_msat: 5}\ndiscloses: {subjects: [a], derivations: [b], human_gated: false, "
+    "answers_within: PT1H}\n",
 ])
 def test_a_seller_file_with_a_wrong_or_extra_member_is_refused(tmp_path, monkeypatch, body):
     (tmp_path / "x.yaml").write_text(body)
     monkeypatch.setattr(cast, "SELLERS_DIR", tmp_path)
-    with pytest.raises(ValueError, match="needs label, offer"):
+    with pytest.raises(ValueError, match="needs label, offer|keeps history_card/2"):
         cast.seller_file("x")
+
+
+def test_an_edited_seller_file_is_what_the_sellers_own_entry_lists(tmp_path, monkeypatch):
+    (tmp_path / "alder.yaml").write_text(
+        "label: Alder Print Co.\noffer: {item: 300 lanyards, price_msat: 1500}\n"
+        "discloses: {subjects: [checkpoints], derivations: [history_card/2], human_gated: true, answers_within: PT2H}\n")
+    monkeypatch.setattr(cast, "SELLERS_DIR", tmp_path)
+    alder = cast.seller_file("alder")
+    assert alder["discloses"] == {"subjects": ["checkpoints"], "derivations": ["history_card/2"], "human_gated": True,
+                                  "answers_within": "PT2H"}
+    monkeypatch.setattr(cm, "verify", lambda doc: None)
+    d = Discovery({"alder": alder}, lambda n: {"key_id": "k", "profile": cm.PROFILE})
+    try:
+        with urllib.request.urlopen(d.sellers["alder"].origin + ard.WELL_KNOWN) as r:
+            (e,) = json.loads(r.read())["entries"]
+    finally:
+        d.close()
+    assert e["x-demo-offer"] == {"item": "300 lanyards", "price_msat": 1500, "currency": "msat"}
+
+
+def test_a_deal_names_the_item_the_chosen_sellers_file_lists(monkeypatch):
+    import buyer
+
+    monkeypatch.setitem(cast.SELLERS, "kestrel", {**cast.SELLERS["kestrel"], "item": "300 lanyards"})
+    seen = []
+
+    class Maya:
+        def check(self, deal_id, action, item, *a, **kw):
+            seen.append(item)
+            return {}
+
+    buyer.check_payment(Maya(), buyer.Deal("deal-1", "kestrel", "k", 1000, "o", "simulated"), "ref")
+    assert seen == ["300 lanyards"]
 
 
 def test_the_policy_uri_resolves_against_the_commitment_url_on_the_sellers_own_origin(monkeypatch):

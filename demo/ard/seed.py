@@ -24,7 +24,7 @@ from typing import Callable
 import adjudicator as adj
 import flow
 import party as pt
-from cast import DEALS_EACH, HELD_FROM, ITEM, SELLERS, sample_buyer
+from cast import DEALS_EACH, HELD_FROM, SELLERS, sample_buyer
 
 #: Every sample deal is due, and its contest window ends, this many seconds after the seed starts: room to make all of
 #: them and have the witness take their stamp, on a slow witness too. The seed itself ends as soon as the stamps are
@@ -57,10 +57,11 @@ def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator:
     """One sample deal, both sides run here, handing each other the files each verb writes. Its rows are due, and their
     window ends, at ``window_end`` (a ``time.time()``)."""
     decision = flow.seller_decision(price_msat)
+    item = SELLERS[seller.name]["item"]
     left = window_end - int(time.time())  # offer adds it to now, cut to the second: the window ends at window_end
     if left < MIN_LEFT_S:  # no time left to stamp it inside its window: it would never count as held
         raise pt.Refused(f"the sample deals took longer than their window ({MAKE_S} s) allows")
-    o = buyer.offer(seller.key_id, ITEM, price_msat, decision["pack"]["digest"], adjudicator, due_s=left, window_s=left)
+    o = buyer.offer(seller.key_id, item, price_msat, decision["pack"]["digest"], adjudicator, due_s=left, window_s=left)
     deal_id = o["deal_id"]
     seller.receive(o["file"])
     seller.admit(deal_id, decision)
@@ -70,14 +71,14 @@ def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator:
     intent = buyer.intent(deal_id, "sample deal", "purchase", ["pay"], price_msat, "the seller")
     seller.receive(buyer.agree(o["offer"], intent)["file"])
     ref = hashlib.sha256(f"sample payment, no money moved: {deal_id}".encode()).hexdigest()
-    check = buyer.check(deal_id, "pay", ITEM, price_msat, "the seller", {"amount_minor": price_msat, "payment_ref": ref})
+    check = buyer.check(deal_id, "pay", item, price_msat, "the seller", {"amount_minor": price_msat, "payment_ref": ref})
     if not check.get("proceed"):
         # A payment pauses for a person whatever the materiality predicate says. The sample buyer is the demo
         # operator's own stand-in, so its answer is the operator's, in words that say so.
         buyer.approve(deal_id, check, "proceed", SAMPLE_APPROVAL)
     seller.receive(buyer.pay_leg(deal_id, check["check_id"]))
     buyer.receive(seller.received_leg(deal_id, price_msat, ref))
-    commit = seller.check(deal_id, "commit", ITEM, price_msat, "the buyer")
+    commit = seller.check(deal_id, "commit", item, price_msat, "the buyer")
     if not commit.get("proceed"):
         raise pt.Refused(f"the seller's delivery check paused: {commit.get('verdict')}")
     buyer.receive(seller.perform(deal_id, commit["check_id"], "delivered:badges_200_of_200"))

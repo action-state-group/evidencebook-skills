@@ -6,7 +6,8 @@ offer:
   item: 200 conference badges, delivered by Friday
   price_msat: 2000
 discloses:
-  # What a buyer can ask this seller for (the commitment's answers.subjects and answers.derivations).
+  # What a buyer can ask this seller for (the commitment's answers.subjects and answers.derivations). The
+  # derivations keep history_card/2: the commitment staples that card and its signed policy names it.
   subjects: [checkpoints, full_history]
   derivations: [history_card/2]
   # Whether a person approves each answer before it goes out, and how soon an answer comes (ISO 8601).

@@ -21,7 +21,7 @@ import ard
 import party as pt
 import screens
 import wire
-from cast import BUYER, HELD_FROM, ITEM, SELLERS, label
+from cast import BUYER, HELD_FROM, SELLERS, label
 
 _paths_setup = pt._paths  # party already put the Goose reference on the path
 import commitment as cm  # noqa: E402
@@ -266,7 +266,7 @@ class SellerAgent:
             wire.send(self.home, to, deal_id, "received", leg)
 
             def deliver() -> str:
-                check = p.check(deal_id, "commit", ITEM, ref["amount_msat"], "the buyer")
+                check = p.check(deal_id, "commit", SELLERS[self.name]["item"], ref["amount_msat"], "the buyer")
                 if not check.get("proceed"):
                     raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
                 return p.perform(deal_id, check["check_id"], info["observed"])

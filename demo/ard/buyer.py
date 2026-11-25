@@ -23,7 +23,7 @@ import flow
 import party as pt
 import screens
 import wire
-from cast import ASK, BUDGET_MSAT, BUYER, ITEM, SELLERS, label
+from cast import ASK, BUDGET_MSAT, BUYER, SELLERS, label
 from pack import Pack
 
 ASSESSED = "ard_assessment"
@@ -216,13 +216,14 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
         raise pt.Refused(f"the assessment is {chosen.verdict}"
                          + (f": deals under {chosen.cap_msat:,} msat" if chosen.cap_msat else "")
                          + "; no deal opens and nothing is paid")
-    o = maya.offer(seller_key, ITEM, chosen.price_msat, chosen.pack_digest, adjudicator)
+    item = SELLERS[seller]["item"]  # the seller's own listing (sellers/<name>.yaml)
+    o = maya.offer(seller_key, item, chosen.price_msat, chosen.pack_digest, adjudicator)
     deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me)
     wire.send_json(home, seller, deal.deal_id, "from", {"buyer": me})  # before the offer: where the seller answers
     wire.send(home, seller, deal.deal_id, "offer", o["file"])
     maya.note(DEAL_OPENED, {"deal_id": deal.deal_id, "seller": seller_key, "seller_name": seller, "price_msat": deal.price_msat,
                             "offer": deal.offer, "rail": rail, "me": me}, subject_ref=deal.deal_id)
-    say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {ITEM}; the agreement names the deal's adjudicator "
+    say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {item}; the agreement names the deal's adjudicator "
         f"and {pt.WITNESS_NAME}")
     try:
         agreed_by_seller = wire.wait(home, me, deal.deal_id, "agree", flow.WAIT_S)
@@ -261,7 +262,7 @@ def seller_of(maya: pt.Party) -> Callable[[str], str]:
 
 def check_payment(maya: pt.Party, deal: Deal, payment_ref: str) -> dict:
     """Maya's final review of the payment (``deal check``): it pauses for her answer, with the card she is shown."""
-    return maya.check(deal.deal_id, "pay", ITEM, deal.price_msat, label(deal.seller),
+    return maya.check(deal.deal_id, "pay", SELLERS[deal.seller]["item"], deal.price_msat, label(deal.seller),
                       # a rail other than lightning states the most the payment may take (capsulectl's check)
                       {"amount_minor": deal.price_msat, "payment_ref": payment_ref,
                        **({} if deal.rail == "lightning" else {"authorized_max_minor": deal.price_msat})}, rail=deal.rail,

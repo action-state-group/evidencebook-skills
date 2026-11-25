@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-ITEM = "200 conference badges, delivered by Friday"
 #: What Maya asks for (her words, sealed as each deal's intent).
 ASK = "I need 200 conference badges by Friday, under 3,000 msat."
 BUDGET_MSAT = 3000
@@ -36,6 +35,10 @@ def seller_file(name: str) -> dict:
         ok = False
     if not ok:
         raise ValueError(f"{f}: needs label, offer (item, price_msat > 0) and discloses ({', '.join(DISCLOSES)}) only")
+    if "history_card/2" not in discloses["derivations"]:
+        # the signed disclosure policy and the card stapled to the commitment are always history_card/2 (evidencebook
+        # commitment.POLICY and build): a list without it would contradict them
+        raise ValueError(f"{f}: discloses.derivations keeps history_card/2, the card the commitment staples")
     return {"label": s["label"], "item": offer["item"], "price_msat": offer["price_msat"], "discloses": discloses}
 
 

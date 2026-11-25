@@ -8,7 +8,7 @@ Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evide
 
 ## What you will see
 
-Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 12 sample deals, all held, and no disputes. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`: edit one, then reset and seed, and the seller signs a new commitment from it.
+Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 12 sample deals, all held, and no disputes. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
