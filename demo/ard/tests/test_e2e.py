@@ -163,7 +163,7 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
 
     # #242: Maya's receipt page is capsulectl's own (deal report --html), drawn with the hosted witness's directory
     import receipt
-    page = receipt.receipt_page(w["maya"], "Maya", deal2, rail="simulated", seller=False)
+    page = receipt.receipt_page(w["maya"], "Maya", deal2.deal_id, rail="simulated", seller=False)
     html = page.read_text()
     assert page.stat().st_size > 10000 and "<html" in html.lower()
     assert '"status":"verified","witness":"Action State\'s witness"' in html, "the page carries the witness time capsulectl verified"
