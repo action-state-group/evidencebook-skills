@@ -49,17 +49,17 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     assert "REFUSED: no sealed pick of Alder" in tools.ard_pay("alder")
     limit = tools.ard_pick("kestrel")
     assert "over this seller's limit" in limit and "no deal opens and nothing is paid" in limit
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("a refused pay must not ask for approval"))
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: pytest.fail("a refused pay must not ask for approval"))
     assert "REFUSED: no sealed pick of Kestrel" in tools.ard_pay("kestrel")
     assert tools._session.run.rail.paid == []
 
     assert "within its limit" in tools.ard_pick("alder")
     # The approval gate: the presenter's dialog decides, never the agent. A refusal pays nothing and can be retried.
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: "no")
     refused = tools.ard_pay("alder")
     assert "the presenter did not approve" in refused and tools._session.run.rail.paid == []
     # The first call after a refusal opens no dialog: it hands the agent the question to ask Maya first.
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
     reask = tools.ard_pay("alder")
     assert reask.startswith("REFUSED: the presenter did not approve the last payment to Alder Print Co.")
     assert 'The question is: "Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"' in reask
@@ -67,12 +67,12 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
             "and she said yes, call ard_pay again now: do not ask her again.") in reask
     assert "call ard_pay again only after she says yes" in reask and tools._session.run.rail.paid == []
     # A second refusal sets it again: each Cancel is followed by the question before the next dialog.
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: "no")
     assert "the presenter did not approve" in tools.ard_pay("alder")
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: pytest.fail("the call after a refusal must not open the dialog"))
     assert "REFUSED: the presenter did not approve the last payment" in tools.ard_pay("alder")
     asked: list[str] = []
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: asked.append(summary) or True)
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: asked.append(summary) or "yes")
     paid = tools.ard_pay("alder")
     assert asked == ["Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."]
     assert "invoice 2,000 msat" in paid and "Alder Print Co.'s card now counts 25 deals" in paid
@@ -142,9 +142,9 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
     assert tools._session.run.rail.paid == [2000]
     tools._session.paid.add("alder")  # as after a payment the rail reported succeeded (the story test cleared it)
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: "yes")
     asked = []
-    monkeypatch.setattr(tools, "approve_hold", lambda title, text: asked.append(f"{title}\n{text}") or False)
+    monkeypatch.setattr(tools, "hold_answer", lambda title, text: asked.append(f"{title}\n{text}") or "no")
     second = tools.ard_pay("alder")
     assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second
     assert "over your weekly limit: 4,000 msat with this order, limit 2,000 msat" in second and "declined" in second
@@ -167,15 +167,29 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
 
 
 @pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
+def test_a_held_order_nobody_answered_is_told_as_no_answer_never_as_a_decline(tools, monkeypatch):
+    # #239 finding 11, PM's words: "No answer in time, so the order was not placed and nothing was paid. Want to try again?"
+    s = tools._session
+    assert s.run.rail.paid == [2000] and "alder" in s.paid
+    monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
+    monkeypatch.setattr(tools, "hold_answer", lambda title, text: tools.rules.NO_ANSWER)
+    said = tools.ard_pay("alder")
+    assert "No answer in time, so the order was not placed and nothing was paid" in said and "Want to try again?" in said
+    assert "never that she declined it" in said and "The presenter declined" not in said
+    assert s.run.rail.paid == [2000]  # nothing more was paid
+    s.declined.discard("alder")  # the module's later tests start from a fresh question, as before this one
+
+
+@pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
 def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason_and_an_approval_pays(tools, monkeypatch):
     """With the limit set the payment dialog moves after the deal check: a held order is one dialog (payment and every
     reason, Don't buy or Buy anyway); the first dialog is never shown before the rules have answered."""
     s = tools._session
     assert s.run.rail.paid == [2000] and "alder" in s.paid
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the payment dialog is not shown first under a limit"))
+    monkeypatch.setattr(tools, "payment_answer", lambda summary: pytest.fail("the payment dialog is not shown first under a limit"))
     asked = []
-    monkeypatch.setattr(tools, "approve_hold", lambda title, text: asked.append(f"{title}\n{text}") or False)
+    monkeypatch.setattr(tools, "hold_answer", lambda title, text: asked.append(f"{title}\n{text}") or "no")
     declined = tools.ard_pay("alder")
     assert "REFUSED:" in declined and "declined" in declined and len(asked) == 1
     # the one question names the payment, the limit, and the other failing rules in their own words
@@ -192,7 +206,7 @@ def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason
     assert "alder" in s.paid and "alder" not in s.attempted and s.run.rail.paid == [2000]
     # a decline, like a cancelled payment dialog, leaves the next call to hand the agent the question: no dialog opens
     assert "opens no dialog" in tools.ard_pay("alder") and len(asked) == 1
-    monkeypatch.setattr(tools, "approve_hold", lambda title, text: True)
+    monkeypatch.setattr(tools, "hold_answer", lambda title, text: "yes")
     approved = tools.ard_pay("alder")
     assert "You approved this held order" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
@@ -238,11 +252,11 @@ def test_the_one_question_under_a_limit_is_the_payment_dialog_for_an_order_nothi
 
     mod = tools_module()
     shown = []
-    monkeypatch.setattr(mod, "approve_payment", lambda summary: shown.append(summary) or False)
-    monkeypatch.setattr(mod, "approve_hold", lambda summary: pytest.fail("nothing is held"))
+    monkeypatch.setattr(mod, "payment_answer", lambda summary: shown.append(summary) or "no")
+    monkeypatch.setattr(mod, "hold_answer", lambda summary: pytest.fail("nothing is held"))
     ask = mod._ask_order("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", False, "fake")
-    assert ask(types.SimpleNamespace(held=False, reasons=[])) is None and shown == ["Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."]
-    monkeypatch.setattr(mod, "approve_payment", lambda summary: True)
+    assert ask(types.SimpleNamespace(held=False, reasons=[])) == mod.rules.NO and shown == ["Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."]
+    monkeypatch.setattr(mod, "payment_answer", lambda summary: "yes")
     # the Pay click is the person's answer, which the approval record commits to (#261)
     assert ask(types.SimpleNamespace(held=False, reasons=[])) == mod.rules.Answer(
         "Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")

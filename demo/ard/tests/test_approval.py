@@ -101,3 +101,22 @@ def test_only_the_buy_anyway_button_approves_a_held_order(monkeypatch):
 def test_anything_else_declines_a_held_order(monkeypatch, kw):
     hold_answer(monkeypatch, **kw)
     assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is False
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,raises,expected", [
+    (0, "button returned:Buy anyway, gave up:false\n", "", None, "yes"),
+    (0, "button returned:, gave up:true\n", "", None, ds.rules.NO_ANSWER),  # nobody clicked before it gave up
+    (1, "", "execution error: User canceled. (-128)", None, ds.rules.NO),  # Don't buy, the cancel button
+    (1, "", "execution error: no display", None, ds.rules.NOT_SHOWN),
+    (0, "", "", OSError("no osascript"), ds.rules.NOT_SHOWN),
+])
+def test_the_dialog_says_how_it_ended_so_a_timeout_is_never_called_a_decline(monkeypatch, returncode, stdout, stderr,
+                                                                               raises, expected):
+    # #239 finding 11: a dialog that timed out was reported to Maya as "declined"
+    def run(cmd, **kw):
+        if raises:
+            raise raises
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+    monkeypatch.setattr(subprocess, "run", run)
+    assert ds.hold_answer("Held", "200 badges ...") == expected
+    assert ds.approve_hold("Held", "200 badges ...") is (expected == "yes")

@@ -52,13 +52,21 @@ class RulesRefused(RulesError):
     """The rules answered ``deny`` or ``not_evaluable``: the check ran and the order cannot go ahead. Nothing was paid."""
 
 
-class RuleHeld(RuntimeError):
-    """The deal check held the order for the person's OK and the person declined it: nothing was paid. ``reasons`` are
-    the rules' own words."""
+#: The ways a dialog can end without a yes: the person's no, no answer before it gave up, or no dialog shown at all.
+#: An ``approve`` callable may return one of these instead of a falsy value, so what is said and sealed is what happened
+#: (a timeout is never called a decline: #239 finding 11, PM's words).
+NO, NO_ANSWER, NOT_SHOWN = "no", "no answer", "not shown"
+_DECISION = {NO: "declined", NO_ANSWER: "no answer", NOT_SHOWN: "not shown"}
 
-    def __init__(self, message: str, reasons: list[str]):
+
+class RuleHeld(RuntimeError):
+    """The person was asked and did not say yes (``answer``: :data:`NO`, :data:`NO_ANSWER` or :data:`NOT_SHOWN`):
+    nothing was paid. ``reasons`` are the rules' own words when they held the order, else empty."""
+
+    def __init__(self, message: str, reasons: list[str], answer: str = NO):
         super().__init__(message)
         self.reasons = reasons
+        self.answer = answer
 
 
 @dataclass(frozen=True)
@@ -83,7 +91,8 @@ class Outcome:
     refused: list[str] = field(default_factory=list)  # a failing NEVER rule (23 to 25): the order is not put to the person
     ruleset: str = ""
     findings: list[dict] = field(default_factory=list)  # every finding the engine returned: id, check, verdict, reason (and limit, value when it names them)
-    decision: str = ""  # "approved" or "declined" when the person was asked (a held order, or any under ask_always), else ""
+    decision: str = ""  # when the person was asked (a held order, or any under ask_always): "approved", "declined",
+    # "no answer" or "not shown"; else ""
     rules: dict = field(default_factory=dict)  # the verdict record's ``rules`` block, as sealed
     differences: list[dict] = field(default_factory=list)  # the verdict's differences: one per failing finding
     answer: Answer | None = None  # the person's answer (Buy anyway on a held order, or Pay under ask_always), when they said yes
@@ -443,7 +452,10 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
             outcome.decision = "declined"
             seal_note(node, chain.deal_id, outcome)
             raise RulesError(f"the person could not be asked: {type(exc).__name__}: {exc}") from None
-        outcome.decision = "approved" if ok else "declined"
+        not_yes = ok if isinstance(ok, str) and ok in _DECISION else (None if ok else NO)
+        if not_yes:
+            ok = False
+        outcome.decision = _DECISION[not_yes] if not_yes else "approved"
         if isinstance(ok, Answer):
             outcome.answer = ok  # the words the dialog actually showed
         elif ok and outcome.held:
@@ -453,7 +465,9 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
                                                 outcome.over_limit)
             outcome.answer = Answer(f"{title}\n{text}", "Buy anyway")
     seal_note(node, chain.deal_id, outcome)
-    if outcome.decision == "declined":
-        raise RuleHeld(("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons)) if outcome.held
-                       else "the payment was not approved", outcome.reasons)
+    if outcome.decision in _DECISION.values():
+        how = {"declined": "declined", "no answer": "not answered in time", "not shown": "not shown"}[outcome.decision]
+        raise RuleHeld((f"held for your OK at deal check, and {how}: " + "; ".join(outcome.reasons)) if outcome.held
+                       else f"the payment was not approved ({how})", outcome.reasons,
+                       answer=next(k for k, v in _DECISION.items() if v == outcome.decision))
     return outcome
