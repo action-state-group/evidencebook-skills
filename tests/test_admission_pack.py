@@ -83,7 +83,7 @@ class Ladder(unittest.TestCase):
         self.assertEqual(admission_pack.compiled_bytes(load(empty)), admission_pack.compiled_bytes(load(baseline_text())))
 
     def test_open_disputes_beside_the_ladder(self):
-        row = """  - id: open-disputes
+        row = """  - id: open-disputes-limit
     statement: The card shows at most one open dispute raised about the counterparty.
     source: card
     check: card.open_disputes
@@ -102,7 +102,7 @@ class Ladder(unittest.TestCase):
 
     def test_disputes_against_with_on_unread(self):
         # #280: a shown loss limits; a card with no dispute tally is recorded.
-        row = """  - id: disputes-against
+        row = """  - id: disputes-against-test
     statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
     source: card
     check: card.disputes_against
@@ -114,12 +114,12 @@ class Ladder(unittest.TestCase):
         text = baseline_text().replace("rows:\n", "rows:\n" + row, 1)
         self.assertEqual(pack_compile.validate_source(load(text)), [])
         compiled = admission_pack.compile_pack(load(text))
-        got = next(r for r in compiled["rows"] if r["id"] == "disputes-against")
+        got = next(r for r in compiled["rows"] if r["id"] == "disputes-against-test")
         self.assertEqual(got["on_unread"], "record")
         # Written only when set, so every other row keeps its bytes.
         self.assertNotIn("on_unread", next(r for r in compiled["rows"] if r["id"] == "card-verified"))
         rule = next(q for q in admission_pack.from_admission(load(text))["requirements"]
-                    if q["id"] == "disputes-against")
+                    if q["id"] == "disputes-against-test")
         self.assertIn("carries no dispute tally, recorded", json.dumps(rule))
 
         def issues_for(old, new):
@@ -275,7 +275,7 @@ class Baseline(unittest.TestCase):
 
     def test_compiles_to_a_contract(self):
         contract = ec.from_pack(load(baseline_text()))
-        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.0.0@1.0.0")
+        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.1.0@1.1.0")
         self.assertEqual([r["id"] for r in contract["requirements"]],
                          [r["id"] for r in load(baseline_text())["rows"]])
         judged = [r for r in contract["requirements"] if r["id"] == "adjacent-domain"]
@@ -328,7 +328,7 @@ def muse_text():
     return (MUSE / "pack-source.yaml").read_text()
 
 
-def reference_decide(pack, inp):
+def reference_decide(pack, inp, rows=None):
     """A small reading of profile section 4, for the predicates and the USD
     band the Muse buyer pack uses, so its fixtures are checked against the
     lift of section 4.1 and not only for shape. capsule-engine is the real
@@ -349,6 +349,9 @@ def reference_decide(pack, inp):
     own, card, op = inp["own"], inp["card"], inp["operator"]
     roots = pack["trust_roots"]
     MISSING = "missing"
+    # Rows that read not_read because a verified card carries no dispute
+    # tally (profile section 3.3, reason no_dispute_tally).
+    no_tally = set()
 
     def read(r):
         p = r.get("params") or {}
@@ -386,10 +389,22 @@ def reference_decide(pack, inp):
                 return "pass" if card["claims"]["held"] >= p["min"] else "fail"
             if c == "card.controller_declared":
                 return "pass" if card.get("controller") else "fail"
+            if c == "card.open_disputes":
+                d = card.get("disputes")
+                return "not_read" if d is None else ("pass" if d["open"] <= p["max"] else "fail")
+            if c == "card.disputes_against":
+                decided = (card.get("disputes") or {}).get("decided")
+                if decided is None:
+                    no_tally.add(r["id"])
+                    return "not_read"
+                return "pass" if decided["against"] <= p["max"] else "fail"
         return "not_read"  # selection, vouch, stake, judged rows: none are in these cases
 
     used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, top)]
     res = {r["id"]: read(r) for r in used}
+    if rows is not None:
+        rows.update({k: ("not_read" if v == MISSING else v) for k, v in res.items()})
+        rows.update({k + "#no_tally": True for k in no_tally})
     for r in used:
         if r["on_fail"] == "NO" and res[r["id"]] == "fail":
             return "NO", r["id"], None
@@ -410,6 +425,8 @@ def reference_decide(pack, inp):
             lifted |= {x["id"] for x in cards}
     admitted, unmet = min(deal, top), []
     for r in used:
+        if r.get("on_unread") == "record" and r["id"] in no_tally:
+            continue  # section 4, step 4: recorded, lowering nothing
         if r["on_fail"] == "LIMIT" and res[r["id"]] != "pass" and r["id"] not in lifted:
             admitted = min(admitted, tiers.index(r["from"]) - 1)
             unmet.append(r)
@@ -464,6 +481,27 @@ class MuseBuyer(unittest.TestCase):
             verdict, source, tier = reference_decide(self.pack, c["input"])
             e = c["expected"]
             self.assertEqual((verdict, source, tier), (e["verdict"], e["source"], e["tier"]), c["case"])
+
+    def test_the_lost_disputes_row_never_passes_unread(self):
+        # #280 acceptance 4: a loss fails the row; a card that is unverified,
+        # or verified with no dispute tally (no disputes, or no decided), reads
+        # not_read, never pass, and only the no-tally case is recorded.
+        for path, pack in ((MUSE, self.pack), (BASELINE, load(baseline_text()))):
+            doc = json.loads((path / "fixtures/cases.json").read_text())
+            want = {"t1-a-dispute-lost-to-another-party-limits": ("fail", False),
+                    "t1-no-dispute-lost-goes": ("pass", False),
+                    "t1-disputes-without-decided-are-recorded": ("not_read", True),
+                    "t1-unverifiable-card-with-a-tally-asks": ("not_read", False)}
+            seen = set()
+            for c in doc["cases"]:
+                if c["case"] not in want:
+                    continue
+                rows = {}
+                reference_decide(pack, c["input"], rows)
+                self.assertEqual((rows["disputes-against"], rows.get("disputes-against#no_tally", False)),
+                                 want[c["case"]], (path.name, c["case"]))
+                seen.add(c["case"])
+            self.assertEqual(seen, set(want), path.name)
 
     def test_every_case_input_is_well_formed(self):
         doc = json.loads((MUSE / "fixtures/cases.json").read_text())
@@ -624,7 +662,7 @@ class Refusals(unittest.TestCase):
     def test_a_judged_row_in_a_pack_without_limit(self):
         text = baseline_text().replace('outcomes: ["GO", "ASK", "LIMIT", "NO"]', 'outcomes: ["GO", "ASK", "NO"]')
         issues = pack_compile.validate_source(load(text))
-        self.assertIn("rows[17] ('adjacent-domain'): a judged row caps a tier, so LIMIT must be in outcomes", issues)
+        self.assertIn("rows[19] ('adjacent-domain'): a judged row caps a tier, so LIMIT must be in outcomes", issues)
 
     def test_a_cap_that_lowers_nothing(self):
         self.assertRefused("    on_fail: {cap: T1}", "    on_fail: {cap: T2}", "cap T2 must be a tier below from T2")
@@ -664,7 +702,7 @@ class Refusals(unittest.TestCase):
 
     def test_ids_with_a_trailing_newline(self):
         self.assertRefused("  - id: attestation\n", "  - id: \"attestation\\n\"\n", "id must be lowercase")
-        self.assertRefused("pack_id: asg/admission_baseline/1.0.0", "pack_id: \"asg/admission_baseline/1.0.0\\n\"",
+        self.assertRefused("pack_id: asg/admission_baseline/1.1.0", "pack_id: \"asg/admission_baseline/1.1.0\\n\"",
                            "must be owner/name/version")
 
     def test_a_rail_pin_with_an_uppercase_digest(self):
@@ -703,7 +741,7 @@ class Refusals(unittest.TestCase):
         text = baseline_text().replace("  - id: attestation\n", "  - id: [attestation]\n") \
             .replace("check: platform.owner_signed", "check: [platform.owner_signed]") \
             .replace('source: "evidencebook-skills#51', 'source_was: "x"\nsource: {by: "evidencebook-skills#51')
-        text = text.replace('§4"\n', '§4"}\n', 1)
+        text = text.replace('#280"\n', '#280"}\n', 1)
         issues = pack_compile.validate_source(load(text))
         self.assertTrue(any("id must be lowercase" in i for i in issues), issues)
         self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
@@ -866,11 +904,11 @@ class ArdDemoBuyer(unittest.TestCase):
 
     def test_only_the_documented_demo_fields_differ_from_the_baseline(self):
         changed = {k for k in self.base if self.pack.get(k) != self.base[k]}
-        self.assertEqual(changed, {"pack_id", "source", "accept", "tiers", "trust_roots", "rows"})
+        self.assertEqual(changed, {"pack_id", "pack_version", "source", "accept", "tiers", "trust_roots", "rows"})
         self.assertEqual(set(self.pack), set(self.base))
         base_rows = {r["id"]: r for r in self.base["rows"]}
         demo_rows = {r["id"]: r for r in self.pack["rows"]}
-        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held"})
+        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "disputes-against", "open-disputes"})
         self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
         self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]], [])
 

@@ -1,5 +1,5 @@
 {
- "pack": "asg/admission_baseline/1.0.0",
+ "pack": "asg/admission_baseline/1.1.0",
  "source": "evidencebook-skills#51: admission-baseline@1's fixtures. Each case is an evaluator input (admission pack profile v0 \u00a75) and the decision expected, written by hand. capsule-engine#265's evaluator (Go and Rust) decides every case in its CI; evidencebook#189 reads them for guide Path 4.",
  "cases": [
   {
@@ -361,6 +361,214 @@
     "verdict": "GO",
     "source": "rows",
     "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-a-dispute-lost-to-another-party-limits",
+   "why": "The card shows one dispute about the counterparty decided against it, in a deal our own book does not hold: the disputes-against row limits to T0 (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 0,
+      "of": 2,
+      "decided": {
+       "against": 1,
+       "of": 2
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-no-dispute-lost-goes",
+   "why": "The card shows disputes, none decided against the counterparty and one still open: the disputes-against row passes and the open-disputes row is recorded (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 1,
+      "of": 3,
+      "decided": {
+       "against": 0,
+       "of": 2
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-disputes-without-decided-are-recorded",
+   "why": "The card's disputes come without the decided ones: the disputes-against row reads not_read (no_dispute_tally), is recorded and does not limit, until #281 (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 0,
+      "of": 1
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-unverifiable-card-with-a-tally-asks",
+   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason; the card rows limit, and the card is asked for again (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "unverifiable",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 0,
+      "of": 1,
+      "decided": {
+       "against": 0,
+       "of": 1
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "ASK",
+    "source": "rows",
+    "tier": "T0"
    }
   },
   {

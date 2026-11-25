@@ -1,8 +1,8 @@
-# admission-muse-buyer@1 -- the Muse buyer admission pack (evidencebook-skills#154),
+# admission-muse-buyer@1.1 -- the Muse buyer admission pack (evidencebook-skills#154),
 # in admission pack profile v0 (docs/admission-pack-profile-v0.md).
 #
 # A person's agent runs it in Muse before buying from a merchant. It is
-# admission-baseline@1 with two changes, and nothing else:
+# admission-baseline@1.1 with two changes, and nothing else:
 #
 #   1. No platform rows. Muse is no release platform, so it holds no release
 #      attestation to read; the baseline's `attestation` row would read
@@ -23,11 +23,11 @@
 # rows read not_read), so the lift applies to it as to one that never answered.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
-pack_id: asg/admission_muse_buyer/1.0.0
-pack_version: 1.0.0
+pack_id: asg/admission_muse_buyer/1.1.0
+pack_version: 1.1.0
 scope:
   kind: admission
-source: "evidencebook-skills#154; evidencebook-skills#51; Steven's ruling 2026-11-17 (muse#314, What 1)"
+source: "evidencebook-skills#154; evidencebook-skills#51; Steven's ruling 2026-11-17 (muse#314, What 1); evidencebook-skills#280"
 
 outcomes: ["GO", "ASK", "LIMIT", "NO"]
 # A missing input limits to T0; it is never a silent GO.
@@ -151,6 +151,27 @@ rows:
     check: own.no_conflicting
     from: T1
     on_fail: "LIMIT"
+
+  # Disputes about the counterparty with anyone, as its card shows (#280,
+  # Steven's ruling; profile section 3.3). A dispute decided against it limits;
+  # a verified card with no dispute tally is recorded and does not limit,
+  # Sherlock2's interim until the card asked for at T1 carries the tally
+  # (#281). Open disputes are recorded only: anyone can open one.
+  - id: disputes-against
+    statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
+    source: card
+    check: card.disputes_against
+    params: {max: 0}              # placeholder; LIMIT on any loss is Sherlock2's default
+    from: T1
+    on_fail: "LIMIT"
+    on_unread: "record"
+  - id: open-disputes
+    statement: The counterparty's card shows how many disputes about it are still open, out of all it received.
+    source: card
+    check: card.open_disputes
+    params: {max: 0}              # placeholder
+    from: T1
+    on_fail: "record"
 
   # T2: a selection bound to our ask, with inclusion proofs; the controller in
   # our trust roots; no dispute left unanswered with anyone in 90 days.
