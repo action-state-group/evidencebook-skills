@@ -156,7 +156,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
    .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0"
    ```
 
-   **Expect:** pip ends with no error.
+   **Expect:** pip ends with no error. A capsule-viewer package an earlier set-up left in `.venv` is no longer used; it can stay.
 
 5. Install Goose Desktop 1.59.2 (Apple silicon), replacing any Goose already in Applications.
 

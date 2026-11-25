@@ -146,6 +146,12 @@ def path(name: str, kind: str) -> Path:
     return out
 
 
+def write(name: str, kind: str, page: str) -> Path:
+    out = path(name, kind)
+    out.write_text(page, encoding="utf-8")
+    return out
+
+
 def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
     """Write the party's History card page from its own card, as of a checkpoint taken now, and return its path."""
     p.stamp()
