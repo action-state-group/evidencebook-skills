@@ -96,6 +96,12 @@ def instructions(role: str, rail: str) -> str:
 #: What ``--print`` writes for a wallet variable that is not set: it only prints, so it needs no wallet.
 PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<seller wallet dir>"}
 
+#: Goose's timeout for one tool call. ard_pay is the longest call: the payment dialog (desktop_server.DIALOG_GIVE_UP_S
+#: plus 20 s), the seller's agree (flow.WAIT_S), on the real rail the invoice (pay.INVOICE_WAIT_S) and the payment
+#: (pay.PAY_WAIT_S), and the delivery (flow.WAIT_S): 1,310 s at most. A call cut off sooner would report an error after
+#: the money had moved (#305 review).
+TOOL_TIMEOUT_S = 1380
+
 
 def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}",
@@ -113,7 +119,7 @@ def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     return {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller deal: {role}, following the {p['skill']} skill.",
               "instructions": instructions(role, rail), "prompt": p["prompt"],
               "extensions": [{"type": "stdio", "name": f"ard_{role}", "description": f"The {role} side of the ARD two-seller deal",
-                              "cmd": "/usr/bin/env", "args": [*env, sys.executable, str(SERVER)], "timeout": 300}]}
+                              "cmd": "/usr/bin/env", "args": [*env, sys.executable, str(SERVER)], "timeout": TOOL_TIMEOUT_S}]}
 
 
 def to_link(recipe: dict) -> str:

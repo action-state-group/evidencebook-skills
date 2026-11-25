@@ -108,18 +108,25 @@ def dialog_text(text: str) -> str:
 NO, NO_ANSWER, NOT_SHOWN = "no", "no_answer", "not_shown"
 #: What the person is told when the dialog did not end in yes (Sherlock2's words for no answer, #239 finding 11).
 NOT_YES = {NO: "the presenter declined it",
-           NO_ANSWER: "No answer in time",
+           NO_ANSWER: "no answer in time",
            NOT_SHOWN: "the dialog could not be shown"}
+
+
+#: How long a dialog waits for the presenter before it gives up (run finding F6a, 2026-11-25: 3 minutes was too short
+#: when a person first has to find the dialog). The window's MCP tool timeout (open-windows.py TOOL_TIMEOUT_S) covers
+#: it and the rest of the longest call, ard_pay.
+DIALOG_GIVE_UP_S = 600
 
 
 def dialog_answer(title: str, text: str, yes: str, no: str = "Cancel") -> str:
     """A native dialog on the presenter's screen that the agent neither reads nor answers through the chat, and how it
-    ended: ``"yes"`` (the ``yes`` button), :data:`NO` (the other button), :data:`NO_ANSWER` (it gave up after 3 minutes,
+    ended: ``"yes"`` (the ``yes`` button), :data:`NO` (the other button), :data:`NO_ANSWER` (it gave up after :data:`DIALOG_GIVE_UP_S`,
     nobody clicked) or :data:`NOT_SHOWN` (no screen, or any error)."""
     script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" buttons {{"{no}", "{yes}"}} '
-              f'default button "{no}" cancel button "{no}" with icon caution giving up after 180')
+              f'default button "{no}" cancel button "{no}" with icon caution giving up after {DIALOG_GIVE_UP_S}')
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=200)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                             timeout=DIALOG_GIVE_UP_S + 20)
     except subprocess.TimeoutExpired:  # past its own give-up: most likely on screen, unanswered
         return NO_ANSWER
     except (OSError, subprocess.SubprocessError):
@@ -345,7 +352,7 @@ def ard_pick(seller: str) -> None:
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
 _PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears on the presenter's screen first and this call "
-        "blocks, for up to 3 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it "
+        "blocks, for up to 10 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it "
         "waits. Only after Pay does it open the deal with the seller (the agreement names the deal's adjudicator and "
         "Action State's witness) and pay it. Refused "
         "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
@@ -432,6 +439,7 @@ def ard_seller_activity() -> None:
         print("  " + line)
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
+    print("  " + screens.SAMPLE_NOTE)
 
 
 # -- the adjudicator ----------------------------------------------------------------------------------
@@ -527,8 +535,10 @@ def ard_show_card() -> None:
     p, name = _own()
     p.stamp()
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
-    print(f"{name}: its own History card, as of its checkpoint at {as_of['anchor_time']}")
+    print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
+    if ROLE in SELLERS:
+        print("  " + screens.SAMPLE_NOTE)
 
 
 def _own_deal() -> tuple[pt.Party, str, str | None]:

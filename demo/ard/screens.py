@@ -10,6 +10,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import party as pt
+from adjudicator import CHALLENGE_DAYS
+from cast import DEALS_EACH
 
 if TYPE_CHECKING:
     from buyer import Assessment, Evidence
@@ -21,6 +23,9 @@ OPERATOR_NOTE = ("filled in by the operator, not checked: the platform, the allo
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
+#: Said wherever a seller's card is shown as signed or time-stamped: its first deals are the seed's sample history, so a
+#: witnessed count never reads as real trade (the twin's plan review, checked by the coordinator, 2026-11-25).
+SAMPLE_NOTE = f"Its first {DEALS_EACH} deals are sample history the operator made before this run."
 WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
                 "witness is not independent of them.")
 #: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
@@ -41,6 +46,18 @@ def seller_credit_note(price_msat: int) -> str:
     was credited is not (the wallet provider may keep a receiving fee)."""
     return (f"Agreed price {price_msat:,} msat. What this seller's wallet was credited is not in these records: "
             "its wallet provider may deduct a receiving fee.")
+
+
+def local_time(iso: str, date: bool = False) -> str:
+    """A record's UTC time as a person reads it: this Mac's local time with its zone ("12:16:32 CST"), with the date
+    when ``date`` is set ("2026-11-25 12:16:32 CST"). The records keep UTC; only what is shown changes (run finding F7,
+    2026-11-25). Anything that is not an ISO time is shown as it is."""
+    from datetime import datetime
+    try:
+        t = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+    except (ValueError, AttributeError):
+        return iso
+    return t.strftime(("%Y-%m-%d " if date else "") + "%H:%M:%S %Z")
 
 
 def msat(n: int) -> str:
@@ -69,8 +86,8 @@ def card_line(card: dict) -> str:
 def signed_line(name: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:
-        return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts."
-    return f"Signed by {name}. These are the seller's own counts."
+        return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts. {SAMPLE_NOTE}"
+    return f"Signed by {name}. These are the seller's own counts. {SAMPLE_NOTE}"
 
 
 def own_ruling(a: Assessment) -> dict | None:
@@ -88,7 +105,7 @@ def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None
     decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
     ruled = own_ruling(a)
     if a.verdict == "NO" and ruled:
-        when = (ruled.get("at") or "")[:10]
+        when = local_time(ruled.get("at") or "", date=True).split(" ")[0] if ruled.get("at") else ""
         line = (f"NO: you hold a ruling against this seller (deal {ruled['deal_id'][5:13]}, delivery not met, ruled {when}). "
                 "Your rules block a seller you hold a ruling against for 180 days.")
         if against:
@@ -135,5 +152,7 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
     ``docs/design/861-four-books.md`` §6; :data:`adjudicator.CHALLENGE_DAYS`)."""
     return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
             f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
-            f"of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and "
+            f"of the parties. Either side may challenge it within {CHALLENGE_DAYS} days. A challenge is recorded beside the "
+            f"ruling and "
             f"never replaces it.")
+

@@ -174,7 +174,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         raise SystemExit("seed stopped: " + "; ".join(errors) + ": run `demo.py reset`, then `demo.py seed` again")
     (home / HELD_FROM).write_text(str(_floor_minute(window_end) + 60))
     say(f"sample history made and stamped in {time.monotonic() - started:.0f} s. Each card counts it held from "
-        f"{datetime.fromtimestamp(_floor_minute(window_end) + 60).strftime('%H:%M:%S')}, the first stamp after the "
+        f"{datetime.fromtimestamp(_floor_minute(window_end) + 60).astimezone().strftime('%H:%M:%S %Z')}, the first stamp after the "
         "windows end, which each seller's agent takes as it starts")
     for p in ps.values():
         p.close()

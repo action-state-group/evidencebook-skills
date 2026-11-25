@@ -2,11 +2,11 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at this pin. The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
+Status: run by hand on 2026-11-25 on a Mac at these pins (evidencebook-skills cd33ab8, before this guide's last fixes): steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Fixed since, not yet run by hand: the 10-minute dialogs, local times, and both agents' ruling and witness wording. Open: the windows open stacked, not tiled; the buyer's agent sent "received" without Maya's yes (evidencebook-skills#306). The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
 
 ## What you will see
 
@@ -139,7 +139,7 @@ The registry, the seller sites and the 24 sample deals are local stand-ins, and 
 
    ```
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@c6bb35516b0733b9cd070c632bf6d7efc05c83b9"
+   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@d56da4d3314b79b7aafb6b293979a14cc49d033e"
    ```
 
    **Expect:** pip ends with no error.
@@ -304,7 +304,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** for each: "History card: 12 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
+   **Expect:** for each: "History card: 12 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 12 deals are sample history the operator made before this run." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
 
 4. Type.
 
@@ -322,7 +322,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
    **Expect:** the pick is sealed first ("pick sealed before any payment"), then Maya asks before paying.
 
-6. Type, then wait for the macOS dialog (it waits 3 minutes). Only your click releases the payment.
+6. Type, then wait for the macOS dialog (it waits 10 minutes). Only your click releases the payment.
 
    ```
    Yes, pay it.
@@ -361,7 +361,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
+    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 12 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type:
 
@@ -375,7 +375,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** invoice 2,000 msat succeeded, "Alder Print Co.'s delivery record says 200 of 200 badges were shipped." and "Maya's statement sent: she received what she paid for."
 
 15. Type `Show your History card, then your receipt.`
-    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends) and "Test money: this deal's payment was on a simulated rail. No real money moved."
+    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Asked for the receipt as a page, Maya says it can't be drawn yet for this kind of deal; the receipt in words is complete.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 

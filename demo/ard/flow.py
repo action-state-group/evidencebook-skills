@@ -19,6 +19,7 @@ from typing import Callable
 import adjudicator as adj
 import ard
 import party as pt
+import screens
 import wire
 from cast import BUYER, HELD_FROM, ITEM, SELLERS, label
 
@@ -132,7 +133,7 @@ class SellerAgent:
 
     def say(self, line: str) -> None:
         with self._lock:
-            self.log.append(f"{datetime.now().strftime('%H:%M:%S')}  {line}")
+            self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
 
     def stop(self) -> None:
         self._stop.set()
@@ -336,7 +337,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
             entered[deal_id] = when
             done.append(deal_id)
             say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in this party's records"
-                + (f" (time-stamped by {pt.WITNESS_NAME} at {when})" if when else ""))
+                + (f" (time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)})" if when else ""))
         elif not entered[deal_id] and deal_id not in stamped and pt.witnessed():
             mark = p.dir / "handled" / f"{deal_id}.ruling-seen"
             if not mark.exists() or file.stat().st_mtime > mark.stat().st_mtime:
@@ -346,7 +347,8 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 if when:
                     p.note(RULING_STAMPED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
                     stamped.add(deal_id)
-                    say(f"the ruling on deal {deal_id[5:13]} was time-stamped by {pt.WITNESS_NAME} at {when}")
+                    say(f"the ruling on deal {deal_id[5:13]} was time-stamped by {pt.WITNESS_NAME} at "
+                        f"{screens.local_time(when, date=True)}")
         if deal_id not in sent:
             adj.send_book(home, p, deal_id, side, say)
             p.note(BOOK_SENT, {"deal_id": deal_id}, subject_ref=deal_id)
@@ -426,11 +428,12 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
     ruling once recorded. It decides nothing."""
     out = [f"deal {c.deal_id[5:13]}, row {c.row}: disputed by {names['buyer']}"]
     if c.asked_at:
-        out.append(f"  asked both sides for their books at {c.asked_at}")
+        out.append(f"  asked both sides for their books at {screens.local_time(c.asked_at)}")
     for side in ("buyer", "seller"):
         other = names["seller" if side == "buyer" else "buyer"]
         if side in c.answered:
-            out.append(f"  {names[side]} answered at {c.answered[side]}: own book and the copy held of {other}'s")
+            out.append(f"  {names[side]} answered at {screens.local_time(c.answered[side])}: own book and the copy held of "
+                       f"{other}'s")
         elif side in c.signed:  # read from the copy the other side holds (u211 item 2)
             out.append(f"  {names[side]}: no answer yet (its own copy of its book not received; its records here come "
                        f"from the copy {other} holds)")

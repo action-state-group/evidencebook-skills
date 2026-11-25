@@ -50,11 +50,11 @@ def test_quotes_in_the_summary_cannot_break_out_of_the_script(monkeypatch):
     assert 'do shell script "id"' not in seen[0] and "x' & (do shell script 'id') & '" in seen[0]
 
 
-def test_the_dialog_gives_up_after_three_minutes(monkeypatch):
+def test_the_dialog_gives_up_after_ten_minutes(monkeypatch):
     seen = []
     monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.append(cmd[2]) or types.SimpleNamespace(returncode=1, stdout=""))
     pay_dialog("Pay X")
-    assert "giving up after 180" in seen[0]
+    assert f"giving up after {ds.DIALOG_GIVE_UP_S}" in seen[0] and ds.DIALOG_GIVE_UP_S == 600
 
 
 def test_summary_wording_names_the_rail():

@@ -77,6 +77,7 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 def test_no_line_a_person_reads_names_the_demo():
     lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
              screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
+             screens.SAMPLE_NOTE,
              pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
 
@@ -353,3 +354,212 @@ def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_pat
     with pytest.raises(SystemExit, match="did not finish"):
         seed.seed(tmp_path, say=said.append)
     assert failed and not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
+
+
+def _receipt(iat: int) -> str:
+    """A COSE_Sign1 witness receipt whose protected header carries CWT claims {6: iat} (label 15)."""
+    import base64
+    protected = bytes([0xa2, 0x01, 0x26, 0x0f, 0xa1, 0x06, 0x1a]) + iat.to_bytes(4, "big")
+    sign1 = bytes([0xd2, 0x84, 0x40 + len(protected)]) + protected + bytes([0xa0, 0xf6, 0x41, 0x00])
+    return base64.b64encode(sign1).decode()
+
+
+def test_the_witness_time_is_the_receipts_own_iat():
+    import receipt
+    hosted = {"ts_url": "https://witness.agentactioncapsule.org", "receipt": _receipt(1795620316)}
+    other = {"ts_url": "https://other.example", "receipt": _receipt(1795600000)}
+    assert receipt.witness_time({"witness_receipts": [other, hosted]}) == "2026-11-25T15:25:16Z"
+    assert receipt.witness_time({"witness_receipts": [other]}) == ""  # never another witness's time
+    assert receipt.witness_time({"witness_receipts": []}) == ""
+
+
+@pytest.mark.parametrize("verdict,half,receipts,expect", [
+    ("VALID", {"status": "verified"}, 1, ["  Signed by both sides: the other side's half verifies (capsulectl deal verify).",
+                                          "  Time-stamped by Action State's witness at " + screens.local_time("2026-11-25T15:25:16Z", date=True) + "."]),
+    ("VALID", None, 0, ["  The other side's half is not in this copy.",
+                        "  Not time-stamped yet: the next checkpoint sends it to Action State's witness."]),
+    ("INVALID", {"status": "verified"}, 1, ["  This copy did not verify (capsulectl deal verify: INVALID).",
+                                            "  Time-stamped by Action State's witness at " + screens.local_time("2026-11-25T15:25:16Z", date=True) + "."]),
+])
+def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, half, receipts, expect):
+    # Sherlock2's what-confirmation on #242: "Signed by both sides" only when deal verify passes on the whole copy;
+    # "Time-stamped" only with a named witness's receipt for the checkpoint the copy rests on, at the witness's time
+    import json
+    import receipt
+
+    class P:
+        def bundle(self, deal_id):
+            return tmp_path / "copy.json"
+
+        def verify(self, copy):
+            return {"verdict": verdict, "extensions": [{"counterparty_half": half}] if half else []}
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            out = args[args.index("--out") + 1]
+            Path(out).write_text(json.dumps({"witness_receipts": [{"ts_url": "https://witness.agentactioncapsule.org",
+                                                                   "receipt": _receipt(1795620316)}] * receipts}))
+            return {"named_witness_receipts": receipts}
+    from pathlib import Path
+    assert receipt.proof_lines(P(), "deal-0123456789abcdef") == expect
+
+
+def test_a_sellers_card_says_its_first_deals_are_sample_history():
+    from cast import DEALS_EACH
+    for line in (screens.signed_line("Alder Print Co."), screens.signed_line("Alder Print Co.", True)):
+        assert line.endswith(f"Its first {DEALS_EACH} deals are sample history the operator made before this run.")
+    assert pages.labels(card(), witnessed=True, sample=True)[-1] == screens.SAMPLE_NOTE
+    assert screens.SAMPLE_NOTE not in pages.labels(card(), witnessed=True)  # a buyer's own card has no sample deals
+
+
+def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
+    import adjudicator as adj
+    assert f"within {adj.CHALLENGE_DAYS} days" in screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
+
+
+def test_the_receipt_page_is_capsulectls_own_when_it_draws_one(monkeypatch, tmp_path):
+    # Ethan: the run shows the v1 receipt page as soon as `capsulectl deal report --html` draws one; until then the
+    # refusal falls through to the page that says it can't be drawn
+    import receipt
+    monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
+    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", True)
+    calls = []
+
+    class P:
+        name = "maya"
+
+        def __init__(self, refuse):
+            self.refuse = refuse
+
+        def run(self, *args):
+            calls.append(args[:2])
+            if self.refuse:
+                raise buyer.pt.Refused(self.refuse)
+            Path(args[args.index("--html") + 1]).write_text("<html>page</html>")
+            return {}
+
+        def bundle(self, *a, **k):
+            raise buyer.pt.Refused("stop here")
+    from pathlib import Path
+    page = receipt.receipt_page(P(None), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+    assert page.read_text() == "<html>page</html>"
+    with pytest.raises(receipt.ReceiptError, match="stop here"):  # fell through to the copy, as before
+        receipt.receipt_page(P("--html renders an x-deal-v0 deal's page; an x-deal-v1 report has no page yet"), "Maya",
+                             "deal-0123456789abcdef", rail="simulated", seller=False)
+    with pytest.raises(receipt.ReceiptError, match="disk full"):
+        receipt.receipt_page(P("disk full"), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+
+
+def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
+    # #242: capsulectl's first v1 page says "no witness" and "not countersigned" for a witnessed two-sided deal
+    import receipt
+    assert receipt.DRAW_V1_PAGE is False
+
+    class P:
+        name = "maya"
+
+        def run(self, *args):
+            raise AssertionError("no deal report --html while the page is off")
+
+        def bundle(self, *a, **k):
+            raise buyer.pt.Refused("stop here")
+    with pytest.raises(receipt.ReceiptError, match="stop here"):
+        receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+
+
+def test_times_show_in_local_time_with_the_zone(monkeypatch):
+    # run finding F7 (2026-11-25): a person reads local time; the records keep UTC
+    import time
+    try:
+        with monkeypatch.context() as m:
+            m.setenv("TZ", "America/Chicago")
+            time.tzset()
+            assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
+            assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
+            assert screens.local_time("not a time") == "not a time"
+    finally:
+        time.tzset()  # after the context put TZ back, so later tests see the restored zone
+
+
+def _receipt_without_time() -> str:
+    """A COSE_Sign1 witness receipt whose protected header carries no CWT claims, so no iat."""
+    import base64
+    protected = bytes([0xa1, 0x01, 0x26])
+    return base64.b64encode(bytes([0xd2, 0x84, 0x40 + len(protected)]) + protected + bytes([0xa0, 0xf6, 0x41, 0x00])).decode()
+
+
+def test_a_stamped_receipt_without_a_time_still_says_time_stamped(tmp_path):
+    # Codex on #305: a receipt that verifies (named_witness_receipts >= 1) but states no iat was stamped; the line must
+    # not say "Not time-stamped yet"
+    import json
+    import receipt
+
+    class P:
+        def bundle(self, deal_id):
+            return tmp_path / "copy.json"
+
+        def verify(self, copy):
+            return {"verdict": "VALID", "extensions": []}
+
+        def tmp(self, name):
+            return str(tmp_path / name)
+
+        def run(self, *args):
+            out = args[args.index("--out") + 1]
+            Path(out).write_text(json.dumps({"witness_receipts": [{"ts_url": "https://witness.agentactioncapsule.org",
+                                                                   "receipt": _receipt_without_time()}]}))
+            return {"named_witness_receipts": 1}
+    from pathlib import Path
+    assert receipt.proof_lines(P(), "deal-0123456789abcdef")[-1] == \
+        "  Time-stamped by Action State's witness; its receipt states no time."
+
+
+@pytest.mark.parametrize("raw", [
+    b"",                              # empty
+    b"\xd2",                          # a tag with nothing after it
+    b"\xd2\x84\x4b\xa2\x01",          # a byte string shorter than its length
+    b"\xd2\x84\x1a\x01",              # an integer shorter than its size
+    b"\x81" * 200 + b"\x00",          # nested too deep
+    b"\xd2\x84\x63\xff\xfe\xfd",      # text that is not UTF-8
+    b"\xd2\x9f",                      # an indefinite-length array
+    b"\xd2\x84\x01\x02\x03\x04",      # the first member is not a byte string
+    # a time no clock can show: CWT claims {6: 2**64 - 1}
+    b"\xd2\x84\x4d\xa1\x0f\xa1\x06\x1b" + b"\xff" * 8 + b"\xa0\xf6\x41\x00",
+])
+def test_a_receipt_this_reader_cannot_read_gives_no_time_and_no_error(raw):
+    import base64
+    import receipt
+    hosted = {"ts_url": "https://witness.agentactioncapsule.org", "receipt": base64.b64encode(raw).decode()}
+    assert receipt.witness_time({"witness_receipts": [hosted]}) == ""
+
+
+@pytest.mark.parametrize("role,noted", [("kestrel", True), ("maya", False)])
+def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeypatch, role, noted):
+    # the stand-in on #305: SAMPLE_NOTE is said wherever a seller's card is shown, in words as on its page
+    import desktop_server as ds
+
+    class P:
+        def stamp(self):
+            pass
+
+        def card_bundle(self, shared):
+            return None
+    monkeypatch.setattr(ds, "ROLE", role)
+    monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
+    monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
+    out = ds.ard_show_card()
+    assert (screens.SAMPLE_NOTE in out) == noted, out
+
+
+def test_the_tool_timeout_covers_the_longest_call():
+    # the stand-in on #305: ard_pay waits for the dialog, the seller's agree, the payment and the delivery; Goose must
+    # not cut it off after the money has moved
+    import importlib.util
+    import desktop_server as ds
+    import pay
+    spec = importlib.util.spec_from_file_location("open_windows", __import__("pathlib").Path(__file__).parent.parent / "goose" / "open-windows.py")
+    ow = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ow)
+    assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.INVOICE_WAIT_S + pay.PAY_WAIT_S
