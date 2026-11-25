@@ -864,7 +864,7 @@ def test_the_viewer_drift_check_fails_only_when_the_vendored_copy_is_behind():
     ("abc\trefs/tags/ts/v0.27.2\nabd\trefs/tags/ts/v0.28.0\n", 1, "0.28.0 is released"),
     ("", 2, "no ts/vX.Y.Z release tag found"),
     ("abc\trefs/tags/go/v0.30.0\n", 2, "no ts/vX.Y.Z release tag found"),
-    ("error", 2, "cannot read capsule-viewer's releases"),
+    ("error", 2, "Could not resolve host"),
     ("timeout", 2, "cannot read capsule-viewer's releases"),
 ])
 def test_the_viewer_drift_command_exits_by_what_it_could_compare(monkeypatch, capsys, result, want, said):

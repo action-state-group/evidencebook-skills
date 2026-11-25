@@ -48,7 +48,9 @@ def main() -> int:
         out = subprocess.run(["git", "ls-remote", "--tags", REPO, "ts/v*"], capture_output=True, text=True,
                              stdin=subprocess.DEVNULL, timeout=60, check=True).stdout
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
-        print(f"cannot read capsule-viewer's releases from {REPO}: {exc}", file=sys.stderr)
+        detail = (getattr(exc, "stderr", None) or "").strip()
+        print(f"cannot read capsule-viewer's releases from {REPO}: {exc}" + (f": {detail}" if detail else ""),
+              file=sys.stderr)
         return 2
     tags = out.splitlines()
     latest = newest(tags)
