@@ -14,7 +14,7 @@ import pytest
 import envhelp
 
 DEMO = Path(__file__).resolve().parents[1]
-SETUP = ("ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL", "ARD_ADJUDICATOR_BIN", "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL", "ARD_HOME")
+SETUP = ("ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL", "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL", "ARD_HOME")
 
 
 def _run(script: str, *args: str, **env: str) -> subprocess.CompletedProcess:
@@ -29,17 +29,17 @@ def test_demo_with_no_command_or_help_prints_the_commands_and_the_environment(ar
     assert run.returncode == (2 if not args else 0)
     out = run.stdout
     for text in ("seed", "run", "reset", "Environment:", "ARD_EVIDENCEBOOK", "CAPSULE_ENGINE", "CAPSULECTL_DEAL",
-                 "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "needed by seed, run", "with --rail local", "reset needs none of them", "ARD_ADJUDICATOR_BIN",
+                 "ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "needed by seed, run", "with --rail local", "reset needs none of them",
                  "export ARD_EVIDENCEBOOK=/path/to/evidencebook CAPSULECTL_DEAL=/path/to/capsulectl-deal "
-                 "CAPSULE_ENGINE=/path/to/capsule-engine ARD_ADJUDICATOR_BIN=/path/to/adjudicator-bin"):
+                 "CAPSULE_ENGINE=/path/to/capsule-engine"):
         assert text in out, text
     assert "Traceback" not in run.stderr
 
 
 @pytest.mark.parametrize("command,rail,missing", [
-    ("seed", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_ADJUDICATOR_BIN"]),
-    ("run", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_ADJUDICATOR_BIN"]),
-    ("run", "local", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_ADJUDICATOR_BIN", "ARD_WALLET_BUYER",
+    ("seed", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE"]),
+    ("run", "fake", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE"]),
+    ("run", "local", ["ARD_EVIDENCEBOOK", "CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_WALLET_BUYER",
                       "ARD_WALLET_SELLER"]),
 ])
 def test_a_missing_variable_is_one_message_with_the_export_line_not_a_traceback(command, rail, missing):
@@ -68,7 +68,6 @@ def test_a_set_environment_passes_the_check(tmp_path, monkeypatch):
     exe.chmod(0o755)
     monkeypatch.setenv("ARD_EVIDENCEBOOK", str(tmp_path / "eb"))
     monkeypatch.setenv("CAPSULE_ENGINE", str(exe))
-    monkeypatch.setenv("ARD_ADJUDICATOR_BIN", str(tmp_path))
     monkeypatch.delenv("CAPSULECTL_DEAL", raising=False)
     for command in ("run", "seed", "windows"):  # every deal record is capsulectl-deal's
         assert "CAPSULECTL_DEAL" in envhelp.message(command)
@@ -104,7 +103,7 @@ def test_open_windows_help_and_missing_variables():
     run = _run("goose/open-windows.py", "--rail", "local")
     assert run.returncode == 2 and "Traceback" not in run.stderr
     assert ("open-windows.py needs these environment variables, which are not set: ARD_EVIDENCEBOOK, CAPSULECTL_DEAL, "
-            "CAPSULE_ENGINE, ARD_ADJUDICATOR_BIN, ARD_WALLET_BUYER, ARD_WALLET_SELLER.") in run.stderr
+            "CAPSULE_ENGINE, ARD_WALLET_BUYER, ARD_WALLET_SELLER.") in run.stderr
     assert "export ARD_EVIDENCEBOOK=/path/to/evidencebook" in run.stderr
 
 

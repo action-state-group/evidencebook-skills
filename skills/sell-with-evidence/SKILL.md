@@ -50,7 +50,7 @@ sale in those records.
 | 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (capsule-cli#571) |
 | 2 Share the History card | done by the demo's seller process: its shared `standard_history/3` card, as of each checkpoint | `deal standard-history card --shared`, or `respond` over the mailbox (capsule-cli#573) |
 | 3 Take and record the sale | done by the demo's seller process | `deal receive`, `deal admit`, `deal agree`, `deal check` with `"action":"commit"`, `deal perform` |
-| 4 Answer a dispute and enter a ruling | done by the demo's seller process: its copy to the deal's adjudicator, the ruling entered in its own records | `deal report --share adjudicator`, `deal receive` the ruling |
+| 4 Answer a dispute and enter a ruling | done by the demo's seller process: its full answer to the adjudicator's request, the ruling entered in its own records | `deal respond` to the adjudicator's request, `deal receive` the ruling |
 | Show what happened | `ard_seller_activity` | `deal` and `book` views |
 | Show the History card | `ard_show_card`, `ard_open_card_page` (as a page) | `book` card |
 | Show the receipt | `ard_show_receipt`, `ard_open_receipt_page` (as a page) | `deal` receipt |
@@ -72,6 +72,6 @@ sale in those records.
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
 - To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
   page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
-- A buyer may dispute a delivery. The seller process then sends this seller's records to the deal's adjudicator,
-  which the operator runs, and enters any ruling in this seller's own records. Say what the ruling found in its
+- A buyer may dispute a delivery. When the deal's adjudicator, which the operator runs, asks for this seller's books,
+  the seller process answers in full, and it enters any ruling in this seller's own records. Say what the ruling found in its
   own words ("ruled against this seller on the delivery"), never that the seller was dishonest or failed.

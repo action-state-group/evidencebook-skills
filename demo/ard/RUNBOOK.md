@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook d3ad8fa (capsulectl-deal built from it) · capsule-engine 0263ff1 (go/v0.8.0) · ledger-cloud 9e52270 (the adjudicator) · capsule-viewer b21b993 (ts/v0.26.1) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook 710d865 (evidencebook#893; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer b21b993 (ts/v0.26.1) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -18,11 +18,11 @@ Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousa
 
 3. **Deal 1.** Both sellers are "Good to buy"; Maya picks Kestrel, the cheaper one, and pays 1,000 msat (a dialog asks you first). Kestrel's own delivery record says 150 of 200 badges were shipped. Maya disputes the delivery.
 
-4. **The adjudicator.** The adjudicator's window shows the case: both sides' books, and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
+4. **The adjudicator.** The adjudicator asks each side for its books, and each side's agent answers on its own: its own book and the copy it holds of the other side's. The adjudicator's window shows the case and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
 
 5. **Deal 2.** Kestrel's card now counts 25 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
 
-The registry, the seller sites and the 48 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (ledger-cloud's adjudicator) are the real code.
+The registry, the seller sites and the 48 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
 
 ## What you need
 
@@ -119,7 +119,8 @@ The registry, the seller sites and the 48 sample deals are local stand-ins, and 
    git clone -q https://github.com/action-state-group/evidencebook-skills
    git -C evidencebook-skills checkout -q PIN
    git clone -q https://github.com/action-state-group/evidencebook
-   git -C evidencebook checkout -q d3ad8fa2c38cdb9cded1f48f6c3051f86abf2793
+   git -C evidencebook fetch -q origin 710d8655d487c1a2b7810c8d23a68eeea57bb85a
+   git -C evidencebook checkout -q 710d8655d487c1a2b7810c8d23a68eeea57bb85a
    (cd evidencebook/capsulectl && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
    ```
 
@@ -131,14 +132,10 @@ The registry, the seller sites and the 48 sample deals are local stand-ins, and 
    ```
 
    ```
-   cd $HOME/ard-demo
-   git clone -q https://github.com/action-state-group/ledger-cloud
-   git -C ledger-cloud checkout -q 9e52270669a2ef8564bcc92f8fcf9f2da2bdd11f
-   for c in adjudicator-front adjudicator-operator adjudicator-client; do (cd ledger-cloud/ledger_cloud/adjudicator && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/$c ./cmd/$c); done
    ls $HOME/ard-demo/bin
    ```
 
-   **Expect:** `adjudicator-client adjudicator-front adjudicator-operator capsule-engine capsulectl-deal`.
+   **Expect:** `capsule-engine capsulectl-deal`.
 
    ```
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
@@ -209,14 +206,13 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## In every terminal
 
-1. Go to the checkout and set the four paths.
+1. Go to the checkout and set the three paths.
 
    ```
    cd $HOME/ard-demo/evidencebook-skills
    export ARD_EVIDENCEBOOK=$HOME/ard-demo/evidencebook \
      CAPSULECTL_DEAL=$HOME/ard-demo/bin/capsulectl-deal \
-     CAPSULE_ENGINE=$HOME/ard-demo/bin/capsule-engine \
-     ARD_ADJUDICATOR_BIN=$HOME/ard-demo/bin
+     CAPSULE_ENGINE=$HOME/ard-demo/bin/capsule-engine
    ```
 
 2. Check which variables each command needs.
@@ -236,7 +232,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## Before each run
 
-1. Quit Goose, then reset: it stops the demo's processes (the stage, the adjudicator's front and the windows' servers), deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's four recipes, and any other recipe you trusted in the meantime. Goose keeps recipe trust in one place for both, so this also applies to your own Goose. The demo home is `~/.config/ard-commerce-demo`.
+1. Quit Goose, then reset: it stops the demo's processes (the stage and the windows' servers), deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's four recipes, and any other recipe you trusted in the meantime. Goose keeps recipe trust in one place for both, so this also applies to your own Goose. The demo home is `~/.config/ard-commerce-demo`.
 
    ```
    osascript -e 'quit app "Goose"'
@@ -332,7 +328,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Yes, pay it.
    ```
 
-   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves."; click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
+   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves."; nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
 
 7. Type.
 
@@ -340,10 +336,10 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Only 150 arrived. Dispute the delivery.
    ```
 
-   **Expect:** "Dispute raised on this deal's delivery. Sent to Kestrel Print and to the adjudicator your agreement names. Nothing is refunded by this step." (It waits up to a minute for Maya's next checkpoint first.)
+   **Expect:** "Dispute raised on this deal's delivery. Sent to Kestrel Print and to the adjudicator your agreement names. Nothing is refunded by this step."
 
 8. Cmd+` to Kestrel's window, type `What happened?`.
-   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …", "this seller's records were sent to the adjudicator".
+   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …: the adjudicator will ask for this seller's books". After step 9, also "the adjudicator asked for this party's books of deal …: sent in full (its own book and the copy it holds of the other side's)".
 
 9. Cmd+` to the adjudicator's window, type:
 
@@ -351,7 +347,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me the case.
    ```
 
-   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", the case for the deal, row delivered, "books read" for both Maya and Kestrel Print with the times they were sent, and "Kestrel Print's own signed delivery record: partial:badges_150_of_200". If Kestrel's book is not there yet, ask again in a minute.
+   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "its own book and the copy it holds of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". It waits up to 30 seconds for the answers; if one says "no answer yet", ask again.
 
 10. Type, then answer the dialog.
 
@@ -359,13 +355,13 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     Rule against Kestrel: its own delivery record says 150 of 200.
     ```
 
-    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped." (with no network: "Not yet time-stamped: Action State's witness took no stamp within a minute (no network?). …").
+    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped.", "Sent to both parties; each enters it in its own records." (with no network: "Not yet time-stamped: Action State's witness took no stamp within 90 seconds (no network?). Run this again to send it with its stamp.").
 
 11. After about a minute, type `Did both parties enter it?`.
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "25 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." If it still shows 24, ask again in a minute: the card counts after the seller's next checkpoint.
+    **Expect:** "25 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." If it still shows 24 deals, or 0 that didn't go as agreed, ask again in a minute: the card counts after the seller's next checkpoint, and the deal's outcome can follow the dispute's count by one checkpoint.
 
 13. Cmd+` back to Maya's window, type:
 
@@ -422,7 +418,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 2. Check that nothing of the demo is left running.
 
    ```
-   ps -ax | grep -E "[d]emo/ard|[a]djudicator-front"
+   ps -ax | grep -E "[d]emo/ard"
    ```
 
    **Expect:** nothing printed.
@@ -439,10 +435,10 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 ## Troubleshooting
 
-1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too. A `stage.py` or the adjudicator's front left from an earlier run is stopped by reset itself.
+1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too. A `stage.py` left from an earlier run is stopped by reset itself.
 
 2. **Seed says a card counts fewer than 24 held after 5 minutes.** The checkpoints did not reach the witness: check the network, or set `ARD_WITNESS=off`, then reset and seed.
 
 3. **A command says a variable is not set.** Copy the export line it prints, put in your own paths, and run it again.
 
-4. **The adjudicator's case shows only Maya's book.** Kestrel's window is not running, or its checkpoint has not come yet: wait a minute and ask again. A case with no seller book cannot be ruled against the seller yet.
+4. **The adjudicator's case says Kestrel Print: no answer yet.** Kestrel's window is not running: open it and ask again. The case can still be ruled on from Maya's answer, which carries the records Kestrel signed that she holds, its delivery record among them.

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +21,7 @@ import adjudicator as adj
 import ard
 import flow
 import party as pt
+import screens
 import wire
 from cast import ASK, BUDGET_MSAT, BUYER, ITEM, SELLERS, label
 from pack import Pack
@@ -101,7 +103,7 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
         ev.fail("History card", str(exc))
         return ev
     ev.read, ev.card = r, r.card
-    ev.ok("History card", f"standard_history/3, signed by {r.signer[:8]}… (the key the commitment names), "
+    ev.ok("History card", f"{pt.CARD_DERIVATION}, signed by {r.signer[:8]}… (the key the commitment names), "
                           f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {r.anchor_time}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
@@ -266,15 +268,86 @@ def pay(home: Path, maya: pt.Party, deal: Deal, check: dict, reference: str, sim
     wire.send(home, deal.seller, deal.deal_id, "paid", leg)
 
 
-def await_delivery(home: Path, maya: pt.Party, deal: Deal) -> str:
-    """Keep the seller's payee leg and its delivery record; return what the delivery record says it shipped."""
-    maya.receive(wire.wait(home, deal.me, deal.deal_id, "received", flow.WAIT_S))
-    act = wire.wait(home, deal.me, deal.deal_id, "act", flow.WAIT_S)
-    maya.receive(act)
-    body = json.loads(act.read_text())
-    observed = _observed(body)
+def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
+                 rail: Any, summary: str, ask: Callable[[str], bool], say: Callable[[str], None],
+                 simulated: bool) -> tuple[Deal, Any] | None:
+    """The person's yes first, then the deal: nothing reaches the seller until the person approved the payment
+    (evidencebook-skills#289, Sherlock2 on finding 13), so a late yes never meets a seller that stopped waiting. Then the
+    offer and agreement, the invoice, capsulectl's payment check (its pause is answered with the yes already given, in
+    the words the person saw), the payment and the payer leg. None when the person did not say yes: nothing was sent
+    and nothing paid."""
+    if not ask(summary):
+        return None
+    deal = open_deal(home, maya, seller, seller_key, chosen, adjudicator, say, rail=rail.SEALED, me=maya.name)
+    inv = rail.invoice(chosen.price_msat)
+    check = check_payment(maya, deal, inv.payment_hash)
+    if not check.get("proceed"):
+        maya.approve(deal.deal_id, check, "proceed", f"{summary}\nAnswer: Pay")
+    payment = rail.pay_invoice(inv)
+    pay(home, maya, deal, check, payment.reference, simulated=simulated)
+    return deal, payment
+
+
+def take_delivery(home: Path, maya: pt.Party, deal: Deal) -> str | None:
+    """Keep the seller's payee leg and its delivery record once both are on the stage, and return what the delivery
+    record says it shipped; None while either is missing. Each file is kept once, so the payment tool and Maya's agent
+    (:func:`pick_up_deliveries`) can both call it."""
+    seen = [n["statement"]["observed"] for n in maya.notes(flow.DELIVERED_SEEN) if n["statement"]["deal_id"] == deal.deal_id]
+    if seen:
+        return seen[0]
+    files = {k: wire.path(home, deal.me, deal.deal_id, k) for k in ("received", "act")}
+    if not all(f.is_file() for f in files.values()):
+        return None
+    for kind, f in files.items():
+        mark = maya.dir / "handled" / f"{deal.deal_id}.{kind}"
+        if not mark.exists():
+            maya.receive(f)
+            mark.parent.mkdir(exist_ok=True)
+            mark.touch()
+    observed = _observed(json.loads(files["act"].read_text()))
     maya.note(flow.DELIVERED_SEEN, {"deal_id": deal.deal_id, "observed": observed}, subject_ref=deal.deal_id)
     return observed
+
+
+def await_delivery(home: Path, maya: pt.Party, deal: Deal, seconds: float = flow.WAIT_S) -> str:
+    """Wait for the seller's payee leg and its delivery record (:func:`take_delivery`); refused after ``seconds``, and
+    Maya's agent picks the delivery up when it comes (:func:`pick_up_deliveries`)."""
+    stop = time.monotonic() + seconds
+    while True:
+        observed = take_delivery(home, maya, deal)
+        if observed is not None:
+            return observed
+        if time.monotonic() >= stop:
+            raise pt.Refused(f"{label(deal.seller)} has not recorded the payment and the delivery yet (its window may be "
+                             "closed). The payment is recorded on Maya's side; this window shows the delivery when it comes")
+        time.sleep(0.5)
+
+
+def paid(home: Path, deal: Deal) -> bool:
+    """Whether Maya handed the seller her payer leg for this deal."""
+    return wire.path(home, deal.seller, deal.deal_id, "paid").is_file()
+
+
+def pick_up_deliveries(home: Path, maya: pt.Party, say: Callable[[str], None]) -> list[str]:
+    """For each of Maya's paid deals whose delivery the payment tool did not see (the seller's window was closed, say):
+    take the delivery once it is on the stage, say what was shipped, and send Maya's statement when all of it came.
+    Returns the deals picked up now."""
+    done = []
+    for deal in deals_from_notes(maya):
+        if not paid(home, deal) or any(n["statement"]["deal_id"] == deal.deal_id for n in maya.notes(flow.DELIVERED_SEEN)):
+            continue
+        observed = take_delivery(home, maya, deal)
+        if observed is None:
+            continue
+        done.append(deal.deal_id)
+        what = shipped(observed)
+        say(screens.delivered_line(label(deal.seller), what))
+        if what.startswith("200 of 200"):
+            close_received(home, maya, deal)
+            say("Maya's statement sent: she received what she paid for.")
+        else:
+            say("Maya ordered 200 badges. If fewer arrived, she can dispute the delivery.")
+    return done
 
 
 def _observed(doc: Any) -> str:
@@ -317,16 +390,15 @@ def close_received(home: Path, maya: pt.Party, deal: Deal) -> None:
 
 def dispute(home: Path, maya: pt.Party, deal: Deal, say: Callable[[str], None]) -> dict:
     """Maya disputes the delivery: her statement that it was not met, then ``deal dispute``; the dispute goes to the
-    seller and, with her adjudicator copy, to the adjudicator the agreement names."""
+    seller and to the adjudicator the agreement names, which then asks each side for its books."""
     wire.send(home, deal.seller, deal.deal_id, "statement",
               maya.statement(deal.deal_id, {pt.PAID: "met", pt.DELIVERED: "not_met"}))
     d = maya.dispute(deal.deal_id, pt.DELIVERED)
     wire.send(home, deal.seller, deal.deal_id, "dispute", d["file"])
-    copy = maya.bundle(deal.deal_id, "adjudicator", "the deal's adjudicator", wait=120, say=say)
-    case = adj.open_case(Path(d["file"]), copy)
-    maya.note(flow.CASE, {"deal_id": deal.deal_id, "case": case["case"], "copy": case["copies"][0]},
-              subject_ref=deal.deal_id)
-    return case
+    adj.send_dispute(home, Path(d["file"]), deal.deal_id, buyer=deal.me, seller=deal.seller)
+    maya.note(flow.CASE, {"deal_id": deal.deal_id}, subject_ref=deal.deal_id)
+    say("dispute sent to the seller and to the adjudicator")
+    return d
 
 
 def seller_statements(home: Path, maya: pt.Party) -> None:

@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The demo's adjudicator: ledger-cloud's adjudicator service (``ledger_cloud/adjudicator``), run on this Mac with a
-directory store, as Steven runs it now (ops u211 item 5, "Option A"). It holds no deal rule of its own: its front
-takes cases and books (``POST /v1/cases``, ``POST /v1/cases/{case}/books``) and serves rulings to the parties they
-name (``GET /v1/cases/{case}/rulings/{digest}``, signed by the party's record key); its operator, the one process that
-holds the key, rules (``rule``), registers its stamp with the witness (``witness``) and checks each party's entry of a
-ruling (``entry``). Every rule it applies is evidencebook's (``xdealv1.CheckCase``, ``SealRuling``, ``EntryOf``).
+"""The demo's adjudicator: a capsulectl-deal profile of its own (one key for its records and its checkpoints, the key every
+agreement names), run by the operator, which rules with capsulectl's own verbs (evidencebook#861, design note
+``docs/design/861-four-books.md``; capsulectl at the run sheet's pin):
 
-This module starts the front (the stage does, :mod:`stage`), wraps the operator and the client as the demo's parties
-and the Adjudicator window use them, and serves the rules page the agreements name. The binaries are ledger-cloud's,
-built at the commit the run sheet pins, in ``ARD_ADJUDICATOR_BIN``."""
+1. A party sends it the dispute it raised (``deal dispute``'s file).
+2. It asks each party for its books: a ``deal_adjudicator_copy/1`` evidence request over the deal's correlation. Each
+   party's agent answers on its own with ``deal respond``: its whole deal book and the copy it holds of the other side's
+   (u207, u211: full disclosure; four books).
+3. The presenter decides, and ``deal ruling --answer A --answer B`` records it over the books read
+   (``xdealv1.GatherCase``): the ruling names each side's book read and what timed each record. A side whose own book
+   was not shown is ruled on only from records it signed, as the other side holds them (u211 item 2), and capsulectl
+   refuses a ruling against a side none of whose records it read.
+4. Its checkpoint carries the ruling's stamp to the witness every agreement names; the ruling file, written again
+   after the stamp, carries the receipt, and each party enters it with ``deal receive``.
+5. ``deal ruling entries`` reads whether each party entered it, from the copies they send back.
+
+Everything travels through the stage's files (:mod:`wire`), as every other deal step does. No adjudication rule is
+written here: capsulectl applies evidencebook's (``CheckCase``, ``GatherCase``, ``SealRuling``, ``EntryOf``)."""
 from __future__ import annotations
 
 import hashlib
@@ -16,35 +24,32 @@ import json
 import os
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
 import party as pt
+import wire
+from cast import ADJUDICATOR
 
-PORT = int(os.environ.get("ARD_STAGE_PORT", "47481")) + 2  # the stage's port + 2: 47483 by default
-URL = f"http://127.0.0.1:{PORT}"
-PRINCIPAL = "demo-operator"
-#: The challenge window: 7 days (Steven, ops u214, 2026-11-24: "was 30; agents act fast"). The rules page and the
-#: ruling dialog say it; the operator keeps a ruled case's copies this long.
-CHALLENGE_WINDOW = "168h"
-#: The conflict determination every ruling records (ops u120: whether Action State is, or acts for, a party). In this
-#: demo the operator runs every party, so it is not independent of them; the dialog shows these words.
+#: The conflict determination every ruling's dialog shows (ops u120: whether Action State is, or acts for, a party).
 CONFLICT = "the operator runs this adjudicator and every party here, so it is not independent of the parties"
-#: The rules the agreements name: what the demo adjudicator rules on. The page is served by the stage; its SHA-256 is
-#: the agreement's ``rules_digest``.
-RULES_TEXT = """Adjudicator: rules
+#: The challenge window: 7 days (Steven, ops u214, 2026-11-24: "was 30; agents act fast").
+CHALLENGE_DAYS = 7
+#: The rules the agreements name: what the adjudicator rules on. The stage serves the page; its SHA-256 is the agreement's
+#: ``rules_digest``.
+RULES_TEXT = f"""Adjudicator: rules
 
 The operator runs this adjudicator and every party here, so it is not independent of the parties.
 
 1. It rules on one row of an x-deal-v1 deal whose agreement names it, when a party disputes that row.
-2. It reads the books the parties send it, and rules against a side only on records that side signed itself. A side
-   whose book was not shown is not ruled against.
-3. Its ruling says whether the row was met. It is final for the row; either side may challenge it within 7 days,
-   and a challenge is recorded beside the ruling and never replaces it.
+2. It asks each party for its books: its own deal book and the copy it holds of the other side's. It rules against a
+   side only on records that side signed itself, and not against a side none of whose records it read.
+3. Its ruling says whether the row was met. It is final for the row; either side may challenge it within
+   {CHALLENGE_DAYS} days, and a challenge is recorded beside the ruling and never replaces it.
 4. It orders no payment and moves no money.
 """
+#: The derivation of the adjudicator's request for a party's books (evidencebook ``xdealv1.DerivationAdjudicatorCopy``).
+DERIVATION = "deal_adjudicator_copy/1"
 
 
 class AdjudicatorError(RuntimeError):
@@ -59,39 +64,55 @@ def rules_url() -> str:
     return f"http://127.0.0.1:{int(os.environ.get('ARD_STAGE_PORT', '47481'))}/adjudicator/rules"
 
 
-def binary(name: str) -> str:
-    d = os.environ.get("ARD_ADJUDICATOR_BIN", "")
-    path = Path(d) / name
-    if not d or not os.access(path, os.X_OK):
-        raise AdjudicatorError(f"set ARD_ADJUDICATOR_BIN to the folder holding ledger-cloud's {name} (the run sheet "
-                               "builds it)")
-    return str(path)
+def request_for(deal_id: str) -> dict:
+    """The adjudicator's request for a party's books of one deal, in the evidence request draft's wire form
+    (``min_freshness`` is a bare time)."""
+    return {"coverage": {"min_freshness": "2020-01-01T00:00:00Z"}, "derivation": DERIVATION,
+            "nonce": os.urandom(16).hex(), "subject": {"correlation": deal_id}}
+
+
+def _named_file(home: Path) -> Path:
+    return Path(home).expanduser() / "stage" / "adjudicator.json"
+
+
+def named_key(home: Path) -> str:
+    """The adjudicator's key as the stage publishes it: the key a party checks the adjudicator's request against."""
+    return json.loads(_named_file(home).read_text())["key_id"]
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _mtime(p: Path) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(p.stat().st_mtime))
 
 
 @dataclass(frozen=True)
 class Adjudicator:
-    """The adjudicator's state under the demo home: ``<home>/adjudicator`` (its key, the operator's shelf, the
-    intake, read and export folders, the witness directory)."""
+    """The adjudicator's profile under the demo home (``<home>/adjudicator``)."""
 
     home: Path
 
     @property
-    def dir(self) -> Path:
-        return Path(self.home).expanduser() / "adjudicator"
+    def party(self) -> pt.Party:
+        return pt.Party(Path(self.home).expanduser(), ADJUDICATOR)
 
     @property
     def key_file(self) -> Path:
-        return self.dir / "adjudicator.key"
+        return Path(self.home).expanduser() / ADJUDICATOR / "adjudicator.key"
 
     def create(self) -> Adjudicator:
-        """Make the key once (``capsulectl key generate``), and the witness directory the operator pins."""
-        self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        """Make the key once (``capsulectl deal key generate``) and the profile on it, records and checkpoints alike: an
+        agreement names the adjudicator by that one key, and its case book's stamp proof binds to it."""
+        self.key_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if not self.key_file.exists():
             run = subprocess.run([os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"), "key", "generate", "--output",
                                   str(self.key_file)], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
             if run.returncode != 0:
                 raise AdjudicatorError(f"capsulectl key generate failed: {run.stderr.strip()}")
-        (self.dir / "witnesses.json").write_text(json.dumps(pt.witness_directory()))
+        self.party.create("node", key_file=str(self.key_file))
+        wire.write_atomic(_named_file(self.home), json.dumps(self.named()).encode())
         return self
 
     @property
@@ -104,168 +125,147 @@ class Adjudicator:
         """How an agreement names this adjudicator: its key and its published rules."""
         return {"key_id": self.key_id, "rules_digest": rules_digest(), "rules_url": rules_url()}
 
-    # -- the front ------------------------------------------------------------------------------
+    # -- the cases ---------------------------------------------------------------------------------
 
-    def start_front(self) -> subprocess.Popen:
-        """Start ``adjudicator-front`` on localhost for the stage (it holds no key)."""
-        log = open(self.dir / "front.log", "a")
-        return subprocess.Popen([binary("adjudicator-front"), "-addr", f"127.0.0.1:{PORT}", "-adjudicator-key", self.key_id,
-                                 "-rules-digests", rules_digest(), "-intake", str(self.dir / "intake"),
-                                 "-read", str(self.dir / "read"), "-xff-hop", "0"],
-                                stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
-
-    # -- the operator (the Adjudicator window's process only) ----------------------------------
-
-    def operator(self, *args: str) -> dict:
-        env_args = [binary("adjudicator-operator"), "-dir", str(self.dir / "op"), "-key-file", str(self.key_file),
-                    "-witness-directory", str(self.dir / "witnesses.json"), "-intake", str(self.dir / "intake"),
-                    "-read", str(self.dir / "read"), "-export", str(self.dir / "export"), "-principal", PRINCIPAL,
-                    "-challenge-window", CHALLENGE_WINDOW]
-        if pt.witnessed():
-            env_args += ["-witness-ids", pt.WITNESS_URL, "-witness-urls", pt.WITNESS_URL]
-        run = subprocess.run([*env_args, *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
-        if run.returncode != 0:
-            raise AdjudicatorError(f"adjudicator-operator {args[0]}: {(run.stderr or run.stdout).strip()}")
-        out = run.stdout.strip()
-        try:
-            return json.loads(out) if out else {}
-        except ValueError:
-            return {"raw": out}
+    def ask(self) -> list[str]:
+        """For each dispute sent here that it has not asked about yet: ask the deal's buyer and seller for their books
+        (one request each, through the stage). Returns the deals asked about now."""
+        asked = []
+        for deal_id, _f in wire.pending(self.home, ADJUDICATOR, "dispute"):
+            if wire.path(self.home, ADJUDICATOR, deal_id, "asked").is_file():
+                continue
+            parties = json.loads(wire.path(self.home, ADJUDICATOR, deal_id, "parties").read_text())
+            for side in ("buyer", "seller"):
+                wire.send_json(self.home, parties[side], deal_id, "adjrequest", request_for(deal_id))
+            wire.send_json(self.home, ADJUDICATOR, deal_id, "asked", {"at": _now(), **parties})
+            asked.append(deal_id)
+        return asked
 
     def cases(self) -> list[dict]:
-        """The cases the front took, read from its intake folder (ledger-cloud ``layout``: ``cases/case/<id>/`` with
-        ``disputes``, ``copies``, ``books`` and ``descriptors``, each object stored once as ``{received_at, body}``):
-        each case's deal, row, the parties' keys, its dispute, the copies sent and when each arrived."""
+        """Each dispute sent here: its deal, the parties, when they were asked, the answers that came back, the ruling."""
         out = []
-        root = self.dir / "intake" / "cases" / "case"
-        for case in sorted(p for p in root.glob("*") if p.is_dir()) if root.is_dir() else []:
-            def objs(kind: str) -> list[dict]:
-                d = case / kind
-                found = []
-                for f in sorted(d.glob("*")) if d.is_dir() else []:
-                    try:
-                        env = json.loads(f.read_bytes())
-                    except ValueError:
-                        env = {}
-                    found.append({"digest": f.name, "received_at": env.get("received_at", ""), "body": env.get("body")})
-                return found
-            desc = next(iter(sorted((case / "descriptors").glob("*"))), None) if (case / "descriptors").is_dir() else None
-            deal_id, row, buyer, seller = (desc.name.split("~") + ["", "", "", ""])[:4] if desc else ("", "", "", "")
-            out.append({"case": case.name, "deal_id": deal_id, "row": bytes.fromhex(row).decode() if row else "",
-                        "buyer": buyer, "seller": seller, "disputes": objs("disputes"), "copies": objs("copies"),
-                        "books": objs("books")})
+        for deal_id, f in wire.pending(self.home, ADJUDICATOR, "dispute"):
+            asked_f = wire.path(self.home, ADJUDICATOR, deal_id, "asked")
+            parties = json.loads(wire.path(self.home, ADJUDICATOR, deal_id, "parties").read_text())
+            answers = {}
+            for side in ("buyer", "seller"):
+                a = wire.path(self.home, ADJUDICATOR, deal_id, f"answer-{side}")
+                if a.is_file():
+                    answers[side] = {"file": a, "at": _mtime(a)}
+            ruling = wire.path(self.home, ADJUDICATOR, deal_id, "ruling")
+            out.append({"deal_id": deal_id, "dispute": f, "parties": parties, "answers": answers,
+                        "asked_at": json.loads(asked_f.read_text())["at"] if asked_f.is_file() else "",
+                        "ruling": json.loads(ruling.read_text()) if ruling.is_file() else None})
         return out
 
-    def rule(self, case: str, dispute: str, copies: list[str], row: str, value: str, against: str) -> dict:
-        args = ["rule", "-case", case, "-dispute", dispute]
-        for c in copies:
-            args += ["-copy", c]
-        return self.operator(*args, "-row", row, "-value", value, "-against", against, "-final", "-conflict", CONFLICT)
-
-    def witness(self, seconds: float = 60) -> int:
-        """Register the stamps the operator holds with the witness, retrying for up to ``seconds``; how many it
-        delivered (0 when the witness took none in that time)."""
-        stop = time.time() + seconds
+    def gather(self, seconds: float = 30) -> list[dict]:
+        """Ask about each new dispute, then wait up to ``seconds`` for both sides of every open case to answer. Returns the
+        cases as they stand."""
+        self.ask()
+        stop = time.monotonic() + seconds
         while True:
-            try:  # the operator exits non-zero when the witness cannot be reached: that is "none yet", not a failed ruling
-                n = int(self.operator("witness").get("delivered", 0) or 0)
-            except AdjudicatorError:
-                n = 0
-            if n or time.time() >= stop:
-                return n
-            time.sleep(5)
+            cases = self.cases()
+            if time.monotonic() >= stop or all(len(c["answers"]) == 2 or c["ruling"] for c in cases):
+                return cases
+            time.sleep(1)
 
-    def rulings(self, case: str) -> list[dict]:
-        """The case's published rulings, as the operator wrote them for the parties to fetch: each one's digest and
-        what it found (its value and against whom), read from the ruling record's payload."""
-        out = []
-        d = self.dir / "read" / "rulings" / "case" / case
-        for f in sorted(d.glob("*.json")) if d.is_dir() else []:
-            found = _walk_ruling(json.loads(f.read_bytes()))
-            out.append({"digest": f.stem, **found})
-        return out
+    def rule(self, case: dict, row: str, value: str, against: str) -> dict:
+        """Record the presenter's ruling with ``deal ruling`` over the answers that came back, final for the row. The same
+        ruling again seals nothing and writes the file again with the receipts the shelf holds by then."""
+        p = self.party
+        args = ["ruling", "--deal", case["deal_id"], "--row", row, "--value", value, "--against", against, "--final",
+                "--dispute", str(case["dispute"])]
+        for side in ("buyer", "seller"):
+            if side in case["answers"]:
+                args += ["--answer", str(case["answers"][side]["file"])]
+        out = p.tmp("ruling.json")
+        try:
+            done = p.run(*args, "--out", out)
+        except pt.Refused as exc:
+            raise AdjudicatorError(str(exc)) from None
+        record = {"ruling": done.get("ruling", ""), "sealed": done.get("sealed"), "row": row, "value": value,
+                  "against": against, "file": out, "books": done.get("books", {})}
+        wire.send_json(self.home, ADJUDICATOR, case["deal_id"], "ruling", record)
+        return record
 
-    def entry(self, case: str, ruling: str) -> list[dict]:
-        out = self.operator("entry", "-case", case, "-ruling", ruling)
-        return out if isinstance(out, list) else out.get("answers", [])
+    def stamp(self, case: dict, seconds: float = 90) -> bool:
+        """Take the adjudicator's next checkpoint so the witness stamps the ruling, write the ruling file again with the
+        receipt, and hand it to both parties. True when the stamp was delivered within ``seconds`` (never without a
+        witness); the ruling goes to the parties either way."""
+        p, record = self.party, case["ruling"]
+        stamped = False
+        if pt.witnessed():
+            stop = time.monotonic() + seconds
+            while time.monotonic() < stop:
+                t = p.tick()
+                if t.get("state") == "ticked" and t.get("delivered") and not t.get("pending"):
+                    stamped = True
+                    break
+                time.sleep(5)
+        again = self.rule(case, record["row"], record["value"], record["against"])
+        for side in ("buyer", "seller"):
+            wire.send(self.home, case["parties"][side], case["deal_id"], "ruling", again["file"])
+        return stamped
+
+    def entries(self, case: dict) -> list[dict]:
+        """Whether each party entered the ruling, from the copies they sent back after entering it
+        (``deal ruling entries``)."""
+        args = ["ruling", "entries", "--deal", case["deal_id"], "--ruling", case["ruling"]["ruling"]]
+        sent = 0
+        for side in ("buyer", "seller"):
+            book = wire.path(self.home, ADJUDICATOR, case["deal_id"], f"book-{side}")
+            proof = wire.path(self.home, ADJUDICATOR, case["deal_id"], f"proof-{side}")
+            if book.is_file():
+                args += ["--copy", str(book)] + (["--proof", str(proof)] if proof.is_file() else [])
+                sent += 1
+        if not sent:
+            return []
+        return self.party.run(*args)["entries"]
 
 
 # -- what a party does with the adjudicator ---------------------------------------------------------
 
-def _post(path: str, body: dict) -> dict:
-    req = urllib.request.Request(URL + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"},
-                                 method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:  # the demo's own localhost adjudicator
-            return json.loads(r.read())
-    except urllib.error.HTTPError as exc:
-        raise AdjudicatorError(f"the adjudicator refused it ({exc.code}): {exc.read().decode(errors='replace')[:300]}") from None
-    except OSError as exc:
-        raise AdjudicatorError(f"the adjudicator is not reachable at {URL}: {exc}") from None
+def send_dispute(home: Path, dispute_file: Path, deal_id: str, buyer: str, seller: str) -> None:
+    """A party hands its dispute to the adjudicator, with who the deal's buyer and seller are on the stage."""
+    wire.send_json(home, ADJUDICATOR, deal_id, "parties", {"buyer": buyer, "seller": seller})
+    wire.send(home, ADJUDICATOR, deal_id, "dispute", dispute_file)
 
 
-def open_case(dispute_file: Path, copy: Path) -> dict:
-    """Send the dispute with this party's adjudicator copy (``POST /v1/cases``). The other side sends the same dispute
-    with its own copy; the front keeps each object once, so both land in one case."""
-    return _post("/v1/cases", {"dispute": json.loads(Path(dispute_file).read_text()), "copies": [json.loads(copy.read_text())]})
-
-
-def send_book(case: str, copy: Path, proof: dict) -> dict:
-    """Send this party's book after it entered a ruling, with its stamp proof and witness receipts, for the entry check."""
-    return _post(f"/v1/cases/{case}/books", {"bundle": json.loads(copy.read_text()), "stamp_proof": proof["stamp_proof"],
-                                             "witness_receipts": proof.get("witness_receipts") or []})
-
-
-def fetch_ruling(p: pt.Party, case: str, ruling: str) -> Path:
-    """Fetch a ruling with the party's record key (``adjudicator-client``)."""
-    out = p.tmp("ruling.json")
-    run = subprocess.run([binary("adjudicator-client"), "-url", URL, "-case", case, "-ruling", ruling, "-key-file",
-                          str(p.seed_file), "-out", out], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
-    if run.returncode != 0:
-        raise AdjudicatorError(f"could not fetch the ruling: {(run.stderr or run.stdout).strip()}")
-    return Path(out)
-
-
-def list_rulings(p: pt.Party, case: str) -> dict:
-    """The case's rulings and refusals, as the party may read them (``adjudicator-client`` with no ``-ruling``)."""
-    out = str(p.dir / "tmp" / "rulings-list.json")  # one file, rewritten each read
-    Path(out).parent.mkdir(exist_ok=True, mode=0o700)
-    run = subprocess.run([binary("adjudicator-client"), "-url", URL, "-case", case, "-key-file", str(p.seed_file), "-out", out],
-                         capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
-    if run.returncode != 0:
-        return {"rulings": [], "refusals": []}
-    return json.loads(Path(out).read_text())
-
-
-def _walk_ruling(doc) -> dict:
-    """The ruling body's ``value`` and ``against``, wherever the published file carries them (encoded payloads too)."""
-    import base64
-    if isinstance(doc, dict):
-        if "against" in doc and "value" in doc:
-            return {"value": doc["value"], "against": doc["against"]}
-        for v in doc.values():
-            got = _walk_ruling(v)
-            if got:
-                return got
-    elif isinstance(doc, list):
-        for v in doc:
-            got = _walk_ruling(v)
-            if got:
-                return got
-    elif isinstance(doc, str) and len(doc) > 40:
+def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[str]:
+    """Answer each request the adjudicator sent this party, in full (``deal respond``): its whole deal book and the copy it
+    holds of the other side's. ``side`` is this party's side (``buyer`` or ``seller``). capsulectl refuses a request from
+    any key but the adjudicator the deal's agreement names. Returns the deals answered now."""
+    done = []
+    for deal_id, f in wire.pending(home, me, "adjrequest"):
+        mark = p.dir / "handled" / f"{deal_id}.adjanswer"
+        if mark.exists():
+            continue
+        out = p.tmp("answer.json")
         try:
-            return _walk_ruling(json.loads(base64.b64decode(doc + "==")))
-        except Exception:
-            return {}
-    return {}
+            got = p.run("respond", "--request", str(f), "--requester", named_key(home), "--output", out)
+        except pt.Refused as exc:
+            if "after its last checkpoint" not in str(exc):
+                raise
+            p.tick()  # an answer rests on a checkpoint, as a report does: answered on a later round
+            continue
+        if got.get("outcome") != "artifact":
+            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: {got.get('reason', got)}")
+            mark.parent.mkdir(exist_ok=True)
+            mark.touch()  # a refusal is final for that request: it is not tried again every round
+            continue
+        wire.send(home, ADJUDICATOR, deal_id, f"answer-{side}", out)
+        mark.parent.mkdir(exist_ok=True)
+        mark.touch()
+        done.append(deal_id)
+        say(f"the adjudicator asked for this party's books of deal {deal_id[5:13]}: sent in full (its own book and the "
+            "copy it holds of the other side's)")
+    return done
 
 
-def wait_front(seconds: float = 10) -> bool:
-    stop = time.time() + seconds
-    while time.time() < stop:
-        try:
-            with urllib.request.urlopen(URL + "/status.json", timeout=1):
-                return True
-        except Exception:
-            time.sleep(0.2)
-    return False
+def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> None:
+    """After entering a ruling, send the adjudicator this party's copy (``deal report --share adjudicator``) so it can read
+    the entry (``deal ruling entries``)."""
+    copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)
+    wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", copy)
+    wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", p.proof(deal_id, copy))
+    say("this party's book, with the ruling entered, sent to the adjudicator")

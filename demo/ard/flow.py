@@ -4,11 +4,10 @@ seller's agent, which answers on its own, and the buyer's and the adjudicator's 
 
 Every party is its own capsulectl-deal profile (:mod:`party`); they meet through the stage (:mod:`stage`): each
 seller's commitment and its shared History card under ``<home>/stage``, and the files the parties hand each other
-(:mod:`wire`). A dispute goes to the local ledger-cloud adjudicator (:mod:`adjudicator`). Nothing here seals a deal
+(:mod:`wire`). A dispute goes to the adjudicator the agreement names, a capsulectl-deal profile (:mod:`adjudicator`). Nothing here seals a deal
 record or computes a row's status: each step is a capsulectl verb, and what the screen says is read back from it."""
 from __future__ import annotations
 
-import base64
 import json
 import threading
 import time
@@ -21,7 +20,7 @@ import adjudicator as adj
 import ard
 import party as pt
 import wire
-from cast import ADJUDICATOR, BUYER, ITEM, SELLERS, label
+from cast import BUYER, ITEM, SELLERS, label
 
 _paths_setup = pt._paths  # party already put the Goose reference on the path
 import commitment as cm  # noqa: E402
@@ -29,9 +28,9 @@ import goose_node as gn  # noqa: E402
 
 #: Node-book record types of the demo (its own names; capsulectl refuses a library name).
 JOINED = gn.JOINED
-CASE = "ard_case"            # a party sent its copy to the adjudicator for a case
+CASE = "ard_case"            # a party's dispute went to the adjudicator
 RULING_ENTERED = "ard_ruling_entered"
-RULING_STAMPED = "ard_ruling_stamped"  # the ruling's witnessed time, once a fetched copy carried its receipt
+RULING_STAMPED = "ard_ruling_stamped"  # the ruling's witnessed time, once a later file carried its receipt
 BOOK_SENT = "ard_book_sent"
 DELIVERED_SEEN = "ard_delivery_seen"
 #: How long a party waits for the other side's next file before it gives up on that step.
@@ -91,8 +90,8 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
         raise pt.Refused(f"{label(seller)}'s card does not verify: {out.get('verdict')}")
     if signer != key_id:
         raise pt.Refused(f"{label(seller)}'s card is signed by {signer[:8]}…, not the key its commitment names")
-    if card.get("derivation") != "standard_history/3":
-        raise pt.Refused(f"{label(seller)}'s card is {card.get('derivation')}, not standard_history/3")
+    if card.get("derivation") != pt.CARD_DERIVATION:
+        raise pt.Refused(f"{label(seller)}'s card is {card.get('derivation')}, not {pt.CARD_DERIVATION}")
     return CardRead(card, as_of["anchor"], as_of["anchor_time"], signer, out["verdict"],
                     out.get("witnesses", {}).get("status", ""), local)
 
@@ -164,8 +163,8 @@ class SellerAgent:
     def _loop(self) -> None:
         last_card = 0.0
         while not self._stop.is_set():
-            for step in (self._offers, self._agreements, self._payments, self._statements, self._disputes, self._rulings,
-                         self._named):
+            for step in (self._offers, self._agreements, self._payments, self._statements, self._disputes, self._requests,
+                         self._rulings, self._named):
                 try:
                     step()
                 except Exception as exc:  # one failed step is shown in the seller's log and retried next round
@@ -273,26 +272,18 @@ class SellerAgent:
                 self.say(f"the buyer's statement on deal {deal_id[5:13]} kept")
 
     def _disputes(self) -> None:
-        p = self.party
         for deal_id, f in wire.pending(self.home, self.name, "dispute"):
-            if self._done(deal_id, "dispute"):
-                continue
-            if not self._done(deal_id, "dispute-kept"):
-                p.receive(f)
-                self._mark(deal_id, "dispute-kept")
-                self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: sending this seller's records to the "
-                         "adjudicator")
-            copy = Path(self._step(deal_id, "adj-copy",  # one copy: a retry sends the same one, never a second
-                                   lambda: p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)))
-            case = adj.open_case(f, copy)  # the front keeps each object once: a retry stores nothing twice
-            p.note(CASE, {"deal_id": deal_id, "case": case["case"], "copy": case["copies"][0]}, subject_ref=deal_id)
-            self._mark(deal_id, "dispute")
-            self.say("this seller's records were sent to the adjudicator")
+            if not self._done(deal_id, "dispute"):
+                self.party.receive(f)
+                self._mark(deal_id, "dispute")
+                self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: the adjudicator will ask for this "
+                         "seller's books")
+
+    def _requests(self) -> None:
+        adj.answer_requests(self.home, self.party, self.name, "seller", self.say)
 
     def _rulings(self) -> None:
-        if time.monotonic() - self._last_rulings >= 5:  # the adjudicator is read every few seconds, not every round
-            self._last_rulings = time.monotonic()
-            enter_rulings(self.home, self.party, self.buyer_of, self.say)
+        enter_rulings(self.home, self.party, "seller", self.buyer_of, self.say)
 
     def _named(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "named"):
@@ -316,50 +307,40 @@ def seller_decision(price_msat: int) -> dict:
 
 # -- a party and a ruling --------------------------------------------------------------------------------
 
-def enter_rulings(home: Path, p: pt.Party, other: str | Callable[[str], str], say: Callable[[str], None]) -> list[str]:
-    """For each case the party sent its copy to: fetch any ruling not yet entered, enter it in the party's own book
-    (``deal receive --out``), hand the naming statement to the other side, and after the party's next checkpoint send
-    its book to the adjudicator for the entry check. Returns the rulings entered now."""
-    entered = {n["statement"]["ruling"]: n["statement"].get("stamped_at", "") for n in p.notes(RULING_ENTERED)}
-    stamped = {n["statement"]["ruling"] for n in p.notes(RULING_STAMPED)}
-    sent = {n["statement"]["ruling"] for n in p.notes(BOOK_SENT)}
+def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str], str],
+                  say: Callable[[str], None]) -> list[str]:
+    """For each ruling the adjudicator sent this party: enter it in the party's own book (``deal receive --out``), hand the
+    naming statement to the other side, and send the adjudicator this party's book with the entry and its stamp proof,
+    for its entry check. A ruling file that arrives again after the adjudicator's stamp reached the witness is taken again
+    for its receipt. Returns the deals whose ruling was entered now."""
+    entered = {n["statement"]["deal_id"]: n["statement"].get("stamped_at", "") for n in p.notes(RULING_ENTERED)}
+    stamped = {n["statement"]["deal_id"] for n in p.notes(RULING_STAMPED)}
+    sent = {n["statement"]["deal_id"] for n in p.notes(BOOK_SENT)}
     done = []
-    finished = {n["statement"]["deal_id"] for n in p.notes(BOOK_SENT)
-                if n["statement"]["ruling"] in stamped or entered.get(n["statement"]["ruling"]) or not pt.witnessed()}
-    for n in p.notes(CASE):
-        case, deal_id = n["statement"]["case"], n["statement"]["deal_id"]
-        if deal_id in finished:
-            continue
-        for r in adj.list_rulings(p, case).get("rulings", []):
-            # a listed ruling is its record; its digest is the record's payload commitment (what `deal ruling` prints)
-            digest = (r.get("record", {}).get("header", {}).get("payload_commitments") or [""])[0]
-            if not digest:
-                continue
-            if digest not in entered:
-                file = adj.fetch_ruling(p, case, digest)
-                named = p.tmp("named.json")
-                got = p.receive(file, out=named)
-                wire.send(home, other(deal_id) if callable(other) else other, deal_id, "named", named)
-                when = _stamped(got)
-                p.note(RULING_ENTERED, {"deal_id": deal_id, "case": case, "ruling": digest, "stamped_at": when},
-                       subject_ref=deal_id)
-                entered[digest] = when
-                done.append(digest)
-                say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in this party's records"
-                    + (f" (time-stamped by {pt.WITNESS_NAME} at {when})" if when else ""))
-            if not entered.get(digest) and digest not in stamped and pt.witnessed():
-                # entered before the adjudicator's stamp reached the witness: fetch it again for its receipt
-                when = _stamped(p.receive(adj.fetch_ruling(p, case, digest)))
+    for deal_id, file in wire.pending(home, p.name, "ruling"):
+        if deal_id not in entered:
+            named = p.tmp("named.json")
+            when = _stamped(p.receive(file, out=named))
+            wire.send(home, other(deal_id) if callable(other) else other, deal_id, "named", named)
+            p.note(RULING_ENTERED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
+            entered[deal_id] = when
+            done.append(deal_id)
+            say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in this party's records"
+                + (f" (time-stamped by {pt.WITNESS_NAME} at {when})" if when else ""))
+        elif not entered[deal_id] and deal_id not in stamped and pt.witnessed():
+            mark = p.dir / "handled" / f"{deal_id}.ruling-seen"
+            if not mark.exists() or file.stat().st_mtime > mark.stat().st_mtime:
+                mark.parent.mkdir(exist_ok=True)
+                mark.touch()
+                when = _stamped(p.receive(file))
                 if when:
-                    p.note(RULING_STAMPED, {"deal_id": deal_id, "ruling": digest, "stamped_at": when}, subject_ref=deal_id)
-                    stamped.add(digest)
+                    p.note(RULING_STAMPED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
+                    stamped.add(deal_id)
                     say(f"the ruling on deal {deal_id[5:13]} was time-stamped by {pt.WITNESS_NAME} at {when}")
-            if digest not in sent:
-                copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)
-                adj.send_book(case, copy, p.proof(deal_id, copy))
-                p.note(BOOK_SENT, {"deal_id": deal_id, "case": case, "ruling": digest}, subject_ref=deal_id)
-                sent.add(digest)
-                say("this party's book, with the ruling entered, sent to the adjudicator")
+        if deal_id not in sent:
+            adj.send_book(home, p, deal_id, side, say)
+            p.note(BOOK_SENT, {"deal_id": deal_id}, subject_ref=deal_id)
+            sent.add(deal_id)
     return done
 
 
@@ -372,48 +353,75 @@ def _stamped(received: dict) -> str:
 @dataclass
 class Case:
     """A case as the adjudicator's window shows it."""
-    case: str
     deal_id: str
     row: str
-    books: list[dict] = field(default_factory=list)   # [{"side", "received_at", "digest"}]
-    deciding: list[str] = field(default_factory=list)  # lines read from the books
-    dispute: str = ""
-    copies: list[str] = field(default_factory=list)
+    answered: dict[str, str] = field(default_factory=dict)  # side -> when its answer arrived
+    deciding: list[str] = field(default_factory=list)       # lines read from the books
+    asked_at: str = ""
+    ruling: dict | None = None
 
 
-def _payloads(copy_body: dict) -> list[dict]:
-    """The records a copy discloses, decoded (``evidencebook/payloads``)."""
-    out = []
-    for v in copy_body.get("extensions", {}).get("evidencebook/payloads", {}).values():
-        raw = v if isinstance(v, str) else json.dumps(v)
-        try:
-            raw = base64.b64decode(raw + "==").decode()
-        except Exception:
-            pass
-        try:
-            out.append(json.loads(raw))
-        except ValueError:
-            continue
-    return out
+def _records(book: dict) -> list[tuple[str, dict]]:
+    """An answer's records with whose book each comes from: ``own`` (the answering side's) or ``held`` (its copy of the
+    other side's)."""
+    def each(records) -> list[dict]:  # keyed by record id
+        return list((records or {}).values())
+    return [("own", r) for r in each(book.get("records"))] + \
+        [("held", r) for r in each((book.get("received") or {}).get("records"))]
 
 
 def case_view(case: dict, names: dict[str, str]) -> Case:
-    """What the case's books show: which side's book arrived and when, the seller's delivery record and each side's
-    statement on the row, as each side's own copy discloses them. ``names`` maps a party's key to its name."""
-    c = Case(case["case"], case["deal_id"], case["row"])
-    c.dispute = case["disputes"][0]["digest"] if case["disputes"] else ""
-    for cp in case["copies"]:
-        body = cp["body"] or {}
-        side = body.get("extensions", {}).get("x-deal-v1", {}).get("book", {}).get("agreement", {}).get("payload", {}) \
-            .get("body", {}).get("role", "?")
-        c.books.append({"side": side, "received_at": cp["received_at"], "digest": cp["digest"]})
-        c.copies.append(cp["digest"])
-        who = names.get(case["buyer"] if side == "buyer" else case["seller"], "the " + side)
-        for rec in _payloads(body):
-            b = rec.get("body", {})
+    """What the case's books show: which side answered and when, the seller's delivery record and each side's statement
+    on the row, from each answer's own book and the copy it holds of the other side's. ``names`` maps a side to its
+    name."""
+    dispute = json.loads(Path(case["dispute"]).read_text())
+    row = dispute.get("record", {}).get("payload", {}).get("body", {}).get("row", "delivered")
+    c = Case(case["deal_id"], row, asked_at=case.get("asked_at", ""), ruling=case.get("ruling"))
+    seen: set[str] = set()
+    for side, a in case["answers"].items():
+        c.answered[side] = a["at"]
+        book = json.loads(Path(a["file"]).read_text())["bundle"].get("extensions", {}).get("x-deal-v1", {}).get("book", {})
+        other = "seller" if side == "buyer" else "buyer"
+        for whose, rec in _records(book):
+            signer = side if whose == "own" else other
+            b = (rec.get("payload") or {}).get("body", {})
+            line = ""
             if "observed" in b and b.get("act"):
-                c.deciding.append(f"{who}'s own signed delivery record: {b['observed']}")
+                line = f"{names.get(signer, signer)}'s own signed delivery record: {buyer_words(b['observed'])}"
             for st in b.get("statements", []) if isinstance(b.get("statements"), list) else []:
-                if st.get("row") == case["row"]:
-                    c.deciding.append(f"{who}'s statement on the row: {st.get('value')}")
+                if st.get("row") == row:
+                    line = f"{names.get(signer, signer)}'s statement on the row: {st.get('value', '').replace('_', ' ')}"
+            if line and line not in seen:
+                seen.add(line)
+                c.deciding.append(line)
     return c
+
+
+def buyer_words(observed: str) -> str:
+    import buyer
+    return buyer.shipped(observed)
+
+
+def case_names(case: dict) -> dict[str, str]:
+    """Each side's name in a case, from the stage folders its dispute named."""
+    return {side: label(case["parties"][side]) for side in ("buyer", "seller")}
+
+
+def case_lines(c: Case, names: dict[str, str]) -> list[str]:
+    """What the adjudicator's screen says about a case: who was asked and who answered, what their books show, and the
+    ruling once recorded. It decides nothing."""
+    out = [f"deal {c.deal_id[5:13]}, row {c.row}: disputed by {names['buyer']}"]
+    if c.asked_at:
+        out.append(f"  asked both sides for their books at {c.asked_at}")
+    for side in ("buyer", "seller"):
+        if side in c.answered:
+            out.append(f"  {names[side]} answered at {c.answered[side]}: its own book and the copy it holds of "
+                       f"{names['seller' if side == 'buyer' else 'buyer']}'s")
+        else:
+            out.append(f"  {names[side]}: no answer yet (its book not shown to the adjudicator)")
+    out += [f"  {line}" for line in c.deciding]
+    if c.ruling:
+        who = names.get(c.ruling["against"], "no one")
+        found = "not met" if c.ruling["value"] == "not_met" else "met"
+        out.append(f"  ruling recorded: {found}, against {who} (ruling {c.ruling['ruling'][:8]}…)")
+    return out

@@ -15,15 +15,15 @@ starting ``REFUSED:`` and changes nothing.
     ard_dispute       ->  her dispute of a deal's delivery, sent to the seller and to the deal's adjudicator
 ``alder`` / ``kestrel``   a seller, its own profile and keys; its agent answers on its own:
     ard_seller_activity  ->  what its agent did: the deal, the delivery, a dispute, a ruling, its card now
-``adjudicator``   the demo's adjudicator (ledger-cloud's, run locally by the demo operator):
-    ard_case          ->  the cases sent to it, and what each side's books show
+``adjudicator``   the demo's adjudicator (its own capsulectl-deal profile, run by the demo operator):
+    ard_case          ->  the cases sent to it: it asks each side for its books and shows what they show
     ard_rule          ->  the presenter's ruling on a case (a dialog), recorded and time-stamped
     ard_case_activity ->  whether each party entered the ruling in its own book
 Every party's window also has ard_show_card, ard_open_card_page, ard_show_receipt and ard_open_receipt_page: its own
 History card and its own receipt (the adjudicator holds no deal of its own, so not those).
 
 Environment (``demo.py --help`` lists it): ``CAPSULECTL_DEAL``, ``CAPSULE_ENGINE``, ``ARD_EVIDENCEBOOK``,
-``ARD_ADJUDICATOR_BIN``, ``ARD_HOME``, ``ARD_RAIL`` (``fake``, ``lightning`` or ``local``; default ``fake``). Seed the
+``ARD_HOME``, ``ARD_RAIL`` (``fake``, ``lightning`` or ``local``; default ``fake``). Seed the
 home first with ``demo.py seed``. See RUNBOOK.md."""
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ import party as pt  # noqa: E402
 import pay  # noqa: E402
 import screens  # noqa: E402
 import stage  # noqa: E402
-from cast import ADJUDICATOR, BUYER, SELLERS, label  # noqa: E402
+from cast import ADJUDICATOR, BUYER, SELLERS  # noqa: E402
 
 ROLE = os.environ.get("ARD_ROLE", "maya")
 if ROLE not in (BUYER, ADJUDICATOR, *SELLERS):
@@ -152,15 +152,18 @@ class Session:
         threading.Thread(target=self._rulings, daemon=True).start()
 
     def say(self, line: str) -> None:
-        self.log.append(line)
+        if not self.log or self.log[-1] != line:  # a retry that fails the same way every round says so once
+            self.log.append(line)
 
     def _rulings(self) -> None:
         """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
         while True:
             try:
-                if self.maya.notes(flow.CASE):
-                    flow.enter_rulings(self.home, self.maya, buyer.seller_of(self.maya), self.say)
+                adj.answer_requests(self.home, self.maya, BUYER, "buyer", self.say)
+                flow.enter_rulings(self.home, self.maya, "buyer", buyer.seller_of(self.maya), self.say)
                 buyer.seller_statements(self.home, self.maya)
+                with self.pay_lock:  # not while ard_pay itself waits for the same delivery
+                    buyer.pick_up_deliveries(self.home, self.maya, self.say)
             except Exception as exc:  # shown in the next tool's output
                 self.say(f"could not read the adjudicator yet: {exc}")
             time.sleep(3)
@@ -206,6 +209,10 @@ def _tool(*roles: str, description: str | None = None):
             buf = io.StringIO()
             try:
                 with contextlib.redirect_stdout(buf):
+                    if _session is not None and _session.log:  # what Maya's agent did since her last request
+                        print("Since your last request:")
+                        _flush(_session)
+                        print()
                     fn(*args, **kwargs)
             except (SystemExit, Exception) as exc:
                 return (buf.getvalue() + f"\nREFUSED: {exc}").strip()
@@ -308,9 +315,10 @@ def ard_pick(seller: str) -> None:
 
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
-_PAY = ("Step 6: open the deal with the picked seller (the agreement names the deal's adjudicator and Action State's "
-        "witness) and pay it on the {rail}. A dialog appears on the presenter's screen and this call blocks, for up to "
-        "3 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it waits. Refused "
+_PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears on the presenter's screen first and this call "
+        "blocks, for up to 3 minutes, until the presenter clicks Pay or Cancel: do not retry or call it again while it "
+        "waits. Only after Pay does it open the deal with the seller (the agreement names the deal's adjudicator and "
+        "Action State's witness) and pay it. Refused "
         "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
         "record says it shipped.")
 
@@ -334,23 +342,25 @@ def ard_pay(seller: str) -> None:
                 + ("over Lightning, which moves real money?" if _real() else "on the simulated rail, where no money moves?")
                 + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
                 "your turn, and call ard_pay again only after she says yes.")
-        deal = buyer.open_deal(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), print, rail=s.rail.SEALED)
+        made = buyer.open_and_pay(
+            s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary,
+            lambda text: gate_off() or ask_person("Approve this payment", text, "Pay"), print, simulated=not _real())
+        if made is None:
+            s.declined.add(key)
+            raise RuntimeError("the presenter did not approve this payment (the dialog was cancelled, timed out or could "
+                               "not be shown): nothing was sent to the seller and nothing was paid. Do not retry on your "
+                               "own; if Maya asks again, confirm with her first.")
+        deal, payment = made
         s.deals.append(deal)
-        inv = s.rail.invoice(a.price_msat)
-        check = buyer.check_payment(s.maya, deal, inv.payment_hash)
-        if not check.get("proceed"):
-            if not (gate_off() or ask_person("Approve this payment", summary, "Pay")):
-                s.declined.add(key)
-                raise RuntimeError("the presenter did not approve this payment (the dialog was cancelled, timed out or could "
-                                   "not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm "
-                                   "with her first.")
-            s.maya.approve(deal.deal_id, check, "proceed", f"{dialog_text(summary)}\nAnswer: Pay")
-        payment = s.rail.pay_invoice(inv)
         who = ("the simulated rail paid it (no money moved)" if not _real() else "the buyer's wallet paid it")
         print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}{screens.fee_note(payment.fee_msat, _real())}")
-        buyer.pay(s.home, s.maya, deal, check, payment.reference, simulated=not _real())
     print(f"waiting for {name}'s delivery")
-    observed = buyer.await_delivery(s.home, s.maya, deal)
+    try:
+        with s.pay_lock:
+            observed = buyer.await_delivery(s.home, s.maya, deal)
+    except pt.Refused as exc:
+        print(f"{exc}.")
+        return
     shipped = buyer.shipped(observed)
     print(screens.delivered_line(name, shipped))
     if shipped.startswith("200 of 200"):
@@ -363,7 +373,7 @@ def ard_pay(seller: str) -> None:
 @_tool("maya")
 def ard_dispute(seller: str) -> None:
     """Dispute the delivery of Maya's latest deal with ``seller``: her statement that it was not met, and a dispute,
-    sent to the seller and, with her copy of the deal's records, to the adjudicator the agreement names. It moves no
+    sent to the seller and to the adjudicator the agreement names, which then asks each side for its books. It moves no
     money. Call only when Maya says the delivery was short or did not come."""
     s = session()
     key = _seller_key(seller)
@@ -372,7 +382,6 @@ def ard_dispute(seller: str) -> None:
         raise RuntimeError(f"Maya has no deal with {SELLERS[key]['label']} in this run")
     buyer.dispute(s.home, s.maya, deal, print)
     print(screens.DISPUTE_RAISED.format(seller=SELLERS[key]["label"]))
-    _flush(s)
 
 
 # -- the sellers --------------------------------------------------------------------------------------
@@ -399,79 +408,51 @@ def _adjudicator() -> adj.Adjudicator:
     return adj.Adjudicator(_home())
 
 
-def _names() -> dict[str, str]:
-    """Each party's key and name, from the sellers' commitments on the stage and Maya's profile."""
-    out = {pt.Party(_home(), BUYER).key_id: "Maya"}
-    for n in SELLERS:
-        f = _home() / "stage" / "commitments" / f"{n}.json"
-        if f.is_file():
-            import json
-            out[json.loads(f.read_bytes())["key_id"]] = SELLERS[n]["label"]
-    return out
-
-
-def _cases() -> list[flow.Case]:
-    a, names = _adjudicator(), _names()
-    return [flow.case_view(c, names) for c in a.cases()]
-
-
 @_tool("adjudicator")
 def ard_case() -> None:
-    """Show the cases sent to this adjudicator: the deal, the disputed row, which side's books arrived and when, and what
-    those books show (a seller's own signed delivery record, each side's statement on the row). It decides nothing."""
-    cases, names = _cases(), _names()
+    """Show the disputes sent to this adjudicator: it asks each side for its books (each side's agent answers on its own,
+    with its own book and the copy it holds of the other side's), then shows who answered and what the books show (the
+    seller's own signed delivery record, each side's statement on the row) and any ruling recorded. It decides nothing."""
+    cases = _adjudicator().gather(30)
     if not cases:
         print("no case yet: a party has sent no dispute to this adjudicator")
         return
     print(screens.ADJUDICATOR_INDEPENDENCE)
-    for c in cases:
-        print(f"\ncase {c.case[:8]}… for deal {c.deal_id[5:13]}, row {c.row}")
-        raw = next(x for x in _adjudicator().cases() if x["case"] == c.case)
-        seller_name, buyer_name = names.get(raw["seller"], "the seller"), names.get(raw["buyer"], "the buyer")
-        shown = {b["side"] for b in c.books}
-        for b in c.books:
-            print(f"  books read: {buyer_name if b['side'] == 'buyer' else seller_name}'s own book (sent {b['received_at']})")
-        if "seller" not in shown:
-            print(f"  {seller_name}'s book: not shown to the adjudicator; its delivery record is not in {buyer_name}'s copy, "
-                  "so this case cannot be ruled against it yet")
-        if "buyer" not in shown:
-            print(f"  {buyer_name}'s book: not shown to the adjudicator")
-        for line in c.deciding:
-            print(f"  {line}")
-        for r in _adjudicator().rulings(c.case):
-            who = seller_name if r.get("against") == "seller" else buyer_name if r.get("against") == "buyer" else "no one"
-            found = "not met" if r.get("value") == "not_met" else "met"
-            print(f"  ruling recorded: {found}, against {who} (ruling {r['digest'][:8]}…)")
+    for raw in cases:
+        print()
+        print("\n".join(flow.case_lines(flow.case_view(raw, flow.case_names(raw)), flow.case_names(raw))))
 
 
 @_tool("adjudicator")
 def ard_rule(seller: str) -> None:
     """Rule on the open case about ``seller``'s delivery: a dialog on the presenter's screen asks for the decision
-    (against the seller, the row not met); only the presenter's click records it. The ruling is then time-stamped by
-    Action State's witness and each party fetches it. Refused when the seller's own book was not shown."""
+    (against the seller, the row not met); only the presenter's click records it, with capsulectl's ``deal ruling`` over
+    the books the sides sent. The ruling is then time-stamped by Action State's witness and sent to both parties, each of
+    which enters it in its own records."""
     key = _seller_key(seller)
-    a, names = _adjudicator(), _names()
+    a = _adjudicator()
     seller_name = SELLERS[key]["label"]
-    for raw in a.cases():
-        if names.get(raw["seller"]) != seller_name:
+    for raw in a.gather(30):
+        if raw["parties"]["seller"] != key:
             continue
-        c = flow.case_view(raw, names)
-        if "seller" not in {b["side"] for b in c.books}:
-            raise RuntimeError(f"{seller_name}'s book was not shown to the adjudicator: no ruling against it from this case yet")
-        if not (gate_off() or ask_person("Rule on this case", screens.rule_question(c.deal_id, c.row, seller_name), "Rule")):
+        if not raw["answers"]:
+            raise RuntimeError("neither side has answered the adjudicator's request for its books yet: no ruling from "
+                               "this case yet (try again in a minute)")
+        c = flow.case_view(raw, flow.case_names(raw))
+        if not raw["ruling"] and not (gate_off() or ask_person("Rule on this case", screens.rule_question(
+                c.deal_id, c.row, seller_name), "Rule")):
             raise RuntimeError("the presenter did not record a ruling (the dialog was cancelled or timed out): nothing was ruled")
-        r = a.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
-        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name} "
-              f"({'new' if r.get('sealed') else 'already recorded'}).")
-        if pt.witnessed() and not r.get("sealed"):
-            print("It was already recorded; each party's window shows the time it was stamped.")
+        try:
+            r = raw["ruling"] or a.rule(raw, c.row, "not_met", "seller")
+        except adj.AdjudicatorError as exc:
+            raise RuntimeError(f"capsulectl refused the ruling: {exc}") from None
+        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name}.")
+        if a.stamp({**raw, "ruling": r}):
+            print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
         elif pt.witnessed():
-            if a.witness():
-                print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
-            else:
-                print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within a minute (no network?). Each "
-                      "party's window shows the time once it is.")
-        print("Both parties can fetch it now; each enters it in its own records.")
+            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 90 seconds (no network?). Run this "
+                  "again to send it with its stamp.")
+        print("Sent to both parties; each enters it in its own records.")
         return
     raise RuntimeError(f"no case about {seller_name}")
 
@@ -479,24 +460,18 @@ def ard_rule(seller: str) -> None:
 @_tool("adjudicator")
 def ard_case_activity() -> None:
     """Whether each party entered this adjudicator's ruling in its own records, read from the books they sent back."""
-    a, names = _adjudicator(), _names()
-    rulings = sorted((a.dir / "read" / "rulings").glob("case/*/*.json")) if (a.dir / "read").is_dir() else []
-    if not rulings:
+    a = _adjudicator()
+    ruled = [c for c in a.cases() if c["ruling"]]
+    if not ruled:
         print("no ruling yet")
         return
-    for f in rulings:
-        case, digest = f.parent.name, f.stem
-        try:
-            answers = a.entry(case, digest)
-        except adj.AdjudicatorError as exc:
-            print(f"ruling {digest[:8]}…: {exc}")
-            continue
-        for x in answers:
-            who = names.get(x.get("key", ""), x.get("party", "?"))
-            words = x.get("words", "")
-            if "not shown" in words:
-                words = "book not shown to the adjudicator"
-            print(f"ruling {digest[:8]}…  {who}: {words}")
+    for c in ruled:
+        names = flow.case_names(c)
+        rows = a.entries(c)
+        if not rows:
+            print(f"deal {c['deal_id'][5:13]}: no party has sent its book back yet")
+        for x in rows:
+            print(f"deal {c['deal_id'][5:13]}  {names.get(x['party'], x['party'])}: {x['words']}")
 
 
 # -- every party: its own card and receipt ---------------------------------------------------------------
@@ -510,7 +485,7 @@ def _own() -> tuple[pt.Party, str]:
 
 @_tool("maya", "alder", "kestrel")
 def ard_show_card() -> None:
-    """Show THIS window's own History card (standard_history/3) as of its newest checkpoint: deals counted, held, did
+    """Show THIS window's own History card (its standard_history derivation) as of its newest checkpoint: deals counted, held, did
     not hold, and disputes others raised about it. A deal or a ruling counts after the party's next checkpoint."""
     p, name = _own()
     p.tick()

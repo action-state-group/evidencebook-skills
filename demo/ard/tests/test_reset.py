@@ -435,14 +435,3 @@ def test_the_trust_note_is_written_once_and_a_home_without_one_keeps_all_trust(t
     assert reset.trust_before(home) is None  # an unreadable note counts as none
 
 
-def test_the_adjudicators_front_for_this_home_is_ours_and_another_homes_is_not(tmp_path, monkeypatch):
-    # stage.py starts ledger-cloud's adjudicator-front with its intake under the home (#285): reset stops it with the stage
-    home, other = tmp_path / "home", tmp_path / "other"
-    (home / "adjudicator" / "intake").mkdir(parents=True)
-    (other / "adjudicator" / "intake").mkdir(parents=True)
-    argv = {1: ["/bin/adjudicator-front", "-addr", "127.0.0.1:47483", "-intake", str(home / "adjudicator" / "intake")],
-            2: ["/bin/adjudicator-front", "-intake", str(other / "adjudicator" / "intake")],
-            3: ["/bin/something-else", "-intake", str(home / "adjudicator" / "intake")]}
-    monkeypatch.setattr(reset, "_argv", lambda pid: argv.get(pid))
-    assert reset._front_for(1, home) and not reset._front_for(2, home) and not reset._front_for(3, home)
-    assert reset.demo_ports() == [47481, 47483, 47491, 47492] or os.environ.get("ARD_STAGE_PORT")

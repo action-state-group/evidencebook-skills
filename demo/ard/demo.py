@@ -138,20 +138,15 @@ class Script:
         if a.verdict != "GO":
             print(screens.limit_outcome(a))
             return None
-        deal = buyer.open_deal(self.home, self.maya, key, self.keys[key], a, self.adjudicator.named(), print,
-                               rail=self.rail.SEALED)
-        inv = self.rail.invoice(a.price_msat)
-        check = buyer.check_payment(self.maya, deal, inv.payment_hash)
         words = "over Lightning, which moves real money" if self.real else "on the simulated rail: no money moves"
-        summary = f"Pay {name} {screens.msat(a.price_msat)} {words}."
-        if not check.get("proceed"):
-            if not self.ask(summary):
-                print("not approved: nothing was paid")
-                return None
-            self.maya.approve(deal.deal_id, check, "proceed", f"{summary}\nAnswer: Pay")
-        payment = self.rail.pay_invoice(inv)
+        made = buyer.open_and_pay(self.home, self.maya, key, self.keys[key], a, self.adjudicator.named(), self.rail,
+                                  f"Pay {name} {screens.msat(a.price_msat)} {words}.", self.ask, print,
+                                  simulated=not self.real)
+        if made is None:
+            print("not approved: nothing was sent to the seller and nothing was paid")
+            return None
+        deal, payment = made
         print(f"invoice {screens.msat(payment.invoice_msat)}: {payment.status}{screens.fee_note(payment.fee_msat, self.real)}")
-        buyer.pay(self.home, self.maya, deal, check, payment.reference, simulated=not self.real)
         observed = buyer.await_delivery(self.home, self.maya, deal)
         print(screens.delivered_line(name, buyer.shipped(observed)))
         return deal
@@ -162,37 +157,34 @@ class Script:
         print(screens.DISPUTE_RAISED.format(seller=SELLERS[deal.seller]["label"]))
         rule("The adjudicator")
         print(screens.ADJUDICATOR_INDEPENDENCE)
-        names = {self.maya.key_id: "Maya", **{v: SELLERS[k]["label"] for k, v in self.keys.items()}}
-        print("waiting for both sides' books (each needs its next checkpoint, up to a minute)")
-        stop = time.time() + 300
-        while time.time() < stop:
-            cases = [c for c in self.adjudicator.cases() if c["deal_id"] == deal.deal_id]
-            if cases and len(cases[0]["copies"]) >= 2:
+        print("the adjudicator asks each side for its books; each side's agent answers on its own")
+        stop = time.time() + 120
+        while True:
+            raw = next(c for c in self.adjudicator.gather(5) if c["deal_id"] == deal.deal_id)
+            adj.answer_requests(self.home, self.maya, BUYER, "buyer", print)
+            if len(raw["answers"]) == 2 or time.time() > stop:
                 break
-            time.sleep(3)
-        c = flow.case_view(cases[0], names)
-        for b in c.books:
-            print(f"  books read: {'Maya' if b['side'] == 'buyer' else SELLERS[deal.seller]['label']}'s own book (sent {b['received_at']})")
-        for line in c.deciding:
-            print(f"  {line}")
+        names = flow.case_names(raw)
+        c = flow.case_view(raw, names)
+        print("\n".join(flow.case_lines(c, names)))
         if not self.ask(screens.rule_question(c.deal_id, c.row, SELLERS[deal.seller]["label"])):
             print("no ruling recorded")
             return
-        r = self.adjudicator.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
-        if pt.witnessed() and r.get("sealed") and not self.adjudicator.witness():
-            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within a minute")
-        print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Both parties fetch it and enter it.")
+        r = self.adjudicator.rule(raw, c.row, "not_met", "seller")
+        if not self.adjudicator.stamp({**raw, "ruling": r}) and pt.witnessed():
+            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 90 seconds")
+        print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 300
         while time.time() < stop and not (self.maya.notes(flow.RULING_ENTERED) and agent.party.notes(flow.RULING_ENTERED)):
-            flow.enter_rulings(self.home, self.maya, deal.seller, print)
+            flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
             time.sleep(3)
         print("waiting for the seller's next checkpoint, so its card counts the ruling (up to a minute)")
         stop = time.time() + 180
         while time.time() < stop:
             agent.republish()
             card, _, _ = flow.read_card(self.home / "stage" / "cards" / f"{deal.seller}.json")
-            if card["disputes"]["received"]["by_outcome"]["against"]:
+            if card["disputes"]["received"]["by_outcome"]["against"] and card["outcomes"]["did_not_hold"]:
                 break
             time.sleep(5)
 

@@ -99,8 +99,7 @@ PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<
 
 def link(role: str, rail: str, placeholders: bool = False) -> str:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}",
-           f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}", f"CAPSULECTL_DEAL={os.environ['CAPSULECTL_DEAL']}",
-           f"ARD_ADJUDICATOR_BIN={os.environ['ARD_ADJUDICATOR_BIN']}"]
+           f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}", f"CAPSULECTL_DEAL={os.environ['CAPSULECTL_DEAL']}"]
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")

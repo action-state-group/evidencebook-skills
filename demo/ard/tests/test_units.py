@@ -128,15 +128,60 @@ def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
         assert row["result"] in ("fail", "not_read"), row
 
 
-def test_a_witness_that_cannot_be_reached_is_none_yet_not_a_failed_ruling(monkeypatch, tmp_path):
-    a = adj.Adjudicator(tmp_path)
-    calls = []
+def test_the_adjudicators_request_is_the_wire_form(monkeypatch):
+    # min_freshness is a bare time on the wire (AAC's evidence request); an object there is refused as request_malformed
+    r = adj.request_for("deal-0123456789abcdef")
+    assert r["derivation"] == "deal_adjudicator_copy/1" and r["subject"] == {"correlation": "deal-0123456789abcdef"}
+    assert r["coverage"] == {"min_freshness": "2020-01-01T00:00:00Z"} and len(r["nonce"]) == 32
 
-    def unreachable(self, *args):
-        calls.append(args)
-        raise adj.AdjudicatorError("adjudicator-operator witness: no route to the witness")
-    monkeypatch.setattr(adj.Adjudicator, "operator", unreachable)
-    monkeypatch.setattr(adj.time, "sleep", lambda s: None)
-    assert a.witness(seconds=0) == 0 and calls == [("witness",)]
-    monkeypatch.setattr(adj.Adjudicator, "operator", lambda self, *args: {"delivered": 2})
-    assert a.witness() == 2
+
+def _answer(tmp_path, side, own, held):
+    import json
+    f = tmp_path / f"answer-{side}.json"
+    book = {"records": {str(i): r for i, r in enumerate(own)}, "received": {"records": {str(i): r for i, r in enumerate(held)}}}
+    f.write_text(json.dumps({"request": {}, "bundle": {"extensions": {"x-deal-v1": {"book": book}}}, "facts": {}}))
+    return f
+
+
+def test_a_case_reads_the_silent_sellers_own_record_from_the_buyers_held_copy(tmp_path):
+    import json
+    perform = {"payload": {"body": {"act": "delivered", "observed": "partial:badges_150_of_200"}}}
+    stmt = {"payload": {"body": {"statements": [{"row": "delivered", "value": "not_met"}]}}}
+    dispute = tmp_path / "d.json"
+    dispute.write_text(json.dumps({"record": {"payload": {"body": {"row": "delivered"}}}}))
+    case = {"deal_id": "deal-0123456789abcdef", "dispute": dispute, "asked_at": "2026-11-25T10:00:00Z", "ruling": None,
+            "parties": {"buyer": "maya", "seller": "kestrel"},
+            "answers": {"buyer": {"file": _answer(tmp_path, "buyer", [stmt], [perform]), "at": "2026-11-25T10:00:05Z"}}}
+    names = flow.case_names(case)
+    c = flow.case_view(case, names)
+    assert c.row == "delivered" and c.answered == {"buyer": "2026-11-25T10:00:05Z"}
+    assert c.deciding == ["Maya's statement on the row: not met",
+                          "Kestrel Print's own signed delivery record: 150 of 200 badges"]
+    lines = flow.case_lines(c, names)
+    assert "  Kestrel Print: no answer yet (its book not shown to the adjudicator)" in lines
+    assert not [x for x in lines if "demo" in x.lower()]
+    c.ruling = {"against": "seller", "value": "not_met", "ruling": "ab" * 32}
+    assert flow.case_lines(c, names)[-1] == "  ruling recorded: not met, against Kestrel Print (ruling abababab…)"
+
+
+def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
+    # evidencebook-skills#289: the dialog comes first; a no sends nothing, and a yes opens the deal only then
+    calls = []
+    monkeypatch.setattr(buyer, "open_deal", lambda *a, **k: calls.append("open") or buyer.Deal("deal-01", "alder", "k", 1, "o"))
+    monkeypatch.setattr(buyer, "check_payment", lambda *a: calls.append("check") or {"proceed": True, "check_id": "c"})
+    monkeypatch.setattr(buyer, "pay", lambda *a, **k: calls.append("pay"))
+
+    class Rail:
+        SEALED = "simulated"
+        invoice = staticmethod(lambda msat: calls.append("invoice") or type("I", (), {"payment_hash": "h"})())
+        pay_invoice = staticmethod(lambda inv: calls.append("paid") or type("P", (), {"reference": "r"})())
+    who = type("M", (), {"name": "maya"})()
+    a = assessment("GO")
+
+    def ask(answer):
+        return lambda text: calls.append("ask") or answer
+    assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(False), print, simulated=True) is None
+    assert calls == ["ask"]
+    calls.clear()
+    assert buyer.open_and_pay(None, who, "alder", "k", a, {}, Rail, "Pay?", ask(True), print, simulated=True)
+    assert calls == ["ask", "open", "invoice", "check", "paid", "pay"]

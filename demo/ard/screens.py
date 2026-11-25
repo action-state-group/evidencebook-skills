@@ -132,7 +132,7 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
     """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. A challenge is x-deal-v1's
     ``dispute`` of kind ``challenge`` (PROFILE.md §5; ``deal dispute --challenge``, which "changes no row's status");
     the window is 7 days (Steven, ops u214, 2026-11-24), a practice-statement constant (evidencebook
-    ``docs/design/861-four-books.md`` §6; ledger-cloud ``-challenge-window``, :data:`adjudicator.CHALLENGE_WINDOW`)."""
+    ``docs/design/861-four-books.md`` §6; :data:`adjudicator.CHALLENGE_DAYS`)."""
     return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
             f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
             f"of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and "

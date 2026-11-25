@@ -46,6 +46,9 @@ WITNESS_NAME = "Action State's witness"
 #: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter, so a sale or a ruling
 #: counts on the card within a minute.
 CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
+#: The History card's derivation every party makes and every buyer accepts: the one constant a move to
+#: ``standard_history/4`` changes (AAC standard-history §12: /3 with one rule changed).
+CARD_DERIVATION = "standard_history/3"
 #: The one forum the demo's agreements accept: the demo adjudicator, an outside party to the deal.
 FORUM = "external:ard-demo"
 #: The two rows of every demo deal (the Goose reference's own, ``goose_node.ROW`` and ``DELIVERED``).
@@ -124,7 +127,7 @@ class Party:
 
     @property
     def seed_file(self) -> Path:
-        """The record key's seed file (64 hex), which the adjudicator's client signs a party's reads with."""
+        """The record key's seed file (64 hex)."""
         return self.dir / "deal" / "signing.seed"
 
     def tmp(self, name: str) -> str:
@@ -168,10 +171,11 @@ class Party:
             time.sleep(3)
 
     def card_bundle(self, shared: bool) -> Path:
-        """The party's ``standard_history/3`` card as a bundle, as of its newest checkpoint: the shared copy (the card,
+        """The party's :data:`CARD_DERIVATION` card as a bundle, as of its newest checkpoint: the shared copy (the card,
         its policy and its anchor) or its own copy (with the deal entries it counts)."""
         out = self.tmp("card-shared.json" if shared else "card.json")
-        self.run("standard-history", "card", "--out", out, *(["--shared"] if shared else []))
+        self.run("standard-history", "card", "--derivation", CARD_DERIVATION, "--out", out,
+                 *(["--shared"] if shared else []))
         return Path(out)
 
     # -- deals --------------------------------------------------------------------------------
@@ -305,11 +309,11 @@ class Party:
             self.wait_checkpoint(max(stop - time.monotonic(), 1), say)
             say = None
 
-    def proof(self, deal_id: str, copy: Path) -> dict:
-        """The stamp proof and witness receipts behind a copy, for the adjudicator's entry check."""
+    def proof(self, deal_id: str, copy: Path) -> Path:
+        """The file of the stamp proof and witness receipts behind a copy, for the adjudicator's entry check."""
         out = self.tmp("proof.json")
         self.run("checkpoint", "proof", "--deal", deal_id, "--copy", str(copy), "--out", out)
-        return json.loads(Path(out).read_text())
+        return Path(out)
 
     def deals(self) -> list[dict]:
         return self.run("list", "--json")

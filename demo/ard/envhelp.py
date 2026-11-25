@@ -35,9 +35,6 @@ VARS = (
         "/path/to/capsulectl-deal", ("seed", "run", "windows"), "program"),
     Var("CAPSULE_ENGINE", "the capsule-engine binary (go build ./cmd/capsule-engine in capsule-engine/go)",
         "/path/to/capsule-engine", ("seed", "run", "windows"), "program"),
-    Var("ARD_ADJUDICATOR_BIN", "the folder holding ledger-cloud's adjudicator-front, adjudicator-operator and "
-        "adjudicator-client, built at the pinned commit (the demo's adjudicator)",
-        "/path/to/adjudicator-bin", ("seed", "run", "windows"), "dir"),
     Var("ARD_WALLET_BUYER", "the buyer's wallet directory (ln-pay-local init --wallet <dir>; fund it)",
         "/path/to/buyer-wallet", ("local",), "dir"),
     Var("ARD_WALLET_SELLER", "the sellers' wallet directory (ln-pay-local init --wallet <dir>)",

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """The stage the demo's windows share, on localhost: the discovery stand-ins (each seller's own origin and the stand-in
-registry, :mod:`discovery`), the demo adjudicator's front (ledger-cloud's ``adjudicator-front``, :mod:`adjudicator`)
-and its rules page. Usually started by the first party that needs it (:func:`ensure_stage`); ``python stage.py <demo
+registry, :mod:`discovery`) and the adjudicator's rules page (:mod:`adjudicator`). Usually started by the first party that needs it (:func:`ensure_stage`); ``python stage.py <demo
 home>`` runs it by hand. It keeps no keys and no records of its own: the sellers' commitments and shared cards, and
-the files the parties hand each other, are files under ``<demo home>/stage``; the adjudicator's front holds no key."""
+the files the parties hand each other, are files under ``<demo home>/stage``."""
 from __future__ import annotations
 
 import json
@@ -38,7 +37,7 @@ STAGE_LOCK = ".stage.lock"
 
 
 class Stage:
-    """The discovery stand-ins, the adjudicator's front and its rules page, over files under ``home/stage``."""
+    """The discovery stand-ins and the adjudicator's rules page, over files under ``home/stage``."""
 
     def __init__(self, home: Path):
         from discovery import Discovery
@@ -49,7 +48,6 @@ class Stage:
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
         self._held = open(self.dir / STAGE_LOCK, "a")
         self.adjudicator = adj.Adjudicator(self.home).create()
-        self.front = self.adjudicator.start_front()
         self.discovery = Discovery(SELLERS, self.commitment, HTTP_PORT, SELLER_PORTS, get=self.page)
         self.url = self.discovery.registry.url
 
@@ -68,7 +66,6 @@ class Stage:
             self.close()
 
     def close(self) -> None:
-        self.front.terminate()
         self.discovery.close()
 
 
@@ -93,22 +90,22 @@ def stage_up() -> bool:
 
 def ensure_stage(home: Path) -> None:
     """Start the stage as its own process if none listens, so it outlives any one window."""
-    if stage_up() and adj.wait_front(1):
+    if stage_up():
         return
     subprocess.Popen([sys.executable, str(HERE / "stage.py"), str(home)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
     for _ in range(75):
-        if stage_up() and adj.wait_front(0.2):
+        if stage_up():
             return
         time.sleep(0.2)
-    raise RuntimeError("the stage (seller origins, registry and the adjudicator's front) did not start")
+    raise RuntimeError("the stage (seller origins and registry) did not start")
 
 
 def main(argv: list[str]) -> int:
     home = Path(argv[1] if len(argv) > 1 else "~/.config/ard-commerce-demo").expanduser()
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # so the stage stops the adjudicator's front with it
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # so the stage closes its listeners on a stop
     stage = Stage(home)
-    print(f"stage: registry {stage.url}, adjudicator {adj.URL}", flush=True)
+    print(f"stage: registry {stage.url}, adjudicator rules {adj.rules_url()}", flush=True)
     try:
         stage.serve_forever()
     except KeyboardInterrupt:

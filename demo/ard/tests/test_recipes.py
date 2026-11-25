@@ -23,7 +23,6 @@ def env(monkeypatch):
     monkeypatch.setenv("CAPSULE_ENGINE", "/bin/true")
     monkeypatch.setenv("ARD_EVIDENCEBOOK", "/nonexistent/evidencebook")
     monkeypatch.setenv("CAPSULECTL_DEAL", "/opt/capsulectl-deal")
-    monkeypatch.setenv("ARD_ADJUDICATOR_BIN", "/opt/adjudicator-bin")
 
 
 def _recipe(link: str) -> dict:
@@ -62,11 +61,11 @@ def test_maya_is_given_the_registry_the_stage_serves(monkeypatch):
     assert "http://127.0.0.1:48000/search" in r["instructions"] and "ARD_STAGE_PORT=48000" in r["extensions"][0]["args"]
 
 
-def test_every_window_is_given_capsulectl_deal_and_the_adjudicator(monkeypatch):
-    # every deal record is capsulectl-deal's, and every window reaches the demo's adjudicator
+def test_every_window_is_given_capsulectl_deal(monkeypatch):
+    # every deal record is capsulectl-deal's, the adjudicator's ruling too
     for role in ("alder", "kestrel", "adjudicator", "maya"):
         args = _recipe(ow.link(role, "fake"))["extensions"][0]["args"]
-        assert "CAPSULECTL_DEAL=/opt/capsulectl-deal" in args and "ARD_ADJUDICATOR_BIN=/opt/adjudicator-bin" in args
+        assert "CAPSULECTL_DEAL=/opt/capsulectl-deal" in args
 
 
 def test_a_real_rail_says_real_money_moves():
