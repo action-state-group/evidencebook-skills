@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: three Goose Desktop windows, one buyer agent and two seller agents, that find each other through ARD, compare signed deal histories, and settle one payment. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills e5c3224 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 613a8a9 (receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills e5c3224 · evidencebook 5d29ccc · capsulectl-deal v0.1.0-rc50 · capsule-engine b84d7d0 (go/v0.7.0) · capsule-viewer 89b75d6 (ts/v0.25.0, receipt pages; the History page vendors 0.23.0) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -142,7 +142,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins. The 
 
    ```
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
+   .venv/bin/pip install -q ../evidencebook/python pyyaml rfc8785 websockets "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@89b75d6ab5f34bada727082758562071d494ce0b"
    ```
 
    **Expect:** pip ends with no error.
@@ -424,10 +424,10 @@ Type in Maya's window, one message at a time; each step takes 30 to 60 s. Cmd+` 
    Show your History card, then open your History card and your receipt as pages.
    ```
 
-   **Expect:** 1 deal, held; the receipt page says Verified, 2,000 msat, Closed; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy; once the card's checkpoint is witnessed and covers the deal, it adds that the hosted witness stamped the History checkpoint taken at a named time (checkpoint number and UTC time), which covers this deal as of that checkpoint, and that the card shows the newest checkpoint.
+   **Expect:** 1 deal, held; the receipt page's top line says Verified, "Checked by capsulectl verify --bundle: graph closure, interval coverage, per record membership, checkpoint, producer signatures (all verified)."; then 2,000 msat, Closed; on the simulated rail it says once, near the top, "Test money: this deal's payment was on a simulated rail. No real money moved."; the "Step" header of the records table under "Verify" reads on one line; it says "This copy carries no witness receipt." and that the other party's signed half is in their own copy; once the card's checkpoint is witnessed and covers the deal, it adds that the hosted witness stamped the History checkpoint taken at a named time (checkpoint number and UTC time), which covers this deal as of that checkpoint, and that the card shows the newest checkpoint.
 
 16. Cmd+` to Alder's window, same message.
-   **Expect:** 25 deals, all held; receipt page Verified, Sale receipt, 2,000 msat agreed, with "The payment proof is in the buyer's records, not this copy." and Alder's own sentence about the payment: on the simulated rail it is tagged "simulated rail: no money moved"; on the real rail it names rail lightning and adds the credit note. If it shows 24, ask again in a few seconds.
+   **Expect:** 25 deals, all held; receipt page Verified with the same top line, Sale receipt, 2,000 msat agreed, with "The payment proof is in the buyer's records, not this copy." and Alder's own sentence about the payment: on the simulated rail it is tagged "simulated rail: no money moved"; on the real rail it names rail lightning and adds the credit note. If it shows 24, ask again in a few seconds.
 
 17. [Real] Wallets after.
 

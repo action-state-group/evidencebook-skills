@@ -161,6 +161,10 @@ def test_each_party_gets_its_own_receipt_page(seeded, name, party, seller):
     assert "Paid by lightning" not in page and "over lightning" not in page
     assert "no witness receipt is in this report" not in page and "no other party has signed" not in page
     assert "This copy carries no witness receipt." in page and "the other party&#x27;s signed half is in their own copy" in page.replace("&#39;", "&#x27;")
+    # capsule-viewer 0.25.0 (#374): the top line names the verifier and its checks
+    assert "Checked by capsulectl verify --bundle: graph closure" in page
+    if not seller:  # 0.25.0 says test money once, at the top (a seller's copy holds no payment step)
+        assert page.replace("&#39;", "&#x27;").count("Test money: this deal&#x27;s payment was on a simulated rail.") == 1
     if seller:  # where the proof is, then the seller's own sealed sentence, attributed and tagged simulated (#243)
         assert "Not recorded in this copy" not in page
         assert "The payment proof is in the buyer&#x27;s records, not this copy." in page.replace("&#39;", "&#x27;")

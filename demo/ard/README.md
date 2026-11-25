@@ -44,7 +44,7 @@ export ARD_EVIDENCEBOOK=/path/to/evidencebook        # checked out at the pinned
 export CAPSULE_ENGINE=/path/to/capsule-engine        # go build ./cmd/capsule-engine in capsule-engine/go
 python3 -m venv .venv
 .venv/bin/pip install "$ARD_EVIDENCEBOOK/python" pyyaml rfc8785 websockets "mcp==2.3.0" \
-  "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@613a8a95144e5851bbb61df72df8cc76b7500381"
+  "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@89b75d6ab5f34bada727082758562071d494ce0b"
 export CAPSULECTL_DEAL=/path/to/capsulectl-deal  # verifies each receipt page's copy (capsulectl verify --bundle)
 cd demo/ard
 ../../.venv/bin/python demo.py seed                  # once, about 20 s: 24 + 24 sample deals
