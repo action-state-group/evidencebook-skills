@@ -437,8 +437,11 @@ def test_the_trust_hash_is_goose_1_59_2s_name_for_a_real_trust_file():
     assert reset.trust_hash({k: v for k, v in recipe.items() if k != "version"}) == FIXTURE_HASH  # version defaults
     reordered = dict(reversed(list(recipe.items())))
     assert reset.trust_hash(reordered) == FIXTURE_HASH  # Goose's schema fixes the order, not the link's JSON
-    with pytest.raises(ValueError, match="stdio extensions only"):
-        reset.trust_hash({**recipe, "extensions": [{"type": "builtin", "name": "developer"}]})
+    ext = recipe["extensions"][0]
+    for other in ({"type": "builtin", "name": "developer"}, {k: v for k, v in ext.items() if k != "description"},
+                  {**ext, "args": []}, {**ext, "envs": {}}, {**ext, "env_keys": ["X"]}):
+        with pytest.raises(ValueError, match="the demo's recipe shape only"):  # Goose would normalize these
+            reset.trust_hash({**recipe, "extensions": [other]})
 
 
 def test_reset_deletes_only_the_noted_recipes_trust_and_never_by_time(tmp_path):
@@ -459,3 +462,7 @@ def test_reset_deletes_only_the_noted_recipes_trust_and_never_by_time(tmp_path):
     assert reset.clear_recipe_trust(root, user) == 2 and _left(hashes) == [f"{reset.trust_hash(mine)}.hash"]
     (root / reset.DEMO_TRUST).write_text("{not json")
     assert reset.clear_recipe_trust(root, user) == 0 and len(_left(hashes)) == 1  # an unreadable note deletes nothing
+    outside = hashes.parent / "x.hash"
+    outside.write_text("t")
+    (root / reset.DEMO_TRUST).write_text(json.dumps(["../x" + "0" * 60]))  # 64 characters, not a hash: ignored
+    assert reset.clear_recipe_trust(root, user) == 0 and outside.exists()

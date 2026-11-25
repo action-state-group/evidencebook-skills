@@ -306,15 +306,19 @@ def trust_hash(recipe: dict) -> str:
 
     At the v1.59.2 tag (9da692f), ui/desktop/src/utils/recipeHash.ts hashes ``JSON.stringify(recipe)`` with sha256, and
     the recipe it gets (ui/desktop/src/sessions.ts ``ensureRecipeConsent``) is the server's decode of the link
-    (``_goose/unstable/recipes/decode``, which returns the link's recipe unchanged) parsed by the client's zod schema:
-    keys in the schema's order, absent ones left out, ``version`` defaulting to "1.0.0". Checked against the three trust
-    files the demo's windows made on 2026-11-25. Only stdio extensions, the demo's only kind; any other is refused
-    rather than guessed."""
+    (``_goose/unstable/recipes/decode``) parsed by the client's zod schema: keys in the schema's order, absent ones left
+    out, ``version`` defaulting to "1.0.0". The decode returns a recipe like the demo's as it came, but normalizes
+    some others (an extension without a description gets "", empty ``args``, ``envs`` or ``env_keys`` are dropped,
+    disallowed ``envs`` too), so any recipe outside the demo's shape is refused rather than guessed: only stdio
+    extensions with a description, non-empty ``args`` and no ``envs`` or ``env_keys``. Checked against the three trust
+    files the demo's windows made on 2026-11-25."""
     r = {"version": "1.0.0", **recipe}
     out = {k: r[k] for k in _RECIPE_KEYS if k in r}
     if out.get("extensions"):
-        if any(e.get("type") != "stdio" for e in out["extensions"]):
-            raise ValueError("trust_hash covers stdio extensions only")
+        if any(e.get("type") != "stdio" or not e.get("description") or not e.get("args") or "envs" in e
+               or "env_keys" in e for e in out["extensions"]):
+            raise ValueError("trust_hash covers the demo's recipe shape only: stdio extensions with a description, "
+                             "non-empty args and no envs or env_keys")
         out["extensions"] = [{k: e[k] for k in _STDIO_KEYS if k in e} for e in out["extensions"]]
     return hashlib.sha256(json.dumps(out, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
@@ -324,7 +328,9 @@ def _noted(root: Path) -> set[str]:
         names = json.loads((root / DEMO_TRUST).read_text())
     except (OSError, ValueError):
         return set()
-    return {n for n in names if isinstance(n, str) and len(n) == 64} if isinstance(names, list) else set()
+    hexdigest = set("0123456789abcdef")
+    return ({n for n in names if isinstance(n, str) and len(n) == 64 and set(n) <= hexdigest}
+            if isinstance(names, list) else set())
 
 
 def note_trust(recipes: list[dict], root: Path) -> None:

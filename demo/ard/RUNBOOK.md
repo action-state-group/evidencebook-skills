@@ -549,4 +549,4 @@ Before the run, in the shell that starts the windows, set the limit to the first
 
 5. **Maya finds only one seller.** A seller publishes its entry with its first message. Wait until both seller windows have answered, then ask again.
 
-6. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes.
+6. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes. Once, after moving to this version from one before evidencebook-skills#277: the first reset finds no note of the demo's recipes and deletes no trust, so the next windows may open without a Trust prompt; from the next reset on, it is asked again.
