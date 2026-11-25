@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 45eaceb (the 2026-11-25 run's integration commit: main with #922 and #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer d56da4d (main, capsule-viewer#417) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -112,62 +112,86 @@ The registry, the seller sites and the 24 sample deals are local stand-ins, and 
 
 ## Set up, once
 
-1. Clone and build everything under `~/ard-demo` (about 5 minutes). Paste each block below into the same terminal window, one block at a time, and wait for each to finish before pasting the next.
+Paste each block into the same terminal window, one at a time, and wait for each to finish before the next. Every block can be run again: it leaves what is already right and moves the rest.
+
+1. Install the build tools. GNU tar is needed because the plugin build script refuses macOS's own tar.
 
    ```
-   mkdir -p $HOME/ard-demo/bin && cd $HOME/ard-demo
-   git clone -q https://github.com/action-state-group/evidencebook-skills
-   git clone -q https://github.com/action-state-group/evidencebook
-   git -C evidencebook fetch -q origin 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
-   git -C evidencebook checkout -q 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
-   (cd evidencebook/capsulectl && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
+   brew install go gnu-tar
    ```
 
-   ```
-   cd $HOME/ard-demo
-   git clone -q https://github.com/action-state-group/capsule-engine
-   git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
-   (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
-   ```
+2. Get the code: evidencebook-skills at main, and the other repositories at their pins. This block clones what is missing and moves what is already there, so it is the same on a new Mac and on one that ran an earlier version of this guide.
 
    ```
-   ls $HOME/ard-demo/bin
+   mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
+   [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
+   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 45eaceb5f2bd29111b7bfa76dab6212e716c1c46; git -C evidencebook checkout -q 45eaceb5f2bd29111b7bfa76dab6212e716c1c46
+   [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 0043a944b22dc25515f1440169fcdabfd345750b; git -C capsule-cli checkout -q 0043a944b22dc25515f1440169fcdabfd345750b
+   [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
    ```
 
-   **Expect:** `capsule-engine capsulectl-deal`.
+   **Expect:** no output.
+
+3. Build and install capsulectl with its book and deal plugins, all at one version (about 5 minutes). It installs into `~/.local`.
 
    ```
+   cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
+   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=45eaceb5f2bd29111b7bfa76dab6212e716c1c46 V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
+   mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
+   (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
+   install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
+   evidencebook/capsulectl/scripts/release-build.sh "$V" "$EB_SHA" "$HOME/ard-demo/dist" > /dev/null
+   for l in book deal; do (cd evidencebook/capsulectl && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -buildid= -X $PKG.CLIVersion=$V -X $PKG.CLICommit=$CORE_SHA -X $PKG.PluginVersion=$V -X $PKG.PluginCommit=$EB_SHA" -o "$HOME/ard-demo/dist/capsulectl-$l-$V-$P" "./cmd/capsulectl-$l"); done
+   capsulectl plugin install "$HOME/ard-demo/dist/capsulectl-book-$V-$P" > /dev/null && capsulectl plugin install "$HOME/ard-demo/dist/capsulectl-deal-$V-$P" > /dev/null
+   tar -xzf "$HOME/ard-demo/dist/standard-history-$V.tar.gz" -C $HOME/.local/lib/capsulectl/plugins
+   tar -xzf "$HOME/ard-demo/dist/deal-view-$V.tar.gz" -C $HOME/.local/lib/capsulectl/plugins
+   capsulectl --version; capsulectl plugin ls | python3 -c 'import json,sys; d=json.load(sys.stdin); print([(p["name"], p["version"]) for p in d["plugins"]], "refused:", d["refused"])'
+   ```
+
+   **Expect:** `capsulectl v0.1.0-main.0043a944 (commit 0043a944…)`, then `[('book', 'v0.1.0-main.0043a944'), ('deal', 'v0.1.0-main.0043a944')] refused: []`.
+
+4. Build capsule-engine, and make the Python environment.
+
+   ```
+   cd $HOME/ard-demo && mkdir -p bin && (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
    .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@d56da4d3314b79b7aafb6b293979a14cc49d033e"
+   .venv/bin/pip install -q --force-reinstall --no-deps "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@d56da4d3314b79b7aafb6b293979a14cc49d033e"
    ```
 
-   **Expect:** pip ends with no error.
+   **Expect:** pip ends with no error. The second line is needed: every capsule-viewer commit carries the same version number, so the first line alone keeps an earlier capsule-viewer.
 
-2. Already cloned at an earlier pin? Move each checkout to this pin, rebuild the binaries with the build lines above, and rerun the pip line. The earlier evidencebook Python package is no longer used; it may stay installed.
+5. Install Goose Desktop 1.59.2 (Apple silicon), replacing any Goose already in Applications.
 
-3. Install Goose Desktop 1.59.2: download `Goose-darwin-arm64.zip` from [the release page](https://github.com/aaif-goose/goose/releases/tag/v1.59.2), unzip it, move `Goose.app` to Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
+   ```
+   osascript -e 'quit app "Goose"'
+   curl -fsSL -o /tmp/Goose-darwin-arm64.zip https://github.com/aaif-goose/goose/releases/download/v1.59.2/Goose-darwin-arm64.zip
+   rm -rf /tmp/goose-1.59.2 && ditto -x -k /tmp/Goose-darwin-arm64.zip /tmp/goose-1.59.2 && rm -rf /Applications/Goose.app && mv /tmp/goose-1.59.2/Goose.app /Applications/
+   ```
 
-4. Install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
+   **Expect:** `/Applications/Goose.app` exists, and Goose > About Goose shows 1.59.2. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
+
+6. Install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
 
    ```
    npm install --prefix $HOME/ard-demo/acp @agentclientprotocol/claude-agent-acp@0.108.0
    ```
 
-5. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
+7. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
 
    ```
    osascript -e 'quit app "Goose"'
-   .venv/bin/python demo/ard/goose/open-windows.py --goose-only
+   cd $HOME/ard-demo/evidencebook-skills && .venv/bin/python demo/ard/goose/open-windows.py --goose-only
    ```
 
    **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
 
-6. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider, type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
+8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider, type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
    **Expect:** a chat opens and answers a short message.
 
-7. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
+9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
 
-8. Quit that Goose.
+10. Quit that Goose.
 
    ```
    osascript -e 'quit app "Goose"'
@@ -210,7 +234,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    ```
    cd $HOME/ard-demo/evidencebook-skills
    export ARD_EVIDENCEBOOK=$HOME/ard-demo/evidencebook \
-     CAPSULECTL_DEAL=$HOME/ard-demo/bin/capsulectl-deal \
+     CAPSULECTL_DEAL=$HOME/.local/lib/capsulectl/plugins/capsulectl-deal \
      CAPSULE_ENGINE=$HOME/ard-demo/bin/capsule-engine
    ```
 
