@@ -6,7 +6,7 @@ evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#28
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
-Status: not yet run by hand at this pin. The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
+Status: run by hand on 2026-11-25 on a Mac at these pins (evidencebook-skills cd33ab8, before this guide's last fixes): steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Fixed since, not yet run by hand: the 10-minute dialogs, local times, and both agents' ruling and witness wording. Open: the windows open stacked, not tiled; the buyer's agent sent "received" without Maya's yes (evidencebook-skills#306). The demo's automated tests, both deals end to end against Action State's hosted witness included, pass in CI. The spending-limit section of earlier pins is not in this guide: it returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890). The receipt page is not available for these deals yet (the page viewer does not check this kind of deal copy yet); the receipt in words is.
 
 ## What you will see
 
