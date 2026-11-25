@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# The fast set every pull request runs: the scripts' tests, and the
-# evidencebook-report skill's grades run end to end against a real capsulectl.
+# The fast set every pull request runs: the scripts' tests, the ARD demo's
+# vendored capsule-viewer drift check, and the evidencebook-report skill's
+# grades run end to end against a real capsulectl.
 # Runs the pull request's own code on `pull_request`, which receives no
 # secrets; nothing here needs one (no model runs: the end-to-end report takes
 # the no-judge path). The suites over about five minutes (ard-demo, tau2-live)

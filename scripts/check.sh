@@ -19,7 +19,9 @@
 #
 # Needs: git, gh (signed in: the pinned checkouts and releases are
 # action-state-group's), Go, uv (it provides Python 3.12), python3 and Google
-# Chrome (the report pages' check). No secret: nothing here calls a model.
+# Chrome (the report pages' check), and network: ard-demo's end-to-end test
+# uses Action State's hosted witness and viewer-drift reads capsule-viewer's
+# release tags. No secret: nothing here calls a model.
 # Released binaries are taken for this machine's platform (darwin-arm64 or
 # linux-amd64), where CI takes linux-amd64.
 set -euo pipefail
@@ -134,19 +136,60 @@ job_unit() {
   AAC_CHECKOUT=$aac PATH="$py/bin:$PATH" python -m unittest discover -s tests -p 'test_*.py'
 }
 
+# stage_port: a free ARD_STAGE_PORT for the demo's end-to-end test. It serves the registry on that port and the
+# two sellers on port+10 and port+11; its default (47681) is shared by every checkout on this machine, so a second
+# run at the same time (another clone's check, a lane's own run) would fail with "Address already in use".
+stage_port() {
+  python3 - <<'PY'
+import random, socket
+for _ in range(200):
+    base = random.randrange(20000, 60000)
+    socks = []
+    try:
+        for port in (base, base + 10, base + 11):
+            s = socket.socket()
+            socks.append(s)
+            s.bind(("127.0.0.1", port))
+    except OSError:
+        continue
+    finally:
+        for s in socks:
+            s.close()
+    print(base)
+    break
+else:
+    raise SystemExit("no free ARD_STAGE_PORT")
+PY
+}
+
 job_ard_demo() {
-  local w=tests.yml eb_ref ce_tag tag viewer eb ce deal py
+  # The tests' directory as a variable, for the same reason as in job_tau2_live.
+  local w=tests.yml eb_ref ce_tag viewer eb ce deal py port t=demo/ard/tests
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
-  tag=$(pin $w ard-demo CAPSULECTL_DEAL_TAG)
   viewer=$(pin $w ard-demo CAPSULE_VIEWER_REF)
   eb=$(checkout evidencebook "$eb_ref")
   ce=$(engine "$ce_tag")
-  deal=$(release evidencebook "$tag" "capsulectl-deal-${tag#capsulectl/}-$plat")
-  py=$(venv "ard-${eb_ref:0:12}-${viewer:0:12}" "$eb/python" pyyaml rfc8785 websockets "mcp==2.3.0" pytest pytest-xdist \
+  # capsulectl-deal is built from the pinned evidencebook checkout, as CI builds it.
+  deal="$deps/bin/capsulectl-deal@$eb_ref"
+  if [[ ! -x "$deal" ]]; then
+    mkdir -p "$deps/bin"
+    (cd "$eb/capsulectl" && go build -o "$deal" ./cmd/capsulectl-deal)
+  fi
+  py=$(venv "ard-${viewer:0:12}" cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist \
     "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@$viewer")
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
-    python -m pytest -q --durations=40 -n 4 --dist loadfile demo/ard/tests
+    python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
+  # Both deals end to end against Action State's hosted witness (network), as CI runs them.
+  port=$(stage_port)
+  ARD_E2E=1 ARD_STAGE_PORT="$port" ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
+    python -m pytest -v "$t/test_e2e.py"
+}
+
+job_viewer_drift() {
+  local py
+  py=$(venv bare)
+  PATH="$py/bin:$PATH" python demo/ard/viewer_drift.py
 }
 
 job_admission_engine() {
@@ -217,7 +260,7 @@ job_tau2_live() {
 
 failed=()
 summary=()
-for job in unit admission-engine live-engine report-grades obligations-report ard-demo tau2-live; do
+for job in unit viewer-drift admission-engine live-engine report-grades obligations-report ard-demo tau2-live; do
   printf '\n=== %s\n' "$job"
   start=$SECONDS
   # Not in an `if`: errexit would be off inside the job.
