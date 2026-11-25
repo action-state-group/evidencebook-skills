@@ -199,7 +199,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
 Do a full run on the simulated rail first, then the real rail. This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts. Not yet run at these pins. Lexe's fees, from [docs.lexe.tech/pricing](https://docs.lexe.tech/pricing) (read 2026-11-18; the page says rates may change): receiving payments 0.5%, sending to other Lexe users 0.5% of the payment amount, and "Lightning sends and receives have a minimum fee of ₿0.1 (100 msat …). It only applies to payments under ₿20." At 2,000 msat, 0.5% is 10 msat, so the 100 msat minimum applies on both sides: the buyer needs 2,100 msat and the seller should receive about 1,900.
 
-1. [Real] Install ln-pay-local. ln-pay-local is a small command-line wallet on Lexe's Lightning SDK.
+1. [Real] Install ln-pay-local. ln-pay-local is a small command-line wallet on Lexe's Lightning SDK. Run this block again after each upgrade of this guide: it moves ln-pay-local to the pin and reinstalls it.
 
    ```
    [ -d $HOME/ard-demo/ln-pay-local ] || git clone -q https://github.com/action-state-group/ln-pay-local $HOME/ard-demo/ln-pay-local; git -C $HOME/ard-demo/ln-pay-local fetch -q origin 4b936bb164d7dcea4db37075ad336d4a9f2ec102; git -C $HOME/ard-demo/ln-pay-local checkout -q 4b936bb164d7dcea4db37075ad336d4a9f2ec102
@@ -291,9 +291,9 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
    .venv/bin/python demo/ard/goose/open-windows.py --rail fake
    ```
 
-6. If the windows are still not tiled: allow the access, click Maya's window, then by hand: Window, Move & Resize, Quarters.
+6. If the windows are stacked, tile them by hand: click Maya's window, then Window, Move & Resize, Quarters. The script can report that it tiled them when it did not (evidencebook-skills#322: hand runs on 2026-11-25 found them stacked), and the menu item works only while a Goose window is in front, which the click makes it.
 
-7. Click Trust and Execute in all four windows, in any order.
+7. Click Trust and Execute in all four windows, in any order. Click each window once first: a window behind the others takes the first click only to come forward. Maya's window can open with no Trust prompt and answer at once (seen on another Mac on 2026-11-25, after a reset that cleared all four recipes' trust; the cause is not known yet: evidencebook-skills#322). If it does, carry on: step 8 checks that it has only its own `ard_maya` tools.
    **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya and the adjudicator's assistant only say they are ready.
 
 8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
@@ -458,7 +458,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 ## Troubleshooting
 
-1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too. A `stage.py` left from an earlier run is stopped by reset itself.
+1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too: the Claude app, for one, keeps a folder you connected to a session open (the demo's `pages` folder, say). Remove that folder from the session, or quit the app, or leave that home and use a new one: `export ARD_HOME=~/.config/ard-commerce-demo-2` in every terminal, then reset and seed there. A `stage.py` left from an earlier run is stopped by reset itself.
 
 2. **Seed says a seller's sample deals were not stamped by the witness within their window.** The witness did not take the stamp in time (no network, or it answered slowly): check the network, or set `ARD_WITNESS=off`, then reset and seed.
 
