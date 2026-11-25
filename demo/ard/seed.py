@@ -135,8 +135,10 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
                 got = seller.stamp()
             except pt.Refused as exc:
                 got = {"error": str(exc)}
-            # Taken before the window ends: the witness's receipt time is before this check.
-            if pt.taken(got) and time.time() < window_end:
+            # Taken before the window ends: the witness's receipt time is before this check. And nothing left pending,
+            # so the live run's first stamp has no backlog to deliver first (capsulectl delivers every pending
+            # checkpoint in one tick, one after another).
+            if pt.taken(got) and not got.get("pending") and time.time() < window_end:
                 return
             if time.time() > window_end - 5:
                 errors.append(f"{name}: its sample deals were not stamped by the witness within their window ({MAKE_S} s): "
