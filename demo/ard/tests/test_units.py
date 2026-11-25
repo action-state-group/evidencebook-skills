@@ -340,15 +340,16 @@ def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_pat
     monkeypatch.setattr(seed, "parties", lambda home: {n: Fake(n) for n in (*SELLERS, "maya", *(f"sample-buyer-{s}" for s in SELLERS))})
     monkeypatch.setattr(seed.adj.Adjudicator, "named", lambda self: {})
     monkeypatch.setattr(seed, "sample_deal", lambda *a: "deal")
-    real_start, started = threading.Thread.start, []
+    real_start, failed = threading.Thread.start, []
 
     def start(self):
-        started.append(self)
-        if len(started) == 4:  # a stream of the second seller
+        # Only a deal stream's start fails, the first one whichever seller's it is: the seed's own threads start.
+        if getattr(self, "_target", None) is not None and self._target.__name__ == "stream" and not failed:
+            failed.append(self)
             raise RuntimeError("can't start new thread")
         return real_start(self)
     monkeypatch.setattr(threading.Thread, "start", start)
     said = []
     with pytest.raises(SystemExit, match="did not finish"):
         seed.seed(tmp_path, say=said.append)
-    assert not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
+    assert failed and not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
