@@ -34,7 +34,7 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 
 ## Without Goose
 
-`demo.py run` runs both deals in one terminal, each dialog asked at the prompt (`--auto` answers yes, simulated rail only). `demo.py seed` makes the sample history; `demo.py reset` stops the demo's processes, deletes the home and clears the Goose recipe trust given since the windows first opened. `demo.py --help` lists the environment each command needs.
+`demo.py run` runs both deals in one terminal, each dialog asked at the prompt (`--auto` answers yes, simulated rail only). `demo.py seed` makes the sample history; `demo.py reset` stops the demo's processes, deletes the home and clears Goose's trust in the demo's own recipes (any other recipe keeps its trust). `demo.py --help` lists the environment each command needs.
 
 ## Tests
 

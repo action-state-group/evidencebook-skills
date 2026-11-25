@@ -232,14 +232,14 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## Before each run
 
-1. Quit Goose, then reset: it stops the demo's processes (the stage and the windows' servers), deletes the demo home and clears the recipe trust given since the demo's windows first opened: the demo's four recipes, and any other recipe you trusted in the meantime. Goose keeps recipe trust in one place for both, so this also applies to your own Goose. The demo home is `~/.config/ard-commerce-demo`.
+1. Quit Goose, then reset: it stops the demo's processes, deletes the demo home and clears Goose's trust in the demo's own recipes, so each window asks Trust and Execute again. Goose keeps recipe trust in one place for the demo's Goose and your own; reset deletes only the trust files of the recipes open-windows.py opened (it computes their names the way Goose 1.59.2 does), so any other recipe you trusted keeps its trust. The demo home is `~/.config/ard-commerce-demo`.
 
    ```
    osascript -e 'quit app "Goose"'
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …". If it refuses, it says what to stop.
+   **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …". If it refuses, it says what to stop.
 
 2. Make the sample history (about 8 minutes: each sample deal counts as held only once its contest window ends and a checkpoint covers it).
 
@@ -413,7 +413,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    (cd demo/ard && ../../.venv/bin/python demo.py reset)
    ```
 
-   **Expect:** "removed …" and "cleared Goose's trust in the N recipes trusted since this home's windows first opened …".
+   **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …".
 
 2. Check that nothing of the demo is left running.
 
@@ -442,3 +442,9 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 3. **A command says a variable is not set.** Copy the export line it prints, put in your own paths, and run it again.
 
 4. **The adjudicator's case says Kestrel Print: no answer yet.** Kestrel's window is not running: open it and ask again. The case can still be ruled on from Maya's answer, which carries the records Kestrel signed that she holds, its delivery record among them.
+
+5. **A window shows nothing new.** Bring it to the front (Cmd+`); a background window may not draw its reply.
+
+6. **Maya finds only one seller.** A seller publishes its entry when its window starts. Wait until both seller windows are open, then ask again.
+
+7. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes. Once, after moving to this version from one before evidencebook-skills#277: the first reset finds no note of the demo's recipes and deletes no trust, so the next windows may open without a Trust prompt; from the next reset on, it is asked again.
