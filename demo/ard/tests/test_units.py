@@ -261,3 +261,38 @@ def test_a_seller_agent_waits_for_the_minute_its_sample_deals_count_held(tmp_pat
     (tmp_path / HELD_FROM).write_text(str(int(time.time()) + 30))
     agent.wait_sample_held()
     assert len(slept) == 1 and 25 < slept[0] <= 31
+
+
+def test_a_sample_deals_window_ends_at_the_seeds_whole_second():
+    """seed.sample_deal hands offer ``window_end - int(now)`` seconds; offer writes now plus that, cut to the second:
+    the deal's window ends exactly at window_end (or a second later), never before the seed's own check."""
+    from datetime import timedelta
+
+    import party as pt
+
+    window_end = 1_795_620_090
+    for frac in (0.0, 0.2, 0.7, 0.999):
+        now = datetime.fromtimestamp(1_795_620_010 + frac, tz=timezone.utc)
+        left = window_end - int(now.timestamp())
+        end = datetime.strptime(pt._iso(now + timedelta(seconds=left)), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        assert end.timestamp() == window_end, frac
+
+
+def test_a_stamp_is_tried_again_only_with_time_left(monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    clock = [0.0]
+    monkeypatch.setattr(pt.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(pt.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    p = pt.Party.__new__(pt.Party)
+    p.name, tries = "x", []
+
+    def slow_refused():
+        tries.append(clock[0])
+        clock[0] += 5  # each try takes 5 s and the witness does not take it
+        return {"state": "ticked", "checkpoint": 1, "delivered": []}
+    p.stamp = slow_refused
+    with pytest.raises(pt.Refused):
+        p.wait_checkpoint(12)
+    assert tries == [0.0, 6.0] and clock[0] == 11.0  # a third try (at 12 s) would not end by the bound

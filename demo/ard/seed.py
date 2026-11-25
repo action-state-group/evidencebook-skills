@@ -51,11 +51,11 @@ def parties(home: Path) -> dict[str, pt.Party]:
     return out
 
 
-def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator: dict, window_end: float) -> str:
+def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator: dict, window_end: int) -> str:
     """One sample deal, both sides run here, handing each other the files each verb writes. Its rows are due, and their
     window ends, at ``window_end`` (a ``time.time()``)."""
     decision = flow.seller_decision(price_msat)
-    left = int(window_end - time.time())
+    left = window_end - int(time.time())  # offer adds it to now, cut to the second: the window ends at window_end
     if left < MIN_LEFT_S:  # no time left to stamp it inside its window: it would never count as held
         raise pt.Refused(f"the sample deals took longer than their window ({MAKE_S} s) allows")
     o = buyer.offer(seller.key_id, ITEM, price_msat, decision["pack"]["digest"], adjudicator, due_s=left, window_s=left)
@@ -109,7 +109,9 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         if ps[name].deals():
             raise SystemExit(f"{name} has sample deals from a seed that did not finish: their windows are over, so they "
                              "can never count as held. Run `demo.py reset`, then `demo.py seed`")
-    started, window_end = time.monotonic(), time.time() + MAKE_S
+    # Whole seconds: each deal's terms state this exact time (party._iso writes whole seconds), so the check below and
+    # every deal's window end are the same instant.
+    started, window_end = time.monotonic(), int(time.time()) + MAKE_S
 
     def run(name: str) -> None:
         seller, buyer, price = ps[name], ps[sample_buyer(name)], SELLERS[name]["price_msat"]

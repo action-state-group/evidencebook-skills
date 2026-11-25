@@ -202,16 +202,11 @@ class Adjudicator:
         p, record = self.party, case["ruling"]
         stamped = False
         if pt.witnessed():
-            stop = time.monotonic() + seconds
-            while time.monotonic() < stop:
-                try:
-                    t = p.stamp()
-                except pt.Refused:
-                    t = {}
-                if pt.taken(t):
-                    stamped = True
-                    break
-                time.sleep(2)
+            try:
+                p.wait_checkpoint(seconds)
+                stamped = True
+            except pt.Refused:
+                pass
         again = self.rule(case, record["row"], record["value"], record["against"])
         for side in ("buyer", "seller"):
             wire.send(self.home, case["parties"][side], case["deal_id"], "ruling", again["file"])

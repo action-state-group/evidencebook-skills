@@ -48,6 +48,9 @@ WITNESS_NAME = "Action State's witness"
 CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
 #: The History card's derivation every party makes and every buyer accepts: the one constant a move to
 #: ``standard_history/4`` changes (AAC standard-history §12: /3 with one rule changed).
+#: How long one stamp takes the hosted witness to take, at most, when it is well (measured 3 to 6 s): a stamp is tried
+#: again only with this long left of its wait.
+STAMP_TRY_S = 6
 CARD_DERIVATION = "standard_history/3"
 #: The one forum the demo's agreements accept: the demo adjudicator, an outside party to the deal.
 FORUM = "external:ard-demo"
@@ -187,8 +190,10 @@ class Party:
         return self.run("tick", "--now")
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
-        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again every few seconds
-        while it does not (it answers slowly or with an error under load), up to ``seconds``."""
+        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again while it does not
+        (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
+        ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
+        then mid-delivery), and what it did not deliver goes with the next tick."""
         stop = time.monotonic() + seconds
         while True:
             try:
@@ -197,12 +202,12 @@ class Party:
                 t = {"error": str(exc)}
             if taken(t):
                 return t
-            if time.monotonic() >= stop:
+            if stop - time.monotonic() < STAMP_TRY_S:
                 raise Refused(f"{self.name}: no checkpoint in {int(seconds)} s (last: {json.dumps(t)[:300]})")
             if say:
                 say("this party's checkpoint did not go through; trying again")
                 say = None
-            time.sleep(2)
+            time.sleep(1)
 
     def card_bundle(self, shared: bool) -> Path:
         """The party's :data:`CARD_DERIVATION` card as a bundle, as of its newest checkpoint: the shared copy (the card,
