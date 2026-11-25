@@ -11,6 +11,7 @@ seller's own card counts 24 deals held before it says done (about eight minutes 
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
 import time
 from pathlib import Path
@@ -75,6 +76,23 @@ def held(p: pt.Party) -> tuple[int, int]:
     """The deals the party's own card counts, and how many of them held."""
     card, _, _ = flow.read_card(p.card_bundle(shared=True))
     return card["outcomes"]["of"], card["outcomes"]["held"]
+
+
+def not_held(p: pt.Party) -> str:
+    """What a seller's own card says of each deal it does not count as held, and its checkpoint state: shown when the
+    seed gives up, so the cause shows where it failed (a CI runner, say)."""
+    try:
+        state = p.tick()
+        doc = json.loads(p.card_bundle(shared=False).read_text())
+        sh = doc["extensions"]["x-standard-history/v0"]
+        rows = [d for d in sh["deals"] if not all(r.get("status") == "agreed" for r in d.get("rows", []))]
+        lines = [f"{p.name}: card as of {sh['as_of'].get('anchor_time')}, tick {json.dumps(state)[:300]}"]
+        lines += [f"  {d['deal'][:12]} agreed {d.get('agreed_at')} happened {d.get('happened')} rows "
+                  + ", ".join(f"{r.get('owed_by')}:{r.get('status')}/{r.get('value')}" for r in d.get("rows", []))
+                  for d in rows[:30]]
+        return "\n".join(lines)
+    except Exception as exc:  # a report of the failure must not hide it
+        return f"{p.name}: could not read its own card: {exc}"
 
 
 def seed(home: Path, say: Callable[[str], None] = print) -> None:
@@ -144,8 +162,9 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
             break
         if time.monotonic() > stop:
             left = "; ".join(f"{n}'s card counts {counts[n][1]} of {counts[n][0]} deals held" for n in SELLERS if n not in done)
+            why = "\n".join(not_held(ps[n]) for n in SELLERS if n not in done)
             raise SystemExit(f"{left} after {HELD_WAIT_S // 60} minutes: check the network (the witness) and run "
-                             "`demo.py seed` again")
+                             f"`demo.py seed` again\n{why}")
         time.sleep(10)
     for p in ps.values():
         p.close()
