@@ -30,6 +30,8 @@ from cast import DEALS_EACH, HELD_FROM, ITEM, SELLERS, sample_buyer
 #: them and have the witness take their stamp, on a slow witness too. The seed itself ends as soon as the stamps are
 #: taken; the cards count the deals held from the first minute after this.
 MAKE_S = 90
+#: How many of a seller's sample deals are made side by side.
+STREAMS = 2
 #: A sample deal is made only with at least this long left in its window, for the stamp that times it.
 MIN_LEFT_S = 20
 #: The sample buyer's answer to its own payment check: the demo operator's, for the sample buyer it runs.
@@ -115,12 +117,23 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
 
     def run(name: str) -> None:
         seller, buyer, price = ps[name], ps[sample_buyer(name)], SELLERS[name]["price_msat"]
-        for i in range(DEALS_EACH):
-            try:
-                sample_deal(buyer, seller, price, named, window_end)
-            except Exception as exc:
-                errors.append(f"{name}: sample deal {i + 1}: {exc}")
-                return
+
+        def stream(k: int) -> None:
+            for i in range(k, DEALS_EACH, STREAMS):
+                try:
+                    sample_deal(buyer, seller, price, named, window_end)
+                except Exception as exc:
+                    errors.append(f"{name}: sample deal {i + 1}: {exc}")
+                    return
+        # Deals made side by side: each verb runs alone on its party's store (Party's lock), so while the seller seals a
+        # step of one deal, the buyer seals a step of another.
+        streams = [threading.Thread(target=stream, args=(k,)) for k in range(STREAMS)]
+        for t in streams:
+            t.start()
+        for t in streams:
+            t.join()
+        if any(e.startswith(f"{name}:") for e in errors):
+            return
         # One witnessed stamp times every statement of these deals. A statement's time is when the witness received the
         # stamp that covers it, so it must reach the witness before the window ends; one the witness did not take (it
         # answers slowly or with an error under load) is taken again. The sample buyer stamps nothing: the seller's stamp
