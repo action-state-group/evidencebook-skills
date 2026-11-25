@@ -15,12 +15,18 @@ The check record is sealed before the payment and the act after it, so the deal 
 evidencebook goose reference seals the check, its verdict, the approval and the act in one call
 (``DealChain.check_and_pay``, python/examples/goose/deal_records.py, at the commit the run sheet pins);
 :func:`pay_check` and :func:`pay_after_check` are that method cut at the payment, and ``tests/test_rules.py`` holds them
-to its output. The verdict record keeps the reference's ``rules: not_configured``: this demo adds no protocol, so what
-the rules said is sealed as a node-book note of Maya's (:data:`CHECKED`) and shown on screen."""
+to its output when no limit is set and no one clicked. With a limit, the verdict record seals what the rules said
+(x-deal-v0 section 8: ``rules: evaluated``, the ruleset, its digest, the engine's sha256, the verdict, every finding
+and the history it was given; an ``escalate`` pauses the check with one ``rules_escalate`` difference per failing
+finding, as evidencebook-deal folds a checker's answer). The approval names who answered: the person (``user``, with a
+commitment to the words they were shown and the button they clicked) when they clicked Pay or Approve (#261, Steven's
+receipt review of 2026-11-24). What the rules said is also kept as a node-book note of Maya's (:data:`CHECKED`)."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from collections.abc import Callable
@@ -51,6 +57,17 @@ class RuleHeld(RuntimeError):
         self.reasons = reasons
 
 
+@dataclass(frozen=True)
+class Answer:
+    """What the person answered in a dialog: the words it showed them and the button they clicked."""
+    shown: str
+    button: str
+
+    def said(self) -> str:
+        """The text the approval's ``said_commitment`` commits to."""
+        return f"{self.shown}\nAnswer: {self.button}"
+
+
 @dataclass
 class Outcome:
     verdict: str
@@ -61,6 +78,14 @@ class Outcome:
     asks: list[str] = field(default_factory=list)  # the pack's other failing rules: the presenter's dialog covers these
     ruleset: str = ""
     decision: str = ""  # "approved" or "declined" when the order was held and the person was asked, else ""
+    rules: dict = field(default_factory=dict)  # the verdict record's ``rules`` block, as sealed
+    differences: list[dict] = field(default_factory=list)  # the verdict's differences: one per failing finding
+    answer: Answer | None = None  # the person's answer to a held order (Approve), when they approved it
+
+    @property
+    def paused(self) -> bool:
+        """Whether the check pauses: the rules escalated (a hold over the limit, or the pack's other asks)."""
+        return self.verdict == "escalate"
 
 
 def limit_msat() -> int | None:
@@ -93,20 +118,46 @@ def pay_check(chain: dr.DealChain, at: datetime) -> list[dr.Step]:
     return chain._since(n)
 
 
-def pay_after_check(chain: dr.DealChain, at: datetime, reference: str) -> list[dr.Step]:
+def pay_after_check(chain: dr.DealChain, at: datetime, reference: str, outcome: Outcome | None = None,
+                    clicked: Answer | None = None) -> list[dr.Step]:
     """The rest of ``check_and_pay`` once the check is sealed and the payment is made: the verdict, the approval and
-    the ``pay`` act naming the payment reference by its commitment."""
+    the ``pay`` act naming the payment reference by its commitment.
+
+    ``outcome`` is what the deal check said under the person's limit (none: no limit, ``rules: not_configured``).
+    ``clicked`` is the person's Pay click in the payment dialog (none: the gate was off). The approval is the
+    person's (``user``) when they answered: the Approve click on a held order, else the Pay click; with no answer it
+    is ``standing_intent`` on a passing check, and ``agent_card`` on a paused one (x-deal-v0 section 6: a pause
+    always needs an answer, and standing intent approves only a pass)."""
     n, t = len(chain._built), chain.terms
     checked = chain._latest(deal.TYPE_CHECK)
-    verdict = chain._step(chain._untyped(deal.TYPE_VERDICT, at, {
-        "result": "pass", "differences": [], "options": [], "judge": {"kind": "rules"},
-        "rules": {"status": "not_configured"}}, [("checks", checked)]), at, {"verdict": "pass"}).digest
+    if outcome is None:
+        body = {"result": "pass", "differences": [], "options": [], "judge": {"kind": "rules"},
+                "rules": {"status": "not_configured"}}
+    elif outcome.paused:
+        body = {"result": "pause", "differences": outcome.differences, "options": ["hold", "proceed"],
+                "judge": {"kind": "rules"}, "rules": outcome.rules}
+    else:
+        body = {"result": "pass", "differences": [], "options": [], "judge": {"kind": "rules"}, "rules": outcome.rules}
+    verdict = chain._step(chain._untyped(deal.TYPE_VERDICT, at, body, [("checks", checked)]), at,
+                          {"verdict": body["result"]}).digest
+    answer = (outcome.answer if outcome is not None else None) or clicked
+    local: dict = {}
+    if answer is not None:
+        said, nonce = dr._commit(answer.said())
+        approver, extra = "user", {"said_commitment": said}
+        local = {"said": answer.said(), "nonces": {"said": nonce}}
+    else:
+        approver, extra = ("agent_card" if body["result"] == "pause" else "standing_intent"), {}
     approval = chain._step(chain._untyped(deal.TYPE_APPROVAL, at, {
-        "choice": "proceed", "proceed": True, "approver": "standing_intent"}, [("approves", verdict)]),
-        at, {"approval": "standing_intent"}).digest
+        "choice": "proceed", "proceed": True, "approver": approver, **extra}, [("approves", verdict)]),
+        at, {"approval": approver, **local}).digest
     commitment, nonce = dr._commit(reference)
-    decide = deal.Decide(deal.Disposition("accept", "policy", False, "executed"), "send_payment",
-                         "one_way_recoverable" if t.refundable else "one_way_consequential")
+    # x-deal-v0 section 3: disposed by the human when the user approved it in their own words, by policy under their
+    # standing intent; an agent_card answer certifies no one, so the act is not a decide Capsule.
+    decide = (None if approver == "agent_card" else
+              deal.Decide(deal.Disposition("accept", "human" if approver == "user" else "policy", approver == "user",
+                                           "executed"), "send_payment",
+                          "one_way_recoverable" if t.refundable else "one_way_consequential"))
     chain._step(chain._untyped(deal.TYPE_ACTION, at, {
         "action": "pay", "action_class": ACTION_CLASS, "amount_minor": t.price_minor,
         "currency": t.currency, "direction": "out", "rail": t.rail, "reference_commitment": commitment,
@@ -114,6 +165,15 @@ def pay_after_check(chain: dr.DealChain, at: datetime, reference: str) -> list[d
         [("authorized_by", approval)], counterparty=chain._counterparty(deal.FP_ALG)),
         at, {"act": {"action": "pay", "reference": reference}, "nonces": {"reference": nonce}}, decide)
     return chain._since(n)
+
+
+def pay(chain: dr.DealChain, at: datetime, reference: str, outcome: Outcome | None, clicked: Answer | None) -> list[dr.Step]:
+    """The steps after the payment for any order: the reference method when there was neither a limit nor a click
+    (today's records, unchanged), else :func:`pay_after_check` (the check is sealed first, by :func:`gate`, or here)."""
+    if outcome is None and clicked is None:
+        return chain.check_and_pay(at, reference)
+    steps = pay_check(chain, at) if outcome is None else []
+    return steps + pay_after_check(chain, at, reference, outcome, clicked)
 
 
 # -- the Everyday Rules over it --------------------------------------------------------------------------------
@@ -130,7 +190,7 @@ MAX_HISTORY = 200
 
 def _paid_acts(node, skip_deal: str, now: datetime | None = None) -> list[dict]:
     """Maya's earlier ``pay`` acts on her other deals within the last 7 days, newest first (the history the weekly limit
-    sums), at most :data:`MAX_HISTORY` of them (the input says so in its ``history_scope``)."""
+    sums), at most :data:`MAX_HISTORY` + 1 of them: one past the cap shows the history was cut (``history_scope``)."""
     since = (now or datetime.now(timezone.utc)) - timedelta(days=WINDOW_DAYS)
     acts = []
     for book_id in sorted(node.shelf.books()):
@@ -144,7 +204,7 @@ def _paid_acts(node, skip_deal: str, now: datetime | None = None) -> list[dict]:
                 at = j["x-deal-v0"]["at"]
                 if datetime.fromisoformat(at.replace("Z", "+00:00")) >= since:
                     acts.append((at, _record(node, book, payloads, i)))
-    return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)][:MAX_HISTORY]
+    return [a for _, a in sorted(acts, key=lambda x: x[0], reverse=True)][:MAX_HISTORY + 1]
 
 
 def engine() -> str:
@@ -166,9 +226,12 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     person's ``limit``. Raises :class:`RulesError` when the engine could not answer."""
     book = node.shelf.open(f"deal/{chain.deal_id}")
     payloads = node.deal_payloads(chain.deal_id)
+    history = _paid_acts(node, chain.deal_id)
+    complete = len(history) <= MAX_HISTORY
+    history = history[:MAX_HISTORY]
     inp = {"schema": "external-check-input/v0", "party_role": "buyer",
-           "record": _record(node, book, payloads, check_step_index), "history": _paid_acts(node, chain.deal_id),
-           "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": True}}
+           "record": _record(node, book, payloads, check_step_index), "history": history,
+           "history_scope": {"days": WINDOW_DAYS, "max_records": MAX_HISTORY, "complete": complete}}
     try:
         with tempfile.TemporaryDirectory(prefix="ard-rules-") as tmp:
             limits = Path(tmp) / "limits.json"
@@ -181,16 +244,58 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
                 raise RulesError(ENGINE_FLAG_MISSING)
             raise RulesError(f"the deal check could not run: {say}")
         result = json.loads(run.stdout)
-        result["findings"], result["ruleset_id"], result["verdict"]  # the members read below
+        result["findings"], result["ruleset_id"], result["verdict"], result["definition_digest"]  # the members read below
     except RulesError:
         raise
     except (OSError, subprocess.SubprocessError, ValueError, KeyError) as exc:
         raise RulesError(f"the deal check could not run: {type(exc).__name__}: {exc}") from None
+    if result["verdict"] not in ("allow", "escalate", "deny", "not_evaluable"):
+        raise RulesError(f"the deal check could not run: the engine answered {result['verdict']!r}")
     failing = [f for f in result["findings"] if f["verdict"] == "fail"]
     caps = [f for f in failing if str(f.get("check", "")).startswith("caps/")]
     reasons = [_words(f) for f in caps]
     asks = [f["reason"] for f in failing if f not in caps and f.get("reason")]
-    return Outcome(result["verdict"], bool(caps), limit, chain.terms.price_minor, reasons, asks, result["ruleset_id"])
+    sealed = {"status": "evaluated", "ruleset_id": result["ruleset_id"], "definition_digest": result["definition_digest"],
+              "checker_sha256": _sha256(engine()), "verdict": result["verdict"],
+              "tier": result.get("tier") if result.get("tier") in ("recomputed", "judged") else "not_stated",
+              "findings": [_sealed(f) for f in result["findings"]],
+              "history": {"days": WINDOW_DAYS, "acts": len(history), "complete": complete}}
+    if result.get("grade") in ("self-attested", "witnessed", "countersigned"):
+        sealed["grade"] = result["grade"]
+    return Outcome(result["verdict"], bool(caps), limit, chain.terms.price_minor, reasons, asks, result["ruleset_id"],
+                   rules=sealed, differences=_differences(result))
+
+
+#: The members of a finding the verdict seals (x-deal-v0 section 8); the checker's own words (``reason``) are not sealed.
+SEALED_FINDING = ("id", "check", "verdict", "disposition", "limit", "value")
+#: A finding the ruleset declares and the checker does not measure: never a difference (x-deal-v0 section 8).
+DECLARED = "declared, not measured"
+
+
+def _sealed(finding: dict) -> dict:
+    return {k: finding[k] for k in SEALED_FINDING if finding.get(k) is not None}
+
+
+def _field(finding_id: str) -> str:
+    """A finding's id as a difference field (lowercase a-z0-9_), as evidencebook-deal's ``findingField`` makes it."""
+    f = re.sub(r"[^a-z0-9_]+", "_", finding_id.lower()).strip("_")
+    return f if f and "a" <= f[0] <= "z" else "rule_" + f
+
+
+def _differences(result: dict) -> list[dict]:
+    """The differences an ``escalate`` adds to the check: one per failing or not-evaluable finding, as
+    evidencebook-deal's ``rulesDifferences`` folds them (internal/deal/rules_checker.go); an allow adds none."""
+    if result["verdict"] == "allow":
+        return []
+    rule = "rules_" + result["verdict"] if result["verdict"] in ("escalate", "deny") else "rules_not_evaluable"
+    out = [{"question": "safety", "rule": rule, "field": _field(f["id"])} for f in result["findings"]
+           if f["verdict"] in ("fail", "not_evaluable") and f.get("reason") != DECLARED]
+    return out or [{"question": "safety", "rule": rule}]
+
+
+def _sha256(path: str) -> str:
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
 
 def _words(finding: dict) -> str:
@@ -201,8 +306,8 @@ def _words(finding: dict) -> str:
 
 
 def seal_note(node, deal_id: str, outcome: Outcome) -> None:
-    """Maya's own record of what the deal check said, in her node book (the verdict record keeps the reference's
-    ``not_configured``)."""
+    """Maya's own record of what the deal check said, in her node book, with the rules' own words (the verdict record
+    seals the findings without them)."""
     node.note(CHECKED, {"deal_id": deal_id, "ruleset": outcome.ruleset, "verdict": outcome.verdict,
                         "held": outcome.held, "decision": outcome.decision, "limit_msat": outcome.limit_msat,
                         "amount_msat": outcome.amount_msat, "reasons": outcome.reasons}, subject_ref=deal_id)
@@ -212,9 +317,14 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
          approve: Callable[[Outcome], bool] | None = None) -> Outcome:
     """Seal the check record and run the rules on it; return what they said once the order may go ahead. An order the
     rules hold is put to the person through ``approve`` (no ``approve``: declined); a decline raises
-    :class:`RuleHeld`: the check is sealed, nothing else, and nothing is paid. Either answer is sealed as a note."""
+    :class:`RuleHeld`: the check is sealed, nothing else, and nothing is paid. Either answer is sealed as a note. An
+    approval is kept on the outcome as the person's :class:`Answer` (the dialog's words and Approve), for the approval
+    record. A ``deny`` or a ``not_evaluable`` verdict pays nothing: there is no way to proceed."""
     node.seal(chain, pay_check(chain, at))
     outcome = check(node, chain, len(node.deal_payloads(chain.deal_id)) - 1, limit)
+    if outcome.verdict in ("deny", "not_evaluable"):
+        seal_note(node, chain.deal_id, outcome)
+        raise RulesError(f"the Everyday Rules answered {outcome.verdict} on this order, so it cannot go ahead")
     if outcome.held:
         try:
             ok = approve is not None and bool(approve(outcome))
@@ -223,6 +333,10 @@ def gate(node, chain: dr.DealChain, limit: int, at: datetime,
             seal_note(node, chain.deal_id, outcome)
             raise RulesError(f"the person could not be asked about the held order: {type(exc).__name__}: {exc}") from None
         outcome.decision = "approved" if ok else "declined"
+        if ok:
+            import screens  # here, not at the top: screens imports buyer, which imports this module
+
+            outcome.answer = Answer(screens.rules_ask(outcome.reasons), "Approve")  # the hold dialog's words
     seal_note(node, chain.deal_id, outcome)
     if outcome.decision == "declined":
         raise RuleHeld("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons), outcome.reasons)

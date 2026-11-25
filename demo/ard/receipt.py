@@ -76,7 +76,15 @@ def ready(node: gn.Node, deal_id: str) -> None:
                            "the receipt page is made once both halves are exchanged")
 
 
-def _line(kind: str, body: dict, simulated: bool) -> str:
+def _held_by_limit(verdict: dict | None) -> bool:
+    """Whether a verdict paused for the person's spending limit: a failing ``caps/`` finding under evaluated rules."""
+    rules = (verdict or {}).get("rules") or {}
+    return rules.get("status") == "evaluated" and any(
+        f.get("verdict") == "fail" and str(f.get("check", "")).startswith("caps/") for f in rules.get("findings") or [])
+
+
+def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) -> str:
+    """A step's line on the receipt. ``answered`` is, for an approval, the body of the verdict it answers."""
     amount = body.get("amount_minor")
     action = body.get("action")
     if kind == "baseline":
@@ -87,14 +95,23 @@ def _line(kind: str, body: dict, simulated: bool) -> str:
         return {"pay": f"About to pay {screens.msat(amount)}", "offer": f"About to offer {screens.msat(amount)}",
                 "commit": f"About to commit to the sale at {screens.msat(amount)}"}.get(action, f"Proposed: {action}")
     if kind == "verdict":
+        rules = body.get("rules") or {}
+        if rules.get("status") == "evaluated":  # #261: say what the person's rules said, in plain words
+            if rules.get("verdict") == "allow":
+                return f"Checked against your rules ({rules.get('ruleset_id')}): allowed"
+            if _held_by_limit(body):
+                return (f"Checked against your rules ({rules.get('ruleset_id')}): over your spending limit, so the order "
+                        "was held for your approval")
+            return f"Checked against your rules ({rules.get('ruleset_id')}): they asked for your approval"
         result = body.get("result") or body.get("disposition")
         return f"Checked: {result}, {len(body.get('differences') or body.get('findings') or [])} difference(s)"
     if kind == "approval":
         if body.get("kind") == "counterparty-acceptance-observation":
             return "The buyer accepted the offer"
+        if body.get("approver") == "user" and _held_by_limit(answered):
+            return "Held by your spending limit, then approved by you"  # Sherlock2 on #261
         return {"user": "Approved by you",
-                "standing_intent": ("Went ahead under the instructions you gave your agent (a Pay or Approve click "
-                                    "you made is not recorded in this receipt)"),
+                "standing_intent": "Went ahead under the instructions you gave your agent",
                 "agent_card": "Went ahead on the agent's card"}.get(body.get("approver"), "Approved")
     if kind == "action":
         if action == "pay":
@@ -144,9 +161,13 @@ def report_body(node: gn.Node, deal_id: str, *, seller: bool, real: bool, as_of:
     simulated = not real
     first = payloads[0]["body"]
     item = first["terms"]["item"]
-    steps = [{"capsule_id": r.record_id, "kind": _KIND.get(_kind(p), "other"), "n": i + 1, "at": _at(p),
-              "line": _line(_kind(p), p.get("body", {}), simulated)}
-             for i, (r, p) in enumerate(zip(records, payloads))]
+    steps, verdict = [], None
+    for i, (r, p) in enumerate(zip(records, payloads)):
+        kind = _kind(p)
+        steps.append({"capsule_id": r.record_id, "kind": _KIND.get(kind, "other"), "n": i + 1, "at": _at(p),
+                      "line": _line(kind, p.get("body", {}), simulated, verdict)})
+        if kind == "verdict":
+            verdict = p.get("body", {})
     acts = [(r, p) for r, p in zip(records, payloads) if _kind(p) == "action"]
     close = next(p for p in reversed(payloads) if _kind(p) == "close")
     not_held = any(_kind(p) == OUTCOME_NOTE and p.get("body", {}).get("outcome") == "did_not_hold" for p in payloads)

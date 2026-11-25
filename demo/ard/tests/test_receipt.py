@@ -342,3 +342,52 @@ def test_a_sample_deal_its_owner_marked_did_not_hold_says_so_on_its_receipt(seed
     page = html.unescape(receipt.receipt_page(kestrel, "kestrel", "Kestrel Print", noted[0], rail="fake", seller=True).read_text())
     assert receipt.NOT_HELD in page and "not held up by the seller's owner (reason:" in page
     assert "matches what was agreed" not in page
+
+
+def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit():
+    """#261 (Sherlock2's wording): the person's click reads "Approved by you"; after a hold by their spending limit it
+    reads "Held by your spending limit, then approved by you"; a pause for the pack's other asks names no limit."""
+    caps = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
+                      "findings": [{"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"}]}}
+    other = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
+                       "findings": [{"id": "r06-new-merchant", "check": "counterparty_seen_before/4.0.0", "verdict": "fail"},
+                                    {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "pass"}]}}
+    user = {"approver": "user"}
+    assert receipt._line("approval", user, True, caps) == "Held by your spending limit, then approved by you"
+    assert receipt._line("approval", user, True, other) == "Approved by you"
+    assert receipt._line("approval", user, True, {"rules": {"status": "not_configured"}}) == "Approved by you"
+    assert receipt._line("verdict", caps, True) == ("Checked against your rules (asg/everyday/0.3.8): over your spending "
+                                                    "limit, so the order was held for your approval")
+    assert receipt._line("verdict", other, True) == "Checked against your rules (asg/everyday/0.3.8): they asked for your approval"
+    allow = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "allow", "findings": []}}
+    assert receipt._line("verdict", allow, True) == "Checked against your rules (asg/everyday/0.3.8): allowed"
+    assert receipt._line("verdict", {"result": "pass", "differences": [], "rules": {"status": "not_configured"}}, True) \
+        == "Checked: pass, 0 difference(s)"
+
+
+@pages_only
+def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_person_approved(seeded, tmp_path, monkeypatch):
+    """#261: the buyer's receipt for an order the spending limit held and the person approved verifies, and its step
+    lines say what the rules said and who approved; the seller's receipt is unchanged."""
+    import deals
+    import rules
+    from test_rules import stub_engine
+    from world import CURRENCY, ITEM, SELLERS, terms
+
+    engine, _ = stub_engine(tmp_path)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    world, _ = seeded
+    maya, alder = world.nodes["maya"], world.nodes["alder"]
+    price = SELLERS["alder"]["price_msat"]
+    click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")
+    deal_id = deals.run_deal(maya, alder, terms(ITEM, price, CURRENCY, pay.FakeRail.SEALED), ASK, "", pay=lambda: "ref-held",
+                             limit=price, approve=lambda o: True, clicked=click)
+    lines = [s["line"] for s in receipt.report_body(maya, deal_id, seller=False, real=False, as_of="x")["steps"]]
+    assert lines[2] == "Checked against your rules (asg/everyday/0.3.8): over your spending limit, so the order was held for your approval"
+    assert lines[3] == "Held by your spending limit, then approved by you"
+    for n in (maya, alder):
+        n.tick(datetime.now(timezone.utc))
+    page = html.unescape(receipt.receipt_page(maya, "maya", "Maya", deal_id, rail="fake", seller=False).read_text())
+    assert "Held by your spending limit, then approved by you" in page and "over your spending limit" in page
+    seller = html.unescape(receipt.receipt_page(alder, "alder", "Alder Print Co.", deal_id, rail="fake", seller=True).read_text())
+    assert "approved by you" not in seller.lower() and "spending limit" not in seller

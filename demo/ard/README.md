@@ -194,9 +194,14 @@ msat, this order would bring it to 4,000 msat)." (Sherlock2, 2026-11-23) and a s
 person is asked about the hold after that click; Sherlock2 accepted that for Tuesday, and applying the check before the
 dialog, still as a hold, is the follow-up [evidencebook-skills#223](https://github.com/action-state-group/evidencebook-skills/issues/223).
 The pack's other asks (a new merchant, a payment that cannot be undone) are what the payment dialog already asks the
-person, so they are listed, not held. The verdict record the reference seals keeps its `rules: not_configured` (this
-demo adds no protocol); the note is where the rules' answer and the person's decision are kept. A clean check reads the
-same with or without `--limits`, so this demo's note, not the result, is the record that the limit was applied. Needs
+person, so they are listed, not held. The deal's verdict record seals what the rules said (x-deal-v0 section 8: `rules:
+evaluated`, the ruleset and its digest, the engine's sha256, the verdict, every finding without the engine's words, and the
+history it was given); an `escalate`, which the pack's other asks give on the first order too, pauses the check with one
+`rules_escalate` difference per failing finding. The approval names who answered: `user`, with a commitment to the dialog's
+words and the button, for the Approve click on a held order or the Pay click otherwise (also with no limit set); with the
+dialog off (`ARD_APPROVAL=none`, simulated rail, tests only) it is `standing_intent` on a passing check and `agent_card` on
+a paused one. The buyer's receipt says it in plain words: "Approved by you", or "Held by your spending limit, then approved
+by you" (evidencebook-skills#261). The note keeps the rules' own words and the person's decision. Needs
 capsule-engine go/v0.7.0 or later (`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under

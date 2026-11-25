@@ -284,16 +284,19 @@ class NotApproved(RuntimeError):
     """The presenter's dialog did not approve the payment."""
 
 
-def approval_gate(real: bool, rail_name: str, summary: str) -> None:
-    """Return only when this payment may go ahead: the presenter clicked Pay, or the gate is off on a simulated rail."""
+def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | None:
+    """Return only when this payment may go ahead: the presenter clicked Pay (their answer: the dialog's words and Pay,
+    which the deal's approval record names), or the gate is off on a simulated rail (``None``: no one clicked)."""
     if os.environ.get("ARD_APPROVAL") == "none":
         if real:  # the gate goes off only where no money moves: a leftover test setting never pays for real
             raise RuntimeError(f"ARD_APPROVAL=none is refused on the {rail_name} rail, which moves real money: "
                                "unset it so the presenter approves the payment. Nothing was paid.")
         print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
-    elif not approve_payment(summary):
+        return None
+    if not approve_payment(summary):
         raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
                            "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
+    return rules.Answer(summary, "Pay")
 
 
 @_tool("maya", description=_PAY)
@@ -337,7 +340,7 @@ def ard_pay(seller: str) -> None:
                     + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
             try:
-                approval_gate(real, rail_name, summary)
+                clicked = approval_gate(real, rail_name, summary)
             except NotApproved:
                 s.declined.add(key)
                 raise
@@ -347,7 +350,7 @@ def ard_pay(seller: str) -> None:
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
-        _pay(s, key, limit)
+        _pay(s, key, limit, clicked)
     except (rules.RuleHeld, rules.RulesError) as stopped:
         # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
         # (an earlier paid order stays paid, and the order may be tried again).
@@ -360,9 +363,9 @@ def ard_pay(seller: str) -> None:
         raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 
-def _pay(s, key: str, limit: int | None) -> None:
+def _pay(s, key: str, limit: int | None, clicked: rules.Answer | None = None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold)
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold, clicked=clicked)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
@@ -371,6 +374,7 @@ def _pay(s, key: str, limit: int | None) -> None:
     s.deal_ids.append(chain.deal_id)
     try:
         payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=_ask_about_hold,
+                                     clicked=clicked,
                                      on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
     except (rules.RuleHeld, rules.RulesError):
         s.deal_ids.remove(chain.deal_id)  # the receipt tools read the latest deal: a declined order is not one

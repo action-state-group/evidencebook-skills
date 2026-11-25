@@ -221,7 +221,8 @@ class Run:
             return None
         return pick
 
-    def pay_deal(self, made: dict[str, buyer.Assessment], chosen: str, pick: str, limit: int | None = None, approve=None) -> None:
+    def pay_deal(self, made: dict[str, buyer.Assessment], chosen: str, pick: str, limit: int | None = None, approve=None,
+                 clicked=None) -> None:
         a = made[chosen]
         seller = self.w.nodes[chosen]
         name = SELLERS[chosen]["label"]
@@ -238,7 +239,8 @@ class Run:
             print(f"invoice {screens.msat(payment.invoice_msat)}; {who}: {payment.status}{screens.fee_note(payment.fee_msat, self.banner != screens.BANNER_FAKE)}")
             return payment.reference
 
-        deals.run_deal(self.maya, seller, chain.terms, ASK, "", opened=chain, pay=send, limit=limit, approve=approve)
+        deals.run_deal(self.maya, seller, chain.terms, ASK, "", opened=chain, pay=send, limit=limit, approve=approve,
+                       clicked=clicked)
         after = self.rail.balances()
         print(f"operator check, not shown as the price: balances {before} → {after}")
         rule("7  Both halves compared, deal closed, card after the next checkpoint")
