@@ -542,8 +542,10 @@ def ard_rule(seller: str) -> None:
         if a.stamp({**raw, "ruling": r}):
             print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
         elif pt.witnessed():
-            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 12 seconds. It keeps trying for "
-                  f"{adj.LATER_S // 60} minutes and sends the ruling to both parties again with its stamp.")
+            print(f"Not yet time-stamped: {pt.WITNESS_NAME} did not answer within 12 seconds. Both parties have the "
+                  f"ruling without a stamp. This window keeps asking for {adj.LATER_S // 60} minutes and, once stamped, "
+                  "sends the ruling to both parties again with its stamp. Keep this window open until then. If none "
+                  "comes by then, run this again.")
         print("Sent to both parties; each enters it in its own records.")
         return
     raise RuntimeError(f"no case about {seller_name}")
