@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook f063a88 (evidencebook#893; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook e9b06b8 (evidencebook#893 with #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -10,17 +10,17 @@ Status: not yet run by hand at this pin. The demo's automated tests, both deals 
 
 ## What you will see
 
-Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 24 sample deals, all held, and no disputes.
+Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Both start with 12 sample deals, all held, and no disputes.
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
-2. **History cards.** Each seller's card: 24 deals, every one went as agreed, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
+2. **History cards.** Each seller's card: 12 deals, every one went as agreed, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
 
 3. **Deal 1.** Both sellers are "Good to buy"; Maya picks Kestrel, the cheaper one, and pays 1,000 msat (a dialog asks you first). Kestrel's own delivery record says 150 of 200 badges were shipped. Maya disputes the delivery.
 
 4. **The adjudicator.** The adjudicator asks each side for its books, and each side's agent answers on its own: its own book and the copy it holds of the other side's. The adjudicator's window shows the case and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
 
-5. **Deal 2.** Kestrel's card now counts 25 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
+5. **Deal 2.** Kestrel's card now counts 13 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
 
 The registry, the seller sites and the 48 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (capsulectl-deal's `deal respond` and `deal ruling`, the adjudicator's own profile) are the real code.
 
@@ -119,8 +119,8 @@ The registry, the seller sites and the 48 sample deals are local stand-ins, and 
    git clone -q https://github.com/action-state-group/evidencebook-skills
    git -C evidencebook-skills checkout -q PIN
    git clone -q https://github.com/action-state-group/evidencebook
-   git -C evidencebook fetch -q origin f063a88b76d6e94087149a0c2c768a5cc37e1c3e
-   git -C evidencebook checkout -q f063a88b76d6e94087149a0c2c768a5cc37e1c3e
+   git -C evidencebook fetch -q origin e9b06b83f96d7b58e73d8809046e4a0050474048
+   git -C evidencebook checkout -q e9b06b83f96d7b58e73d8809046e4a0050474048
    (cd evidencebook/capsulectl && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
    ```
 
@@ -241,13 +241,13 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
    **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …". If it refuses, it says what to stop.
 
-2. Make the sample history (about 8 minutes: each sample deal counts as held only once its contest window ends and a checkpoint covers it).
+2. Make the sample history. This is set-up: run it before anyone watches, at least two minutes before you open the windows. It takes about a minute: 12 sample deals per seller, with contest windows of seconds, and one witness stamp per seller. Each card counts its deals held from the first stamp after their windows end, which each seller's window takes as it opens; a window opened sooner waits for that minute and says so.
 
    ```
    (cd demo/ard && ../../.venv/bin/python demo.py seed)
    ```
 
-   **Expect:** "alder: 24 deals, all held" and "kestrel: 24 deals, all held". Each party's checkpoints go to Action State's hosted witness (hashes only); with no network, set `ARD_WITNESS=off` first (the cards are then not time-stamped).
+   **Expect:** "sample history made and stamped in … s. Each card counts it held from HH:MM:SS". Each party's checkpoints go to Action State's hosted witness (hashes only); with no network, set `ARD_WITNESS=off` first (the cards are then not time-stamped).
 
 3. [Real] Read both balances.
 
@@ -274,7 +274,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 6. If the windows are still not tiled: allow the access, click Maya's window, then by hand: Window, Move & Resize, Quarters.
 
 7. Click Trust and Execute in all four windows, in any order.
-   **Expect:** Alder and Kestrel each say 24 deals, all held; Maya and the adjudicator's assistant only say they are ready.
+   **Expect:** Alder and Kestrel each say 12 deals, all held; Maya and the adjudicator's assistant only say they are ready.
 
 8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's ten (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
@@ -304,7 +304,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** for each: "History card: 24 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
+   **Expect:** for each: "History card: 12 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
 
 4. Type.
 
@@ -355,13 +355,13 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     Rule against Kestrel: its own delivery record says 150 of 200.
     ```
 
-    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped.", "Sent to both parties; each enters it in its own records." (with no network: "Not yet time-stamped: Action State's witness took no stamp within 90 seconds (no network?). Run this again to send it with its stamp.").
+    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped.", "Sent to both parties; each enters it in its own records." (with no network: "Not yet time-stamped: Action State's witness took no stamp within 20 seconds (no network?). Run this again to send it with its stamp.").
 
-11. After about a minute, type `Did both parties enter it?`.
+11. After a few seconds, type `Did both parties enter it?`.
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "25 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." If it still shows 24 deals, or 0 that didn't go as agreed, ask again in a minute: the card counts after the seller's next checkpoint, and the deal's outcome can follow the dispute's count by one checkpoint.
+    **Expect:** "13 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type:
 
@@ -437,7 +437,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 1. **Reset refuses.** It names the process holding the demo home or the stage's ports. Close it (a terminal: `cd ~`), or stop the process it names, then reset again. Reset changes nothing when it refuses. An app with a folder of the demo home open counts too. A `stage.py` left from an earlier run is stopped by reset itself.
 
-2. **Seed says a card counts fewer than 24 held after 10 minutes.** The checkpoints did not reach the witness: check the network, or set `ARD_WITNESS=off`, then reset and seed.
+2. **Seed says a seller's sample deals were not stamped by the witness within their window.** The witness did not take the stamp in time (no network, or it answered slowly): check the network, or set `ARD_WITNESS=off`, then reset and seed.
 
 3. **A command says a variable is not set.** Copy the export line it prints, put in your own paths, and run it again.
 

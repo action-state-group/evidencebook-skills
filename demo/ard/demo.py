@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The ARD two-seller demo: Maya buys 200 conference badges twice from sellers found through ARD.
 
-    python demo.py seed            # once: the sample history (24 + 24 deals), about eight minutes
+    python demo.py seed            # once, before anyone watches: the sample history (12 + 12 deals), under a minute
     python demo.py run [--rail lightning]
     python demo.py reset           # stop the demo's processes, forget the home, clear Goose's recipe trust
 
@@ -158,7 +158,7 @@ class Script:
         rule("The adjudicator")
         print(screens.ADJUDICATOR_INDEPENDENCE)
         print("the adjudicator asks each side for its books; each side's agent answers on its own")
-        stop = time.time() + 120
+        stop = time.time() + 30
         while True:
             raw = next(c for c in self.adjudicator.gather(5) if c["deal_id"] == deal.deal_id)
             adj.answer_requests(self.home, self.maya, BUYER, "buyer", print)
@@ -172,21 +172,20 @@ class Script:
             return
         r = self.adjudicator.rule(raw, c.row, "not_met", "seller")
         if not self.adjudicator.stamp({**raw, "ruling": r}) and pt.witnessed():
-            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 90 seconds")
+            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 20 seconds")
         print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
-        stop = time.time() + 300
+        stop = time.time() + 60
         while time.time() < stop and not (self.maya.notes(flow.RULING_ENTERED) and agent.party.notes(flow.RULING_ENTERED)):
             flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
-            time.sleep(3)
-        print("waiting for the seller's next checkpoint, so its card counts the ruling (up to a minute)")
-        stop = time.time() + 180
-        while time.time() < stop:
-            agent.republish()
+            time.sleep(1)
+        stop = time.time() + 30  # the seller stamps now, so its card counts the ruling (a second stamp, if the deal's
+        while time.time() < stop:  # outcome follows the dispute's count by one)
+            agent.republish(now=True)
             card, _, _ = flow.read_card(self.home / "stage" / "cards" / f"{deal.seller}.json")
             if card["disputes"]["received"]["by_outcome"]["against"] and card["outcomes"]["did_not_hold"]:
                 break
-            time.sleep(5)
+            time.sleep(2)
 
 
 def cmd_seed(args) -> int:

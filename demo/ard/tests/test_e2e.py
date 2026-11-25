@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The whole story, end to end, with the real binaries: capsulectl-deal (``CAPSULECTL_DEAL``), capsule-engine
 (``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and Action State's hosted witness, which every
-agreement names. It seeds a home (about eight minutes: the sample deals' contest windows must end), then runs
+agreement names. It seeds a home (about a minute), then runs
 deal 1 (Maya buys from Kestrel, Kestrel's own delivery record says 150 of 200, Maya disputes, the adjudicator rules
 against Kestrel, both enter the ruling) and deal 2 (Kestrel's card counts the lost dispute; Maya's own ruling makes it
 NO; a buyer who holds no ruling sees LIMIT from the card alone; Alder is GO and paid).
@@ -96,7 +96,7 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     # deal 1: both clean, both GO
     made = _assess(w, w["maya"])
     for key, (ev, a) in made.items():
-        assert ev.card["outcomes"] == {"of": 24, "held": 24, "did_not_hold": 0, "undecided": 0}, key
+        assert ev.card["outcomes"] == {"of": 12, "held": 12, "did_not_hold": 0, "undecided": 0}, key
         assert a.verdict == "GO", (key, a.reasons)
     deal, shipped = _buy(w, "kestrel", made["kestrel"][1])
     assert shipped == "150 of 200 badges"
@@ -126,13 +126,13 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert b.seller_of(w["maya"])(deal.deal_id) == "kestrel"
     assert _fresh(w, deal.deal_id)["ruling"]["against"] == "seller"
 
-    # Kestrel's own card counts it after its next checkpoint
+    # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence)
     def kestrel_card():
-        w["agents"]["kestrel"].republish()
+        w["agents"]["kestrel"].republish(now=True)
         c, _, _ = flow.read_card(w["home"] / "stage" / "cards" / "kestrel.json")
         # the dispute's count and the deal's outcome can come one checkpoint apart: wait for both
         return c if c["disputes"]["received"]["by_outcome"]["against"] and c["outcomes"]["did_not_hold"] else None
-    card = _until(kestrel_card, 240, step=5)
+    card = _until(kestrel_card, 30, step=2)
     assert card["outcomes"]["did_not_hold"] == 1 and flow.decided(card)["decided"] == {"against": 1, "of": 1}
 
     # deal 2: Maya's own ruling makes Kestrel NO, and the card's count shows with it
@@ -171,8 +171,7 @@ def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(worl
     seller = w["agents"]["alder"].party
 
     def card():
-        time.sleep(65)  # past one checkpoint interval: the card counts everything sealed before it
-        seller.tick()
+        seller.stamp()  # a stamp now: the card counts everything sealed before it
         c, _, _ = flow.read_card(seller.card_bundle(shared=True))
         return c["outcomes"], c["disputes"]["received"]["of"]
     # the seller's deal list (no checkpoint lag) and its card once a checkpoint covers the earlier tests' deals

@@ -2,7 +2,7 @@
 
 To install and run this demo on your own Mac with Goose Desktop, start at [RUNBOOK.md, "What you need"](RUNBOOK.md#what-you-need), then follow [Set up, once](RUNBOOK.md#set-up-once). This page says how the demo is built.
 
-Maya asks her agent for 200 conference badges by Friday, under 3,000 msat. Two sellers are found through ARD: **Alder Print Co.** at 2,000 msat and **Kestrel Print** at 1,000 msat, each with 24 sample deals, all held. In **deal 1** Maya buys from Kestrel, the cheaper one; Kestrel's own delivery record says 150 of 200 badges were shipped; Maya disputes the delivery, and the demo's adjudicator rules against Kestrel on that record. In **deal 2** Kestrel's own History card counts the lost dispute, Maya's own records hold the ruling (her rules then say NO: Steven's u187), and she buys from Alder. A buyer who holds no ruling sees LIMIT from the card alone (Steven's #280 rule); the end-to-end test checks that path.
+Maya asks her agent for 200 conference badges by Friday, under 3,000 msat. Two sellers are found through ARD: **Alder Print Co.** at 2,000 msat and **Kestrel Print** at 1,000 msat, each with 12 sample deals, all held. In **deal 1** Maya buys from Kestrel, the cheaper one; Kestrel's own delivery record says 150 of 200 badges were shipped; Maya disputes the delivery, and the demo's adjudicator rules against Kestrel on that record. In **deal 2** Kestrel's own History card counts the lost dispute, Maya's own records hold the ruling (her rules then say NO: Steven's u187), and she buys from Alder. A buyer who holds no ruling sees LIMIT from the card alone (Steven's #280 rule); the end-to-end test checks that path.
 
 **What it is not.** The sellers' history is sample history, made by the demo operator. The adjudicator is run by the operator, who also runs every party, so it is not independent of them; the ruling's dialog says so. Action State's witness, which every agreement names, is not independent of them either.
 
@@ -14,7 +14,7 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 |---|---|---|
 | Each party's profile and its deal verbs | `party.py` | `capsulectl-deal` through the Goose reference's `Ctl` (evidencebook `python/examples/goose`, at the pin); its `Node` for a party's node book |
 | The parties and their facts | `cast.py` | |
-| The sample history | `seed.py` | 24 real x-deal-v1 deals per seller with a sample buyer; short contest windows, so each counts as held about eight minutes after seeding |
+| The sample history | `seed.py` | 12 real x-deal-v1 deals per seller, each with its own sample buyer; contest windows of seconds, stamped on demand, so the seed takes about a minute and the cards count the deals held a minute or two later |
 | Discovery | `ard.py`, `discovery.py`, `stage.py` | each seller's own `/.well-known/ard.json` and signed `evidence-commitment/1` (with its `history_card/2` staple, ops u539), a stand-in registry answering `POST /search` |
 | The History card | `flow.py` (`publish_card`, `fetch_card`) | each seller's shared `standard_history/3` card (`deal standard-history card --shared`), checked by Maya with `capsulectl verify --bundle` |
 | The assessment | `buyer.py`, `pack.py`, `pack/` | `capsule-engine admission evaluate` under `demo/ard_admission/2.0.0`; the card's dispute tally (`card.disputes_against`, LIMIT on any lost dispute) and Maya's own rulings, read from capsulectl's report of each of her deals (`own.no_adverse_adjudication`, NO) |

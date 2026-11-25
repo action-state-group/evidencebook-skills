@@ -487,7 +487,7 @@ def ard_rule(seller: str) -> None:
         if a.stamp({**raw, "ruling": r}):
             print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
         elif pt.witnessed():
-            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 90 seconds (no network?). Run this "
+            print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within 20 seconds (no network?). Run this "
                   "again to send it with its stamp.")
         print("Sent to both parties; each enters it in its own records.")
         return
@@ -522,10 +522,10 @@ def _own() -> tuple[pt.Party, str]:
 
 @_tool("maya", "alder", "kestrel")
 def ard_show_card() -> None:
-    """Show THIS window's own History card (its standard_history derivation) as of its newest checkpoint: deals counted, held, did
-    not hold, and disputes others raised about it. A deal or a ruling counts after the party's next checkpoint."""
+    """Show THIS window's own History card (its standard_history derivation) as of a checkpoint taken now: deals counted, held,
+    did not hold, and disputes others raised about it."""
     p, name = _own()
-    p.tick()
+    p.stamp()
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
     print(f"{name}: its own History card, as of its checkpoint at {as_of['anchor_time']}")
     print("  " + screens.card_line(card))

@@ -147,9 +147,8 @@ def write(name: str, kind: str, page: str) -> Path:
 
 
 def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
-    """Write the party's History card page from its own card, as of its newest checkpoint (taken now when one is due),
-    and return its path."""
-    p.tick()
+    """Write the party's History card page from its own card, as of a checkpoint taken now, and return its path."""
+    p.stamp()
     bundle = p.card_bundle(shared=False)
     doc = json.loads(bundle.read_text())
     card = doc["disclosures"][doc["records"][0]["capsule_id"]]["agent_input"]
