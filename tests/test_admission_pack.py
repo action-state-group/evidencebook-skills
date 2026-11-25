@@ -328,7 +328,7 @@ def muse_text():
     return (MUSE / "pack-source.yaml").read_text()
 
 
-def reference_decide(pack, inp):
+def reference_decide(pack, inp, rows=None):
     """A small reading of profile section 4, for the predicates and the USD
     band the Muse buyer pack uses, so its fixtures are checked against the
     lift of section 4.1 and not only for shape. capsule-engine is the real
@@ -402,6 +402,9 @@ def reference_decide(pack, inp):
 
     used = [r for r in pack["rows"] if tiers.index(r["from"]) <= min(deal, top)]
     res = {r["id"]: read(r) for r in used}
+    if rows is not None:
+        rows.update({k: ("not_read" if v == MISSING else v) for k, v in res.items()})
+        rows.update({k + "#no_tally": True for k in no_tally})
     for r in used:
         if r["on_fail"] == "NO" and res[r["id"]] == "fail":
             return "NO", r["id"], None
@@ -478,6 +481,27 @@ class MuseBuyer(unittest.TestCase):
             verdict, source, tier = reference_decide(self.pack, c["input"])
             e = c["expected"]
             self.assertEqual((verdict, source, tier), (e["verdict"], e["source"], e["tier"]), c["case"])
+
+    def test_the_lost_disputes_row_never_passes_unread(self):
+        # #280 acceptance 4: a loss fails the row; a card that is unverified,
+        # or verified with no dispute tally (no disputes, or no decided), reads
+        # not_read, never pass, and only the no-tally case is recorded.
+        for path, pack in ((MUSE, self.pack), (BASELINE, load(baseline_text()))):
+            doc = json.loads((path / "fixtures/cases.json").read_text())
+            want = {"t1-a-dispute-lost-to-another-party-limits": ("fail", False),
+                    "t1-no-dispute-lost-goes": ("pass", False),
+                    "t1-disputes-without-decided-are-recorded": ("not_read", True),
+                    "t1-unverifiable-card-with-a-tally-asks": ("not_read", False)}
+            seen = set()
+            for c in doc["cases"]:
+                if c["case"] not in want:
+                    continue
+                rows = {}
+                reference_decide(pack, c["input"], rows)
+                self.assertEqual((rows["disputes-against"], rows.get("disputes-against#no_tally", False)),
+                                 want[c["case"]], (path.name, c["case"]))
+                seen.add(c["case"])
+            self.assertEqual(seen, set(want), path.name)
 
     def test_every_case_input_is_well_formed(self):
         doc = json.loads((MUSE / "fixtures/cases.json").read_text())
