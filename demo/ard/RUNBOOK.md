@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 2a377f2 (main 65cbccab, which holds #922 and #935's receipt page, with #933's `deal tick --now` merged in while #933 is open; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 130877b (main, capsule-viewer#422: the receipt page of #420 and #421) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 1372f2e (main, with #935's receipt page and #933's `deal tick --now`; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 130877b (main, capsule-viewer#422: the receipt page of #420 and #421) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); and the receipt page, capsulectl's own `deal report --html` (evidencebook#935) drawn by capsule-viewer 130877b (#310). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
 
@@ -123,7 +123,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
    [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
-   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 2a377f29de6e6140014107bfc136f932e996a5e8; git -C evidencebook checkout -q 2a377f29de6e6140014107bfc136f932e996a5e8
+   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e; git -C evidencebook checkout -q 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e
    [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 0043a944b22dc25515f1440169fcdabfd345750b; git -C capsule-cli checkout -q 0043a944b22dc25515f1440169fcdabfd345750b
    [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
    ```
@@ -134,7 +134,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    ```
    cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
-   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=2a377f29de6e6140014107bfc136f932e996a5e8 V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
+   CORE_SHA=0043a944b22dc25515f1440169fcdabfd345750b EB_SHA=1372f2ea75c2bc9c884dd701307ab3b1be92fa1e V=v0.1.0-main.0043a944 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
    mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
    (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
    install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
