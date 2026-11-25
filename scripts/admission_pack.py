@@ -77,6 +77,8 @@ TRUST_ROOT_KEYS = ("controllers", "witnesses", "judges")
 # (AAC#406), rather than naming it.
 RAIL_KEYS = {"id", "digest"}
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+# The checks a row may carry on_unread on (#280, until #281 ends the interim).
+ON_UNREAD_CHECKS = ("card.disputes_against",)
 ROW_KEYS = {"id", "statement", "source", "check", "params", "from", "on_fail", "on_unread", "ask", "lift"}
 LIFT_KEYS = {"tier", "unless_fail"}
 
@@ -347,9 +349,13 @@ def validate_admission(source):
                 issues.append(f"{where}.on_fail {on_fail} is not in outcomes")
         on_unread = r.get("on_unread")
         if on_unread is not None:
-            # A LIMIT row whose input is not read records it instead of
-            # limiting (profile section 4, step 4); it never makes a not_read
-            # row pass, and it never asks, since the ask is for a not_read row.
+            # Sherlock2's interim for #280 (until #281): on the lost-disputes
+            # row, a verified card that carries no dispute tally is recorded
+            # instead of limiting (profile section 4, step 4). An unverified
+            # card still limits. It is allowed on that one check only, and
+            # never asks.
+            if check not in ON_UNREAD_CHECKS:
+                issues.append(f"{where}: only a {' or '.join(ON_UNREAD_CHECKS)} row may carry on_unread")
             if on_unread != "record":
                 issues.append(f"{where}.on_unread must be \"record\"")
             if on_fail != "LIMIT":
@@ -492,7 +498,7 @@ def _evidence_rule(r):
     else:
         rule += f"; a failure gives {on_fail}"
     if r.get("on_unread") == "record":
-        rule += "; when its input is not read, recorded, deciding nothing"
+        rule += "; when the card verified but carries no dispute tally, recorded, deciding nothing"
     if r.get("lift"):
         lift = r["lift"]
         rule += (f"; when it passes and none of {', '.join(lift['unless_fail'])} fails, a counterparty that served "

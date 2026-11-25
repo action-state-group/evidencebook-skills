@@ -120,7 +120,7 @@ class Ladder(unittest.TestCase):
         self.assertNotIn("on_unread", next(r for r in compiled["rows"] if r["id"] == "card-verified"))
         rule = next(q for q in admission_pack.from_admission(load(text))["requirements"]
                     if q["id"] == "disputes-against")
-        self.assertIn("when its input is not read, recorded", json.dumps(rule))
+        self.assertIn("carries no dispute tally, recorded", json.dumps(rule))
 
         def issues_for(old, new):
             return pack_compile.validate_source(load(text.replace(old, new, 1)))
@@ -133,6 +133,16 @@ class Ladder(unittest.TestCase):
         self.assertTrue(any("a row with on_unread carries no ask" in i for i in issues), issues)
         issues = issues_for("params: {max: 0}", "params: {}")
         self.assertTrue(any("needs params.max" in i for i in issues), issues)
+        # Only the lost-disputes row may carry it: an unwitnessed, stale or
+        # missing card must still limit.
+        old = """    check: card.witnessed
+    from: T1
+    on_fail: "LIMIT"
+"""
+        self.assertIn(old, baseline_text())
+        witnessed = baseline_text().replace(old, old + '    on_unread: "record"\n', 1)
+        issues = pack_compile.validate_source(load(witnessed))
+        self.assertTrue(any("only a card.disputes_against row may carry on_unread" in i for i in issues), issues)
 
     def test_not_stapled_row_asks_above_t0(self):
         # A stapled card decides T0 only (capsule-engine#277).
