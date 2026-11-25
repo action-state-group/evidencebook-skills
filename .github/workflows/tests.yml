@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 1372f2ea75c2bc9c884dd701307ab3b1be92fa1e  # main: #935 (deal report --html) and #933 (deal tick --now)
+      EVIDENCEBOOK_REF: 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a  # main: #935 (deal report --html), #933 (deal tick --now), #951 (the page on capsule-viewer bb8169bb)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
       CAPSULE_VIEWER_REF: 125957929578f651d3ab474c56c87e0ad74b324e  # main, with #427 (the receipt page's local times)
     steps:
