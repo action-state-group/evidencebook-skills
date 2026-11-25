@@ -115,6 +115,8 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
     # every deal's window end are the same instant.
     started, window_end = time.monotonic(), int(time.time()) + MAKE_S
 
+    finished: set[str] = set()  # a seller is done only when its worker says so: any other way out is a failure
+
     def run(name: str) -> None:
         seller, buyer, price = ps[name], ps[sample_buyer(name)], SELLERS[name]["price_msat"]
 
@@ -152,6 +154,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
             # so the live run's first stamp has no backlog to deliver first (capsulectl delivers every pending
             # checkpoint in one tick, one after another).
             if pt.taken(got) and not got.get("pending") and time.time() < window_end:
+                finished.add(name)
                 return
             if time.time() > window_end - 5:
                 errors.append(f"{name}: its sample deals were not stamped by the witness within their window ({MAKE_S} s): "
@@ -165,7 +168,9 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         t.start()
     for t in threads:
         t.join()
-    if errors:
+    if errors or finished != set(SELLERS):
+        errors += [f"{n}: its sample deals did not finish" for n in SELLERS if n not in finished and
+                   not any(e.startswith(f"{n}:") for e in errors)]
         raise SystemExit("seed stopped: " + "; ".join(errors) + ": run `demo.py reset`, then `demo.py seed` again")
     (home / HELD_FROM).write_text(str(_floor_minute(window_end) + 60))
     say(f"sample history made and stamped in {time.monotonic() - started:.0f} s. Each card counts it held from "

@@ -306,3 +306,49 @@ def test_a_stamp_is_tried_again_only_with_time_left(monkeypatch):
     with pytest.raises(pt.Refused):
         p.wait_checkpoint(12)
     assert tries == [0.0]  # after a 6 s try and the pause, 5 s are left: no second try
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_a_seed_whose_seller_worker_dies_says_so_and_writes_no_held_file(tmp_path, monkeypatch):
+    """A seller is done only when its worker says so: a stream thread that fails to start (any way out but success)
+    stops the seed, with no HELD_FROM file and no 'made' line (Codex on #301, 43a34ef)."""
+    import threading
+
+    import party as pt
+    import seed
+    from cast import HELD_FROM, SELLERS
+
+    class Fake:
+        def __init__(self, name):
+            self.name = name
+
+        def card_bundle(self, shared):
+            raise pt.Refused("no card yet")
+
+        def deals(self):
+            return []
+
+        def add_witness(self):
+            pass
+
+        def stamp(self):
+            return {"state": "ticked", "checkpoint": 1, "delivered": [1], "pending": []}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(seed, "parties", lambda home: {n: Fake(n) for n in (*SELLERS, "maya", *(f"sample-buyer-{s}" for s in SELLERS))})
+    monkeypatch.setattr(seed.adj.Adjudicator, "named", lambda self: {})
+    monkeypatch.setattr(seed, "sample_deal", lambda *a: "deal")
+    real_start, started = threading.Thread.start, []
+
+    def start(self):
+        started.append(self)
+        if len(started) == 4:  # a stream of the second seller
+            raise RuntimeError("can't start new thread")
+        return real_start(self)
+    monkeypatch.setattr(threading.Thread, "start", start)
+    said = []
+    with pytest.raises(SystemExit, match="did not finish"):
+        seed.seed(tmp_path, say=said.append)
+    assert not (tmp_path / HELD_FROM).exists() and not any("made and stamped" in s for s in said)
