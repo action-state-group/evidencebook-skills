@@ -86,6 +86,16 @@ class Script:
         self.keys: dict[str, str] = {}
 
     def close(self) -> None:
+        # A ruling stamp still being asked for in the background (adjudicator.LATER, #307): wait for it, so the ruling
+        # with its stamp reaches both parties, and Maya enters it, before this run's processes stop.
+        pending = [t for t in adj.LATER if t.is_alive()]
+        if pending:
+            print(f"waiting up to {adj.LATER_S // 60} minutes for {pt.WITNESS_NAME} to stamp the ruling before closing")
+            stop = time.monotonic() + adj.LATER_S
+            for t in pending:
+                t.join(max(stop - time.monotonic(), 0))
+            for deal in buyer.deals_from_notes(self.maya):
+                flow.enter_rulings(self.home, self.maya, "buyer", deal.seller, print)
         for a in self.agents.values():
             a.stop()
         self.stage.close()

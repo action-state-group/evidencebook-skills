@@ -216,24 +216,28 @@ class Adjudicator:
             except pt.Refused:
                 pass
         self._send_ruling(case)
-        if pt.witnessed() and not stamped and later > 0:
+        name = f"ruling-stamp-{case['deal_id'][5:13]}"
+        if pt.witnessed() and not stamped and later > 0 and not any(t.name == name and t.is_alive() for t in LATER):
             def go() -> None:
                 try:
                     p.wait_checkpoint(later)
                 except pt.Refused:
                     return
                 self._send_ruling(case)
-            t = threading.Thread(target=go, name=f"ruling-stamp-{case['deal_id'][5:13]}", daemon=True)
+            t = threading.Thread(target=go, name=name, daemon=True)  # one per deal at a time
             t.start()
             LATER.append(t)
         return stamped
 
     def _send_ruling(self, case: dict) -> None:
-        """Write the ruling file again (with the receipts the shelf holds by then) and hand it to both parties."""
+        """Write the ruling file again (with the receipts the shelf holds by then) and hand it to both parties. Under
+        the adjudicator party's lock, so a background resend and a ruling made in the window never write the same
+        wire files at once (wire.send writes through one temporary path per file)."""
         record = case["ruling"]
-        again = self.rule(case, record["row"], record["value"], record["against"])
-        for side in ("buyer", "seller"):
-            wire.send(self.home, case["parties"][side], case["deal_id"], "ruling", again["file"])
+        with self.party._lock:
+            again = self.rule(case, record["row"], record["value"], record["against"])
+            for side in ("buyer", "seller"):
+                wire.send(self.home, case["parties"][side], case["deal_id"], "ruling", again["file"])
 
     def entries(self, case: dict) -> list[dict]:
         """Whether each party entered the ruling, from the copies they sent back after entering it

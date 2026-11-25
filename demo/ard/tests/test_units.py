@@ -589,3 +589,34 @@ def test_a_ruling_stamp_the_witness_took_late_is_sent_again(monkeypatch):
     tries[:] = [0]  # the next wait succeeds at once
     sent.clear()
     assert adj.Adjudicator("home").stamp(case) is True and sent == [case["deal_id"]]
+
+
+def test_ruling_resends_never_overlap(monkeypatch):
+    """#308 review: a background resend and a ruling made in the window write the same wire files; _send_ruling runs
+    them one at a time under the adjudicator party's lock."""
+    import threading
+    import time
+
+    lock, inside, most = threading.RLock(), [0], [0]
+
+    class P:
+        _lock = lock
+    monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
+
+    def rule(self, case, row, value, against):
+        inside[0] += 1
+        most[0] = max(most[0], inside[0])
+        time.sleep(0.05)
+        inside[0] -= 1
+        return {"file": "ruling.json"}
+    monkeypatch.setattr(adj.Adjudicator, "rule", rule)
+    monkeypatch.setattr(adj.wire, "send", lambda *a: None)
+    case = {"deal_id": "deal-0123456789abcdef", "ruling": {"row": "r", "value": "v", "against": "a"},
+            "parties": {"buyer": "maya", "seller": "kestrel"}}
+    a = adj.Adjudicator("home")
+    threads = [threading.Thread(target=a._send_ruling, args=(case,)) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+    assert most[0] == 1
