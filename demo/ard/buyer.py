@@ -335,7 +335,7 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     capsulectl's payment check runs on it (with ``ARD_LIMIT_MSAT`` set, under her spending limit: :mod:`limits`). Then one
     dialog (:func:`question`) through ``ask``, which returns True or ``"yes"`` for the yes button, ``"no"`` for the
     other, and anything else when nobody answered or no dialog was shown. On yes, a paused check is answered in the words
-    the dialog showed and the button (``said`` renders them as the dialog did), the offer is sent and agreed, and the
+    the dialog showed and the button (``said`` renders them as the dialog did: the dialog as shown, card included, then the button, never words of the person's own beyond that click), the offer is sent and agreed, and the
     invoice paid. Otherwise the person's no to a paused check is sealed (no answer is never sealed as one), the unsent
     offer is cancelled, and None is returned: nothing was sent and nothing paid."""
     limit = limits.limit_msat()

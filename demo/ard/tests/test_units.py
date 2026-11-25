@@ -294,14 +294,14 @@ def test_unsetting_the_limit_removes_the_demos_checker(tmp_path):
 
 def test_the_terminal_shows_the_question_and_returns_its_answer(monkeypatch, capsys):
     import demo
-    q = buyer.Question("This order goes over your weekly limit", "line\n\nWhat your answer is recorded with:\nCARD", "Buy anyway",
+    q = buyer.Question("This order goes over your weekly limit", "line\n\nSaved with your answer:\nCARD", "Buy anyway",
                        "Don't buy")
     run = type("R", (), {"auto": False})()
     for typed, want in (("y", "yes"), ("", "no"), ("n", "no")):
         monkeypatch.setattr("builtins.input", lambda prompt: typed)
         assert demo.Script.answer(run, q) == want
     out = capsys.readouterr().out
-    assert "This order goes over your weekly limit\nline\n\nWhat your answer is recorded with:\nCARD" in out
+    assert "This order goes over your weekly limit\nline\n\nSaved with your answer:\nCARD" in out
 
 
 def _rules(*findings, verdict="escalate", limit=2000):

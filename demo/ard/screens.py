@@ -204,13 +204,13 @@ def rules_approved(reasons: list[str], over_limit: bool = True) -> str:
 def rules_held(reasons: list[str]) -> str:
     """What the screen says when the deal check holds an order: over the spending limit the person set (Steven's ruling
     that a failing caps check on a person-set limit escalates, ops u325) or on any other ASK rule (Sherlock2, 2026-11-23)."""
-    return ("Held for your OK at deal check, nothing paid. The Everyday Rules held this order: "
+    return ("The Everyday Rules held this order for your OK, and nothing was paid: "
             + "; ".join(reasons) + ".")
 
 
 #: The line above capsulectl's card in a dialog: the card is what the person's answer is sealed with, so it is shown in
 #: full (Sherlock2's ruling on evidencebook#890, Option A: every word the record says Maya approved was on her screen).
-CARD_HEAD = "What your answer is recorded with:"
+CARD_HEAD = "Saved with your answer:"
 
 
 def with_card(text: str, card: str) -> str:

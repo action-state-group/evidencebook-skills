@@ -350,7 +350,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Yes, pay it.
    ```
 
-   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves.", then "What your answer is recorded with:" and capsulectl's card, which your answer is sealed with: "PAUSED FOR YOU", "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?", "1,000 msat · by simulated · not refundable · within your 3,000 msat limit" and "Why I'm asking: I picked item 200 conference badges, delivered by Friday, not you." Nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
+   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves.", then "Saved with your answer:" and capsulectl's card, which your answer is sealed with: "PAUSED FOR YOU", "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?", "1,000 msat · by simulated · not refundable · within your 3,000 msat limit" and "Why I'm asking: I picked item 200 conference badges, delivered by Friday, not you." Nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
 
 7. Type.
 
@@ -422,7 +422,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
    - "The payment is not refundable"
    - "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
 
-   Under them, "What your answer is recorded with:" and capsulectl's card, which starts "PAUSED FOR YOU" and "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?". Your answer is sealed with every word shown.
+   Under them, "Saved with your answer:" and capsulectl's card, which starts "PAUSED FOR YOU" and "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?". Your answer is sealed with every word shown.
 
    Click Buy anyway. **Expect:** "You approved this held order (…). Paying now.", then the rest of step 6 as written. Say aloud: every rule that asks is in this one question, and nothing reaches the seller or is paid before your answer.
 
@@ -430,7 +430,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
 
    **Expect:** the same held-order question for Alder Print Co. at 2,000 msat. Its reasons: "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat", "No earlier payment to this merchant from this profile" and "The payment is not refundable", then capsulectl's card ("… over your 2,000 msat limit").
 
-   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you every reason the dialog listed ("Held for your OK at deal check, nothing paid. …") without naming any tool, and the wallet balances do not change.
+   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you every reason the dialog listed ("The Everyday Rules held this order for your OK, and nothing was paid: …") without naming any tool, and the wallet balances do not change.
 
 4. Ask for the order again:
 
@@ -448,7 +448,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
 
 When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and "Change your limit any time in Everyday Rules." This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
 
-To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the windows. Maya's next payment removes the checker.
+To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the windows. Her next payment then runs without the spending limit.
 
 ## Quit and re-entry
 
