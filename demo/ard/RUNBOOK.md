@@ -322,7 +322,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
    **Expect:** the pick is sealed first ("pick sealed before any payment"), then Maya asks before paying.
 
-6. Type, then wait for the macOS dialog (it waits 3 minutes). Only your click releases the payment.
+6. Type, then wait for the macOS dialog (it waits 10 minutes). Only your click releases the payment.
 
    ```
    Yes, pay it.
