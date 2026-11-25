@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook 710d865 (evidencebook#893; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer b21b993 (ts/v0.26.1) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook f063a88 (evidencebook#893; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -119,8 +119,8 @@ The registry, the seller sites and the 48 sample deals are local stand-ins, and 
    git clone -q https://github.com/action-state-group/evidencebook-skills
    git -C evidencebook-skills checkout -q PIN
    git clone -q https://github.com/action-state-group/evidencebook
-   git -C evidencebook fetch -q origin 710d8655d487c1a2b7810c8d23a68eeea57bb85a
-   git -C evidencebook checkout -q 710d8655d487c1a2b7810c8d23a68eeea57bb85a
+   git -C evidencebook fetch -q origin f063a88b76d6e94087149a0c2c768a5cc37e1c3e
+   git -C evidencebook checkout -q f063a88b76d6e94087149a0c2c768a5cc37e1c3e
    (cd evidencebook/capsulectl && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
    ```
 
@@ -139,7 +139,7 @@ The registry, the seller sites and the 48 sample deals are local stand-ins, and 
 
    ```
    cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@b21b993bca899fa69a4311c406ba86f442b50b2a"
+   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0" "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@c6bb35516b0733b9cd070c632bf6d7efc05c83b9"
    ```
 
    **Expect:** pip ends with no error.

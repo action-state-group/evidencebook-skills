@@ -113,23 +113,39 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
             raise SystemExit(f"{name}'s card already counts deals of a run ({card['outcomes']['of']} deals, "
                              f"{card['disputes']['received']['of']} disputes): run `demo.py reset`, then `demo.py seed`")
 
+    all_made = threading.Event()
+    made: dict[str, bool] = {}
+
     def run(name: str) -> None:
         seller, price = ps[name], SELLERS[name]["price_msat"]
         have = sum(1 for d in seller.deals() if d.get("version") == "x-deal-v1" and d.get("counterparty_key") == buyer.key_id)
         for i in range(have, DEALS_EACH):
             try:
                 sample_deal(buyer, seller, price, named)
+                seller.tick()  # stamps this deal's statements before its window ends, however slow the run (not due: no-op)
             except Exception as exc:
                 errors.append(f"{name}: sample deal {i + 1}: {exc}")
                 return
             if (i + 1) % 12 == 0:
                 say(f"{name}: {i + 1}/{DEALS_EACH} sample deals")
+        made[name] = True
+        # Keep this seller's records being stamped while the other seller still makes its deals: a statement counts
+        # only if its first witnessed time is before its row's window end (status_value.go, carriedStatements), and
+        # a seller that finished first got no checkpoint until the other did. On a slow CI runner that gap passed the
+        # 5-minute window, and Kestrel's last 12 deals read no_statement (evidencebook-skills#288, CI at fcb9082).
+        while not all_made.is_set():
+            seller.tick()
+            buyer.tick()
+            all_made.wait(15)
 
     threads = [threading.Thread(target=run, args=(n,)) for n in SELLERS]
     for t in threads:
         t.start()
-    for t in threads:
-        t.join()
+    while any(t.is_alive() for t in threads):  # done when each has made its deals, or stopped on an error
+        if all(made.get(n, False) for n in SELLERS) or errors:
+            all_made.set()
+        time.sleep(1)
+    all_made.set()
     if errors:
         raise SystemExit("seed stopped: " + "; ".join(errors))
     say(f"waiting for the sample deals' contest windows to end ({SAMPLE_WINDOW_S // 60} minutes) and for a checkpoint")

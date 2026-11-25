@@ -41,9 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 710d8655d487c1a2b7810c8d23a68eeea57bb85a  # #893: deal respond answers the adjudicator; deal ruling --answer
+      EVIDENCEBOOK_REF: f063a88b76d6e94087149a0c2c768a5cc37e1c3e  # #893's head: deal respond answers the adjudicator; deal ruling --answer
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_VIEWER_REF: b21b993bca899fa69a4311c406ba86f442b50b2a  # ts/v0.26.1
+      CAPSULE_VIEWER_REF: c6bb35516b0733b9cd070c632bf6d7efc05c83b9  # ts/v0.27.2
     steps:
       - uses: actions/checkout@v4
         with:
