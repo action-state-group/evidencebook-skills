@@ -307,7 +307,7 @@ def ard_show_history() -> None:
         print("\n".join("  " + line for line in screens.check_lines(ev)))
         if ev.card:
             print(f"  History card: {screens.card_line(ev.card)}")
-            print(f"  {screens.signed_line(e['name'], ev.read is not None and ev.read.witness_status == 'pass')}")
+            print(f"  {screens.signed_line(e['name'], e['id'], ev.read is not None and ev.read.witness_status == 'pass')}")
 
 
 @_tool("maya")
@@ -486,7 +486,7 @@ def ard_seller_activity() -> None:
         print("  " + line)
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
-    print("  " + screens.SAMPLE_NOTE)
+    print("  " + screens.sample_note(sel.name))
 
 
 # -- the adjudicator ----------------------------------------------------------------------------------
@@ -587,7 +587,7 @@ def ard_show_card() -> None:
     print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
     if ROLE in SELLERS:
-        print("  " + screens.SAMPLE_NOTE)
+        print("  " + screens.sample_note(ROLE))
 
 
 def _own_deal() -> tuple[pt.Party, str, str | None]:

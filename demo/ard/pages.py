@@ -104,10 +104,10 @@ WITNESS_NOTE = (f"Time-stamped by {pt.WITNESS_NAME}. Action State also runs ever
                 "independent of them.")
 
 
-def labels(card: dict, witnessed: bool, sample: bool = False) -> list[str]:
+def labels(card: dict, witnessed: bool, sample: str = "") -> list[str]:
     """The lines above the view: who time-stamped it, the card's counts with its dispute tally (the view has no member
-    for disputes), and, on a seller's card, that its first deals are sample history."""
-    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + ([screens.SAMPLE_NOTE] if sample else [])
+    for disputes), and, on a seller's card (``sample``: the seller), that its first deals are sample history."""
+    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + ([screens.sample_note(sample)] if sample else [])
 
 
 def _script_json(value: dict) -> str:
@@ -164,7 +164,7 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
                  if out.get("witnesses", {}).get("status") == "pass" else None)
     view = history_input(ext.get("deals", []), name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=seller),
+    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name if seller else ""),
                                                      f"History · {label}"))
 
 

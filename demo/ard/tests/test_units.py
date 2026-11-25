@@ -76,8 +76,8 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 
 def test_no_line_a_person_reads_names_the_demo():
     lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
-             screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
-             screens.SAMPLE_NOTE,
+             screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print", "kestrel"),
+             screens.signed_line("Kestrel Print", "kestrel", True), screens.sample_note("kestrel"),
              pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
 
@@ -393,11 +393,24 @@ def test_signed_by_both_only_when_the_whole_copy_verifies(tmp_path, verdict, hal
 
 
 def test_a_sellers_card_says_its_first_deals_are_sample_history():
-    from cast import DEALS_EACH
-    for line in (screens.signed_line("Alder Print Co."), screens.signed_line("Alder Print Co.", True)):
-        assert line.endswith(f"Its first {DEALS_EACH} deals are sample history the operator made before this run.")
-    assert pages.labels(card(), witnessed=True, sample=True)[-1] == screens.SAMPLE_NOTE
-    assert screens.SAMPLE_NOTE not in pages.labels(card(), witnessed=True)  # a buyer's own card has no sample deals
+    from cast import SAMPLE_DEALS
+    for seller, label in (("alder", "Alder Print Co."), ("kestrel", "Kestrel Print")):
+        for line in (screens.signed_line(label, seller), screens.signed_line(label, seller, True)):
+            assert line.endswith(f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before "
+                                 "this run.")
+        assert pages.labels(card(), witnessed=True, sample=seller)[-1] == screens.sample_note(seller)
+    assert not any("sample history" in x for x in pages.labels(card(), witnessed=True))  # a buyer's card has none
+
+
+def test_the_sellers_sample_histories_differ_and_neither_falls_below_the_packs_band_minimum():
+    """#317 (Steven's ruling): the two cards give a choice, a deeper history against a lower price; Kestrel keeps at
+    least the band-history row's k, so its 1,000 msat deal is not limited before deal 1."""
+    import yaml
+
+    from cast import SAMPLE_DEALS
+    rows = yaml.safe_load((packs.HERE / "pack" / "pack-source.yaml").read_text())["rows"]
+    k = next(r for r in rows if r["id"] == "band-history")["params"]["k"]
+    assert SAMPLE_DEALS["alder"] > SAMPLE_DEALS["kestrel"] >= k
 
 
 def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
@@ -545,7 +558,7 @@ def test_a_receipt_this_reader_cannot_read_gives_no_time_and_no_error(raw):
 
 @pytest.mark.parametrize("role,noted", [("kestrel", True), ("maya", False)])
 def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeypatch, role, noted):
-    # the stand-in on #305: SAMPLE_NOTE is said wherever a seller's card is shown, in words as on its page
+    # the stand-in on #305: screens.sample_note(seller) is said wherever a seller's card is shown, in words as on its page
     import desktop_server as ds
 
     class P:
@@ -558,7 +571,10 @@ def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeyp
     monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
     monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
     out = ds.ard_show_card()
-    assert (screens.SAMPLE_NOTE in out) == noted, out
+    if noted:
+        assert screens.sample_note("kestrel") in out, out  # this seller's own count, not the other's
+    else:
+        assert "sample history" not in out, out
 
 
 def test_the_tool_timeout_covers_the_longest_call():
@@ -794,3 +810,33 @@ def test_an_answer_goes_at_once_when_its_stamp_is_taken_and_once_only(tmp_path, 
     assert (tmp_path / "handled" / "deal-0123456789abcdef.adjrequest-seen").read_text() == first  # kept from round 1
     assert adj.answer_requests(tmp_path, P(), "maya", "buyer", said.append) == []  # answered once only
     assert sent == ["answer-buyer"] and not any("without one" in x for x in said)
+
+
+@pytest.mark.parametrize("counts,refused", [({"alder": 15, "kestrel": 10}, False), ({"alder": 16, "kestrel": 10}, True),
+                                            ({"alder": 15, "kestrel": 11}, True)])
+def test_a_seeded_home_is_refused_only_past_each_sellers_own_count(tmp_path, monkeypatch, counts, refused):
+    """#319 review: a home whose cards count each seller's own sample deals is left as it is; one deal more on either
+    (a run's deal) is refused with the reset message."""
+    import seed
+    from cast import HELD_FROM
+
+    class Fake:
+        def __init__(self, name):
+            self.name = name
+
+        def card_bundle(self, shared):
+            return self.name
+
+        def close(self):
+            pass
+    monkeypatch.setattr(seed, "parties", lambda home: {n: Fake(n) for n in ("maya", "alder", "kestrel")})
+    monkeypatch.setattr(seed.adj.Adjudicator, "named", lambda self: {})
+    monkeypatch.setattr(seed.flow, "read_card", lambda name: (card(of=counts[name], held=counts[name]), {}, None))
+    (tmp_path / HELD_FROM).write_text("0")
+    said = []
+    if refused:
+        with pytest.raises(SystemExit, match="already counts deals of a run"):
+            seed.seed(tmp_path, say=said.append)
+    else:
+        seed.seed(tmp_path, say=said.append)
+        assert said == ["already seeded: the sample history is made and stamped"]

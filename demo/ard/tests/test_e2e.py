@@ -96,8 +96,10 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     w = world
     # deal 1: both clean, both GO
     made = _assess(w, w["maya"])
+    from cast import SAMPLE_DEALS
     for key, (ev, a) in made.items():
-        assert ev.card["outcomes"] == {"of": 12, "held": 12, "did_not_hold": 0, "undecided": 0}, key
+        n = SAMPLE_DEALS[key]  # each seller's own sample history (#317)
+        assert ev.card["outcomes"] == {"of": n, "held": n, "did_not_hold": 0, "undecided": 0}, key
         assert a.verdict == "GO", (key, a.reasons)
     deal, shipped = _buy(w, "kestrel", made["kestrel"][1])
     assert shipped == "150 of 200 badges"
