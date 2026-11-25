@@ -107,3 +107,19 @@ def test_a_withdrawn_order_frees_the_seller_without_an_error(tmp_path, monkeypat
     m1 = {"steps": [{"capsule": {"key_id": "k"}, "payload": {"body": body}}], "checkpoint": {"key_id": "c"}}
     parties.Seller.deal(seller, "d1", m1)
     assert said[-1].startswith("the buyer ended this order before paying: nothing was paid")
+
+
+@pytest.mark.parametrize("error,withdraws", [(parties.pay.NotSent("no invoice"), True),
+                                             (parties.pay.RailError("send timed out"), False)])
+def test_a_payment_that_failed_before_the_send_withdraws_and_any_other_failure_does_not(tmp_path, monkeypatch, error,
+                                                                                          withdraws):
+    monkeypatch.setattr(parties.deals, "_reconcile", lambda *a, **k: None)
+    monkeypatch.setattr(parties, "wait_file", lambda *a, **k: {})
+    maya = types.SimpleNamespace(half=lambda d: {})
+    peer = types.SimpleNamespace(home=tmp_path, id="alder")
+    chain = types.SimpleNamespace(deal_id="d1")
+    def failing(msat):
+        raise error
+    with pytest.raises(type(error)):
+        parties.buyer_deal(maya, peer, chain, types.SimpleNamespace(pay=failing), 2000)
+    assert parties.withdrawn(tmp_path / "stage" / "wire" / "alder", "d1").is_file() is withdraws

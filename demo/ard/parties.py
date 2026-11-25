@@ -444,7 +444,11 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
         except BaseException:  # the seller is waiting for a paid half that will not come: let it go now (#289)
             write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
             raise
-    payment = rail.pay(price_msat)
+    try:
+        payment = rail.pay(price_msat)
+    except pay.NotSent:  # no money moved: let the seller go now; any other failure may have paid, so it keeps waiting
+        write_atomic(withdrawn(wire / peer.id, deal_id), b"{}")
+        raise
     if on_paid is not None:
         on_paid(payment)  # at once: what follows (the seller's half, the close) can fail after the money moved
     maya.seal(maya.deal(deal_id), rules.pay(maya.deal(deal_id), now(), payment.reference, outcome, clicked))

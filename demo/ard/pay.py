@@ -27,6 +27,22 @@ class RailError(RuntimeError):
     pass
 
 
+class NotSent(RailError):
+    """The payment failed before the buyer's send started (making or checking the invoice), so no money moved: the
+    buyer may tell the seller the order is off (evidencebook-skills#289). A failure during or after the send is a plain
+    :class:`RailError`, since money may have moved."""
+
+
+def _before_send(make):
+    """Run ``make`` (the invoice step) and turn any failure into :class:`NotSent`."""
+    try:
+        return make()
+    except NotSent:
+        raise
+    except (RailError, OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise NotSent(f"{type(exc).__name__}: {exc}" if not isinstance(exc, RailError) else str(exc)) from exc
+
+
 _HEX64 = re.compile(r"[0-9a-fA-F]{64}")
 _MULT_MSAT = {"": 10**11, "m": 10**8, "u": 10**5, "n": 10**2}  # msat per unit of the amount's multiplier; p is 0.1 msat
 _HRP = re.compile(r"^ln(?:bc|tb|bcrt)(\d+)([munp]?)1")
@@ -109,13 +125,16 @@ class LightningRail(Rail):
                 "brattain": self._control(self.BUYER, {"command": "balance"})}
 
     def pay(self, amount_msat: int) -> Payment:
-        made = self._control(self.SELLER, {"command": "fund", "amount_msat": amount_msat})
-        invoice = _find_invoice(made)
-        if invoice is None:
-            raise RailError("Shockley's fund call returned no invoice")
-        stated = invoice_msat(invoice)  # the invoice itself, not the wallet's account of it
-        if stated != amount_msat:
-            raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+        def make():
+            made = self._control(self.SELLER, {"command": "fund", "amount_msat": amount_msat})
+            invoice = _find_invoice(made)
+            if invoice is None:
+                raise NotSent("Shockley's fund call returned no invoice")
+            stated = invoice_msat(invoice)  # the invoice itself, not the wallet's account of it
+            if stated != amount_msat:
+                raise NotSent(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+            return made, invoice
+        made, invoice = _before_send(make)
         sent = self._control(self.BUYER, {"command": "send", "invoice": invoice, "max_fee_msat": MAX_FEE_MSAT})
         status = str(sent.get("status", ""))
         if status != "succeeded":
@@ -150,13 +169,16 @@ class LocalRail(Rail):
         return {"seller": self._run("balance", "--wallet", self.seller), "buyer": self._run("balance", "--wallet", self.buyer)}
 
     def pay(self, amount_msat: int) -> Payment:
-        made = self._run("invoice", str(amount_msat), "--wallet", self.seller)
-        invoice = made.get("invoice")
-        if not isinstance(invoice, str):
-            raise RailError("the seller's wallet returned no invoice")
-        stated = invoice_msat(invoice)  # the invoice itself, not the program's account of it
-        if stated != amount_msat:
-            raise RailError(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+        def make():
+            made = self._run("invoice", str(amount_msat), "--wallet", self.seller)
+            invoice = made.get("invoice")
+            if not isinstance(invoice, str):
+                raise NotSent("the seller's wallet returned no invoice")
+            stated = invoice_msat(invoice)  # the invoice itself, not the program's account of it
+            if stated != amount_msat:
+                raise NotSent(f"the invoice is for {stated} msat, not {amount_msat}: not paying it")
+            return made, invoice
+        made, invoice = _before_send(make)
         sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=SEND_TIMEOUT_S)
         status = str(sent.get("status", ""))
         if status != "succeeded":
