@@ -32,8 +32,9 @@ class ReceiptError(RuntimeError):
     """No receipt page: capsulectl refused to draw it."""
 
 
-def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool) -> str:
-    """The party's receipt for one deal in words: each row's status as capsulectl reports it now."""
+def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool, counterparty: str = "") -> str:
+    """The party's receipt for one deal in words: each row's status as capsulectl reports it now; on the buyer's, what
+    a ruling for her means (:func:`screens.ruled_for_buyer`, naming ``counterparty``, the seller)."""
     try:
         rep = p.report(deal_id)
     except pt.Refused as exc:
@@ -51,6 +52,8 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
         elif row.get("value"):
             line += f" ({'met' if row['value'] == 'met' else 'not met'})"
         lines.append(line)
+    if not seller:
+        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller")]
     lines += proof_lines(p, deal_id, name)
     if seller and real:
         owed = next((r.get("owed", {}).get("amount_minor") for r in report.get("rows", []) if r["id"] == pt.PAID), None)

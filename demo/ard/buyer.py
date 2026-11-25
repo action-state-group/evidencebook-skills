@@ -98,15 +98,17 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
         ev.fail("commitment", entry.get("problem", "no commitment"))
         return ev
     key = entry["commitment"]["key_id"]
-    ev.ok("commitment", f"signature verifies under {key[:8]}…, and matches the seller's entry")
+    ev.ok("commitment", "its signature verifies, and it is the one the seller's entry names")
     try:
         r = flow.fetch_card(home, maya, entry["id"], key)
     except pt.Refused as exc:
         ev.fail("History card", str(exc))
         return ev
     ev.read, ev.card = r, r.card
-    ev.ok("History card", f"{pt.CARD_DERIVATION}, signed by {r.signer[:8]}… (the key the commitment names), "
-                          f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {screens.local_time(r.anchor_time, date=True)}")
+    # no digests, key ids, derivation names or checkpoint hashes in Maya's chat (#332, Sherlock2); they stay in her own
+    # records (the CARD_RECEIVED note below names the seller's key, the card's checkpoint and its digest)
+    ev.ok("History card", f"signed by the key the seller's commitment names, and it verifies; as of the seller's "
+                          f"checkpoint at {screens.local_time(r.anchor_time, date=True)}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
     elif r.witness_status in ("withheld", ""):  # none carried, or none reported: no verb hands a buyer one (#891)

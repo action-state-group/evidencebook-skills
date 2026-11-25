@@ -75,7 +75,7 @@ def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monke
 
     monkeypatch.setattr(ard, "entry", tampered)
     found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
-    assert "commitment" in found["alder"] and "commitment digest matches the seller's entry" in found["alder"]["checks"]
+    assert "commitment" in found["alder"] and "the commitment served is the one the seller's entry names" in found["alder"]["checks"]
     assert "digest differs" in found["kestrel"]["problem"] and "commitment" not in found["kestrel"]
 
 
