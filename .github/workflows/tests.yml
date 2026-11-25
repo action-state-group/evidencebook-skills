@@ -41,9 +41,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 45eaceb5f2bd29111b7bfa76dab6212e716c1c46  # the run's integration commit: main (#893) with #922 and #933 (deal tick --now)
+      EVIDENCEBOOK_REF: 2a377f29de6e6140014107bfc136f932e996a5e8  # main 65cbccab (#922, #935: deal report --html) with #933 (deal tick --now) merged in while #933 is open
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_VIEWER_REF: d56da4d3314b79b7aafb6b293979a14cc49d033e  # main, the merge of capsule-viewer#417 (tree of 343c0aeb)
+      CAPSULE_VIEWER_REF: 130877b1f19753a8f3faf72d4b52d2dc9fdb1ada  # main, the merge of capsule-viewer#422: the page runtime of #420 and #421
     steps:
       - uses: actions/checkout@v4
         with:

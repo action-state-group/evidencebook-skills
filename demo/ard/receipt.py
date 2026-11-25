@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """A party's own receipt for a deal: in words (:func:`receipt_text`, from capsulectl's report of the deal) and as a page
-(:func:`receipt_page`, capsule-viewer's receipt module drawing the party's own copy of the deal, with nothing added).
+(:func:`receipt_page`, capsulectl's own ``deal report --html``, evidencebook#935).
 
-The copy is ``capsulectl deal report --deal D --bundle F``: the party's own deal book at its checkpoint with the sealed
-report beside it. ``capsulectl verify --bundle`` checks it. capsule-viewer's x-deal-v1 receipt module is JavaScript only
-and draws a copy only once the page's verifier runs the x-deal-v1 profile rule, which is not released yet (lane
-eb-viewer025, after capsule-viewer#398); its Python receipt path covers x-deal-v0 only. Until then the page says it is not
-available, and :func:`receipt_text` gives the receipt in words. Nothing here computes a row's status: every line is read
-from capsulectl's report."""
+The page is drawn by capsulectl from its own verify report of the party's copy, with capsule-viewer's receipt page: it says
+the other side's half and the book's witness time as capsulectl verified them, and adds nothing. Nothing here computes a
+row's status: every line is read from capsulectl's report."""
 from __future__ import annotations
 
 import hashlib
@@ -37,10 +34,14 @@ STATUS = {
 ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 
 
-#: Off for the 2026-11-25 run: capsulectl's first v1 page (evidencebook 64da5152) draws a copy without the other side's
-#: half and the witness receipt, so it says "no witness" and "not countersigned" for a witnessed two-sided deal (#242).
-#: On again once the page reads them.
-DRAW_V1_PAGE = False
+#: On since evidencebook#935, whose page is drawn by capsule-viewer 130877b1 (#420, #421) from the binary's own verify
+#: report: it says the other side's half and the book's witness time as capsulectl verified them (#242). It was off for
+#: the 2026-11-25 run, when capsulectl's first v1 page (64da5152) said "no witness" and "not countersigned" for a
+#: witnessed two-sided deal.
+DRAW_V1_PAGE = True
+
+#: How long the receipt page waits for the witness to take the checkpoint it stamps first.
+PAGE_WAIT_S = 30
 
 NOT_YET = "a receipt page for this kind of deal can't be drawn yet; the receipt in words is complete"
 
@@ -216,16 +217,25 @@ def render(bundle: dict, output: dict) -> str:
 
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
     """Write the party's receipt page for a deal, and return its path: capsulectl's own page
-    (``capsulectl deal report --html``) where capsulectl draws one for an x-deal-v1 deal; otherwise capsule-viewer's page
-    of the party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
+    (``capsulectl deal report --html``, evidencebook#935). With :data:`DRAW_V1_PAGE` off, capsule-viewer's page of the
+    party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
     if DRAW_V1_PAGE:
         out = pages.path(p.name, f"receipt-{deal_id}")
+        # with the hosted witness's directory, so the page says the book's witness time capsulectl verified
+        args = ("report", "--deal", deal_id, "--html", str(out),
+                "--witness-directory", p.write("witnesses.json", pt.witness_directory()))
+        # A page rests on a checkpoint, and says the witness time only once the witness has taken it: stamp now and
+        # wait for the witness, as the card page does. If it does not take the stamp in time the page is still drawn,
+        # without the witness line, since capsulectl says only what it verified.
         try:
-            p.run("report", "--deal", deal_id, "--html", str(out))
-            return out
+            p.wait_checkpoint(PAGE_WAIT_S)
+        except pt.Refused:
+            pass
+        try:
+            p.run(*args)
         except pt.Refused as exc:
-            if "no page yet" not in str(exc):  # capsulectl's refusal while it draws no x-deal-v1 page
-                raise ReceiptError(str(exc)) from None
+            raise ReceiptError(str(exc)) from None
+        return out
     try:
         copy = p.bundle(deal_id, "keep", wait=30)
     except pt.Refused as exc:
