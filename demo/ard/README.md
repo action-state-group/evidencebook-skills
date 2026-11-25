@@ -18,17 +18,17 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 | Discovery | `ard.py`, `discovery.py`, `stage.py` | each seller's own `/.well-known/ard.json` and signed `evidence-commitment/1` (with its `history_card/2` staple, ops u539) and the signed `disclosure-policy/0` its `lcap.policy_uri` names, a stand-in registry answering `POST /search` |
 | The History card | `flow.py` (`publish_card`, `fetch_card`) | each seller's shared `standard_history/3` card (`deal standard-history card --shared`), checked by Maya with `capsulectl verify --bundle` |
 | The assessment | `buyer.py`, `pack.py`, `pack/` | `capsule-engine admission evaluate` under `demo/ard_admission/2.0.0`; the card's dispute tally (`card.disputes_against`, LIMIT on any lost dispute) and Maya's own rulings, read from capsulectl's report of each of her deals (`own.no_adverse_adjudication`, NO) |
-| A deal | `buyer.py`, `flow.py` (`SellerAgent`), `wire.py` | offer naming the adjudicator and the witness, admit, intent, agree, check (Maya's dialog), payer and payee legs, delivery, statements; the parties hand each other the files the verbs write |
+| A deal | `buyer.py`, `flow.py` (`SellerAgent`), `wire.py` | offer naming the adjudicator and the witness, intent and check (Maya's dialog) before the offer is sent, admit, agree, payer and payee legs, delivery, statements; the parties hand each other the files the verbs write |
 | The dispute and the ruling | `buyer.dispute`, `flow.enter_rulings`, `adjudicator.py` | `deal dispute`, sent to the seller and the adjudicator; the adjudicator's request for each side's books and each side's full answer (`deal respond`: its own book and the copy it holds of the other side's); `deal ruling --answer` on the adjudicator's own capsulectl-deal profile, then its stamp; `deal receive` of the ruling; each side's book sent back for `deal ruling entries` |
 | The windows | `desktop_server.py`, `goose/open-windows.py`, `goose/locked` | one MCP server per window (`ARD_ROLE`: maya, alder, kestrel, adjudicator), each agent limited to its own tools |
 | The pages | `pages.py`, `receipt.py` | capsule-viewer's History view, vendored at 0.27.2; the receipt in words from capsulectl's report, and as capsulectl's own page |
+| The spending limit | `limits.py`, `buyer.question`, `screens.hold_question` | with `ARD_LIMIT_MSAT` set, capsule-engine's Everyday Rules (`guard check --limits`) pinned as Maya's rules checker (`profile update --rules-checker`), so `deal check` runs them on each payment, checked on her offer before it is sent; a held order is one question listing every reason, with capsulectl's card under it (evidencebook#890) |
 | Payment | `pay.py` | the simulated rail, the Brattain and Shockley test nodes, or two local Lexe wallets (`ln-pay-local`); the invoice is made first, so Maya's check binds its payment hash |
 
 ## What is not there yet
 
 - **The hosted adjudicator.** The adjudicator here is a capsulectl-deal profile the operator runs on this Mac (evidencebook#893). The hosted service, with the adjudicator's own journal record of each request, is evidencebook#861 PR 3.
 - **The card's witness.** No verb gives a buyer the witness receipt for a card's anchor (evidencebook#891), so that input is filled in by the operator and the screen says it is not checked.
-- **The spending limit.** It returns when the Everyday Rules run as the buyer's pinned rules checker on x-deal-v1 deals (evidencebook#890).
 - **The History page's dispute line.** The view has no member for disputes, so the card's tally is one line above it.
 
 ## Without Goose

@@ -109,6 +109,8 @@ def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
+    if role == "maya" and os.environ.get("ARD_LIMIT_MSAT"):  # the buyer's spending limit (limits.py)
+        env.append(f"ARD_LIMIT_MSAT={os.environ['ARD_LIMIT_MSAT']}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):

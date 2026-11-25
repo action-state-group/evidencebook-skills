@@ -166,3 +166,15 @@ def test_a_recipe_reset_could_not_clear_opens_nothing(calls, capsys, monkeypatch
     assert ow.main(["--rail", "fake"]) == 2
     assert calls == []  # no Goose started, no window opened
     assert "the demo's recipe shape only; nothing was opened" in capsys.readouterr().err
+
+
+def test_only_mayas_window_carries_the_spending_limit(monkeypatch):
+    # evidencebook#890: ARD_LIMIT_MSAT set where the windows are opened reaches Maya's server, and no other window's
+    for var, value in (("CAPSULE_ENGINE", "/e"), ("ARD_EVIDENCEBOOK", "/b"), ("CAPSULECTL_DEAL", "/d"), ("ARD_LIMIT_MSAT", "2000")):
+        monkeypatch.setenv(var, value)
+    monkeypatch.setattr(ow, "instructions", lambda role, rail: "")
+    args = {role: ow.recipe(role, "fake")["extensions"][0]["args"] for role in ("maya", "alder", "kestrel", "adjudicator")}
+    assert "ARD_LIMIT_MSAT=2000" in args["maya"]
+    assert all("ARD_LIMIT_MSAT=2000" not in a for role, a in args.items() if role != "maya")
+    monkeypatch.delenv("ARD_LIMIT_MSAT")
+    assert not any(a.startswith("ARD_LIMIT_MSAT=") for a in ow.recipe("maya", "fake")["extensions"][0]["args"])

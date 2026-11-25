@@ -158,3 +158,61 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
             f"ruling and "
             f"never replaces it.")
 
+
+
+#: The foot of the held-order question, whichever layout (#270 items 2 and 3). It names no place to change the rules:
+#: the demo has none (Steven's feedback of 2026-11-25; Sherlock2 on #321, option a), and the limit is set where the
+#: windows are opened (ARD_LIMIT_MSAT).
+HELD_FOOT = "Your answer is saved on the receipt."
+HELD_TITLE = "The Everyday Rules held this order for your OK"  # Sherlock2 on #237
+
+
+def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], over_limit: bool,
+                  seller: str | None = None, rail: str | None = None) -> tuple[str, str]:
+    """The one question for an order the Everyday Rules hold, as a dialog's title and text (evidencebook-skills#270,
+    Steven's "Spending-limit question"). Over a limit alone it shows the figures from the sealed caps findings
+    (``limits``: ``weekly`` and ``per_order``, each the finding's ``(limit, value)``, never recomputed); when another rule
+    holds the order too, it lists every reason in their place (Steven, 2026-11-23: one ask, every reason). ``rail`` is
+    the payment's rail clause, such as "on the simulated rail: no money moves"."""
+    weekly, per_order = limits.get("weekly"), limits.get("per_order")
+    if over_limit and weekly and not per_order:  # both limits failing: the reasons layout, so neither is dropped
+        cap, total = weekly
+        spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
+        title = "This order goes over your weekly limit"
+        figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
+        foot = HELD_FOOT
+    elif over_limit and per_order and not weekly:
+        cap, value = per_order
+        this, limit = msat(value), msat(cap)
+        title = "This order goes over your per-order limit"
+        figures = [f"This order: {this}", f"Your per-order limit: {limit}"]
+        foot = HELD_FOOT
+    else:
+        title, figures, foot = HELD_TITLE, [r[:1].upper() + r[1:] for r in reasons], HELD_FOOT  # each with a capital (Sherlock2 on #270)
+    what = f"{item} from {seller}" if seller else item
+    line = f"{what} for {msat(price_msat)}" + (f", {rail}" if rail else "") + ". Nothing has been paid yet."
+    return title, "\n".join([line, *figures, foot])
+
+
+def rules_approved(reasons: list[str], over_limit: bool = True) -> str:
+    """What the screen says after the person approves a held order."""
+    what = "this order over your limit" if over_limit else "this held order"
+    return (f"You approved {what} (" + "; ".join(reasons) + "). Paying now. Your approval goes "
+            "into this deal's records and will show on its receipt.")  # Sherlock2 on #265: not recorded until paid
+
+
+def rules_held(reasons: list[str]) -> str:
+    """What the screen says when the deal check holds an order: over the spending limit the person set (Steven's ruling
+    that a failing caps check on a person-set limit escalates, ops u325) or on any other ASK rule (Sherlock2, 2026-11-23)."""
+    return ("The Everyday Rules held this order for your OK, and nothing was paid: "
+            + "; ".join(reasons) + ".")
+
+
+#: The line above capsulectl's card in a dialog: the card is what the person's answer is sealed with, so it is shown in
+#: full (Sherlock2's ruling on evidencebook#890, Option A: every word the record says Maya approved was on her screen).
+CARD_HEAD = "Saved with your answer:"
+
+
+def with_card(text: str, card: str) -> str:
+    """A dialog's text with capsulectl's card shown in full below it (:data:`CARD_HEAD`)."""
+    return f"{text}\n\n{CARD_HEAD}\n{card}" if card else text

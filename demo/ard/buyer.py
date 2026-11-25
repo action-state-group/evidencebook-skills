@@ -20,7 +20,9 @@ from typing import Any, Callable
 import adjudicator as adj
 import ard
 import flow
+import limits
 import party as pt
+import pay as rails  # buyer.pay is the function below
 import screens
 import wire
 from cast import ASK, BUDGET_MSAT, BUYER, SELLERS, label
@@ -206,25 +208,44 @@ class Deal:
     rail: str = "lightning"
     #: the buyer's folder on the wire: the seller answers there
     me: str = BUYER
+    #: the offer file to send (:func:`draft_deal`), and the intent the agreement cites
+    offer_file: str = ""
+    intent: str = ""
 
 
-def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,
-              adjudicator: dict, say: Callable[[str], None], rail: str = "lightning", me: str = BUYER) -> Deal:
-    """Open Maya's side of the deal from a GO assessment: the offer (naming the adjudicator and the witness), the
-    seller's agreement, her admission (the assessment's own decision), her intent and her agreement."""
+def draft_deal(maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
+               rail: str = "lightning", me: str = BUYER) -> Deal:
+    """Maya's side of a deal from a GO assessment, before the seller hears of it: the offer (naming the adjudicator and
+    the witness), written but not sent, and her intent. Her payment can be checked on it already (``deal check``), so
+    the person answers before anything reaches the seller (evidencebook-skills#289, evidencebook#890)."""
     if chosen.verdict != "GO":
         raise pt.Refused(f"the assessment is {chosen.verdict}"
                          + (f": deals under {chosen.cap_msat:,} msat" if chosen.cap_msat else "")
                          + "; no deal opens and nothing is paid")
     item = SELLERS[seller]["item"]  # the seller's own listing (sellers/<name>.yaml)
     o = maya.offer(seller_key, item, chosen.price_msat, chosen.pack_digest, adjudicator)
-    deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me)
+    deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me, offer_file=o["file"])
+    deal.intent = maya.intent(deal.deal_id, ASK, "purchase", ["pay"], BUDGET_MSAT, label(seller), rail=rail,
+                              domain=ard.publisher(seller))
+    return deal
+
+
+def cancel_draft(maya: pt.Party, deal: Deal) -> None:
+    """Withdraw an offer that was never sent (``deal offer cancel``): the seller's book holds nothing of it, and Maya's
+    holds the cancelled offer with any check and answer sealed on it."""
+    maya.run("offer", "cancel", deal.offer, "--out", maya.tmp("cancel.json"))
+
+
+def send_deal(home: Path, maya: pt.Party, deal: Deal, chosen: Assessment, say: Callable[[str], None]) -> Deal:
+    """Send a drafted offer and agree: the seller's agreement, Maya's admission (the assessment's own decision) and
+    her agreement."""
+    seller, me = deal.seller, deal.me
     wire.send_json(home, seller, deal.deal_id, "from", {"buyer": me})  # before the offer: where the seller answers
-    wire.send(home, seller, deal.deal_id, "offer", o["file"])
-    maya.note(DEAL_OPENED, {"deal_id": deal.deal_id, "seller": seller_key, "seller_name": seller, "price_msat": deal.price_msat,
-                            "offer": deal.offer, "rail": rail, "me": me}, subject_ref=deal.deal_id)
-    say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {item}; the agreement names the deal's adjudicator "
-        f"and {pt.WITNESS_NAME}")
+    wire.send(home, seller, deal.deal_id, "offer", deal.offer_file)
+    maya.note(DEAL_OPENED, {"deal_id": deal.deal_id, "seller": deal.seller_key, "seller_name": seller, "price_msat": deal.price_msat,
+                            "offer": deal.offer, "rail": deal.rail, "me": me}, subject_ref=deal.deal_id)
+    say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {SELLERS[seller]['item']}; the agreement names "
+        f"the deal's adjudicator and {pt.WITNESS_NAME}")
     try:
         agreed_by_seller = wire.wait(home, me, deal.deal_id, "agree", flow.WAIT_S)
     except pt.Refused:
@@ -236,12 +257,16 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
                          "offer is withdrawn, nothing was paid") from None
     maya.receive(agreed_by_seller)
     maya.admit(deal.deal_id, chosen.decision)
-    intent = maya.intent(deal.deal_id, ASK, "purchase", ["pay"], BUDGET_MSAT, label(seller), rail=rail,
-                         domain=ard.publisher(seller))
-    agreed = maya.agree(deal.offer, intent)
+    agreed = maya.agree(deal.offer, deal.intent)
     wire.send(home, seller, deal.deal_id, "agree", agreed["file"])
     say(f"agreed: both sides signed the agreement for deal {deal.deal_id[5:13]}")
     return deal
+
+
+def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,
+              adjudicator: dict, say: Callable[[str], None], rail: str = "lightning", me: str = BUYER) -> Deal:
+    """Open Maya's side of the deal from a GO assessment and agree it (:func:`draft_deal`, then :func:`send_deal`)."""
+    return send_deal(home, maya, draft_deal(maya, seller, seller_key, chosen, adjudicator, rail, me), chosen, say)
 
 
 def deals_from_notes(maya: pt.Party) -> list[Deal]:
@@ -278,22 +303,74 @@ def pay(home: Path, maya: pt.Party, deal: Deal, check: dict, reference: str, sim
     wire.send(home, deal.seller, deal.deal_id, "paid", leg)
 
 
+@dataclass
+class Question:
+    """The one dialog before a payment: its title, text and buttons, and what the rules held, if they did."""
+    title: str
+    text: str
+    yes: str
+    no: str
+    held: limits.Held | None = None
+
+
+def question(deal: Deal, check: dict, held: limits.Held | None, summary: str, rail_words: str = "") -> Question:
+    """The dialog for the checked payment. Held by the rules: the held-order question (:func:`screens.hold_question`,
+    Steven's design in evidencebook-skills#270), Buy anyway or Don't buy. Otherwise the payment dialog, Pay or Cancel.
+    A check that paused shows capsulectl's card in full below (:func:`screens.with_card`), since the person's answer is
+    sealed with it (Sherlock2's ruling on evidencebook#890, Option A)."""
+    card = "" if check.get("proceed") else check.get("card", "")
+    if held is not None:
+        title, text = screens.hold_question(SELLERS[deal.seller]["item"], deal.price_msat, held.limits, held.reasons,
+                                            held.over_limit, label(deal.seller), rail_words or None)
+        return Question(title, screens.with_card(text, card), "Buy anyway", "Don't buy", held)
+    return Question("Approve this payment", screens.with_card(summary, card), "Pay", "Cancel")
+
+
 def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
-                 rail: Any, summary: str, ask: Callable[[str], bool], say: Callable[[str], None],
-                 simulated: bool, said: Callable[[str], str] = lambda text: text) -> tuple[Deal, Any] | None:
-    """The person's yes first, then the deal: nothing reaches the seller until the person approved the payment
-    (evidencebook-skills#289, Sherlock2 on finding 13), so a late yes never meets a seller that stopped waiting. Then the
-    offer and agreement, the invoice, capsulectl's payment check (its pause is answered with the yes already given, in
-    the words the person saw, as ``said`` renders them for the dialog), the payment and the payer leg. None when the person did not say yes: nothing was sent
-    and nothing paid."""
-    if not ask(summary):
-        return None
-    deal = open_deal(home, maya, seller, seller_key, chosen, adjudicator, say, rail=rail.SEALED, me=maya.name)
-    inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
-    check = check_payment(maya, deal, inv.payment_hash)
-    if not check.get("proceed"):
-        maya.approve(deal.deal_id, check, "proceed", f"{said(summary)}\nAnswer: Pay")
-    payment = rail.pay_invoice(inv)
+                 rail: Any, summary: str, ask: Callable[[Question], Any], say: Callable[[str], None],
+                 simulated: bool, said: Callable[[str], str] = lambda text: text,
+                 rail_words: str = "") -> tuple[Deal, Any] | None:
+    """The payment checked first, then the person's answer, then the deal: nothing reaches the seller until the person
+    said yes (evidencebook-skills#289). Maya's offer is drafted, not sent (:func:`draft_deal`), the invoice is made and
+    capsulectl's payment check runs on it (with ``ARD_LIMIT_MSAT`` set, under her spending limit: :mod:`limits`). Then one
+    dialog (:func:`question`) through ``ask``, which returns True or ``"yes"`` for the yes button, ``"no"`` for the
+    other, and anything else when nobody answered or no dialog was shown. On yes, a paused check is answered in the words
+    the dialog showed and the button (``said`` renders them as the dialog did: the dialog as shown, card included, then the button, never words of the person's own beyond that click), the offer is sent and agreed, and the
+    invoice paid. Otherwise the person's no to a paused check is sealed (no answer is never sealed as one), the unsent
+    offer is cancelled, and None is returned: nothing was sent and nothing paid."""
+    limit = limits.limit_msat()
+    if limit is not None:
+        limits.pin(maya, limit)
+    else:
+        limits.unpin(maya)
+    deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name)
+    try:  # until the offer is sent, any failure cancels it: the seller never hears of it
+        inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
+        check = check_payment(maya, deal, inv.payment_hash)
+        if check.get("verdict") == "deny":  # a rule that refuses (23 to 25): not put to the person, nothing is paid
+            raise pt.Refused("refused by your rules, not put to you: " + "; ".join(limits.refusal(check)) +
+                             "; nothing was sent to the seller and nothing was paid")
+        held = limits.read(check, limit)
+        q = question(deal, check, held, summary, rail_words)
+        answer = ask(q)
+        words = said(f"{q.title}\n{q.text}")
+        if answer is not True and answer != "yes":
+            if answer == "no" and not check.get("proceed"):
+                maya.approve(deal.deal_id, check, "hold", f"{words}\nAnswer: {q.no}")
+            cancel_draft(maya, deal)
+            return None
+        if not check.get("proceed"):
+            maya.approve(deal.deal_id, check, "proceed", f"{words}\nAnswer: {q.yes}")
+    except BaseException:
+        cancel_draft(maya, deal)
+        raise
+    send_deal(home, maya, deal, chosen, say)
+    maya.sending(deal.deal_id, check["check_id"])  # refused here, nothing has moved
+    try:
+        payment = rail.pay_invoice(inv)
+    except rails.PaymentFailed:  # the rail says no money moved: the payment no longer counts against the limit
+        maya.payment_failed(deal.deal_id, check["check_id"])
+        raise
     pay(home, maya, deal, check, payment.reference, simulated=simulated)
     return deal, payment
 

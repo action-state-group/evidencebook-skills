@@ -61,7 +61,7 @@ def test_summary_wording_names_the_rail():
     # the text the presenter reads: real money on the real rails, none on the simulated one, and no word of a demo
     src = open(ds.__file__).read()
     assert 'over Lightning: this moves real money, to a wallet {shared} share"' in src and '"on the simulated rail: no money moves"' in src
-    assert '"over Lightning, which moves real money?"' in src and "REAL Lightning rail" not in src
+    assert '"over Lightning, which moves real money"' in src and "REAL Lightning rail" not in src
     assert "settles to the demo" not in src and "ARD demo: approve" not in src
 
 

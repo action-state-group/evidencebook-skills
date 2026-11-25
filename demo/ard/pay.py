@@ -32,6 +32,11 @@ class RailError(RuntimeError):
     pass
 
 
+class PaymentFailed(RailError):
+    """The rail answered that the payment failed: no money moved, so the payment counted as sent is closed as failed.
+    Any other error after the payment started leaves its outcome unknown, and it stays in flight."""
+
+
 class NotSent(RailError):
     """The payment failed before the buyer's send started (making or checking the invoice), so no money moved
     (evidencebook-skills#289). A failure during or after the send is a plain :class:`RailError`, since money may have
@@ -179,6 +184,8 @@ class LightningRail(Rail):
         invoice, amount_msat, made = inv.text, inv.amount_msat, inv.raw
         sent = self._control(self.BUYER, {"command": "send", "invoice": invoice, "max_fee_msat": MAX_FEE_MSAT})
         status = str(sent.get("status", ""))
+        if status == "failed":
+            raise PaymentFailed(f"Brattain's send did not succeed: status failed")
         if status != "succeeded":
             raise RailError(f"Brattain's send did not succeed: status {status or 'unknown'}")
         if sent.get("amount_msat") is not None and int(sent["amount_msat"]) != amount_msat:
@@ -220,6 +227,8 @@ class LocalRail(Rail):
         invoice, amount_msat = inv.text, inv.amount_msat
         sent = self._run("pay", invoice, "--wallet", self.buyer, "--max-fee-msat", str(self.max_fee_msat), timeout=PAY_WAIT_S)
         status = str(sent.get("status", ""))
+        if status == "failed":
+            raise PaymentFailed(f"the buyer's wallet did not pay: status failed")
         if status != "succeeded":
             raise RailError(f"the buyer's wallet did not pay: status {status or 'unknown'}")
         if int(sent.get("amount_msat", amount_msat)) != amount_msat:
