@@ -279,7 +279,7 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     if not ask(summary):
         return None
     deal = open_deal(home, maya, seller, seller_key, chosen, adjudicator, say, rail=rail.SEALED, me=maya.name)
-    inv = rail.invoice(chosen.price_msat)
+    inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
     check = check_payment(maya, deal, inv.payment_hash)
     if not check.get("proceed"):
         maya.approve(deal.deal_id, check, "proceed", f"{said(summary)}\nAnswer: Pay")

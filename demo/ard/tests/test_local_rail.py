@@ -89,6 +89,20 @@ def test_a_failing_program_is_a_rail_error_without_its_output(tmp_path):
         rail(tmp_path, fail="invoice").pay(289)
 
 
+@pytest.mark.parametrize("kw", [{"invoice": "lnbc5000p1pnexample"}, {"fail": "invoice"}])
+def test_a_failure_before_the_send_says_nothing_was_sent(tmp_path, kw):
+    # #289: only a failure before the buyer's send may tell the seller the order is off
+    with pytest.raises(pay.NotSent):
+        rail(tmp_path, **kw).pay(289)
+
+
+@pytest.mark.parametrize("kw", [{"pay_answer": {"status": "failed"}}, {"pay_answer": {"amount_msat": 300}}, {"fail": "pay"}])
+def test_a_failure_during_or_after_the_send_is_not_called_unsent(tmp_path, kw):
+    with pytest.raises(pay.RailError) as err:
+        rail(tmp_path, **kw).pay(289)
+    assert not isinstance(err.value, pay.NotSent)  # money may have moved
+
+
 def test_balances_name_both_wallets(tmp_path):
     assert rail(tmp_path).balances() == {"seller": {"spendable_msat": 5000}, "buyer": {"spendable_msat": 5000}}
 

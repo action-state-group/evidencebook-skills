@@ -28,6 +28,22 @@ class RailError(RuntimeError):
     pass
 
 
+class NotSent(RailError):
+    """The payment failed before the buyer's send started (making or checking the invoice), so no money moved
+    (evidencebook-skills#289). A failure during or after the send is a plain :class:`RailError`, since money may have
+    moved."""
+
+
+def _before_send(make):
+    """Run ``make`` (the invoice step) and turn any failure into :class:`NotSent`."""
+    try:
+        return make()
+    except NotSent:
+        raise
+    except (RailError, OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise NotSent(f"{type(exc).__name__}: {exc}" if not isinstance(exc, RailError) else str(exc)) from exc
+
+
 _HEX64 = re.compile(r"[0-9a-fA-F]{64}")
 _MULT_MSAT = {"": 10**11, "m": 10**8, "u": 10**5, "n": 10**2}  # msat per unit of the amount's multiplier; p is 0.1 msat
 _HRP = re.compile(r"^ln(?:bc|tb|bcrt)(\d+)([munp]?)1")
@@ -111,8 +127,13 @@ class Rail:
         raise NotImplementedError
 
     def invoice(self, amount_msat: int) -> Invoice:
-        """The seller side's invoice for exactly ``amount_msat``: its hash is what the buyer's deal check binds."""
+        """The seller side's invoice for exactly ``amount_msat``: its hash is what the buyer's deal check binds. A
+        failure here is before any send: callers wrap it with :meth:`checked_invoice`."""
         raise NotImplementedError
+
+    def checked_invoice(self, amount_msat: int) -> Invoice:
+        """:meth:`invoice`, any failure raised as :class:`NotSent` (no money moved)."""
+        return _before_send(lambda: self.invoice(amount_msat))
 
     def pay_invoice(self, inv: Invoice) -> Payment:
         """Pay an invoice from :meth:`invoice` from the buyer's wallet, once the person approved it."""
@@ -120,7 +141,7 @@ class Rail:
 
     def pay(self, amount_msat: int) -> Payment:
         """Issue an invoice for exactly ``amount_msat`` on the seller's wallet and pay it from the buyer's."""
-        return self.pay_invoice(self.invoice(amount_msat))
+        return self.pay_invoice(self.checked_invoice(amount_msat))
 
 
 class LightningRail(Rail):

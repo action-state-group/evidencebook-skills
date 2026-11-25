@@ -176,7 +176,7 @@ def test_nothing_reaches_the_seller_before_the_persons_yes(monkeypatch):
 
     class Rail:
         SEALED = "simulated"
-        invoice = staticmethod(lambda msat: calls.append("invoice") or type("I", (), {"payment_hash": "h"})())
+        checked_invoice = staticmethod(lambda msat: calls.append("invoice") or type("I", (), {"payment_hash": "h"})())
         pay_invoice = staticmethod(lambda inv: calls.append("paid") or type("P", (), {"reference": "r"})())
     who = type("M", (), {"name": "maya"})()
     a = assessment("GO")
