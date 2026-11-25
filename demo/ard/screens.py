@@ -18,9 +18,9 @@ if TYPE_CHECKING:
 
 PACK_NOTE = "a copy, not published · placeholder thresholds"
 #: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
-OPERATOR_NOTE = ("filled in by the operator, not checked: the platform, the allow-list, the card's witness and "
-                 "controller")
-CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
+OPERATOR_NOTE = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
+                 "list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's "
+                 "key.")
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
 #: Said wherever a seller's card is shown as signed or time-stamped: its first deals are the seed's sample history, so a
@@ -97,7 +97,7 @@ def own_ruling(a: Assessment) -> dict | None:
 def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None = None) -> str:
     """One line: the decision and why, for this seller and this price (Sherlock2's wording, #285)."""
     if a.verdict == "GO":
-        within = f" ({a.tier}, under {msat(ceiling_msat_for_tier)})" if ceiling_msat_for_tier else ""
+        within = f" (allows deals under {msat(ceiling_msat_for_tier)})" if ceiling_msat_for_tier else ""
         return f"GO: {msat(a.price_msat)} is within this pack's limit for it{within}"
     card = ev.card or {}
     b = card.get("disputes", {}).get("received", {}).get("by_outcome", {})
