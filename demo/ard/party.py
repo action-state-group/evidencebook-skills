@@ -64,12 +64,24 @@ def witnessed() -> bool:
     return os.environ.get("ARD_WITNESS", "public") != "off"
 
 
-def taken(tick: dict) -> bool:
-    """Whether a tick cut a checkpoint and the witness took it (its receipt is in hand), or there is no witness. Older
-    checkpoints the witness refused may stay pending: the newest covers every record before it."""
-    if tick.get("state") != "ticked":
-        return False
-    return not witnessed() or tick.get("witness") == "not_configured" or tick.get("checkpoint") in (tick.get("delivered") or [])
+class StampWait:
+    """The stamps one wait cut, and whether the witness took any of them. A checkpoint covers every record before it,
+    so any checkpoint cut during the wait that the witness took times every record sealed before the wait began; an
+    older or a newer one left pending (the witness answered it with an error) does not undo that."""
+
+    def __init__(self) -> None:
+        self.first: int | None = None  # the first checkpoint this wait cut
+        self.taken = False
+
+    def add(self, tick: dict) -> bool:
+        if not witnessed() or tick.get("witness") == "not_configured":
+            self.taken = self.taken or tick.get("state") == "ticked"
+            return self.taken
+        if tick.get("state") == "ticked" and self.first is None:
+            self.first = tick.get("checkpoint")
+        if self.first is not None and any(d >= self.first for d in (tick.get("delivered") or [])):
+            self.taken = True
+        return self.taken
 
 
 def witness_directory() -> dict:
@@ -190,17 +202,18 @@ class Party:
         return self.run("tick", "--now")
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
-        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:func:`taken`), taken again while it does not
+        """Take a checkpoint now (:meth:`stamp`) that the witness takes (:class:`StampWait`: any checkpoint this wait
+        cut), taken again while it does not
         (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
         ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
         then mid-delivery), and what it did not deliver goes with the next tick."""
-        stop = time.monotonic() + seconds
+        stop, wait = time.monotonic() + seconds, StampWait()
         while True:
             try:
                 t = self.stamp()
             except Refused as exc:
                 t = {"error": str(exc)}
-            if taken(t):
+            if wait.add(t):
                 return t
             time.sleep(1)
             if stop - time.monotonic() < STAMP_TRY_S:
