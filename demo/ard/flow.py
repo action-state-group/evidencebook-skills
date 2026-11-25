@@ -122,6 +122,7 @@ class SellerAgent:
         self.log: list[str] = []
         self._lock = threading.Lock()
         self._stop = threading.Event()
+        self._last_rulings = 0.0
         self.threads: list[threading.Thread] = []
         self.advertise()
         self.republish()
@@ -182,31 +183,42 @@ class SellerAgent:
     def _done(self, deal_id: str, kind: str) -> bool:
         return (self.party.dir / "handled" / f"{deal_id}.{kind}").exists()
 
-    def _mark(self, deal_id: str, kind: str) -> None:
+    def _mark(self, deal_id: str, kind: str, value: str = "") -> None:
         d = self.party.dir / "handled"
         d.mkdir(exist_ok=True)
-        (d / f"{deal_id}.{kind}").touch()
+        (d / f"{deal_id}.{kind}").write_text(value)
+
+    def _step(self, deal_id: str, kind: str, make: Callable[[], str]) -> str:
+        """One step of a deal, once: the file it wrote, made now or by an earlier round. A step is marked only after it
+        succeeded, so a failure is retried next round, and a step that succeeded is never sealed twice."""
+        f = self.party.dir / "handled" / f"{deal_id}.{kind}"
+        if f.exists():
+            return f.read_text()
+        out = str(make())
+        self._mark(deal_id, kind, out)
+        return out
 
     def _offers(self) -> None:
         p, listed = self.party, SELLERS[self.name]["price_msat"]
         for deal_id, f in wire.pending(self.home, self.name, "offer"):
             if self._done(deal_id, "offer"):
                 continue
-            self._mark(deal_id, "offer")
             offer = json.loads(f.read_text())
             body = offer["agent_input"]["body"]
             price = body["terms_rows"]["rows"][0]["owed"]["amount_minor"]
             if price != listed:
                 self.say(f"an offer at {price:,} msat, not the listed {listed:,} msat: not taken")
+                self._mark(deal_id, "offer")
                 continue
-            got = p.receive(f)
-            deal_id = got["deal_id"]
-            self.say(f"a buyer offers {price:,} msat for {body['terms']['item']}: taken at the listed price")
-            p.admit(deal_id, seller_decision(price))
-            p.intent(deal_id, f"sell {body['terms']['item']} at the listed price", "service", ["commit"], None, "the buyer")
-            agreed = p.agree(digest_of(offer))
-            wire.send(self.home, self.buyer_of(deal_id), deal_id, "agree", agreed["file"])
-            self.say("agreed: this seller's agreement sent to the buyer")
+            p.receive(f)  # "already kept" on a retry
+            self._step(deal_id, "admit", lambda: p.admit(deal_id, seller_decision(price)))
+            self._step(deal_id, "intent", lambda: p.intent(deal_id, f"sell {body['terms']['item']} at the listed price",
+                                                           "service", ["commit"], None, "the buyer"))
+            agreed = self._step(deal_id, "agreed", lambda: p.agree(digest_of(offer))["file"])
+            wire.send(self.home, self.buyer_of(deal_id), deal_id, "agree", agreed)
+            self._mark(deal_id, "offer")
+            self.say(f"a buyer offered {price:,} msat for {body['terms']['item']}: agreed at the listed price, and this "
+                     "seller's agreement sent to the buyer")
 
     def _agreements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "agree"):
@@ -221,22 +233,28 @@ class SellerAgent:
         for deal_id, f in wire.pending(self.home, self.name, "paid"):
             if self._done(deal_id, "paid"):
                 continue
-            p.receive(f)
             ref = json.loads(wire.path(self.home, self.name, deal_id, "ref").read_text())
-            self._mark(deal_id, "paid")
-            self.say(f"payment of {ref['amount_msat']:,} msat recorded by the buyer"
-                     + (" (simulated rail: no money moved)" if ref.get("simulated") else ""))
             to = self.buyer_of(deal_id)
-            wire.send(self.home, to, deal_id, "received", p.received_leg(deal_id, ref["amount_msat"], ref["payment_ref"]))
-            check = p.check(deal_id, "commit", ITEM, ref["amount_msat"], "the buyer")
-            if not check.get("proceed"):
-                self.say(f"delivery held by this seller's own check: {check.get('verdict')}")
-                continue
-            wire.send(self.home, to, deal_id, "act", p.perform(deal_id, check["check_id"], info["observed"]))
-            self.say(f"delivered to the buyer: {info['shipped']} (this seller's delivery record says so)")
+            if not self._done(deal_id, "paid-kept"):
+                p.receive(f)
+                self._mark(deal_id, "paid-kept")
+                self.say(f"payment of {ref['amount_msat']:,} msat recorded by the buyer"
+                         + (" (simulated rail: no money moved)" if ref.get("simulated") else ""))
+            leg = self._step(deal_id, "received", lambda: p.received_leg(deal_id, ref["amount_msat"], ref["payment_ref"]))
+            wire.send(self.home, to, deal_id, "received", leg)
+
+            def deliver() -> str:
+                check = p.check(deal_id, "commit", ITEM, ref["amount_msat"], "the buyer")
+                if not check.get("proceed"):
+                    raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
+                return p.perform(deal_id, check["check_id"], info["observed"])
+            act = self._step(deal_id, "act", deliver)
+            wire.send(self.home, to, deal_id, "act", act)
             if self.name != "kestrel":  # Kestrel says nothing on the row (plan Q3): the ruling rests on its own record
-                wire.send(self.home, to, deal_id, "statement",
-                          p.statement(deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
+                st = self._step(deal_id, "statement-sent", lambda: p.statement(deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
+                wire.send(self.home, to, deal_id, "statement", st)
+            self._mark(deal_id, "paid")
+            self.say(f"delivered to the buyer: {info['shipped']} (this seller's delivery record says so)")
 
     def _statements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "statement"):
@@ -250,16 +268,21 @@ class SellerAgent:
         for deal_id, f in wire.pending(self.home, self.name, "dispute"):
             if self._done(deal_id, "dispute"):
                 continue
-            p.receive(f)
-            self._mark(deal_id, "dispute")
-            self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: sending this seller's records to the adjudicator")
+            if not self._done(deal_id, "dispute-kept"):
+                p.receive(f)
+                self._mark(deal_id, "dispute-kept")
+                self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: sending this seller's records to the "
+                         "adjudicator")
             copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=120)
-            case = adj.open_case(f, copy)
+            case = adj.open_case(f, copy)  # the front keeps each object once: a retry stores nothing twice
             p.note(CASE, {"deal_id": deal_id, "case": case["case"], "copy": case["copies"][0]}, subject_ref=deal_id)
+            self._mark(deal_id, "dispute")
             self.say("this seller's records were sent to the adjudicator")
 
     def _rulings(self) -> None:
-        enter_rulings(self.home, self.party, self.buyer_of, self.say)
+        if time.monotonic() - self._last_rulings >= 5:  # the adjudicator is read every few seconds, not every round
+            self._last_rulings = time.monotonic()
+            enter_rulings(self.home, self.party, self.buyer_of, self.say)
 
     def _named(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "named"):
@@ -291,8 +314,12 @@ def enter_rulings(home: Path, p: pt.Party, other: str | Callable[[str], str], sa
     stamped = {n["statement"]["ruling"] for n in p.notes(RULING_STAMPED)}
     sent = {n["statement"]["ruling"] for n in p.notes(BOOK_SENT)}
     done = []
+    finished = {n["statement"]["deal_id"] for n in p.notes(BOOK_SENT)
+                if n["statement"]["ruling"] in stamped or entered.get(n["statement"]["ruling"]) or not pt.witnessed()}
     for n in p.notes(CASE):
         case, deal_id = n["statement"]["case"], n["statement"]["deal_id"]
+        if deal_id in finished:
+            continue
         for r in adj.list_rulings(p, case).get("rulings", []):
             # a listed ruling is its record; its digest is the record's payload commitment (what `deal ruling` prints)
             digest = (r.get("record", {}).get("header", {}).get("payload_commitments") or [""])[0]

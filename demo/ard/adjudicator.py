@@ -39,8 +39,8 @@ RULES_TEXT = """Adjudicator: rules
 The operator runs this adjudicator and every party here, so it is not independent of the parties.
 
 1. It rules on one row of an x-deal-v1 deal whose agreement names it, when a party disputes that row.
-2. It reads the books the parties send it. A side that sends none is ruled on only from records that side signed
-   itself, as the other side holds them.
+2. It reads the books the parties send it, and rules against a side only on records that side signed itself. A side
+   whose book was not shown is not ruled against.
 3. Its ruling says whether the row was met. It is final for the row; either side may challenge it within 7 days,
    and a challenge is recorded beside the ruling and never replaces it.
 4. It orders no payment and moves no money.
@@ -162,8 +162,25 @@ class Adjudicator:
             args += ["-copy", c]
         return self.operator(*args, "-row", row, "-value", value, "-against", against, "-final", "-conflict", CONFLICT)
 
-    def witness(self) -> dict:
-        return self.operator("witness")
+    def witness(self, seconds: float = 60) -> int:
+        """Register the stamps the operator holds with the witness, retrying for up to ``seconds``; how many it
+        delivered (0 when the witness took none in that time)."""
+        stop = time.time() + seconds
+        while True:
+            n = int(self.operator("witness").get("delivered", 0) or 0)
+            if n or time.time() >= stop:
+                return n
+            time.sleep(5)
+
+    def rulings(self, case: str) -> list[dict]:
+        """The case's published rulings, as the operator wrote them for the parties to fetch: each one's digest and
+        what it found (its value and against whom), read from the ruling record's payload."""
+        out = []
+        d = self.dir / "read" / "rulings" / "case" / case
+        for f in sorted(d.glob("*.json")) if d.is_dir() else []:
+            found = _walk_ruling(json.loads(f.read_bytes()))
+            out.append({"digest": f.stem, **found})
+        return out
 
     def entry(self, case: str, ruling: str) -> list[dict]:
         out = self.operator("entry", "-case", case, "-ruling", ruling)
@@ -208,12 +225,36 @@ def fetch_ruling(p: pt.Party, case: str, ruling: str) -> Path:
 
 def list_rulings(p: pt.Party, case: str) -> dict:
     """The case's rulings and refusals, as the party may read them (``adjudicator-client`` with no ``-ruling``)."""
-    out = p.tmp("rulings.json")
+    out = str(p.dir / "tmp" / "rulings-list.json")  # one file, rewritten each read
+    Path(out).parent.mkdir(exist_ok=True, mode=0o700)
     run = subprocess.run([binary("adjudicator-client"), "-url", URL, "-case", case, "-key-file", str(p.seed_file), "-out", out],
                          capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
     if run.returncode != 0:
         return {"rulings": [], "refusals": []}
     return json.loads(Path(out).read_text())
+
+
+def _walk_ruling(doc) -> dict:
+    """The ruling body's ``value`` and ``against``, wherever the published file carries them (encoded payloads too)."""
+    import base64
+    if isinstance(doc, dict):
+        if "against" in doc and "value" in doc:
+            return {"value": doc["value"], "against": doc["against"]}
+        for v in doc.values():
+            got = _walk_ruling(v)
+            if got:
+                return got
+    elif isinstance(doc, list):
+        for v in doc:
+            got = _walk_ruling(v)
+            if got:
+                return got
+    elif isinstance(doc, str) and len(doc) > 40:
+        try:
+            return _walk_ruling(json.loads(base64.b64decode(doc + "==")))
+        except Exception:
+            return {}
+    return {}
 
 
 def wait_front(seconds: float = 10) -> bool:

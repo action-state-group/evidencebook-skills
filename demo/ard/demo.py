@@ -179,8 +179,8 @@ class Script:
             print("no ruling recorded")
             return
         self.adjudicator.rule(c.case, c.dispute, c.copies, c.row, "not_met", "seller")
-        if pt.witnessed():
-            self.adjudicator.witness()
+        if pt.witnessed() and not self.adjudicator.witness():
+            print(f"not yet time-stamped: {pt.WITNESS_NAME} took no stamp within a minute")
         print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Both parties fetch it and enter it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 300

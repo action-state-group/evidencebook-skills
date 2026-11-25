@@ -145,7 +145,7 @@ class Session:
         self.assessed: dict[str, buyer.Assessment] = {}
         self.pack: packs.Pack | None = None
         self.picked: set[str] = set()
-        self.deals: list[buyer.Deal] = []
+        self.deals: list[buyer.Deal] = buyer.deals_from_notes(self.maya)  # a reopened window keeps its deals
         self.declined: set[str] = set()
         self.pay_lock = threading.Lock()
         self.log: list[str] = []
@@ -158,8 +158,8 @@ class Session:
         """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
         while True:
             try:
-                for d in {d.seller for d in self.deals}:
-                    flow.enter_rulings(self.home, self.maya, d, self.say)
+                if self.maya.notes(flow.CASE):
+                    flow.enter_rulings(self.home, self.maya, buyer.seller_of(self.maya), self.say)
                 buyer.seller_statements(self.home, self.maya)
             except Exception as exc:  # shown in the next tool's output
                 self.say(f"could not read the adjudicator yet: {exc}")
@@ -438,6 +438,10 @@ def ard_case() -> None:
             print(f"  {buyer_name}'s book: not shown to the adjudicator")
         for line in c.deciding:
             print(f"  {line}")
+        for r in _adjudicator().rulings(c.case):
+            who = seller_name if r.get("against") == "seller" else buyer_name if r.get("against") == "buyer" else "no one"
+            found = "not met" if r.get("value") == "not_met" else "met"
+            print(f"  ruling recorded: {found}, against {who} (ruling {r['digest'][:8]}…)")
 
 
 @_tool("adjudicator")
@@ -460,8 +464,11 @@ def ard_rule(seller: str) -> None:
         print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name} "
               f"({'new' if r.get('sealed') else 'already recorded'}).")
         if pt.witnessed():
-            a.witness()
-            print(f"Its stamp was sent to {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
+            if a.witness():
+                print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
+            else:
+                print(f"Not yet time-stamped: {pt.WITNESS_NAME} took no stamp within a minute (no network?). Each "
+                      "party's window shows the time once it is.")
         print("Both parties can fetch it now; each enters it in its own records.")
         return
     raise RuntimeError(f"no case about {seller_name}")

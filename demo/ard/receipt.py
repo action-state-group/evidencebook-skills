@@ -24,7 +24,7 @@ AUDIENCE = "keep"
 PLAIN = {
     "page.title": "Order receipt",
     "sides.missing.none": "Only this side's records are in this receipt: the other party keeps its own copy.",
-    "seller.handover.none": "Not tracked in this demo",
+    "seller.handover.none": "Not tracked here",
 }
 #: How each row status reads (evidencebook ``rowstatus``), in this demo's words.
 STATUS = {

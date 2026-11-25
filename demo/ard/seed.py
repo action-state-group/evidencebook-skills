@@ -57,7 +57,7 @@ def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator:
         # A payment pauses for a person whatever the materiality predicate says. The sample buyer is the demo
         # operator's own stand-in, so its answer is the operator's, in words that say so.
         buyer.approve(deal_id, check, "proceed", SAMPLE_APPROVAL)
-    seller.receive(buyer.pay_leg(deal_id, check["check_id"], ref))
+    seller.receive(buyer.pay_leg(deal_id, check["check_id"]))
     buyer.receive(seller.received_leg(deal_id, price_msat, ref))
     commit = seller.check(deal_id, "commit", ITEM, price_msat, "the buyer")
     if not commit.get("proceed"):
@@ -84,9 +84,18 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
     buyer = ps[SAMPLE_BUYER]
     errors: list[str] = []
 
+    for name in SELLERS:  # a home a run has used is not seeded again: its cards count live deals and rulings
+        try:
+            card, _, _ = flow.read_card(ps[name].card_bundle(shared=True))
+        except pt.Refused:
+            continue
+        if card["outcomes"]["did_not_hold"] or card["disputes"]["received"]["of"] or card["outcomes"]["of"] > DEALS_EACH:
+            raise SystemExit(f"{name}'s card already counts deals of a run ({card['outcomes']['of']} deals, "
+                             f"{card['disputes']['received']['of']} disputes): run `demo.py reset`, then `demo.py seed`")
+
     def run(name: str) -> None:
         seller, price = ps[name], SELLERS[name]["price_msat"]
-        have = sum(1 for d in seller.deals() if d.get("version") == "x-deal-v1")
+        have = sum(1 for d in seller.deals() if d.get("version") == "x-deal-v1" and d.get("counterparty_key") == buyer.key_id)
         for i in range(have, DEALS_EACH):
             try:
                 sample_deal(buyer, seller, price, named)
@@ -118,7 +127,7 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
                 of, ok = held(ps[name])
             except pt.Refused:
                 of, ok = 0, 0
-            if of >= DEALS_EACH and ok >= DEALS_EACH:
+            if of == DEALS_EACH and ok == DEALS_EACH:
                 say(f"{name}: {of} deals, all held")
                 break
             if time.monotonic() > stop:

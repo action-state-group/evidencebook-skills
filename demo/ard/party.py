@@ -31,6 +31,10 @@ _paths.setup()
 import goose_node as gn  # noqa: E402
 from ctl import Ctl, Refused  # noqa: E402
 
+# The Goose reference's Ctl and engine read their binaries from these; the demo's own variables name them.
+os.environ.setdefault("GOOSE_CAPSULECTL_DEAL", os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"))
+os.environ.setdefault("GOOSE_CAPSULE_ENGINE", os.environ.get("CAPSULE_ENGINE", "capsule-engine"))
+
 __all__ = ["Party", "Refused", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "witnessed"]
 
 #: Action State's hosted witness, ``deal init``'s default (capsulectl ``DealDefaultWitness``, ``DealDefaultWitnessKey``,
@@ -70,8 +74,6 @@ class Party:
         self.name = name
         self.dir = Path(home).expanduser() / name
         self.profile = f"ard-{name}"
-        os.environ.setdefault("GOOSE_CAPSULECTL_DEAL", os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"))
-        os.environ.setdefault("GOOSE_CAPSULE_ENGINE", os.environ.get("CAPSULE_ENGINE", "capsule-engine"))
         self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.ctl = Ctl(self.dir, self.profile)
         self.node = gn.Node(self.dir, self.profile, "ard-demo@v2", self.ctl)
@@ -244,8 +246,9 @@ class Party:
         return self.run("note", "--deal", deal_id, "--kind", "approval", "--check", check["check_id"], "--choice", choice,
                         "--said", said, "--shown-card", self.write("card.txt", check["card"]))
 
-    def pay_leg(self, deal_id: str, check_id: str, payment_ref: str) -> str:
-        """The buyer's payment: counted as in flight, then the payer leg settled, written for the seller."""
+    def pay_leg(self, deal_id: str, check_id: str) -> str:
+        """The buyer's payment: counted as in flight, then the payer leg settled, written for the seller. The payment
+        reference is the one the check bound."""
         try:
             self.run("settle", "--deal", deal_id, "--sent", "--check", check_id, "--payment-ref-type", "ln.payment_hash")
         except Refused as exc:

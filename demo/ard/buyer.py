@@ -29,9 +29,10 @@ PICKED = "ard_pick"
 CARD_RECEIVED = "ard_card_received"
 DEAL_OPENED = "ard_deal_opened"
 #: What the operator fills in for the rows the card cannot answer: the controller the pack's trust roots name, and the
-#: witness of the card's checkpoint. No verb at the pinned evidencebook gives a buyer the witness receipt for a /3
-#: card's anchor (neither the card bundle nor the history_card/2 staple carries one), so Maya cannot check it; the screen
-#: says these are filled in by the operator, not checked (``screens.OPERATOR_NOTE``). Never printed.
+#: witness of the card's checkpoint. At the pinned evidencebook neither the card bundle nor the history_card/2 staple
+#: carries the anchor's witness receipt (evidencebook#891), so ``gather`` finds none to check and the screen says the
+#: witness is filled in by the operator, not checked (``screens.OPERATOR_NOTE``); a card that does carry one is checked
+#: there. Never printed.
 OPERATOR_FACTS = {"controller": "demo-controller", "witness": pt.WITNESS_KEY}
 
 
@@ -104,7 +105,7 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
                           f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {r.anchor_time}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
-    elif r.witness_status == "withheld":  # the card carries none: no verb hands a buyer one yet (evidencebook#891)
+    elif r.witness_status in ("withheld", ""):  # none carried, or none reported: no verb hands a buyer one (#891)
         ev.stated("witness", "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet")
     else:
         ev.fail("witness", f"the card's witness receipt does not verify ({r.witness_status or 'no status'})")
@@ -121,6 +122,9 @@ def own_history(maya: pt.Party, seller_key: str) -> Own:
     """Maya's own deals with the seller, from capsulectl: each deal's report as it stands. A row ruled by the deal's
     adjudicator is a verdict, adverse when it went against the seller."""
     own = Own()
+    stamped = {n["statement"]["deal_id"]: n["statement"].get("stamped_at", "")
+               for kind in (flow.RULING_ENTERED, flow.RULING_STAMPED) for n in maya.notes(kind)
+               if n["statement"].get("stamped_at")}
     for d in maya.deals():
         if d.get("version") != "x-deal-v1" or d.get("counterparty_key") != seller_key:
             continue
@@ -134,7 +138,9 @@ def own_history(maya: pt.Party, seller_key: str) -> Own:
         for row in report.get("rows", []):
             r = row.get("ruling")
             if r and r.get("final"):
-                own.rulings.append({"deal_id": d["deal_id"], "at": d.get("last_record_at", ""), "row": row["id"],
+                # the ruling's time is when the witness stamped it; until then, when Maya's records last changed
+                own.rulings.append({"deal_id": d["deal_id"], "at": stamped.get(d["deal_id"]) or d.get("last_record_at", ""),
+                                    "row": row["id"],
                                     "value": r.get("value"), "adverse": r.get("against") == "seller"})
     return own
 
@@ -194,8 +200,10 @@ class Deal:
     seller_key: str
     price_msat: int
     offer: str
+    #: the rail token the intent and the check seal (pay.Rail.SEALED: "simulated" on the fake rail)
     rail: str = "lightning"
-    me: str = BUYER  # the buyer's folder on the wire: the seller answers there  # the rail token the intent and the check seal (pay.Rail.SEALED: "simulated" on the fake rail)
+    #: the buyer's folder on the wire: the seller answers there
+    me: str = BUYER  # the rail token the intent and the check seal (pay.Rail.SEALED: "simulated" on the fake rail)
 
 
 def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,
@@ -210,8 +218,8 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
     deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me)
     wire.send_json(home, seller, deal.deal_id, "from", {"buyer": me})  # before the offer: where the seller answers
     wire.send(home, seller, deal.deal_id, "offer", o["file"])
-    maya.note(DEAL_OPENED, {"deal_id": deal.deal_id, "seller": seller_key, "price_msat": deal.price_msat},
-              subject_ref=deal.deal_id)
+    maya.note(DEAL_OPENED, {"deal_id": deal.deal_id, "seller": seller_key, "seller_name": seller, "price_msat": deal.price_msat,
+                            "offer": deal.offer, "rail": rail, "me": me}, subject_ref=deal.deal_id)
     say(f"offer sent to {label(seller)}: {deal.price_msat:,} msat for {ITEM}; the agreement names the deal's adjudicator "
         f"and {pt.WITNESS_NAME}")
     maya.receive(wire.wait(home, me, deal.deal_id, "agree", flow.WAIT_S))
@@ -222,6 +230,22 @@ def open_deal(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: 
     wire.send(home, seller, deal.deal_id, "agree", agreed["file"])
     say(f"agreed: both sides signed the agreement for deal {deal.deal_id[5:13]}")
     return deal
+
+
+def deals_from_notes(maya: pt.Party) -> list[Deal]:
+    """Maya's deals, oldest first, from her own node book: a reopened window has no other memory of them."""
+    out = []
+    for n in maya.notes(DEAL_OPENED):
+        st = n["statement"]
+        if "seller_name" in st:
+            out.append(Deal(st["deal_id"], st["seller_name"], st["seller"], st["price_msat"], st["offer"], st["rail"], st["me"]))
+    return out
+
+
+def seller_of(maya: pt.Party) -> Callable[[str], str]:
+    """The seller's folder on the wire for each of Maya's deals: a ruling's naming statement goes to that deal's seller."""
+    by_deal = {d.deal_id: d.seller for d in deals_from_notes(maya)}
+    return lambda deal_id: by_deal[deal_id]
 
 
 def check_payment(maya: pt.Party, deal: Deal, payment_ref: str) -> dict:
@@ -236,7 +260,7 @@ def check_payment(maya: pt.Party, deal: Deal, payment_ref: str) -> dict:
 def pay(home: Path, maya: pt.Party, deal: Deal, check: dict, reference: str, simulated: bool) -> None:
     """After the rail paid: the payer leg, handed to the seller with the payment's reference (the seller's payee leg
     names it)."""
-    leg = maya.pay_leg(deal.deal_id, check["check_id"], reference)
+    leg = maya.pay_leg(deal.deal_id, check["check_id"])
     wire.send_json(home, deal.seller, deal.deal_id, "ref",
                    {"amount_msat": deal.price_msat, "payment_ref": reference, "simulated": simulated})
     wire.send(home, deal.seller, deal.deal_id, "paid", leg)

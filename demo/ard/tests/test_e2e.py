@@ -109,13 +109,19 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert "Kestrel Print's own signed delivery record: partial:badges_150_of_200" in view.deciding
     r = w["adj"].rule(view.case, view.dispute, view.copies, view.row, "not_met", "seller")
     assert r["sealed"]
-    w["adj"].witness()
+    assert w["adj"].witness() > 0
 
     # each side enters it in its own records and sends its book; the entry check reads both
     _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "kestrel", lambda *_: None) or True)
            and w["maya"].notes(flow.BOOK_SENT), 300)
     _until(lambda: w["agents"]["kestrel"].party.notes(flow.BOOK_SENT), 300)
     assert {x["words"] for x in w["adj"].entry(view.case, r["ruling"])} == {"entered"}
+
+    # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
+    import buyer as b
+    assert [d.deal_id for d in b.deals_from_notes(w["maya"])] == [deal.deal_id]
+    assert b.seller_of(w["maya"])(deal.deal_id) == "kestrel"
+    assert [x["against"] for x in w["adj"].rulings(view.case)] == ["seller"]
 
     # Kestrel's own card counts it after its next checkpoint
     def kestrel_card():

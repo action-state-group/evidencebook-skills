@@ -6,8 +6,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import os
+
+import pytest
+
+import adjudicator as adj
 import buyer
 import flow
+import pack as packs
 import pages
 import screens
 
@@ -71,7 +77,7 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 def test_no_line_a_person_reads_names_the_demo():
     lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
              screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print"), screens.signed_line("Kestrel Print", True),
-             pages.WITNESS_NOTE]
+             pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
 
 
@@ -99,3 +105,24 @@ def test_a_history_row_says_capsulectls_statuses_and_derives_no_outcome():
     assert row["outcome"] == "this party's row: ruled, not met; the other party's row: met"
     assert "held" not in row["outcome"] and row["witness"] == {"state": "none"}
     assert pages.labels(card(of=25, dnh=1, against=1), witnessed=False) == [screens.card_line(card(of=25, dnh=1, against=1))]
+
+
+@pytest.mark.skipif(not os.environ.get("CAPSULE_ENGINE"), reason="CAPSULE_ENGINE names the evaluator")
+def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
+    """The demo pack 2.0.0 under capsule-engine: a verified card that carries no dispute tally is not read as clean, and
+    one lost dispute limits (Steven's #280 rule); never NO from the card."""
+    p = packs.starting()
+    now = datetime(2026, 11, 25, tzinfo=timezone.utc)
+    clean = buyer.inputs(buyer.Evidence("alder", card=card()), 1000, buyer.Own(), now)
+    no_tally = buyer.inputs(buyer.Evidence("alder", card=card()), 1000, buyer.Own(), now)
+    no_tally["card"]["disputes"].pop("decided")
+    lost = buyer.inputs(buyer.Evidence("kestrel", card=card(of=25, dnh=1, against=1)), 1000, buyer.Own(), now)
+    clean["card"].update(first_checkpoint_at="2026-11-24T00:00:00Z", latest_checkpoint_at="2026-11-24T23:00:00Z")
+    for d in (no_tally, lost):
+        d["card"].update(first_checkpoint_at="2026-11-24T00:00:00Z", latest_checkpoint_at="2026-11-24T23:00:00Z")
+    assert buyer.pt.decide(p.path, clean)["verdict"] == "GO"
+    for d in (no_tally, lost):
+        got = buyer.pt.decide(p.path, d)
+        assert got["verdict"] == "LIMIT", got
+        row = next(r for r in got["rows"] if r["row"] == "disputes-against")
+        assert row["result"] in ("fail", "not_read"), row
