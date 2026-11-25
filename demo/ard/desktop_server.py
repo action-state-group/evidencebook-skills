@@ -93,6 +93,7 @@ class Session:
         self.deal_ids: list[str] = []     # this run's deals, oldest first (the receipt shows the latest)
         self.attempted: set[str] = set()  # payments started: a failure mid-way is not a retry
         self.declined: set[str] = set()   # the presenter's last dialog for this seller was not approved
+        self.declined_how: dict[str, str] = {}  # and how it ended (rules.NO or rules.NOT_SHOWN)
         self.pay_lock = threading.Lock()  # one check, approval and payment at a time
         rail: pay.Rail = pay.from_env(os.environ.get("ARD_RAIL", "fake"))
         kestrel_card = os.environ.get("ARD_KESTREL_CARD", "sentinel")
@@ -124,37 +125,61 @@ def dialog_text(text: str) -> str:
     return text.replace("\\", " ").replace('"', "'")
 
 
-def approve_payment(summary: str) -> bool:
-    """The presenter's approval, out of band: a native dialog on the presenter's screen that the agent neither reads
-    nor answers through the chat (a code returned in the tool's output would reach the agent, which could reuse it in
-    the same turn). True only for the Pay button; Cancel, a timeout, no screen or any error is a refusal.
-    ``ARD_APPROVAL=none`` turns the gate off (tests only; the tool says so in its output)."""
+def _dialog(script: str, yes: str) -> str:
+    """Show one native dialog and say how it ended: ``"yes"`` (the ``yes`` button), :data:`rules.NO` (the other
+    button), :data:`rules.NO_ANSWER` (it gave up, nobody clicked) or :data:`rules.NOT_SHOWN` (no screen, or any error)."""
     import subprocess
 
-    text = dialog_text(summary)
-    script = (f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
-              f'default button "Cancel" cancel button "Cancel" with icon caution giving up after {parties.DIALOG_GIVE_UP_S}')
     try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
+        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                             timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
+    except subprocess.TimeoutExpired:  # past its own give-up: the dialog was most likely on screen, unanswered
+        return rules.NO_ANSWER
     except (OSError, subprocess.SubprocessError):
-        return False
-    return run.returncode == 0 and "button returned:Pay" in run.stdout and "gave up:true" not in run.stdout
+        return rules.NOT_SHOWN
+    if run.returncode == 0 and "gave up:true" in run.stdout:
+        return rules.NO_ANSWER
+    if run.returncode == 0 and f"button returned:{yes}" in run.stdout:
+        return "yes"
+    if "(-128)" in (getattr(run, "stderr", "") or "") or (run.returncode == 0 and "button returned:" in run.stdout):
+        return rules.NO  # the cancel button (osascript: "User canceled. (-128)")
+    return rules.NOT_SHOWN
+
+
+def payment_answer(summary: str) -> str:
+    """The presenter's approval, out of band: a native dialog on the presenter's screen that the agent neither reads
+    nor answers through the chat (a code returned in the tool's output would reach the agent, which could reuse it in
+    the same turn). ``"yes"`` only for the Pay button; else how it ended (:func:`_dialog`).
+    ``ARD_APPROVAL=none`` turns the gate off (tests only; the tool says so in its output)."""
+    text = dialog_text(summary)
+    return _dialog(f'display dialog "{text}" with title "Approve this payment" buttons {{"Cancel", "Pay"}} '
+                   f'default button "Cancel" cancel button "Cancel" with icon caution giving up after {parties.DIALOG_GIVE_UP_S}',
+                   "Pay")
+
+
+def approve_payment(summary: str) -> bool:
+    """True only for the Pay button (:func:`payment_answer`)."""
+    return payment_answer(summary) == "yes"
+
+
+def hold_answer(title: str, text: str) -> str:
+    """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
+    :func:`payment_answer`, with :func:`screens.hold_question`'s title and text and Steven's buttons (#270); ``"yes"``
+    only for Buy anyway, else how it ended."""
+    return _dialog(f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" '
+                   "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
+                   f"with icon caution giving up after {parties.DIALOG_GIVE_UP_S}", "Buy anyway")
 
 
 def approve_hold(title: str, text: str) -> bool:
-    """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
-    :func:`approve_payment`, with :func:`screens.hold_question`'s title and text and Steven's buttons (#270); True only
-    for Buy anyway. Don't buy, a timeout, no screen or any error is a decline."""
-    import subprocess
+    """True only for Buy anyway (:func:`hold_answer`)."""
+    return hold_answer(title, text) == "yes"
 
-    script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" '
-              "buttons {\"Don't buy\", \"Buy anyway\"} default button \"Don't buy\" cancel button \"Don't buy\" "
-              f"with icon caution giving up after {parties.DIALOG_GIVE_UP_S}")
-    try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return run.returncode == 0 and "button returned:Buy anyway" in run.stdout and "gave up:true" not in run.stdout
+
+#: What Maya is told when the person was asked and did not say yes (PM's words for no answer, on #239 finding 11).
+NOT_YES = {rules.NO: "the presenter declined it",
+           rules.NO_ANSWER: "No answer in time, so the order was not placed and nothing was paid",
+           rules.NOT_SHOWN: "the dialog could not be shown, so the order was not placed and nothing was paid"}
 
 
 def _ask_order(summary: str, real: bool, rail_name: str, seller: str = "", rail: str = ""):
@@ -168,14 +193,15 @@ def _ask_order(summary: str, real: bool, rail_name: str, seller: str = "", rail:
         if outcome.held:
             title, text = screens.hold_question(outcome.item, outcome.amount_msat, outcome.limits, outcome.reasons,
                                                 outcome.over_limit, seller=seller, rail=rail)
-            if not approve_hold(title, text):
-                return None
+            answer = hold_answer(title, text)
+            if answer != "yes":
+                return answer
             print(screens.rules_approved(outcome.reasons, outcome.over_limit))
             return rules.Answer(dialog_text(f"{title}\n{text}"), "Buy anyway")
         try:
             clicked = approval_gate(real, rail_name, summary)
-        except NotApproved:
-            return None
+        except NotApproved as no:
+            return no.answer
         return clicked or True  # True: the gate is off on a simulated rail (ARD_APPROVAL=none), no one clicked
     return ask
 
@@ -307,10 +333,29 @@ else:
 
 
 class NotApproved(RuntimeError):
-    """The presenter's dialog did not approve the payment."""
+    """The presenter's dialog did not approve the payment; ``answer`` says how it ended (:data:`NOT_YES`)."""
+
+    def __init__(self, message: str, answer: str = rules.NO):
+        super().__init__(message)
+        self.answer = answer
 
 
-def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | None:
+def _try_again(question: str) -> str:
+    """What the agent is told after a dialog nobody answered: PM's words, asked once with the payment it is about, so a
+    yes is the one confirmation for the retry (one question per order, PM on #278)."""
+    return (f'{NOT_YES[rules.NO_ANSWER]}. Ask Maya exactly this, as one question: "{NOT_YES[rules.NO_ANSWER]}. Want to try '
+            f'again? ({question})" Never say she declined it. If she says yes, call ard_pay again: do not ask her again; '
+            "the presenter's click in the next dialog stays the gate. Do not retry on your own.")
+
+
+def _not_approved(answer: str, question: str) -> NotApproved:
+    if answer == rules.NO_ANSWER:
+        return NotApproved(_try_again(question), answer)
+    return NotApproved(f"the presenter did not approve this payment ({NOT_YES[answer]}): nothing was paid. Do not retry on "
+                       "your own; if Maya asks again, confirm with her first.", answer)
+
+
+def approval_gate(real: bool, rail_name: str, summary: str, question: str = "") -> rules.Answer | None:
     """Return only when this payment may go ahead: the presenter clicked Pay (their answer: the dialog's words and Pay,
     which the deal's approval record names), or the gate is off on a simulated rail (``None``: no one clicked)."""
     if os.environ.get("ARD_APPROVAL") == "none":
@@ -319,9 +364,9 @@ def approval_gate(real: bool, rail_name: str, summary: str) -> rules.Answer | No
                                "unset it so the presenter approves the payment. Nothing was paid.")
         print("(approval gate off: ARD_APPROVAL=none, simulated rail, tests only)")
         return None
-    if not approve_payment(summary):
-        raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
-                           "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.")
+    answer = payment_answer(summary)
+    if answer != "yes":
+        raise _not_approved(answer, question or summary)
     return rules.Answer(dialog_text(summary), "Pay")
 
 
@@ -354,6 +399,8 @@ def ard_pay(seller: str) -> None:
             rail = (f"over Lightning: this moves real money, to a wallet {shared} share" if real
                     else "on the simulated rail: no money moves")
             summary = f"Pay {label} {amount} {rail}."
+            question = f"Pay {label} {amount} " + ("over Lightning, which moves real money?" if real
+                                                   else "on the simulated rail, where no money moves?")
             if key in s.declined:
                 # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
                 # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
@@ -362,18 +409,19 @@ def ard_pay(seller: str) -> None:
                 # next call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
-                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
-                    f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
-                    + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
-                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was '
-                    "declined, and she said yes, call ard_pay again now: do not ask her again. "
+                    f"the presenter did not approve the last payment to {label} ({NOT_YES[s.declined_how.get(key, rules.NO)]}), "
+                    f'so this call opens no dialog and pays nothing. The question is: "{question}'
+                    + '" If you asked Maya to confirm this payment (the seller, the amount and the rail) after that dialog, '
+                    "and she said yes, call ard_pay again now: do not ask her again. "
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
             ask, clicked = None, None
             if limit is None:
                 try:
-                    clicked = approval_gate(real, rail_name, summary)
-                except NotApproved:
-                    s.declined.add(key)
+                    clicked = approval_gate(real, rail_name, summary, question)
+                except NotApproved as no:
+                    if no.answer != rules.NO_ANSWER:  # no answer: its refusal already put the question to Maya, once
+                        s.declined.add(key)
+                        s.declined_how[key] = no.answer
                     raise
             else:  # under a spending limit the one dialog comes after the deal check, so it can carry the hold reasons
                 ask = _ask_order(summary, real, rail_name, label, rail)
@@ -390,14 +438,17 @@ def ard_pay(seller: str) -> None:
         s.attempted.discard(key)
         if was_paid:
             s.paid.add(key)
-        if isinstance(stopped, rules.RuleHeld):
+        if isinstance(stopped, rules.RuleHeld) and stopped.answer != rules.NO_ANSWER:
             s.declined.add(key)  # the next call hands the agent the question again instead of reopening the dialog
-        if isinstance(stopped, rules.RuleHeld) and not stopped.reasons:  # the payment dialog was cancelled, nothing held
-            raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
-                              "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.") from None
+            s.declined_how[key] = stopped.answer
+        if isinstance(stopped, rules.RuleHeld) and not stopped.reasons:  # the payment dialog, nothing held
+            raise _not_approved(stopped.answer, question) from None
+        if isinstance(stopped, rules.RuleHeld) and stopped.answer == rules.NO_ANSWER:
+            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} Tell Maya which rule held the order and why. "
+                               f"{_try_again(question)}") from None
         if isinstance(stopped, rules.RuleHeld):
-            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
-                               "order and why, and that nothing was paid; do not try to pay around it.") from None
+            raise RuntimeError(f"{screens.rules_held(stopped.reasons)} {NOT_YES[stopped.answer].capitalize()}. Tell Maya which "
+                               "rule held the order and why, and that nothing was paid; do not try to pay around it.") from None
         if isinstance(stopped, rules.RulesRefused):
             raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the Everyday Rules did not allow this order; do not "
                                "pay around it.") from None

@@ -101,3 +101,48 @@ def test_only_the_buy_anyway_button_approves_a_held_order(monkeypatch):
 def test_anything_else_declines_a_held_order(monkeypatch, kw):
     hold_answer(monkeypatch, **kw)
     assert ds.approve_hold("This order goes over your weekly limit", "200 badges ...") is False
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,raises,expected", [
+    (0, "button returned:Buy anyway, gave up:false\n", "", None, "yes"),
+    (0, "button returned:, gave up:true\n", "", None, ds.rules.NO_ANSWER),  # nobody clicked before it gave up
+    (1, "", "execution error: User canceled. (-128)", None, ds.rules.NO),  # Don't buy, the cancel button
+    (1, "", "execution error: no display", None, ds.rules.NOT_SHOWN),
+    (0, "", "", OSError("no osascript"), ds.rules.NOT_SHOWN),
+    (0, "", "", subprocess.TimeoutExpired("osascript", 200), ds.rules.NO_ANSWER),  # hung past its give-up (PM's nit)
+])
+def test_the_dialog_says_how_it_ended_so_a_timeout_is_never_called_a_decline(monkeypatch, returncode, stdout, stderr,
+                                                                               raises, expected):
+    # #239 finding 11: a dialog that timed out was reported to Maya as "declined"
+    def run(cmd, **kw):
+        if raises:
+            raise raises
+        return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+    monkeypatch.setattr(subprocess, "run", run)
+    assert ds.hold_answer("Held", "200 badges ...") == expected
+    assert ds.approve_hold("Held", "200 badges ...") is (expected == "yes")
+
+
+
+@pytest.mark.parametrize("returncode,stdout,stderr,expected", [
+    (0, "button returned:Pay, gave up:false\n", "", "yes"),
+    (0, "button returned:, gave up:true\n", "", ds.rules.NO_ANSWER),
+    (1, "", "execution error: User canceled. (-128)", ds.rules.NO),
+    (0, "button returned:Cancel, gave up:false\n", "", ds.rules.NO),  # a cancel button that returns instead of raising
+    (1, "", "execution error: no display", ds.rules.NOT_SHOWN),
+])
+def test_the_payment_dialog_says_how_it_ended_too(monkeypatch, returncode, stdout, stderr, expected):
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr))
+    assert ds.payment_answer("Pay X") == expected and ds.approve_payment("Pay X") is (expected == "yes")
+
+
+def test_no_answer_without_a_limit_puts_the_one_question_with_the_payment(monkeypatch):
+    monkeypatch.delenv("ARD_APPROVAL", raising=False)
+    monkeypatch.setattr(ds, "payment_answer", lambda summary: ds.rules.NO_ANSWER)
+    with pytest.raises(ds.NotApproved) as no:
+        ds.approval_gate(False, "fake", "Pay X 2,000 msat on the simulated rail: no money moves.",
+                         "Pay X 2,000 msat on the simulated rail, where no money moves?")
+    assert no.value.answer == ds.rules.NO_ANSWER
+    assert ('"No answer in time, so the order was not placed and nothing was paid. Want to try again? (Pay X 2,000 msat '
+            'on the simulated rail, where no money moves?)"') in str(no.value) and "declined" not in str(no.value).replace(
+            "Never say she declined it", "")
