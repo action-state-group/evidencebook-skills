@@ -24,7 +24,8 @@ MAX_FEE_MSAT = 1000
 _INVOICE = re.compile(r"\bln(?:bc|tb|bcrt)[0-9a-z]+\b")
 
 
-#: How long the real rail waits for a payment to finish.
+#: How long the real rail waits for the seller's invoice, and for a payment to finish.
+INVOICE_WAIT_S = 150
 PAY_WAIT_S = 180
 
 class RailError(RuntimeError):
@@ -209,7 +210,7 @@ class LocalRail(Rail):
         return {"seller": self._run("balance", "--wallet", self.seller), "buyer": self._run("balance", "--wallet", self.buyer)}
 
     def invoice(self, amount_msat: int) -> Invoice:
-        made = self._run("invoice", str(amount_msat), "--wallet", self.seller)
+        made = self._run("invoice", str(amount_msat), "--wallet", self.seller, timeout=INVOICE_WAIT_S)
         invoice = made.get("invoice")
         if not isinstance(invoice, str):
             raise RailError("the seller's wallet returned no invoice")

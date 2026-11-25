@@ -469,15 +469,18 @@ def test_todays_run_draws_no_v1_page(monkeypatch, tmp_path):
         receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
-def test_times_show_in_local_time_with_the_zone(request, monkeypatch):
+def test_times_show_in_local_time_with_the_zone(monkeypatch):
     # run finding F7 (2026-11-25): a person reads local time; the records keep UTC
     import time
-    monkeypatch.setenv("TZ", "America/Chicago")
-    time.tzset()
-    request.addfinalizer(time.tzset)  # runs after monkeypatch puts TZ back, so later tests see the restored zone
-    assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
-    assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
-    assert screens.local_time("not a time") == "not a time"
+    try:
+        with monkeypatch.context() as m:
+            m.setenv("TZ", "America/Chicago")
+            time.tzset()
+            assert screens.local_time("2026-11-25T18:16:32Z") == "12:16:32 CST"
+            assert screens.local_time("2026-11-25T18:16:32Z", date=True) == "2026-11-25 12:16:32 CST"
+            assert screens.local_time("not a time") == "not a time"
+    finally:
+        time.tzset()  # after the context put TZ back, so later tests see the restored zone
 
 
 def _receipt_without_time() -> str:
@@ -559,4 +562,4 @@ def test_the_tool_timeout_covers_the_longest_call():
     spec = importlib.util.spec_from_file_location("open_windows", __import__("pathlib").Path(__file__).parent.parent / "goose" / "open-windows.py")
     ow = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ow)
-    assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.PAY_WAIT_S
+    assert ow.TOOL_TIMEOUT_S > ds.DIALOG_GIVE_UP_S + 20 + 2 * flow.WAIT_S + pay.INVOICE_WAIT_S + pay.PAY_WAIT_S
