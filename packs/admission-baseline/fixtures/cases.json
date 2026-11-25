@@ -1,6 +1,6 @@
 {
- "pack": "asg/admission_baseline/1.0.0",
- "source": "evidencebook-skills#51: admission-baseline@1's fixtures. Each case is an evaluator input (admission pack profile v0 \u00a75) and the decision expected, written by hand. capsule-engine#265's evaluator (Go and Rust) decides every case in its CI; evidencebook#189 reads them for guide Path 4.",
+ "pack": "asg/admission_baseline/1.1.0",
+ "source": "evidencebook-skills#51: admission-baseline@1's fixtures. Each case is an evaluator input (admission pack profile v0 §5) and the decision expected, written by hand. capsule-engine#265's evaluator (Go and Rust) decides every case in its CI; evidencebook#189 reads them for guide Path 4.",
  "cases": [
   {
    "case": "t0-go-on-platform-rows",
@@ -320,7 +320,7 @@
   },
   {
    "case": "t1-stranger-climbs-on-its-own-card",
-   "why": "A stranger with no history with us reaches T1 on its own fresh, witnessed card with claims held (design \u00a74).",
+   "why": "A stranger with no history with us reaches T1 on its own fresh, witnessed card with claims held (design §4).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -338,6 +338,112 @@
      "claims": {
       "held": 12,
       "total": 14
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-a-dispute-lost-to-another-party-limits",
+   "why": "The card shows one dispute about the counterparty decided against it, in a deal our own book does not hold: the disputes-against row limits to T0 (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 0,
+      "of": 2,
+      "decided": {
+       "against": 1,
+       "of": 2
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-no-dispute-lost-goes",
+   "why": "The card shows disputes, none decided against the counterparty and one still open: the disputes-against row passes and the open-disputes row is recorded (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "claims": {
+      "held": 12,
+      "total": 14
+     },
+     "disputes": {
+      "open": 1,
+      "of": 3,
+      "decided": {
+       "against": 0,
+       "of": 2
+      }
      }
     },
     "selection": {},

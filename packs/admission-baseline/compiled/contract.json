@@ -1,6 +1,6 @@
 {
-  "id": "asg/admission_baseline/1.0.0",
-  "version": "1.0.0",
+  "id": "asg/admission_baseline/1.1.0",
+  "version": "1.1.0",
   "requirements": [
     {
       "id": "attestation",
@@ -116,6 +116,24 @@
       "statement": "No deal with the counterparty is CONFLICTING in this party's own book.",
       "tier": "must_have",
       "evidence_rule": "admission check own.no_conflicting, from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "disputes-against",
+      "profile": "outcome",
+      "statement": "The counterparty's card shows no dispute about it decided against it, out of the disputes decided.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.disputes_against (max 0), from tier T1; a failure gives LIMIT; when the card verified but carries no dispute tally, recorded, deciding nothing",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
+      "id": "open-disputes",
+      "profile": "outcome",
+      "statement": "The counterparty's card shows how many disputes about it are still open, out of all it received.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.open_disputes (max 0), from tier T1; recorded, deciding nothing",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },

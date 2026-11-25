@@ -1,4 +1,4 @@
-# admission-baseline@1 -- the baseline admission pack (#51), in admission pack
+# admission-baseline@1.1 -- the baseline admission pack (#51), in admission pack
 # profile v0 (docs/admission-pack-profile-v0.md).
 #
 # A relying party runs it before an act, over what it received about the
@@ -35,11 +35,11 @@
 # stake. Pinning none keeps this pack's compiled bytes and digest.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
-pack_id: asg/admission_baseline/1.0.0
-pack_version: 1.0.0
+pack_id: asg/admission_baseline/1.1.0
+pack_version: 1.1.0
 scope:
   kind: admission
-source: "evidencebook-skills#51; Reference v3 §3A.2, §3A.14; admission design 2026-10-27 §4"
+source: "evidencebook-skills#51; Reference v3 §3A.2, §3A.14; admission design 2026-10-27 §4; evidencebook-skills#280"
 
 outcomes: ["GO", "ASK", "LIMIT", "NO"]
 # A missing input limits to T0; it is never a silent GO.
@@ -172,6 +172,27 @@ rows:
     check: own.no_conflicting
     from: T1
     on_fail: "LIMIT"
+
+  # Disputes about the counterparty with anyone, as its card shows (#280,
+  # Steven's ruling; profile section 3.3). A dispute decided against it limits;
+  # a verified card with no dispute tally is recorded and does not limit,
+  # Sherlock2's interim until the card asked for at T1 carries the tally
+  # (#281). Open disputes are recorded only: anyone can open one.
+  - id: disputes-against
+    statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
+    source: card
+    check: card.disputes_against
+    params: {max: 0}              # placeholder; LIMIT on any loss is Sherlock2's default
+    from: T1
+    on_fail: "LIMIT"
+    on_unread: "record"
+  - id: open-disputes
+    statement: The counterparty's card shows how many disputes about it are still open, out of all it received.
+    source: card
+    check: card.open_disputes
+    params: {max: 0}              # placeholder
+    from: T1
+    on_fail: "record"
 
   # T2: a selection bound to our ask, with inclusion proofs; the controller in
   # our trust roots; no dispute left unanswered with anyone in 90 days.
