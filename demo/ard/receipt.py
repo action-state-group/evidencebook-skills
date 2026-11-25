@@ -96,8 +96,8 @@ def _rules_name(ruleset_id: str) -> str:
     return f"your rules ({ruleset_id})"
 
 
-def _asks(rules: dict) -> str:
-    """The failing checks in plain words, each once, in the order the rules reported them."""
+def _asks(rules: dict) -> tuple[str, int]:
+    """The failing checks in plain words, each once, in the order the rules reported them, and how many."""
     words: list[str] = []
     for f in rules.get("findings") or []:
         if f.get("verdict") in ("fail", "not_evaluable"):
@@ -105,8 +105,8 @@ def _asks(rules: dict) -> str:
             if w not in words:
                 words.append(w)
     if not words:
-        return "the rules asked"
-    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+        return "one of the rules' checks", 1
+    return (words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]), len(words)
 
 
 def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) -> str:
@@ -128,7 +128,8 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
                 return f"Checked against {name}: allowed"
             if _held_by_limit(body):
                 return f"Checked against {name}: over your limit, so the order was held for your approval"
-            return f"Checked against {name}: {_asks(rules)}, which need your approval"
+            asks, n = _asks(rules)
+            return f"Checked against {name}: {asks}, which {'needs' if n == 1 else 'need'} your approval"
         result = body.get("result") or body.get("disposition")
         return f"Checked: {result}, {len(body.get('differences') or body.get('findings') or [])} difference(s)"
     if kind == "approval":

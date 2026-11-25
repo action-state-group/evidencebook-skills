@@ -362,13 +362,15 @@ def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit
     assert receipt._line("verdict", caps, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
                                                     "over your limit, so the order was held for your approval")
     assert receipt._line("verdict", other, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
-                                                     "a seller you have not paid before, which need your approval")
+                                                     "a seller you have not paid before, which needs your approval")
     first = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
         {"id": "r02", "check": "counterparty_seen_before/4.0.0", "verdict": "fail"},
         {"id": "r06", "check": "counterparty_seen_before/4.0.0", "verdict": "fail"},
         {"id": "r08", "check": "refundability/1.1.0", "verdict": "fail"}]}}
     assert receipt._line("verdict", first, True).endswith(
         ": a seller you have not paid before and a payment that cannot be undone, which need your approval")
+    unnamed = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": []}}
+    assert receipt._line("verdict", unnamed, True).endswith(": one of the rules' checks, which needs your approval")
     allow = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "allow", "findings": []}}
     assert receipt._line("verdict", allow, True) == "Checked against the Everyday Rules (0.3.8) and your spending limit: allowed"
     assert receipt._line("verdict", {"result": "pass", "differences": [], "rules": {"status": "not_configured"}}, True) \
