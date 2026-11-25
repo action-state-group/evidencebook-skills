@@ -62,11 +62,12 @@ def session(tmp_path, monkeypatch):
     return s
 
 
-@pytest.mark.parametrize("how", [ds.NO, ds.NO_ANSWER, ds.NOT_SHOWN])
-def test_no_yes_seals_no_received_statement(session, monkeypatch, sent, how):
+@pytest.mark.parametrize("how,words", [(ds.NO, "Maya chose Cancel"), (ds.NO_ANSWER, "Maya did not answer in time"),
+                                       (ds.NOT_SHOWN, "the dialog could not be shown")])
+def test_no_yes_seals_no_received_statement(session, monkeypatch, sent, how, words):
     monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: how)
     out = ds.ard_confirm_received("alder")
-    assert "REFUSED:" in out and "nothing was sent in Maya's name" in out, out
+    assert f"REFUSED: {words}, so nothing was sent in Maya's name" in out and "presenter" not in out, out
     assert session.maya.statements == [] and sent == []
 
 
@@ -77,4 +78,5 @@ def test_her_yes_seals_it_once(session, monkeypatch, sent):
     assert "already said she received it" in ds.ard_confirm_received("alder")  # a second ask seals nothing more
     assert session.maya.statements == [(DEAL.deal_id, {buyer.pt.PAID: "met", buyer.pt.DELIVERED: "met"})]
     assert sent == [("alder", DEAL.deal_id, "statement")] and len(asked) == 1
-    assert "200 of 200 badges" in asked[0] and asked[0].startswith("Did you receive what you paid for from Alder Print Co.")
+    assert asked[0] == ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges "
+                        "were shipped. Choosing Received sends Alder Print Co. your statement that you received it.")

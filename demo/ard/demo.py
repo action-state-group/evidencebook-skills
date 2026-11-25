@@ -222,8 +222,8 @@ def cmd_run(args) -> int:
             if d2 is not None:
                 name = SELLERS[d2.seller]["label"]
                 print(buyer.after_delivery(d2.seller, "200 of 200 badges"))
-                if s.ask(f"Did you receive what you paid for from {name}? Yes sends {name} your statement that you "
-                         "received it."):
+                if s.ask(f"Did you receive what you paid for from {name}? Choosing yes sends {name} your "
+                         "statement that you received it."):
                     buyer.close_received(home, s.maya, d2)
                     print("Maya's statement sent: she received what she paid for.")
                 else:
