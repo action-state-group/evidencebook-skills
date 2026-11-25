@@ -33,6 +33,19 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -p 'test_*.py'
 
+  viewer-drift:
+    # The demo's vendored capsule-viewer History script against capsule-viewer's newest ts/v* release
+    # (evidencebook-skills#316), in its own job so a new release never stops the demo's own tests from running.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python demo/ard/viewer_drift.py
+
   ard-demo:
     # The ARD two-seller demo (demo/ard): its tests, against the pins the run sheet names: an evidencebook checkout
     # (the Goose reference's Ctl and Node) and the capsulectl-deal built from it, which every party and the adjudicator
@@ -43,7 +56,7 @@ jobs:
     env:
       EVIDENCEBOOK_REF: 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a  # main: #935 (deal report --html), #933 (deal tick --now), #951 (the page on capsule-viewer bb8169bb)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_VIEWER_REF: 125957929578f651d3ab474c56c87e0ad74b324e  # main, with #427 (the receipt page's local times)
+      CAPSULE_VIEWER_REF: 125957929578f651d3ab474c56c87e0ad74b324e  # main; the Python package serves the page only with receipt.DRAW_V1_PAGE off (the receipt page itself is capsulectl's, on the viewer evidencebook's go.mod pins)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,8 +81,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
-      - name: the vendored capsule-viewer History script is its newest release (evidencebook-skills#316)
-        run: python demo/ard/viewer_drift.py
       - id: bins
         uses: actions/cache@v4
         with:

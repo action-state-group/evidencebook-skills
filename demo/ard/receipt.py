@@ -34,7 +34,8 @@ STATUS = {
 ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 
 
-#: On since evidencebook#935, whose page is drawn by capsule-viewer 130877b1 (#420, #421) from the binary's own verify
+#: On since evidencebook#935; the page is drawn by the capsule-viewer evidencebook's go.mod pins (bb8169bb since #951:
+#: local times and one witness line) from the binary's own verify
 #: report: it says the other side's half and the book's witness time as capsulectl verified them (#242). It was off for
 #: the 2026-11-25 run, when capsulectl's first v1 page (64da5152) said "no witness" and "not countersigned" for a
 #: witnessed two-sided deal.

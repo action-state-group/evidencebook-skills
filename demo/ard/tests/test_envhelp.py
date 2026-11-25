@@ -118,7 +118,7 @@ def test_the_ln_pay_local_hint_is_the_pinned_install_everywhere(monkeypatch, tmp
     monkeypatch.setenv("ARD_WALLET_SELLER", str(wallet))
     monkeypatch.delenv("ARD_PAY_LOCAL", raising=False)
     monkeypatch.setenv("PATH", str(tmp_path))  # no ln-pay-local on it
-    with pytest.raises(pay.RailError, match="025d56672d92ea12fda5fe6c3fbb84dd1d40ddf7"):
+    with pytest.raises(pay.RailError, match=envhelp.LN_PAY_LOCAL_COMMIT):
         pay.from_env("local")
     assert any(envhelp.LN_PAY_LOCAL_INSTALL in w for w in envhelp.problems("run", "local")[1])
 
@@ -143,3 +143,10 @@ def test_print_needs_no_wallet_and_writes_placeholders(tmp_path):
     opened = _run("goose/open-windows.py", "--rail", "local",
                   ARD_EVIDENCEBOOK=str(tmp_path / "eb"), CAPSULE_ENGINE=str(exe), CAPSULECTL_DEAL=str(exe))
     assert opened.returncode == 2 and "ARD_WALLET_BUYER" in opened.stderr  # opening still needs them
+
+
+def test_the_ln_pay_local_pin_is_the_runbooks():
+    # #320 review: the recovery command installs the commit the RUNBOOK pins, and can be run again
+    runbook = (Path(__file__).resolve().parent.parent / "RUNBOOK.md").read_text()
+    assert f"git -C $HOME/ard-demo/ln-pay-local checkout -q {envhelp.LN_PAY_LOCAL_COMMIT}" in runbook
+    assert envhelp.LN_PAY_LOCAL_INSTALL.startswith("([ -d $HOME/ard-demo/ln-pay-local ] ||")
