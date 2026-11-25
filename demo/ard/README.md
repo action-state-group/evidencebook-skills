@@ -182,27 +182,31 @@ page (`book report build --receipts`, capsule-viewer 0.22.0); building a report 
 The spending limit. With `ARD_LIMIT_MSAT=2000` set in the shell that starts the windows (Maya's window only reads it),
 Maya's deal check runs the Everyday Rules (`asg/everyday/0.3.8`, embedded in capsule-engine) before any payment: the
 check record is sealed, then `capsule-engine guard check --limits FILE` reads it with Maya's earlier paid orders (the last
-7 days) as history (`rules.py`). The limit is the most she may spend in a rolling 7 days and on one order, in msat; set it
-to the first order's price. The first order passes. A second order to the same seller is a new deal, and its check fails
-the caps rule with the engine's own words; the order is **held for the person's OK**, not refused (Steven, ops u325,
-2026-10-12: a failing caps check on a person-set limit is ESCALATE): the screen says "Held for your OK at deal check, nothing
-paid. The Everyday Rules held this order: the 7-day total with this purchase is over the 7-day limit you set (limit 2,000
-msat, this order would bring it to 4,000 msat)." (Sherlock2, 2026-11-23) and a second dialog asks Approve or Decline
-(default Decline). The presenter declines on stage: nothing is paid, and the decline is sealed as a note in Maya's book
-(`ard_rules_checked`, with the limit, the amount and `decision: declined`). Approving goes on to the payment and seals
-`decision: approved`. The deal is opened and the check sealed after the presenter's click on the payment dialog, so the
-person is asked about the hold after that click; Sherlock2 accepted that for Tuesday, and applying the check before the
-dialog, still as a hold, is the follow-up [evidencebook-skills#223](https://github.com/action-state-group/evidencebook-skills/issues/223).
-The pack's other asks (a new merchant, a payment that cannot be undone) are not held: the payment dialog's words name
-neither, and the person's Pay click, made before the check runs, answers them until
-[evidencebook-skills#223](https://github.com/action-state-group/evidencebook-skills/issues/223) shows them in the dialog. The deal's verdict record seals what the rules said (x-deal-v0 section 8: `rules:
-evaluated`, the ruleset and its digest, the engine's sha256, the verdict, every finding without the engine's words, and the
-history it was given); an `escalate`, which the pack's other asks give on the first order too, pauses the check with one
-`rules_escalate` difference per failing finding. The approval names who answered: `user`, with a commitment to the dialog's
-words and the button, for the Approve click on a held order or the Pay click otherwise (also with no limit set); with the
-dialog off (`ARD_APPROVAL=none`, simulated rail, tests only) it is `standing_intent` on a passing check and `agent_card` on
-a paused one. The buyer's receipt says it in plain words: "Approved by you", "Held by your spending limit, then approved by you", or,
-for the pack's other asks, "Approved by you (your Pay click, made before this check ran)" (evidencebook-skills#261). The note keeps the rules' own words and the person's decision. Needs
+7 days) as history, and the seller keyed per profile so a seller paid before is not new (`rules.py`). The limit is the most
+she may spend in a rolling 7 days and on one order, in msat; set it to the first order's price. Any failing ASK rule
+(rules 5 to 22, 26 and 27 of the Everyday Rules) makes the order **held for the person's OK**, not refused (Steven, ops
+u325 for the caps rule; Sherlock2, 2026-11-23, the rules doc section 4.5 for the rest): one ask that lists every reason,
+one line per rule in the rule's own words. The one dialog comes after the deal check, so under a limit the payment dialog
+is that ask: "Held for your OK" (default Decline), naming the payment and then, for a first order to a seller not paid
+before, "The Everyday Rules held this order for your OK: no earlier payment to this merchant from this profile; the
+payment is not refundable; the up-front amount 2000 is above the share limit. Nothing has been paid yet. Approve this
+order anyway, or decline?"; a second order adds "the 7-day total with this purchase is over the 7-day limit you set
+(limit 2,000 msat, this order would bring it to 4,000 msat)" and "the same act was taken in another deal inside the
+window". When every reason is a spending limit the ask opens "This order is over a spending limit you set: " instead. An
+order nothing holds gets the payment dialog as before (rare with this demo's terms: rules 8 and 22 ask on every order).
+Rule 22 (the up-front part) is fed: the check states that the whole price is due first, which the demo does. A failing
+NEVER rule (23 to 25) is refused and not put to the person. Declining pays nothing and is sealed as a note in Maya's
+book (`ard_rules_checked`, with the limit, the amount, every finding with the rules' words and `decision: declined`);
+approving says "You approved this held order (…). Paying now." and goes on to the payment. The deal's verdict record
+seals what the rules said (x-deal-v0 section 8: `rules: evaluated`, the ruleset and its digest, the engine's sha256, the
+verdict, every finding without the engine's words, and the history it was given); an `escalate` pauses the check with
+one `rules_escalate` difference per failing finding. The approval names who answered: `user`, with a commitment to the
+dialog's words and the button, for the Approve click on a held order or the Pay click otherwise (also with no limit
+set); with the dialog off (`ARD_APPROVAL=none`, simulated rail, tests only) it is `standing_intent` on a passing check
+and `agent_card` on a paused one. The buyer's receipt says it in plain words: "Approved by you", "Held by your spending
+limit, then approved by you", or, for the rules' other asks, "Held for your approval, then approved by you"
+(evidencebook-skills#261). Not fed yet: rule 26 (the buyer's task-authority record, after evidencebook#833 moves the
+Goose reference onto capsulectl-deal). Needs
 capsule-engine go/v0.7.0 or later (`guard check --limits`, capsule-engine#314); an older one refuses the order and says so.
 
 The receipt as a page. `ard_open_receipt_page` writes that party's own receipt for its closed deal as a page under

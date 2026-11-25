@@ -346,8 +346,8 @@ def test_a_sample_deal_its_owner_marked_did_not_hold_says_so_on_its_receipt(seed
 
 def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit():
     """#261 (Sherlock2's wording): the person's click reads "Approved by you"; after a hold by their spending limit it
-    reads "Held by your spending limit, then approved by you"; a pause for the pack's other asks names no limit, and
-    says the Pay click came before the check (Sherlock2's call A on #265)."""
+    reads "Held by your spending limit, then approved by you"; a pause for the pack's other asks names no limit (#230:
+    the one dialog comes after the check and lists every reason, so no click came before it)."""
     caps = {"result": "pause", "rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
                       "findings": [{"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"}]}}
     other = {"result": "pause", "rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
@@ -355,12 +355,15 @@ def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit
                                     {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "pass"}]}}
     user = {"approver": "user"}
     assert receipt._line("approval", user, True, caps) == "Held by your spending limit, then approved by you"
-    assert receipt._line("approval", user, True, other) == "Approved by you (your Pay click, made before this check ran)"
+    assert receipt._line("approval", user, True, other) == "Held for your approval, then approved by you"
     assert receipt._line("approval", user, True, {"rules": {"status": "not_configured"}}) == "Approved by you"
     assert receipt._line("approval", user, True, {"result": "pass", "rules": {"status": "evaluated", "verdict": "allow"}}) \
         == "Approved by you"
     assert receipt._line("verdict", caps, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
                                                     "over your limit, so the order was held for your approval")
+    both = {"result": "pause", "rules": {**caps["rules"], "findings": caps["rules"]["findings"] + other["rules"]["findings"]}}
+    assert receipt._line("verdict", both, True).endswith(  # the limit with the other failing checks, each named once
+        ": over your limit and a seller you have not paid before, so the order was held for your approval")
     assert receipt._line("verdict", other, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
                                                      "a seller you have not paid before, which needs your approval")
     first = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
@@ -375,6 +378,37 @@ def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit
     assert receipt._line("verdict", allow, True) == "Checked against the Everyday Rules (0.3.8) and your spending limit: allowed"
     assert receipt._line("verdict", {"result": "pass", "differences": [], "rules": {"status": "not_configured"}}, True) \
         == "Checked: pass, 0 difference(s)"
+
+
+def test_rules_22_and_27_have_plain_words_and_rule_22_names_the_limit_its_amounts_fail():
+    """Sherlock2 on #237: rule 27 "a repeat of a recent payment to this seller"; rule 22 by the limit it failed (above
+    25% of the price, or above 100.00), read from the sealed check's amounts since the sealed finding does not say."""
+    found = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
+        {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"},
+        {"id": "r08", "check": "refundability/1.1.0", "verdict": "fail"},
+        {"id": "r22", "check": "upfront_amount/1.1.0", "verdict": "fail"},
+        {"id": "r27", "check": "dedupe/1.0.0", "verdict": "fail"}]}}
+    whole = {"upfront_amount_minor": 2000, "terms": {"price_minor": 2000}}
+    assert receipt._line("verdict", found, True, whole).endswith(
+        ": over your limit, a payment that cannot be undone, more than a quarter of the price paid up front and a repeat "
+        "of a recent payment to this seller, so the order was held for your approval")
+    assert receipt._upfront_words({"upfront_amount_minor": 501, "terms": {"price_minor": 2000}}).startswith("more than a quarter")
+    assert receipt._upfront_words({"upfront_amount_minor": 500, "terms": {"price_minor": 2000}}) == "another of the rules' checks"
+    assert receipt._upfront_words({"upfront_amount_minor": 10_001, "terms": {"price_minor": 100_000}}) == "a large amount paid up front"
+    assert receipt._upfront_words(None) == "another of the rules' checks"
+
+
+def test_a_rule_the_ruleset_only_declares_is_not_a_reason_on_the_receipt():
+    """Steven's fix on #237: r14, r24 and r25 are declared by everyday-0.3.8 and not measured, so they come back
+    not_evaluable with no ``check`` (evidencebook rules_declared_test.go). They are never a reason (x-deal-v0 section 8),
+    as the dialog leaves them out; before the fix the receipt added "another of the rules' checks"."""
+    found = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
+        {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"},
+        {"id": "r14", "verdict": "not_evaluable"},
+        {"id": "r24", "verdict": "not_evaluable"},
+        {"id": "r25", "verdict": "not_evaluable"}]}}
+    assert receipt._asks(found["rules"]) == ("over your limit", 1)
+    assert receipt._line("verdict", found, True, {}).endswith(": over your limit, so the order was held for your approval")
 
 
 @pages_only
@@ -410,17 +444,20 @@ def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_per
 @pytest.mark.parametrize("clicked,limit,approver", [(True, False, "user"), (False, True, "agent_card")])
 def test_each_new_approval_shape_verifies_on_the_buyers_receipt(seeded, tmp_path, monkeypatch, clicked, limit, approver):
     """#265 review: capsulectl verify --bundle (the Go profile checker) takes a no-limit Pay click (`user`, the act
-    disposed by the human) and a pack-ask pause with no click (`agent_card`, no decide Capsule on the act)."""
+    disposed by the human) and a pause no one answered (`agent_card`, no decide Capsule on the act). Under a limit every
+    escalate is now held and put to the person (#230), so that pause is forced here."""
     import deals
     import rules
     from test_rules import stub_engine
     from world import CURRENCY, ITEM, SELLERS, terms
 
-    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, do_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     world, _ = seeded
     maya, alder = world.nodes["maya"], world.nodes["alder"]
     price = SELLERS["alder"]["price_msat"]
+    real_check = rules.check
+    monkeypatch.setattr(rules, "check", lambda *a, **k: __import__("dataclasses").replace(real_check(*a, **k), held=False))
     click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay") if clicked else None
     deal_id = deals.run_deal(maya, alder, terms(ITEM, price, CURRENCY, pay.FakeRail.SEALED), ASK, "", pay=lambda: "ref-x",
                              limit=price if limit else None, clicked=click)

@@ -142,7 +142,7 @@ def approve_payment(summary: str) -> bool:
 
 
 def approve_hold(summary: str) -> bool:
-    """The person's answer to an order the Everyday Rules held under their spending limit: a native dialog, as
+    """The person's answer to an order the Everyday Rules held (under their spending limit): a native dialog, as
     :func:`approve_payment`; True only for Approve. Decline, a timeout, no screen or any error is a decline."""
     import subprocess
 
@@ -156,13 +156,24 @@ def approve_hold(summary: str) -> bool:
     return run.returncode == 0 and "button returned:Approve" in run.stdout and "gave up:true" not in run.stdout
 
 
-def _ask_about_hold(outcome: "rules.Outcome") -> "rules.Answer | None":
-    """The hold dialog; for an Approve, the words it showed and the button, which the approval record commits to."""
-    asked = screens.rules_ask(outcome.reasons)
-    if not approve_hold(asked):
-        return None
-    print(screens.rules_approved(outcome.reasons))
-    return rules.Answer(dialog_text(asked), "Approve")
+def _ask_order(summary: str, real: bool, rail_name: str):
+    """The one question that releases an order under the person's spending limit, put after the deal check so a hold
+    reason is part of it: an order the Everyday Rules hold is one dialog with the payment and every reason (Approve or
+    Decline); an order they do not hold is the payment dialog as before (``approval_gate``). For a yes it returns the
+    person's :class:`rules.Answer` (the words the dialog showed and the button), which the approval record commits to."""
+    def ask(outcome: "rules.Outcome") -> "rules.Answer | bool | None":
+        if outcome.held:
+            asked = f"{summary} {screens.rules_ask(outcome.reasons, outcome.over_limit)}"
+            if not approve_hold(asked):
+                return None
+            print(screens.rules_approved(outcome.reasons, outcome.over_limit))
+            return rules.Answer(dialog_text(asked), "Approve")
+        try:
+            clicked = approval_gate(real, rail_name, summary)
+        except NotApproved:
+            return None
+        return clicked or True  # True: the gate is off on a simulated rail (ARD_APPROVAL=none), no one clicked
+    return ask
 
 
 _session: Session | None = None
@@ -342,29 +353,38 @@ def ard_pay(seller: str) -> None:
                 # call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
-                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled, timed out or could not be shown), "
+                    f"the presenter did not approve the last payment to {label} (the dialog was cancelled or declined, timed out or could not be shown), "
                     f'so this call opens no dialog and pays nothing. The question is: "Pay {label} {amount} '
                     + ("over Lightning, which moves real money?" if real else "on the simulated rail, where no money moves?")
                     + '" If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now. '
                     "Otherwise ask her it in your reply, end your turn, and call ard_pay again only after she says yes.")
-            try:
-                clicked = approval_gate(real, rail_name, summary)
-            except NotApproved:
-                s.declined.add(key)
-                raise
+            ask, clicked = None, None
+            if limit is None:
+                try:
+                    clicked = approval_gate(real, rail_name, summary)
+                except NotApproved:
+                    s.declined.add(key)
+                    raise
+            else:  # under a spending limit the one dialog comes after the deal check, so it can carry the hold reasons
+                ask = _ask_order(summary, real, rail_name)
         except BaseException:
             if was_paid:
                 s.paid.add(key)
             raise
         s.attempted.add(key)  # before the payment: a failure mid-way must not be retried blindly (check the wallet)
     try:
-        _pay(s, key, limit, clicked)
+        _pay(s, key, limit, ask, clicked)
     except (rules.RuleHeld, rules.RulesError) as stopped:
         # The deal check ran before any payment: nothing was paid, so the session is as it was before this order
         # (an earlier paid order stays paid, and the order may be tried again).
         s.attempted.discard(key)
         if was_paid:
             s.paid.add(key)
+        if isinstance(stopped, rules.RuleHeld):
+            s.declined.add(key)  # the next call hands the agent the question again instead of reopening the dialog
+        if isinstance(stopped, rules.RuleHeld) and not stopped.reasons:  # the payment dialog was cancelled, nothing held
+            raise NotApproved("the presenter did not approve this payment (the approval dialog was cancelled, timed out or "
+                              "could not be shown): nothing was paid. Do not retry on your own; if Maya asks again, confirm with her first.") from None
         if isinstance(stopped, rules.RuleHeld):
             raise RuntimeError(f"{screens.rules_held(stopped.reasons)} The person declined it. Tell Maya which rule held the "
                                "order and why, and that nothing was paid; do not try to pay around it.") from None
@@ -374,9 +394,9 @@ def ard_pay(seller: str) -> None:
         raise RuntimeError(f"{stopped}. Nothing was paid. Tell Maya the deal check could not run; do not pay around it.") from None
 
 
-def _pay(s, key: str, limit: int | None, clicked: rules.Answer | None = None) -> None:
+def _pay(s, key: str, limit: int | None, ask=None, clicked: rules.Answer | None = None) -> None:
     if ROLE == "all":
-        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=_ask_about_hold, clicked=clicked)
+        s.run.pay_deal(s.assessed, key, s.picked[key], limit=limit, approve=ask, ask_always=True, clicked=clicked)
         s.paid.add(key)
         return
     a, peer, run = s.assessed[key], s.bworld.nodes[key], s.run
@@ -384,7 +404,7 @@ def _pay(s, key: str, limit: int | None, clicked: rules.Answer | None = None) ->
     print(f"deal opened with {SELLERS[key]['label']}: waiting for its agent's half")
     s.deal_ids.append(chain.deal_id)
     try:
-        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=_ask_about_hold,
+        payment = parties.buyer_deal(run.maya, peer, chain, run.rail, a.price_msat, limit=limit, approve=ask, ask_always=True,
                                      clicked=clicked,
                                      on_paid=lambda p: s.paid.add(key) if p.status == "succeeded" else None)
     except (rules.RuleHeld, rules.RulesError):
