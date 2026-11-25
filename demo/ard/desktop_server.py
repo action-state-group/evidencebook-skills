@@ -355,7 +355,7 @@ def ard_pay(seller: str) -> None:
                 # This server never sees the chat, so it cannot check that Maya said yes. What it can do: the first call
                 # after a refusal opens no dialog and hands the agent the question, so a bare "yes, pay" never goes straight
                 # back to the dialog. An agent that asked Maya after the dialog was declined (the skill asks before every
-                # payment) calls again at once, with no second question (Sherlock2 on #278: one question per order); the
+                # payment) calls again at once, with no second question (PM on #278: one question per order); the
                 # next call opens the dialog again, and the presenter's click stays the gate.
                 s.declined.discard(key)
                 raise RuntimeError(
