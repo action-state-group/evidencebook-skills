@@ -320,7 +320,7 @@ def ard_assess() -> None:
     s.pack = s.pack or packs.starting()
     p = s.pack
     print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
-    print(f"({screens.CLAIMS_NOTE}; {screens.ASSESSMENT_NOTE})")
+    print(f"({screens.ASSESSMENT_NOTE})")
     print(f"({screens.OPERATOR_NOTE})\n")
     for e in s.entries:
         ev = s.evidence.get(e["id"])
