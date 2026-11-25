@@ -669,8 +669,8 @@ def test_a_stopping_seller_takes_its_rulings_only_after_its_loop_ends(monkeypatc
 
 def test_the_go_line_names_the_amount_not_the_tier_id():
     # PM, 2026-11-25 (#293): a person cannot act on "T2"; the amount comes from the pack's ceiling for the tier
-    line = screens.decision_line(assessment("GO", price=2000), None, 10_000_000)
-    assert line == "GO: 2,000 msat is within this pack's limit for it (allows deals under 10,000,000 msat)"
+    line = screens.decision_line(assessment("GO", price=2000), None, 10_000)  # T2: under 10,000 msat (pack-source.yaml)
+    assert line == "GO: 2,000 msat is within this pack's limit for it (allows deals under 10,000 msat)"
     assert "T2" not in line
 
 
@@ -688,8 +688,10 @@ def test_the_buyer_skill_carries_pms_lines_on_counts_recommendations_and_limits(
     text = (Path(__file__).resolve().parents[3] / "skills" / "buy-with-evidence" / "SKILL.md").read_text()
     flat = " ".join(text.split())
     for line in ("never guess a higher or lower number, and never call them failures",
-                 "Recommend a seller only after you have assessed every seller",
-                 "Nothing here checks quantity or delivery date",
+                 "Recommend a seller only after you have assessed every seller that passed its checks",
+                 "Nothing in the assessment checks quantity or delivery date: never offer to check them before the payment",
+                 "Call the card time-stamped only when the screen says its receipt verifies; otherwise say its time-stamp is "
+                 "not checked here.",
                  'Repeat a limit as the tool gives it, never shortened ("at or over", "under")',
                  "The person's budget stays with you: use it only in the assessment and at the pick; the deadline is "
                  "theirs to judge."):

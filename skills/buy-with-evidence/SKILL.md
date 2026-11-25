@@ -99,9 +99,10 @@ before paying is its own approval dialog.
   reads it in the tool call.
 - The registry is a demo stand-in run by the demo operator, and the sellers' domains are local
   stand-ins; the recipe gives its search URL.
-- A History card is the seller's own count, signed by it and time-stamped by Action State's witness, which also runs
-  every party here, so it is not independent of them: say so, and never call the counts recomputed or
-  confirmed by anyone else.
+- A History card is the seller's own count, signed by it. Its time-stamp comes from Action State's witness, which also
+  runs every party here, so it is not independent of them: say so, and never call the counts recomputed or confirmed
+  by anyone else. Call the card time-stamped only when the screen says its receipt verifies; otherwise say its
+  time-stamp is not checked here.
 - The demo gives GO, LIMIT or NO and has no ASK step. On the demo, LIMIT and NO end with nothing paid,
   no smaller order is offered, and a pick the verdict does not allow opens no deal.
 - A dispute decided against a seller, on its card, limits it (LIMIT). A ruling the person holds against a seller, in
@@ -122,10 +123,11 @@ before paying is its own approval dialog.
   screen says so. Do not present those as checked.
 - Say the card's counts exactly as the card gives them, in Steven's words; never guess a higher or lower number,
   and never call them failures.
-- Recommend a seller only after you have assessed every seller; before that, say what you found, not which seller
-  you prefer.
-- Nothing here checks quantity or delivery date: never offer to check them, and never base a recommendation on
-  them; the deadline is the person's to judge.
+- Recommend a seller only after you have assessed every seller that passed its checks; before that, say what you
+  found, not which seller you prefer.
+- Nothing in the assessment checks quantity or delivery date: never offer to check them before the payment, and never
+  base a recommendation on them; the deadline is the person's to judge. After the payment, the delivery record is
+  where a short delivery shows.
 - Repeat a limit as the tool gives it, never shortened ("at or over", "under").
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
