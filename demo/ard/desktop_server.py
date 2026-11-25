@@ -133,6 +133,8 @@ def _dialog(script: str, yes: str) -> str:
     try:
         run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL,
                              timeout=parties.DIALOG_GIVE_UP_S + parties.DIALOG_SLACK_S)
+    except subprocess.TimeoutExpired:  # past its own give-up: the dialog was most likely on screen, unanswered
+        return rules.NO_ANSWER
     except (OSError, subprocess.SubprocessError):
         return rules.NOT_SHOWN
     if run.returncode == 0 and "gave up:true" in run.stdout:

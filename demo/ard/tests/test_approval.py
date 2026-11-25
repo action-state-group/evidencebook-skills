@@ -109,6 +109,7 @@ def test_anything_else_declines_a_held_order(monkeypatch, kw):
     (1, "", "execution error: User canceled. (-128)", None, ds.rules.NO),  # Don't buy, the cancel button
     (1, "", "execution error: no display", None, ds.rules.NOT_SHOWN),
     (0, "", "", OSError("no osascript"), ds.rules.NOT_SHOWN),
+    (0, "", "", subprocess.TimeoutExpired("osascript", 200), ds.rules.NO_ANSWER),  # hung past its give-up (PM's nit)
 ])
 def test_the_dialog_says_how_it_ended_so_a_timeout_is_never_called_a_decline(monkeypatch, returncode, stdout, stderr,
                                                                                raises, expected):
