@@ -39,7 +39,9 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(ow.time, "sleep", lambda s: None)
     monkeypatch.setattr(ow, "link", lambda role, rail, placeholders=False: f"goose://recipe?config={role}")
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
-    monkeypatch.setattr(ow.reset, "snapshot_trust", lambda home: made.append(["snapshot", str(home)]))
+    monkeypatch.setattr(ow, "recipe", lambda role, rail, placeholders=False: {"title": role})
+    monkeypatch.setattr(ow, "to_link", lambda r: f"goose://recipe?config={r['title']}")
+    monkeypatch.setattr(ow.reset, "note_trust", lambda recipes, root: made.append(["note", [r["title"] for r in recipes], str(root)]))
     # Goose is not running until the script starts it with `open -a Goose`
     monkeypatch.setattr(ow.reset, "goose_running", lambda: any(c[:3] == ["open", "-a", "Goose"] for c in made))
     monkeypatch.setenv("ARD_GOOSE_ROOT", str(tmp_path / "goose-root"))
@@ -54,7 +56,8 @@ def calls(monkeypatch, tmp_path):
 
 def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, capsys):
     assert ow.main(["--rail", "fake"]) == 0
-    assert calls[0][0] == "snapshot"  # the trust note comes before any window can be trusted
+    assert calls[0][:2] == ["note", ["alder", "kestrel", "maya"]]  # the trust note comes before any window can be trusted
+    assert calls[0][2].endswith("goose-root")  # in the demo's Goose root, which every home shares and reset keeps
     assert calls[1][:4] == ["open", "-a", "Goose", "--env"] and calls[1][4].startswith("GOOSE_PATH_ROOT=")
     assert calls[1][4].endswith("goose-root")  # the demo's own Goose root, never the user's ~/.config/goose
     import json as _json
@@ -101,7 +104,7 @@ def test_a_tile_that_works_on_a_retry_prints_only_the_retry_note(calls, capsys, 
 def test_print_and_a_single_window_tile_nothing(calls, args):
     assert ow.main(["--rail", "fake", *args]) == 0
     assert all(c[0] != "osascript" for c in calls)
-    assert any(c[0] == "snapshot" for c in calls) is (args[0] == "--only")  # --print opens nothing, so it notes nothing
+    assert any(c[0] == "note" for c in calls) is (args[0] == "--only")  # --print opens nothing, so it notes nothing
 
 
 def test_a_running_goose_is_refused_and_nothing_opens(calls, capsys, monkeypatch):
@@ -154,3 +157,12 @@ def test_the_search_path_env_is_valid_json_with_an_expanded_absolute_path(calls,
     assert paths[0].endswith("demo/ard/goose/locked")
     prefix = next(arg for arg in calls[0] if arg.startswith("ARD_ACP_PREFIX="))
     assert prefix.endswith("ard-demo/acp") and "~" not in prefix and "$" not in prefix
+
+
+def test_a_recipe_reset_could_not_clear_opens_nothing(calls, capsys, monkeypatch):
+    def refuse(recipes, root):
+        raise ValueError("trust_hash covers the demo's recipe shape only")
+    monkeypatch.setattr(ow.reset, "note_trust", refuse)
+    assert ow.main(["--rail", "fake"]) == 2
+    assert calls == []  # no Goose started, no window opened
+    assert "the demo's recipe shape only; nothing was opened" in capsys.readouterr().err

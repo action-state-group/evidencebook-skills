@@ -1,0 +1,27 @@
+{
+ "version": "1.0.0",
+ "title": "Maya buys conference badges (buyer)",
+ "description": "The ARD two-seller deal: maya, following the buy-with-evidence skill.",
+ "instructions": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 3,000 msat. Your admission pack is demo/ard/pack. The ARD registry to search is http://127.0.0.1:47481/search (a local stand-in registry, run by the operator); referrals stay off.\nWrite in English only. This run's payment rail is simulated: no money moves.\nFollow the buy-with-evidence skill below at evidencebook-skills f93439a.\n\n(test fixture: the skill text is left out)\n",
+ "prompt": "Reply in English only. I am Maya. In one short sentence, say you are my buying agent and ready. Do not search or call any tool until I ask.",
+ "extensions": [
+  {
+   "type": "stdio",
+   "name": "ard_maya",
+   "description": "The maya side of the ARD two-seller deal",
+   "cmd": "/usr/bin/env",
+   "args": [
+    "ARD_ROLE=maya",
+    "ARD_RAIL=fake",
+    "CAPSULE_WITNESS=off",
+    "CAPSULE_ENGINE=/Users/demo/ard-demo/bin/capsule-engine",
+    "ARD_EVIDENCEBOOK=/Users/demo/ard-demo/evidencebook",
+    "CAPSULECTL_DEAL=/Users/demo/ard-demo/bin/capsulectl-deal",
+    "ARD_LIMIT_MSAT=2000",
+    "/Users/demo/ard-demo/evidencebook-skills/.venv/bin/python",
+    "/Users/demo/ard-demo/evidencebook-skills/demo/ard/desktop_server.py"
+   ],
+   "timeout": 300
+  }
+ ]
+}

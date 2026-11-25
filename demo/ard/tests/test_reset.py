@@ -4,6 +4,7 @@ while holding the home's own lock files, refuses if anything else holds the home
 deletes the home, and clears Goose's recipe trust. Real processes stand in for the stage and the servers; no Goose."""
 from __future__ import annotations
 
+import json
 import os
 import random
 import shutil
@@ -76,6 +77,13 @@ def _done(*procs: subprocess.Popen) -> None:
         p.wait()
 
 
+MINE, DEMO_A, DEMO_B = "a" * 64, "b" * 64, "c" * 64
+#: A recipe open-windows.py builds for Maya (paths made neutral, the skill text left out), and the name of the trust file
+#: Goose Desktop 1.59.2 made when its link was opened and trusted (2026-11-25 09:10:13Z, on the Mac of the by-hand run).
+FIXTURE = Path(__file__).parent / "fixtures" / "goose-trust-recipe.json"
+FIXTURE_HASH = "9da4a35c36d5212244208afcf1dfd3f7efb54c33b5dc0aee0925fe406b515425"
+
+
 @pytest.fixture
 def mac(tmp_path, monkeypatch):
     """A home, a user folder with Goose's recipe trust, its settings and two saved recipes, and free demo ports."""
@@ -84,7 +92,7 @@ def mac(tmp_path, monkeypatch):
     monkeypatch.setattr(reset, "goose_running", lambda: False)
     hashes = tmp_path / "user" / "Library" / "Application Support" / "Goose" / "recipe_hashes"
     hashes.mkdir(parents=True)
-    for h in ("aa", "bb", "cc"):
+    for h in (MINE, DEMO_A, DEMO_B):
         (hashes / f"{h}.hash").write_text("2026-11-18T00:00:00Z")
     (hashes.parent / "settings.json").write_text("{}")
     saved = tmp_path / "user" / ".config" / "goose" / "recipes" / reset.SAVED_RECIPE
@@ -93,7 +101,10 @@ def mac(tmp_path, monkeypatch):
     (saved.parent / "other.yaml").write_text("title: y")
     home = tmp_path / "ard"
     (home / "stage").mkdir(parents=True)
-    (home / reset.TRUST_BEFORE).write_text('["aa.hash"]')  # aa was trusted before the demo's windows opened
+    root = tmp_path / "goose-root"  # the demo's Goose root notes the demo's two recipes; MINE is the person's own
+    root.mkdir()
+    (root / reset.DEMO_TRUST).write_text(json.dumps([DEMO_A, DEMO_B, "f" * 64]))  # f…: a noted recipe no longer trusted
+    monkeypatch.setenv("ARD_GOOSE_ROOT", str(root))
     return home, hashes, saved
 
 
@@ -120,7 +131,7 @@ def test_reset_waits_for_a_goose_that_is_still_quitting(mac, monkeypatch):
     monkeypatch.setattr(reset, "goose_running", lambda: next(answers, False))
     monkeypatch.setattr(reset.time, "sleep", lambda s: None)
     assert reset.reset(home, say=lambda *_: None) == 0
-    assert not home.exists() and _left(hashes) == ["aa.hash"]
+    assert not home.exists() and _left(hashes) == [f"{MINE}.hash"]
 
 
 def test_a_failed_goose_check_refuses(monkeypatch):
@@ -188,11 +199,10 @@ def test_stops_this_homes_stage_and_server_leaves_a_prefix_home_alone_and_clears
     finally:
         _done(stage, server, other)
     assert not home.exists() and sibling.exists()
-    assert _left(hashes) == ["aa.hash"] and (hashes.parent / "settings.json").exists()  # only the demo's trust files
+    assert _left(hashes) == [f"{MINE}.hash"] and (hashes.parent / "settings.json").exists()  # only the demo's trust files
     assert not saved.exists() and (saved.parent / "other.yaml").exists()
     assert any("stopped stage.py and desktop_server.py on this home" in s for s in said)
-    assert any("cleared Goose's trust in the 2 recipes trusted since this home's windows first opened" in s
-               and "recipes trusted before keep theirs" in s for s in said)
+    assert any("cleared Goose's trust in 2 of the demo's recipes" in s and "other recipes keep theirs" in s for s in said)
 
 
 @needs_lsof
@@ -249,7 +259,7 @@ def test_an_old_stage_without_a_lock_that_names_this_home_is_stopped(mac, tmp_pa
         old.wait(timeout=10)
     finally:
         _done(server, old)
-    assert not home.exists() and _left(hashes) == ["aa.hash"]
+    assert not home.exists() and _left(hashes) == [f"{MINE}.hash"]
 
 
 @needs_lsof
@@ -326,7 +336,7 @@ def test_reset_runs_with_no_evidencebook_or_engine_set(mac, tmp_path):
     run = subprocess.run([sys.executable, str(Path(reset.__file__).with_name("demo.py")), "reset", "--home", str(home)],
                          env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
     assert run.returncode == 0, run.stderr
-    assert "removed" in run.stdout and not home.exists() and not saved.exists() and _left(hashes) == ["aa.hash"]
+    assert "removed" in run.stdout and not home.exists() and not saved.exists() and _left(hashes) == [f"{MINE}.hash"]
 
 
 @needs_lsof
@@ -412,24 +422,47 @@ def test_a_missing_home_and_no_goose_folder_still_reset(tmp_path, monkeypatch):
     monkeypatch.setattr(reset, "goose_running", lambda: False)
     said = []
     assert reset.reset(tmp_path / "never-made", say=said.append) == 0
-    assert any("kept Goose's recipe trust: this home has no note" in s for s in said)
+    assert any("deleted no Goose recipe trust: no trust file matches a recipe the demo's windows opened" in s for s in said)
 
 
 def _left(hashes: Path) -> list[str]:
     return sorted(p.name for p in hashes.glob("*.hash"))
 
 
-def test_the_trust_note_is_written_once_and_a_home_without_one_keeps_all_trust(tmp_path):
-    user, home = tmp_path / "user", tmp_path / "ard"
+def test_the_trust_hash_is_goose_1_59_2s_name_for_a_real_trust_file():
+    # A recipe the demo's open-windows.py builds, with the paths of the Mac it ran on replaced (they change the hash, so
+    # the expected name below was taken from the trust file Goose Desktop 1.59.2 made for this exact recipe).
+    recipe = json.loads(FIXTURE.read_text())
+    assert reset.trust_hash(recipe) == FIXTURE_HASH
+    assert reset.trust_hash({k: v for k, v in recipe.items() if k != "version"}) == FIXTURE_HASH  # version defaults
+    reordered = dict(reversed(list(recipe.items())))
+    assert reset.trust_hash(reordered) == FIXTURE_HASH  # Goose's schema fixes the order, not the link's JSON
+    ext = recipe["extensions"][0]
+    for other in ({"type": "builtin", "name": "developer"}, {k: v for k, v in ext.items() if k != "description"},
+                  {**ext, "args": []}, {**ext, "envs": {}}, {**ext, "env_keys": ["X"]}):
+        with pytest.raises(ValueError, match="the demo's recipe shape only"):  # Goose would normalize these
+            reset.trust_hash({**recipe, "extensions": [other]})
+
+
+def test_reset_deletes_only_the_noted_recipes_trust_and_never_by_time(tmp_path):
+    user, root = tmp_path / "user", tmp_path / "goose-root"
     hashes = reset._hashes(user)
     hashes.mkdir(parents=True)
-    (hashes / "mine.hash").write_text("t")
-    reset.snapshot_trust(home, user)
-    (hashes / "demo.hash").write_text("t")  # trusted when the demo's windows opened
-    reset.snapshot_trust(home, user)  # a re-entry keeps the first note
-    assert reset.trust_before(home) == {"mine.hash"}
-    assert reset.clear_recipe_trust(reset.trust_before(home), user) == 1 and _left(hashes) == ["mine.hash"]
-    (hashes / "demo.hash").write_text("t")
-    assert reset.clear_recipe_trust(None, user) is None and _left(hashes) == ["demo.hash", "mine.hash"]  # no note: keep all
-    (home / reset.TRUST_BEFORE).write_text("{not json")
-    assert reset.trust_before(home) is None  # an unreadable note counts as none
+    mine = {"title": "mine", "description": "the person's own"}
+    demo = [{"title": "alder", "description": "d"}, {"title": "maya", "description": "d"}]
+    (hashes / f"{reset.trust_hash(mine)}.hash").write_text("2026-11-25T00:00:00Z")  # trusted after the demo noted: kept
+    reset.note_trust(demo[:1], root)
+    reset.note_trust(demo, root)  # a second open adds, and notes each recipe once
+    assert json.loads((root / reset.DEMO_TRUST).read_text()) == sorted(reset.trust_hash(r) for r in demo)
+    assert reset.clear_recipe_trust(root, user) == 0  # nothing trusted yet: nothing deleted, whatever its age
+    assert _left(hashes) == [f"{reset.trust_hash(mine)}.hash"] and not (root / reset.DEMO_TRUST).exists()
+    reset.note_trust(demo, root)
+    for r in demo:
+        (hashes / f"{reset.trust_hash(r)}.hash").write_text("t")
+    assert reset.clear_recipe_trust(root, user) == 2 and _left(hashes) == [f"{reset.trust_hash(mine)}.hash"]
+    (root / reset.DEMO_TRUST).write_text("{not json")
+    assert reset.clear_recipe_trust(root, user) == 0 and len(_left(hashes)) == 1  # an unreadable note deletes nothing
+    outside = hashes.parent / "x.hash"
+    outside.write_text("t")
+    (root / reset.DEMO_TRUST).write_text(json.dumps(["../x" + "0" * 60]))  # 64 characters, not a hash: ignored
+    assert reset.clear_recipe_trust(root, user) == 0 and outside.exists()

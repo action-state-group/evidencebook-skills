@@ -88,7 +88,7 @@ def instructions(role: str, rail: str) -> str:
 PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<seller wallet dir>"}
 
 
-def link(role: str, rail: str, placeholders: bool = False) -> str:
+def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", "CAPSULE_WITNESS=off",
            f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}", f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}"]
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "CAPSULECTL_DEAL", "ARD_WITNESS"):  # CAPSULECTL_DEAL: the receipt pages' verifier
@@ -103,13 +103,20 @@ def link(role: str, rail: str, placeholders: bool = False) -> str:
             elif placeholders and var in PLACEHOLDER:
                 env.append(f"{var}={PLACEHOLDER[var]}")
     p = PARTIES[role]
-    recipe = {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller deal: {role}, following the {p['skill']} skill.",
+    return {"version": "1.0.0", "title": p["title"], "description": f"The ARD two-seller deal: {role}, following the {p['skill']} skill.",
               "instructions": instructions(role, rail), "prompt": p["prompt"],
               "extensions": [{"type": "stdio", "name": f"ard_{role}", "description": f"The {role} side of the ARD two-seller deal",
                               "cmd": "/usr/bin/env", "args": [*env, sys.executable, str(SERVER)], "timeout": 300}]}
+
+
+def to_link(recipe: dict) -> str:
     # No base64 padding: Goose Desktop 1.59.2 opens a blank window for a recipe link whose config ends in "="
     # (percent-encoding it does not help), so a recipe whose JSON length is not a multiple of 3 never loaded.
     return "goose://recipe?config=" + base64.urlsafe_b64encode(json.dumps(recipe).encode()).decode().rstrip("=")
+
+
+def link(role: str, rail: str, placeholders: bool = False) -> str:
+    return to_link(recipe(role, rail, placeholders))
 
 
 #: Goose Desktop 1.59.2 ignores a window position or size set from outside, and every window is titled "Goose", so the
@@ -162,11 +169,8 @@ def tile(say=lambda line: print(line, file=sys.stderr)) -> str | None:
     return f"could not tile the windows ({why}). " + (GRANT if grant else "") + MANUAL + "\n\n" + shlex.join(TILE)
 
 
-#: The demo's own Goose root: Goose 1.59.2 keeps its config (provider, extensions), data and state under
-#: ``GOOSE_PATH_ROOT`` when it is set (crates/goose/src/config/paths.rs), and Goose Desktop reads it from its own
-#: environment at launch (ui/desktop/src/main.ts). So the demo starts Goose itself with this root and never writes the
-#: user's own ~/.config/goose. It lives outside the demo home, so reset keeps it and the provider setup is done once.
-GOOSE_ROOT_DEFAULT = "~/.config/ard-commerce-goose"
+#: The demo's own Goose root (reset.GOOSE_ROOT_DEFAULT, which says why), or ARD_GOOSE_ROOT.
+GOOSE_ROOT_DEFAULT = reset.GOOSE_ROOT_DEFAULT
 
 
 #: The Claude Code ACP adapter the demo's Goose uses, installed under the demo's own prefix and never globally: a
@@ -187,7 +191,7 @@ def acp_install() -> str:
 
 
 def goose_root() -> Path:
-    return Path(os.environ.get("ARD_GOOSE_ROOT", GOOSE_ROOT_DEFAULT)).expanduser()
+    return reset.goose_root()
 
 
 def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
@@ -251,16 +255,22 @@ def main(argv: list[str] | None = None) -> int:
     if not args.show and reset.goose_running():
         print(RUNNING.format(root=root), file=sys.stderr)
         return 2
-    if not args.show:  # before any window can be trusted: reset then clears only the trust given since
-        reset.snapshot_trust(home)
+    roles = [args.only] if args.only else ["alder", "kestrel", "maya"]  # Maya last: hers is the front window
+    if args.show:
+        for role in roles:
+            print(link(role, args.rail, placeholders=True))
+    else:
+        recipes = [recipe(role, args.rail) for role in roles]
+        try:  # before any window can be trusted: reset deletes exactly these trust files
+            reset.note_trust(recipes, root)
+        except ValueError as e:  # a recipe reset could not clear again: open nothing rather than leave trust behind
+            print(f"open-windows.py: {e}; nothing was opened (evidencebook-skills#277)", file=sys.stderr)
+            return 2
         if failed := launch_goose(root):
             print(failed, file=sys.stderr)
             return 1
-    for role in ([args.only] if args.only else ["alder", "kestrel", "maya"]):  # Maya last: hers is the front window
-        if args.show:
-            print(link(role, args.rail, placeholders=True))
-        else:
-            subprocess.run(["open", link(role, args.rail)], check=True)
+        for r in recipes:
+            subprocess.run(["open", to_link(r)], check=True)
             time.sleep(3)
     unset = [v for v in PLACEHOLDER if not os.environ.get(v)]
     if args.show and args.rail == "local" and unset:
