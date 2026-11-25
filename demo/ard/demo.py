@@ -220,8 +220,14 @@ def cmd_run(args) -> int:
         if go:
             d2 = s.buy(made, go[0])
             if d2 is not None:
-                buyer.close_received(home, s.maya, d2)
-                print("Maya's statement sent: she received what she paid for.")
+                name = SELLERS[d2.seller]["label"]
+                print(buyer.after_delivery(d2.seller, "200 of 200 badges"))
+                if s.ask(f"Did you receive what you paid for from {name}? Yes sends {name} your statement that you "
+                         "received it."):
+                    buyer.close_received(home, s.maya, d2)
+                    print("Maya's statement sent: she received what she paid for.")
+                else:
+                    print("Nothing was sent in Maya's name.")
         return 0
     except KeyboardInterrupt:
         print("\ninterrupted: the deals so far are kept; run `demo.py reset` and `demo.py seed` to start over")

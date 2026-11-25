@@ -84,6 +84,7 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 | 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
 | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
+| 6a Confirm receipt | `ard_confirm_received`: a dialog asks the person; only their yes sends their statement that they received what they paid for | `deal statement` with both rows met |
 | 6b Dispute a delivery | `ard_dispute`: a dispute on the delivery row, sent to the seller and the deal's adjudicator | `deal statement`, `deal dispute`; `deal respond` when the adjudicator asks for the books |
 | 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
 
@@ -107,7 +108,9 @@ before paying is its own approval dialog.
   their own records, blocks that seller for 180 days (NO): when both apply, say it is the same lost dispute only if the
   tool says so; the card does not say which deal.
 - After `ard_pay`, say what the seller's delivery record says it shipped. If it is short of what the person ordered,
-  ask whether they want to dispute the delivery; call `ard_dispute` only after they say yes. A dispute moves no money
+  ask whether they want to dispute the delivery; call `ard_dispute` only after they say yes. If all of it came, nothing
+  is said in the person's name until they say they received it: then call `ard_confirm_received`, whose dialog they
+  answer themselves. Never call it on your own. A dispute moves no money
   and asks the deal's adjudicator, which the operator runs, to rule.
 - Say a card's counts and the verdicts in these words (Steven's, from his hand runs): "deals that didn't go as
   agreed" for the did-not-hold count (never "failed deals"), "every one went as agreed" when that count is 0,

@@ -351,11 +351,7 @@ def pick_up_deliveries(home: Path, maya: pt.Party, say: Callable[[str], None]) -
         done.append(deal.deal_id)
         what = shipped(observed)
         say(screens.delivered_line(label(deal.seller), what))
-        if what.startswith("200 of 200"):
-            close_received(home, maya, deal)
-            say("Maya's statement sent: she received what she paid for.")
-        else:
-            say("Maya ordered 200 badges. If fewer arrived, she can dispute the delivery.")
+        say(after_delivery(deal.seller, what))
     return done
 
 
@@ -391,10 +387,32 @@ def shipped(observed: str) -> str:
     return observed
 
 
+#: Maya's own note that she said she received a deal's delivery, so her statement is sealed once.
+RECEIVED_SAID = "ard_received_said"
+
+
+def after_delivery(seller: str, what: str) -> str:
+    """What Maya is told once a delivery arrives. Nothing is said in her name here: whether she received what she paid
+    for is her own answer (run finding F10, evidencebook-skills#304)."""
+    if what.startswith("200 of 200"):
+        return (f"Nothing has been sent in Maya's name. If she received it, she can say so, and {label(seller)} gets "
+                "her statement that she received what she paid for.")
+    return "Maya ordered 200 badges. If fewer arrived, she can dispute the delivery."
+
+
+def received_said(maya: pt.Party, deal: Deal) -> bool:
+    return any(n["statement"]["deal_id"] == deal.deal_id for n in maya.notes(RECEIVED_SAID))
+
+
 def close_received(home: Path, maya: pt.Party, deal: Deal) -> None:
-    """Maya got what she paid for: her statement that both rows were met, handed to the seller."""
+    """Maya said she got what she paid for: her statement that both rows were met, handed to the seller. Called only
+    after her own yes (desktop_server.ard_confirm_received's dialog, or the run script's question), never on a
+    delivery's arrival."""
+    if received_said(maya, deal):
+        return
     wire.send(home, deal.seller, deal.deal_id, "statement",
               maya.statement(deal.deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
+    maya.note(RECEIVED_SAID, {"deal_id": deal.deal_id}, subject_ref=deal.deal_id)
 
 
 def dispute(home: Path, maya: pt.Party, deal: Deal, say: Callable[[str], None]) -> dict:
