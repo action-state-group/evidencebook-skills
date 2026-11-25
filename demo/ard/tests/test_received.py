@@ -55,7 +55,7 @@ def session(tmp_path, monkeypatch):
     maya = FakeMaya()
     import threading
     s = type("S", (), {})()
-    s.home, s.maya, s.deals, s.pay_lock = tmp_path, maya, [DEAL], threading.RLock()
+    s.home, s.maya, s.deals, s.pay_lock = tmp_path, maya, [DEAL], threading.Lock()  # as Session: never taken twice
     s.latest = lambda key=None: s.deals[-1]
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: "delivered:badges_200_of_200")
@@ -127,3 +127,20 @@ def test_the_run_scripts_receipt_question(tmp_path, sent, yes):
     assert buyer.confirm_by_question(tmp_path, maya, DEAL, "Alder Print Co.", lambda q: yes, said.append) is yes
     assert len(maya.statements) == (1 if yes else 0) and len(sent) == (1 if yes else 0)
     assert said == (["Maya's statement sent: she received what she paid for."] if yes else ["Nothing was sent in Maya's name."])
+
+
+@pytest.mark.parametrize("named", ["", "deal-0123456789abcdef", "0123"])
+def test_a_disputed_deal_named_or_not_is_reported_as_disputed(session, monkeypatch, sent, named):
+    session.maya.note(buyer.flow.CASE, {"deal_id": DEAL.deal_id})
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: "yes")
+    out = ds.ard_confirm_received("alder", named)
+    assert "REFUSED:" in out and "her dispute stands" in out and "already said" not in out, out
+    assert session.maya.statements == [] and sent == []
+
+
+@pytest.mark.parametrize("named", ["deal-ffff", "nope"])
+def test_an_unknown_deal_is_refused_not_reported_confirmed(session, monkeypatch, sent, named):
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: "yes")
+    out = ds.ard_confirm_received("alder", named)
+    assert "REFUSED:" in out and "no deal with Alder Print Co. matches" in out and "already said" not in out, out
+    assert session.maya.statements == [] and sent == []

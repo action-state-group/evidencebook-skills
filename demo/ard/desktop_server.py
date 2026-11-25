@@ -427,18 +427,24 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
     mine = [d for d in s.deals if d.seller == key]
     if not mine:
         raise RuntimeError(f"Maya has no deal with {name} in this run")
-    open_ = buyer.to_confirm(s.maya, mine)
-    if deal:
-        open_ = [d for d in open_ if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
-    if not open_:
-        if any(buyer.disputed(s.maya, d) for d in mine) and not deal:
-            raise RuntimeError(f"Maya disputed her delivery from {name}: her dispute stands, and nothing was sent")
-        print(f"Maya already said she received it: {name} has her statement.")
+    if deal:  # the deal she named, among all her deals with this seller
+        found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
+        if len(found) != 1:
+            raise RuntimeError(f"{'no' if not found else 'more than one'} deal with {name} matches {deal!r}: her deals "
+                               "with it are " + ", ".join(d.deal_id[5:13] for d in mine))
+        target = found[0]
+    else:  # the one still to confirm; with none, her latest
+        open_ = buyer.to_confirm(s.maya, mine)
+        if len(open_) > 1:
+            raise RuntimeError(f"Maya has {len(open_)} deals with {name} still to confirm (" +
+                               ", ".join(d.deal_id[5:13] for d in open_) + "): ask her which, then pass it as deal")
+        target = open_[0] if open_ else mine[-1]
+    if buyer.received_said(s.maya, target):
+        print(f"Maya already said she received it: {name} has her statement for deal {target.deal_id[5:13]}.")
         return
-    if len(open_) > 1:
-        raise RuntimeError(f"Maya has {len(open_)} deals with {name} still to confirm (" +
-                           ", ".join(d.deal_id[5:13] for d in open_) + "): ask her which, then pass it as deal")
-    target = open_[0]
+    if buyer.disputed(s.maya, target):
+        raise RuntimeError(f"Maya disputed her delivery from {name} (deal {target.deal_id[5:13]}): her dispute stands, "
+                           "and nothing was sent")
     with s.pay_lock:  # not while the payment tool or Maya's agent takes the same delivery
         observed = buyer.take_delivery(s.home, s.maya, target)
     if observed is None:
