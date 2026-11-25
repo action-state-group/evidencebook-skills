@@ -208,3 +208,56 @@ def test_an_offer_the_seller_did_not_answer_is_withdrawn(monkeypatch, tmp_path):
     with pytest.raises(buyer.pt.Refused, match="the offer is withdrawn, nothing was paid"):
         buyer.open_deal(tmp_path, Maya(), "alder", "k", assessment("GO"), {}, lambda *_: None, me="maya")
     assert wire.pending(tmp_path, "alder", "offer") == [] and wire.pending(tmp_path, "alder", "from") == []
+
+
+# -- stamps on demand (#297) -------------------------------------------------------------------------------------------
+
+def test_taken_means_the_witness_took_the_newest_checkpoint(monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    assert pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [9], "pending": [{"checkpoint": 4}]})
+    assert not pt.taken({"state": "ticked", "checkpoint": 9, "delivered": [4], "pending": [{"checkpoint": 9}]})
+    assert not pt.taken({"state": "ticked", "checkpoint": 9})  # no delivery list: not taken
+    assert not pt.taken({"state": "not_due", "delivered": [9]})
+    assert not pt.taken({"error": "refused"})
+    assert pt.taken({"state": "ticked", "checkpoint": 9, "witness": "not_configured"})
+    monkeypatch.setenv("ARD_WITNESS", "off")
+    assert pt.taken({"state": "ticked", "checkpoint": 9})
+
+
+def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
+    import party as pt
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    p = pt.Party(tmp_path, "seller")
+    prof = p.dir / ".config" / "capsule" / "profiles" / f"{p.profile}.yaml"
+    prof.parent.mkdir(parents=True)
+    prof.write_text("name: x\ncheckpoint:\n    signing:\n        file: k\ncadence:\n  interval: 1m\n")
+    p.add_witness()
+    p.add_witness()
+    text = prof.read_text()
+    assert text.count(f"endpoint: {pt.WITNESS_URL}") == 1 and text.count(f"public_key: {pt.WITNESS_KEY}") == 1
+    assert text.index("checkpoint:") < text.index("endpoint:") < text.index("signing:")
+    prof.write_text("name: x\n")
+    with pytest.raises(pt.Refused):
+        p.add_witness()
+
+
+def test_a_seller_agent_waits_for_the_minute_its_sample_deals_count_held(tmp_path, monkeypatch):
+    import time
+
+    from cast import HELD_FROM
+
+    slept = []
+    monkeypatch.setattr(time, "sleep", slept.append)
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent.home, agent.label, agent.log = tmp_path, "Kestrel Print", []
+    agent._lock = __import__("threading").Lock()
+    agent.wait_sample_held()  # no seed file: no wait
+    (tmp_path / HELD_FROM).write_text(str(int(time.time()) - 5))
+    agent.wait_sample_held()  # past: no wait
+    assert slept == []
+    (tmp_path / HELD_FROM).write_text(str(int(time.time()) + 30))
+    agent.wait_sample_held()
+    assert len(slept) == 1 and 25 < slept[0] <= 31

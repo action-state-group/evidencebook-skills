@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The sample history, made before the demo: 24 deals between each seller and the sample buyer, each a real x-deal-v1
+"""The sample history, made before the demo: 12 deals between each seller and its own sample buyer, each a real x-deal-v1
 deal made with capsulectl-deal (offer, admission, intent, agreement, payment legs, delivery, both sides' statements),
 naming the demo's adjudicator and Action State's witness like every live deal. No money moves: the payment reference is
 a made-up sample one. Every deal holds.
@@ -30,6 +30,8 @@ from cast import DEALS_EACH, HELD_FROM, ITEM, SELLERS, sample_buyer
 #: them and have the witness take their stamp, on a slow witness too. The seed itself ends as soon as the stamps are
 #: taken; the cards count the deals held from the first minute after this.
 MAKE_S = 90
+#: A sample deal is made only with at least this long left in its window, for the stamp that times it.
+MIN_LEFT_S = 20
 #: The sample buyer's answer to its own payment check: the demo operator's, for the sample buyer it runs.
 SAMPLE_APPROVAL = "Sample deal: the operator approves this payment for the sample buyer it runs. No money moves."
 
@@ -53,7 +55,9 @@ def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator:
     """One sample deal, both sides run here, handing each other the files each verb writes. Its rows are due, and their
     window ends, at ``window_end`` (a ``time.time()``)."""
     decision = flow.seller_decision(price_msat)
-    left = max(1, int(window_end - time.time()))
+    left = int(window_end - time.time())
+    if left < MIN_LEFT_S:  # no time left to stamp it inside its window: it would never count as held
+        raise pt.Refused(f"the sample deals took longer than their window ({MAKE_S} s) allows")
     o = buyer.offer(seller.key_id, ITEM, price_msat, decision["pack"]["digest"], adjudicator, due_s=left, window_s=left)
     deal_id = o["deal_id"]
     seller.receive(o["file"])
@@ -81,32 +85,9 @@ def sample_deal(buyer: pt.Party, seller: pt.Party, price_msat: int, adjudicator:
     return deal_id
 
 
-def held(p: pt.Party) -> tuple[int, int]:
-    """The deals the party's own card counts, and how many of them held."""
-    card, _, _ = flow.read_card(p.card_bundle(shared=True))
-    return card["outcomes"]["of"], card["outcomes"]["held"]
-
-
-def not_held(p: pt.Party) -> str:
-    """What a seller's own card says of each deal it does not count as held, and its checkpoint state: shown when the
-    seed gives up, so the cause shows where it failed (a CI runner, say)."""
-    try:
-        state = p.tick()
-        doc = json.loads(p.card_bundle(shared=False).read_text())
-        sh = doc["extensions"]["x-standard-history/v0"]
-        rows = [d for d in sh["deals"] if not all(r.get("status") == "agreed" for r in d.get("rows", []))]
-        lines = [f"{p.name}: card as of {sh['as_of'].get('anchor_time')}, tick {json.dumps(state)[:300]}"]
-        lines += [f"  {d['deal'][:12]} agreed {d.get('agreed_at')} happened {d.get('happened')} rows "
-                  + ", ".join(f"{r.get('owed_by')}:{r.get('status')}/{r.get('value')}" for r in d.get("rows", []))
-                  for d in rows[:30]]
-        return "\n".join(lines)
-    except Exception as exc:  # a report of the failure must not hide it
-        return f"{p.name}: could not read its own card: {exc}"
-
-
 def seed(home: Path, say: Callable[[str], None] = print) -> None:
-    """Make the sample deals each seller lacks, then wait for the checkpoint that stamps each party's last one. A repeat
-    run finishes an interrupted one; a run cut off in the middle of a deal needs ``demo.py reset`` first."""
+    """Make each seller's sample deals and have the witness take the one stamp that times them inside their window. A
+    seeded home is left as it is; a run cut off part way needs ``demo.py reset`` first (its deals' windows are over)."""
     home = Path(home).expanduser()
     ps = parties(home)
     named = adj.Adjudicator(home).named()
@@ -121,12 +102,18 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
             raise SystemExit(f"{name}'s card already counts deals of a run ({card['outcomes']['of']} deals, "
                              f"{card['disputes']['received']['of']} disputes): run `demo.py reset`, then `demo.py seed`")
 
+    if (home / HELD_FROM).is_file():
+        say("already seeded: the sample history is made and stamped")
+        return
+    for name in SELLERS:
+        if ps[name].deals():
+            raise SystemExit(f"{name} has sample deals from a seed that did not finish: their windows are over, so they "
+                             "can never count as held. Run `demo.py reset`, then `demo.py seed`")
     started, window_end = time.monotonic(), time.time() + MAKE_S
 
     def run(name: str) -> None:
         seller, buyer, price = ps[name], ps[sample_buyer(name)], SELLERS[name]["price_msat"]
-        have = sum(1 for d in seller.deals() if d.get("version") == "x-deal-v1" and d.get("counterparty_key") == buyer.key_id)
-        for i in range(have, DEALS_EACH):
+        for i in range(DEALS_EACH):
             try:
                 sample_deal(buyer, seller, price, named, window_end)
             except Exception as exc:
@@ -136,13 +123,18 @@ def seed(home: Path, say: Callable[[str], None] = print) -> None:
         # stamp that covers it, so it must reach the witness before the window ends; one the witness did not take (it
         # answers slowly or with an error under load) is taken again. The sample buyer stamps nothing: the seller's stamp
         # covers the buyer's statements it holds.
-        seller.add_witness()
+        try:
+            seller.add_witness()
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            return
         while True:
             try:
                 got = seller.stamp()
             except pt.Refused as exc:
                 got = {"error": str(exc)}
-            if pt.taken(got):
+            # Taken before the window ends: the witness's receipt time is before this check.
+            if pt.taken(got) and time.time() < window_end:
                 return
             if time.time() > window_end - 5:
                 errors.append(f"{name}: its sample deals were not stamped by the witness within their window ({MAKE_S} s): "

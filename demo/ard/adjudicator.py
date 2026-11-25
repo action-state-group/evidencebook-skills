@@ -195,7 +195,7 @@ class Adjudicator:
         wire.send_json(self.home, ADJUDICATOR, case["deal_id"], "ruling", record)
         return record
 
-    def stamp(self, case: dict, seconds: float = 30) -> bool:
+    def stamp(self, case: dict, seconds: float = 12) -> bool:
         """Take a checkpoint now (on demand) so the witness stamps the ruling, write the ruling file again with the
         receipt, and hand it to both parties. True when the stamp was delivered within ``seconds`` (never without a
         witness); the ruling goes to the parties either way."""
@@ -255,7 +255,7 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
         # An answer rests on a checkpoint, as a report does, and its records are timed only by a stamp the witness took:
         # stamp now, and again if the witness did not take it, so the adjudicator reads every record timed.
         try:
-            p.wait_checkpoint(30)
+            p.wait_checkpoint(12)
         except pt.Refused as exc:
             say(f"the adjudicator's request for deal {deal_id[5:13]}: no stamp yet ({exc}); answered on the next round")
             continue
