@@ -63,7 +63,8 @@ def test_the_story_find_history_assess_limit_then_pay(tools, monkeypatch):
     reask = tools.ard_pay("alder")
     assert reask.startswith("REFUSED: the presenter did not approve the last payment to Alder Print Co.")
     assert 'The question is: "Pay Alder Print Co. 2,000 msat on the simulated rail, where no money moves?"' in reask
-    assert "If you asked Maya exactly that since the refusal and she said yes, call ard_pay again now." in reask
+    assert ("If you asked Maya to confirm this payment (the seller, the amount and the rail) after the dialog was declined, "
+            "and she said yes, call ard_pay again now: do not ask her again.") in reask
     assert "call ard_pay again only after she says yes" in reask and tools._session.run.rail.paid == []
     # A second refusal sets it again: each Cancel is followed by the question before the next dialog.
     monkeypatch.setattr(tools, "approve_payment", lambda summary: False)

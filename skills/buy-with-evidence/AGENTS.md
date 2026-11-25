@@ -50,7 +50,7 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
    - **NO**: stop.
 
    A pick the verdict does not allow pays nothing.
-6. **Pay only on the person's yes.** Before paying, ask the person once, naming the seller, the
+6. **Pay only on the person's yes.** Before each payment, ask the person once, naming the seller, the
    amount, and whether real money moves. Pay only after their yes in their next message, only to
    the seller they named. That yes is the person's approval; where the host cannot carry the
    person's own key signature, say so rather than present it as signed. The assessment stays in the
@@ -98,6 +98,11 @@ before paying is its own approval dialog.
   no smaller order is offered, and a pick the verdict does not allow opens no deal.
 - The demo's "did not hold" counts come from the seller's own note (a temporary record): say so, and
   never present them as confirmed by the buyer or a ruling.
+- Say a card's counts and the verdicts in these words (Steven's, from his hand runs): "deals that didn't go as
+  agreed" for the did-not-hold count (never "failed deals"), "every one went as agreed" when that count is 0,
+  "Good to buy" for GO and "Small orders only" for LIMIT; when a seller is "Small orders only" because the person
+  tightened a threshold, say why: it "doesn't meet your stricter setting". Never name a tool to the person (say
+  "the payment", never `ard_pay`).
 - The demo's assessment fills some facts in for the demo operator (the platform, the allow-list,
   the card's witness and controller; no witness runs) and counts the seller's selection although it
   carries no inclusion proofs; the screen says so. Do not present those as checked.
@@ -106,7 +111,14 @@ before paying is its own approval dialog.
 - To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
   page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
 - `ard_pick` seals the pick. Never call `ard_pay` in the same message as `ard_pick`.
-- Before `ard_pay`, stop and ask the person to confirm in one sentence that names the seller and
-  the amount and says whether real money moves (the recipe says which rail this run uses).
+- Before every `ard_pay`, a repeat order to a seller already paid included, stop and ask the person to
+  confirm in one sentence that names the seller and the amount and says whether real money moves (the
+  recipe says which rail this run uses). For a second order to the same seller, ask "Want me to order
+  again?" in that sentence. The dialog is the second check, never the only one.
+- When `ard_pay`'s answer names the reasons the Everyday Rules held the order, whether the person then
+  declined or approved it, tell the person every reason it lists, each in its own words: leave none out. This is
+  the one answer that may run past two sentences: list the reasons, one per line.
+- If `ard_pay` refuses because the last dialog was declined, and you asked the person to confirm this payment after
+  that and they said yes, call it again at once: one question per order, never a second.
 - `ard_pay` opens an approval dialog on the presenter's screen; you cannot see or answer it. Only
-  its Pay button releases money.
+  its Pay or Buy anyway button releases money.
