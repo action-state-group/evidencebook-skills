@@ -168,6 +168,18 @@ def test_the_view_draws_the_named_witness_on_each_witnessed_row():
     assert html_.count("by Action State&#39;s hosted witness") + html_.count("by Action State's hosted witness") == 3
 
 
+@pytest.mark.skipif(NODE is None, reason="needs node to draw the view")
+def test_an_unwitnessed_card_reads_the_plain_witness_line_at_viewer_0_25_0():
+    """capsule-viewer 0.24.0 (#369) added a line naming the checkpoint a witness has not registered; it is for
+    checkpoint pages only and takes values this deal page never passes (the view refuses a deal page that does), so
+    the card keeps the plain line."""
+    view_input = model(standard_history())
+    assert [c for c in view_input["checks"] if c["id"] == "witness"] == [{"id": "witness", "status": "not_run"}]
+    html_ = draw(view_input)
+    assert "Not checked here: A witness time-stamped these records" in html_
+    assert "is not registered with the witness yet" not in html_
+
+
 def test_the_card_page_reads_the_witness_slot_from_a_node_that_holds_a_receipt_for_the_anchor_tick():
     from datetime import datetime, timezone
 

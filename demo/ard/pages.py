@@ -3,9 +3,9 @@
 §3.6 item 11).
 
 The page is capsule-viewer's History view (``history-view/v0``, capsule-viewer
-``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.23.0/
+``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.25.0/
 history-view.iife.js`` is ``dist/history-view.iife.js`` of the npm package
-``@action-state-group/capsule-viewer@0.23.0``, copied unchanged with the package's own ``.sha256`` and
+``@action-state-group/capsule-viewer@0.25.0``, copied unchanged with the package's own ``.sha256`` and
 licences, and :data:`VIEWER_SHA256` pins it. The view draws and never verifies: the party builds the
 view model from its own ``standard_history/1`` card (``Node.standard_history()``) and the checks its own
 node ran, and the page inlines the script and the model, so it opens offline and fetches nothing
@@ -32,11 +32,11 @@ from pathlib import Path
 import screens
 
 HERE = Path(__file__).resolve().parent
-VIEWER = "capsule-viewer-0.23.0"
+VIEWER = "capsule-viewer-0.25.0"
 VIEWER_DIR = HERE / "vendor" / VIEWER
 VIEWER_SCRIPT = VIEWER_DIR / "history-view.iife.js"
 #: The package's own digest of the script (``dist/history-view.iife.js.sha256``).
-VIEWER_SHA256 = "7bb461b020c72110a714eeca3c060362db441275bbb49cc8e0b29c5eeb0105e3"
+VIEWER_SHA256 = "38469aaeba47e172a4affccc4b1942d0cb60385272f4d16cfa75d81ec17e9ce1"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
 OWN_NOTE = "this party's own note, not verified"
