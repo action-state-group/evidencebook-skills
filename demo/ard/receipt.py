@@ -185,7 +185,16 @@ def render(bundle: dict, output: dict) -> str:
 
 
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
-    """Write the party's receipt page for a deal, and return its path."""
+    """Write the party's receipt page for a deal, and return its path: capsulectl's own page
+    (``capsulectl deal report --html``) where capsulectl draws one for an x-deal-v1 deal; otherwise capsule-viewer's page
+    of the party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
+    out = pages.path(p.name, f"receipt-{deal_id}")
+    try:
+        p.run("report", "--deal", deal_id, "--html", str(out))
+        return out
+    except pt.Refused as exc:
+        if "no page yet" not in str(exc):  # capsulectl's refusal while it draws no x-deal-v1 page
+            raise ReceiptError(str(exc)) from None
     try:
         copy = p.bundle(deal_id, "keep", wait=30)
     except pt.Refused as exc:

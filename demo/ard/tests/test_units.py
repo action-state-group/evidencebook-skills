@@ -410,3 +410,35 @@ def test_a_sellers_card_says_its_first_deals_are_sample_history():
 def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
     import adjudicator as adj
     assert f"within {adj.CHALLENGE_DAYS} days" in screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
+
+
+def test_the_receipt_page_is_capsulectls_own_when_it_draws_one(monkeypatch, tmp_path):
+    # Ethan: the run shows the v1 receipt page as soon as `capsulectl deal report --html` draws one; until then the
+    # refusal falls through to the page that says it can't be drawn
+    import receipt
+    monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
+    calls = []
+
+    class P:
+        name = "maya"
+
+        def __init__(self, refuse):
+            self.refuse = refuse
+
+        def run(self, *args):
+            calls.append(args[:2])
+            if self.refuse:
+                raise buyer.pt.Refused(self.refuse)
+            Path(args[args.index("--html") + 1]).write_text("<html>page</html>")
+            return {}
+
+        def bundle(self, *a, **k):
+            raise buyer.pt.Refused("stop here")
+    from pathlib import Path
+    page = receipt.receipt_page(P(None), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+    assert page.read_text() == "<html>page</html>"
+    with pytest.raises(receipt.ReceiptError, match="stop here"):  # fell through to the copy, as before
+        receipt.receipt_page(P("--html renders an x-deal-v0 deal's page; an x-deal-v1 report has no page yet"), "Maya",
+                             "deal-0123456789abcdef", rail="simulated", seller=False)
+    with pytest.raises(receipt.ReceiptError, match="disk full"):
+        receipt.receipt_page(P("disk full"), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)

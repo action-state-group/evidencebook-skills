@@ -139,12 +139,18 @@ def history_page(view_input: dict, page_labels: list[str], title: str) -> str:
         "</body></html>\n")
 
 
-def write(name: str, kind: str, page: str) -> Path:
+def path(name: str, kind: str) -> Path:
+    """A new page file under the demo home's pages folder (a verb may refuse to overwrite one)."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    path = home() / "pages" / f"{name}-{kind}-{stamp}.html"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(page, encoding="utf-8")
-    return path
+    out = home() / "pages" / f"{name}-{kind}-{stamp}.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def write(name: str, kind: str, page: str) -> Path:
+    out = path(name, kind)
+    out.write_text(page, encoding="utf-8")
+    return out
 
 
 def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
