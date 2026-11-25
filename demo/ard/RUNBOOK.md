@@ -4,7 +4,7 @@ How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, 
 
 This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 0043a944 (capsulectl v0.1.0-main.0043a944, with evidencebook's book and deal plugins installed at the same version) · evidencebook 684dd44 (main, with #935's receipt page, #933's `deal tick --now` and #951's receipt page on capsule-viewer bb8169bb; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer 1259579 (main, for the Python package; the receipt page itself is drawn by capsulectl, on the capsule-viewer bb8169bb evidencebook pins, and the History page vendors capsule-viewer's 0.27.2 script) · Goose Desktop 1.59.2 · real rail: ln-pay-local 4b936bb
 
-Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); the receipt page, capsulectl's own `deal report --html` (evidencebook#935, #951) on capsule-viewer bb8169bb (#310, #320); the History page on capsule-viewer 0.27.2, evidencebook 684dd44 and ln-pay-local 4b936bb (#320). Open: the windows open stacked, not tiled. The spending-limit section returns when the Everyday Rules run as the buyer's pinned rules checker on these deals (evidencebook#890).
+Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); the receipt page, capsulectl's own `deal report --html` (evidencebook#935, #951) on capsule-viewer bb8169bb (#310, #320); the History page on capsule-viewer 0.27.2, evidencebook 684dd44 and ln-pay-local 4b936bb (#320). Open: the windows open stacked, not tiled. The spending-limit section (Everyday Rules as Maya's pinned rules checker on x-deal-v1, evidencebook#890) and the card shown under every payment dialog that pauses (Sherlock2's ruling on evidencebook#890) are new in #321: their dialog lines were captured with the real capsulectl-deal and capsule-engine on the simulated rail, not yet run by hand in Goose.
 
 ## What you will see
 
@@ -350,7 +350,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Yes, pay it.
    ```
 
-   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves."; nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
+   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves.", then "What your answer is recorded with:" and capsulectl's card, which your answer is sealed with: "PAUSED FOR YOU", "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?", "1,000 msat · by simulated · not refundable · within your 3,000 msat limit" and "Why I'm asking: I picked item 200 conference badges, delivered by Friday, not you." Nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
 
 7. Type.
 
@@ -393,7 +393,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
     **Expect:** Kestrel's card as in step 12; Kestrel "NO: you hold a ruling against this seller (deal …, delivery not met, ruled …). Your rules block a seller you hold a ruling against for 180 days. Its card also counts 1 dispute decided against it, of 1 decided; the card does not say which deal."; Alder "GO".
 
-14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog ("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."): click Pay.
+14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog ("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", with capsulectl's card under it as in step 6, "… 2,000 msat …"): click Pay.
     **Expect:** invoice 2,000 msat succeeded, "Alder Print Co.'s delivery record says 200 of 200 badges were shipped." and "Nothing has been sent in Maya's name. If she received it, she can say so, and Alder Print Co. gets her statement that she received what she paid for." Maya's agent sends nothing in her name on its own.
 
     Then type `I received all 200.` and answer the dialog ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges were shipped. Choosing Received sends Alder Print Co. your statement that you received it."): click Received.
@@ -403,6 +403,52 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at … (… UTC), as capsulectl verify reported on your own book. This file carries no witness receipt, so this page did not check it itself." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are in this Mac's own zone, with UTC beside the due and window-end times.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
+
+## The spending limit: an order is held for your OK
+
+Run the steps above with a spending limit of 2,000 msat. Every order then waits at Maya's deal check for your OK. The Everyday Rules hold an order over the limit, and also one from a seller she has not paid before, or one that cannot be refunded. Each such order is one question that lists every reason.
+
+1. Before step 4 (or 5) of "Before each run", in the terminal that opens the windows, set the limit, then open the windows as there:
+
+   ```
+   export ARD_LIMIT_MSAT=2000
+   ```
+
+   **Expect:** nothing different until a payment: the windows open as before. Maya's window is the only one that gets the limit.
+
+2. At step 6, the dialog is the held-order question in place of the payment dialog: titled "The Everyday Rules held this order for your OK", with the buttons Don't buy (the default) and Buy anyway. Its text, one line each:
+   - "200 conference badges, delivered by Friday from Kestrel Print for 1,000 msat, on the simulated rail: no money moves. Nothing has been paid yet."
+   - "No earlier payment to this merchant from this profile"
+   - "The payment is not refundable"
+   - "Your answer is saved on the receipt. Change your rules any time in Everyday Rules."
+
+   Under them, "What your answer is recorded with:" and capsulectl's card, which starts "PAUSED FOR YOU" and "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?". Your answer is sealed with every word shown.
+
+   Click Buy anyway. **Expect:** "You approved this held order (…). Paying now.", then the rest of step 6 as written. Say aloud: every rule that asks is in this one question, and nothing reaches the seller or is paid before your answer.
+
+3. At step 14, type `Pick Alder Print Co.`, then `Yes, pay it.`
+
+   **Expect:** the same held-order question for Alder Print Co. at 2,000 msat. Its reasons: "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat", "No earlier payment to this merchant from this profile" and "The payment is not refundable", then capsulectl's card ("… over your 2,000 msat limit").
+
+   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you every reason the dialog listed ("Held for your OK at deal check, nothing paid. …") without naming any tool, and the wallet balances do not change.
+
+4. Ask for the order again:
+
+   ```
+   Order 200 more badges from Alder Print Co.
+   ```
+
+   **Expect:** no dialog yet. Maya asks once more, "Want me to order again?", naming Alder Print Co., 2,000 msat and the rail; this is the fresh yes after Don't buy. Answer:
+
+   ```
+   Yes.
+   ```
+
+   **Expect:** the same question as in step 3, and no second question in chat. Click Buy anyway: "You approved this held order (…). Paying now.", and the rest of step 14 as written. The approval is sealed in the deal's own records.
+
+When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and "Change your limit any time in Everyday Rules." This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
+
+To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the windows. Maya's next payment removes the checker.
 
 ## Quit and re-entry
 
