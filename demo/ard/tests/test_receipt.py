@@ -398,6 +398,19 @@ def test_rules_22_and_27_have_plain_words_and_rule_22_names_the_limit_its_amount
     assert receipt._upfront_words(None) == "another of the rules' checks"
 
 
+def test_a_rule_the_ruleset_only_declares_is_not_a_reason_on_the_receipt():
+    """Steven's fix on #237: r14, r24 and r25 are declared by everyday-0.3.8 and not measured, so they come back
+    not_evaluable with no ``check`` (evidencebook rules_declared_test.go). They are never a reason (x-deal-v0 section 8),
+    as the dialog leaves them out; before the fix the receipt added "another of the rules' checks"."""
+    found = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
+        {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"},
+        {"id": "r14", "verdict": "not_evaluable"},
+        {"id": "r24", "verdict": "not_evaluable"},
+        {"id": "r25", "verdict": "not_evaluable"}]}}
+    assert receipt._asks(found["rules"]) == ("over your limit", 1)
+    assert receipt._line("verdict", found, True, {}).endswith(": over your limit, so the order was held for your approval")
+
+
 @pages_only
 def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_person_approved(seeded, tmp_path, monkeypatch):
     """#261: the buyer's receipt for an order the spending limit held and the person approved verifies, and its step

@@ -119,7 +119,9 @@ def _asks(rules: dict, check: dict | None = None) -> tuple[str, int]:
     the body of the check record the verdict checks (rule 22's words read its amounts)."""
     words: list[str] = []
     for f in rules.get("findings") or []:
-        if f.get("verdict") in ("fail", "not_evaluable"):
+        # A rule the ruleset declares and the checker does not measure (r14, r24, r25 in everyday-0.3.8) is sealed
+        # not_evaluable with no check: never a reason (x-deal-v0 section 8), as rules.py leaves it out of the dialog.
+        if f.get("verdict") in ("fail", "not_evaluable") and f.get("check"):
             name = str(f.get("check", "")).split("/")[0]
             w = _upfront_words(check) if name == "upfront_amount" else _ASK_WORDS.get(name, "another of the rules' checks")
             if w not in words:
