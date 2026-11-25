@@ -90,6 +90,8 @@ def _mtime(p: Path) -> str:
 
 
 _PARTIES: dict[Path, pt.Party] = {}
+#: How long a party keeps stamping for a timed answer before it answers without one (answer_requests).
+ANSWER_WAIT_S = 45
 #: How long a ruling stamp the witness did not take in the foreground keeps being taken in the background.
 LATER_S = 180
 #: The background stamp threads started (Adjudicator.stamp), so a caller or a test can wait for them.
@@ -274,12 +276,21 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
         if mark.exists():
             continue
         out = p.tmp("answer.json")
-        # An answer rests on a checkpoint, as a report does, and its records are timed by a stamp the witness took: stamp
-        # now (a stamp the witness did not take yet still lets the answer go; its delivery follows with a later tick).
+        # An answer rests on a checkpoint, as a report does, and the records it carries are timed only by a stamp the
+        # witness took before it was made. So it waits for a taken stamp, retried on later rounds, for up to
+        # ANSWER_WAIT_S after the request first came; past that it goes anyway (its records then read untimed), so a
+        # witness that keeps failing never leaves the adjudicator without an answer.
+        first = p.dir / "handled" / f"{deal_id}.adjrequest-seen"
+        if not first.exists():
+            first.parent.mkdir(exist_ok=True)
+            first.write_text(str(time.time()))
         try:
             p.wait_checkpoint(12)
         except pt.Refused:
-            pass
+            if time.time() - float(first.read_text() or 0) < ANSWER_WAIT_S:
+                continue  # stamped again on the next round
+            say(f"the adjudicator's request for deal {deal_id[5:13]}: {pt.WITNESS_NAME} took no stamp in "
+                f"{ANSWER_WAIT_S} s; answered without one (its records read untimed)")
         try:
             got = p.run("respond", "--request", str(f), "--requester", named_key(home), "--output", out)
         except pt.Refused as exc:
