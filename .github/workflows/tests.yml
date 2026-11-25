@@ -41,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: e9b06b83f96d7b58e73d8809046e4a0050474048  # #893's head plus #933 (deal tick --now): deal respond answers the adjudicator; deal ruling --answer
+      EVIDENCEBOOK_REF: 64da5152ce280b286be397e12793ff38fb4ce0d8  # the run's integration commit: main (#893) with #922, #933 (deal tick --now) and #935
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
       CAPSULE_VIEWER_REF: c6bb35516b0733b9cd070c632bf6d7efc05c83b9  # ts/v0.27.2
     steps:

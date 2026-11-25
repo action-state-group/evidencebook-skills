@@ -2,7 +2,7 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook e9b06b8 (evidencebook#893 with #933's `deal tick --now`; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
+evidencebook-skills PIN (set when this guide's PR merges: evidencebook-skills#285) · evidencebook 64da515 (the 2026-11-25 run's integration commit: main with #922, #933's `deal tick --now` and #935; capsulectl-deal built from it, for every party and the adjudicator) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer c6bb355 (ts/v0.27.2) · Goose Desktop 1.59.2 · real rail: ln-pay-local 025d566
 
 Plain-text copy of the reproduction guide, for tools and terminals: [demo/ard/RUNBOOK.md](https://github.com/action-state-group/evidencebook-skills/blob/main/demo/ard/RUNBOOK.md).
 
@@ -119,8 +119,8 @@ The registry, the seller sites and the 24 sample deals are local stand-ins, and 
    git clone -q https://github.com/action-state-group/evidencebook-skills
    git -C evidencebook-skills checkout -q PIN
    git clone -q https://github.com/action-state-group/evidencebook
-   git -C evidencebook fetch -q origin e9b06b83f96d7b58e73d8809046e4a0050474048
-   git -C evidencebook checkout -q e9b06b83f96d7b58e73d8809046e4a0050474048
+   git -C evidencebook fetch -q origin 64da5152ce280b286be397e12793ff38fb4ce0d8
+   git -C evidencebook checkout -q 64da5152ce280b286be397e12793ff38fb4ce0d8
    (cd evidencebook/capsulectl && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsulectl-deal ./cmd/capsulectl-deal)
    ```
 
