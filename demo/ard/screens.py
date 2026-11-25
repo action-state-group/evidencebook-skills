@@ -21,8 +21,8 @@ OPERATOR_NOTE = ("filled in by the operator, not checked: the platform, the allo
 CLAIMS_NOTE = "claims-held is not read today: no card carries claims yet"
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
-WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. Action State also runs every party here, so the witness is not "
-                "independent of them.")
+WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
+                "witness is not independent of them.")
 #: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
 ADJUDICATOR_INDEPENDENCE = ("This adjudicator is run by the operator, who also runs every party here: it is not "
                             "independent of the parties.")
@@ -58,8 +58,11 @@ def card_line(card: dict) -> str:
     r = card.get("disputes", {}).get("received", {})
     b = r.get("by_outcome", {})
     decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
+    # Steven's words (#272 item 4): "didn't go as agreed", "every one went as agreed"; never "failed" or "did not hold"
     still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
-    return (f"{plural(o['of'], 'deal')}, {o['did_not_hold']} did not hold{still}. Disputes others raised about it: "
+    went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
+            else f"{o['did_not_hold']} didn't go as agreed{still}")
+    return (f"{plural(o['of'], 'deal')}, {went}. Disputes others raised about it: "
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
@@ -126,8 +129,11 @@ DISPUTE_RAISED = ("Dispute raised on this deal's delivery. Sent to {seller} and 
 
 
 def rule_question(deal_id: str, row: str, seller: str) -> str:
-    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator."""
+    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. A challenge is x-deal-v1's
+    ``dispute`` of kind ``challenge`` (PROFILE.md §5; ``deal dispute --challenge``, which "changes no row's status");
+    the window is 7 days (Steven, ops u214, 2026-11-24), a practice-statement constant (evidencebook
+    ``docs/design/861-four-books.md`` §6; ledger-cloud ``-challenge-window``, :data:`adjudicator.CHALLENGE_WINDOW`)."""
     return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
             f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
-            f"of the parties. Either side may challenge it within 30 days. A challenge is recorded beside the ruling and "
+            f"of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and "
             f"never replaces it.")

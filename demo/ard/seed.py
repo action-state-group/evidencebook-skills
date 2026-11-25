@@ -25,7 +25,7 @@ from cast import DEALS_EACH, ITEM, SAMPLE_BUYER, SELLERS
 #: after they are sealed) falls inside the contest window, so the window leaves room for that.
 SAMPLE_DUE_S, SAMPLE_WINDOW_S = 120, 300
 #: The sample buyer's answer to its own payment check: the demo operator's, for the sample buyer it runs.
-SAMPLE_APPROVAL = "Sample deal: the demo operator approves this payment for the sample buyer it runs. No money moves."
+SAMPLE_APPROVAL = "Sample deal: the operator approves this payment for the sample buyer it runs. No money moves."
 
 
 def parties(home: Path) -> dict[str, pt.Party]:

@@ -37,8 +37,7 @@ STATUS = {
 ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 
 
-NOT_YET = ("the receipt page for this deal is not available yet: the page viewer does not check this kind of deal copy "
-           "yet. The receipt in words is available, and the deal's records are checked (capsulectl verify --bundle: VALID)")
+NOT_YET = "a receipt page for this kind of deal can't be drawn yet; the receipt in words is complete"
 
 
 class ReceiptError(RuntimeError):
@@ -107,4 +106,10 @@ def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: boo
     output = p.verify(copy)
     if output.get("verdict") != "VALID":
         raise ReceiptError(f"capsulectl verify --bundle says {output.get('verdict')}")
-    return pages.write(p.name, f"receipt-{deal_id}", render(json.loads(copy.read_text()), output))
+    try:
+        page = render(json.loads(copy.read_text()), output)
+    except ReceiptError as exc:
+        # say what the verifier said of this copy, read from its own report
+        raise ReceiptError(f"{exc} (this copy's records were checked: capsulectl verify --bundle says "
+                           f"{output.get('verdict')})") from None
+    return pages.write(p.name, f"receipt-{deal_id}", page)

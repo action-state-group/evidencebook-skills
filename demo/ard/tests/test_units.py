@@ -43,11 +43,13 @@ def test_the_inputs_carry_the_tally_bands_and_the_own_ruling():
 
 
 def test_the_card_line_says_the_tally_in_words():
-    assert screens.card_line(card()) == ("24 deals, 0 did not hold. Disputes others raised about it: 0 decided against "
-                                         "it, of 0 decided; 0 open.")
-    assert screens.card_line(card(of=25, dnh=1, against=1)) == ("25 deals, 1 did not hold. Disputes others raised about "
-                                                                "it: 1 decided against it, of 1 decided; 0 open.")
-    assert "1 not final yet" in screens.card_line(card(of=25, undecided=1))
+    # Steven's words (#272 item 4)
+    assert screens.card_line(card()) == ("24 deals, every one went as agreed. Disputes others raised about it: 0 decided "
+                                         "against it, of 0 decided; 0 open.")
+    assert screens.card_line(card(of=25, dnh=1, against=1)) == ("25 deals, 1 didn't go as agreed. Disputes others raised "
+                                                                "about it: 1 decided against it, of 1 decided; 0 open.")
+    assert "0 didn't go as agreed, 1 not final yet" in screens.card_line(card(of=25, undecided=1))
+    assert "did not hold" not in screens.card_line(card(of=25, dnh=1)) and "failed" not in screens.card_line(card(dnh=1))
 
 
 def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
@@ -76,7 +78,7 @@ def test_no_line_a_person_reads_names_the_demo():
 def test_the_ruling_question_scopes_the_challenge():
     q = screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
     assert "not met, against Kestrel Print" in q and "not independent of the parties" in q
-    assert "Either side may challenge it within 30 days. A challenge is recorded beside the ruling and never replaces it." in q
+    assert "Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." in q
 
 
 def test_the_delivery_record_in_words():

@@ -14,13 +14,13 @@ Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousa
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
-2. **History cards.** Each seller's card: 24 deals, 0 did not hold, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
+2. **History cards.** Each seller's card: 24 deals, every one went as agreed, no disputes. A card's signature shows who wrote the counts and that they are unchanged since; these are the seller's own counts.
 
 3. **Deal 1.** Both sellers are "Good to buy"; Maya picks Kestrel, the cheaper one, and pays 1,000 msat (a dialog asks you first). Kestrel's own delivery record says 150 of 200 badges were shipped. Maya disputes the delivery.
 
 4. **The adjudicator.** The adjudicator's window shows the case: both sides' books, and Kestrel's own signed delivery record. You rule against Kestrel in a dialog. The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Both parties enter the ruling in their own records.
 
-5. **Deal 2.** Kestrel's card now counts 25 deals, 1 did not hold, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
+5. **Deal 2.** Kestrel's card now counts 25 deals, 1 that didn't go as agreed, 1 dispute decided against it. Maya's own records hold the ruling, so her rules give Kestrel "Not from this seller" (NO). Alder is "Good to buy"; Maya buys from Alder, and Alder ships all 200.
 
 The registry, the seller sites and the 48 sample deals are local stand-ins, and the adjudicator runs on this Mac. The ARD search call, fetching each seller's entry, the signature checks, the assessment, every deal record (capsulectl-deal), the dispute and the ruling (ledger-cloud's adjudicator) are the real code.
 
@@ -308,7 +308,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** for each: "History card: 24 deals, 0 did not hold. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts." The witness line reads "the card carries no witness receipt, so its time-stamp is not checked here" (evidencebook#891).
+   **Expect:** for each: "History card: 24 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts." The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
 
 4. Type.
 
@@ -359,13 +359,13 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     Rule against Kestrel: its own delivery record says 150 of 200.
     ```
 
-    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 30 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print", and that its stamp was sent to Action State's witness.
+    **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print", and that its stamp was sent to Action State's witness.
 
 11. After about a minute, type `Did both parties enter it?`.
     **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
-    **Expect:** "25 deals, 1 did not hold. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." If it still shows 24, ask again in a minute: the card counts after the seller's next checkpoint.
+    **Expect:** "25 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open." If it still shows 24, ask again in a minute: the card counts after the seller's next checkpoint.
 
 13. Cmd+` back to Maya's window, type:
 

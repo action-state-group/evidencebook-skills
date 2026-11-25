@@ -26,20 +26,22 @@ import party as pt
 PORT = int(os.environ.get("ARD_STAGE_PORT", "47481")) + 2  # the stage's port + 2: 47483 by default
 URL = f"http://127.0.0.1:{PORT}"
 PRINCIPAL = "demo-operator"
+#: The challenge window: 7 days (Steven, ops u214, 2026-11-24: "was 30; agents act fast"). The rules page and the
+#: ruling dialog say it; the operator keeps a ruled case's copies this long.
+CHALLENGE_WINDOW = "168h"
 #: The conflict determination every ruling records (ops u120: whether Action State is, or acts for, a party). In this
 #: demo the operator runs every party, so it is not independent of them; the dialog shows these words.
 CONFLICT = "the operator runs this adjudicator and every party here, so it is not independent of the parties"
 #: The rules the agreements name: what the demo adjudicator rules on. The page is served by the stage; its SHA-256 is
 #: the agreement's ``rules_digest``.
-RULES_TEXT = """ARD demo adjudicator: rules
+RULES_TEXT = """Adjudicator: rules
 
-This adjudicator is part of a demonstration. It is run by the demo operator, who also runs every party in the
-demo, so it is not independent of the parties.
+The operator runs this adjudicator and every party here, so it is not independent of the parties.
 
 1. It rules on one row of an x-deal-v1 deal whose agreement names it, when a party disputes that row.
 2. It reads the books the parties send it. A side that sends none is ruled on only from records that side signed
    itself, as the other side holds them.
-3. Its ruling says whether the row was met. It is final for the row; either side may challenge it within 30 days,
+3. Its ruling says whether the row was met. It is final for the row; either side may challenge it within 7 days,
    and a challenge is recorded beside the ruling and never replaces it.
 4. It orders no payment and moves no money.
 """
@@ -117,7 +119,8 @@ class Adjudicator:
     def operator(self, *args: str) -> dict:
         env_args = [binary("adjudicator-operator"), "-dir", str(self.dir / "op"), "-key-file", str(self.key_file),
                     "-witness-directory", str(self.dir / "witnesses.json"), "-intake", str(self.dir / "intake"),
-                    "-read", str(self.dir / "read"), "-export", str(self.dir / "export"), "-principal", PRINCIPAL]
+                    "-read", str(self.dir / "read"), "-export", str(self.dir / "export"), "-principal", PRINCIPAL,
+                    "-challenge-window", CHALLENGE_WINDOW]
         if pt.witnessed():
             env_args += ["-witness-ids", pt.WITNESS_URL, "-witness-urls", pt.WITNESS_URL]
         run = subprocess.run([*env_args, *args], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)

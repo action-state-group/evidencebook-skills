@@ -104,8 +104,10 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
                           f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {r.anchor_time}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
+    elif r.witness_status == "withheld":  # the card carries none: no verb hands a buyer one yet (evidencebook#891)
+        ev.stated("witness", "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet")
     else:
-        ev.stated("witness", "the card carries no witness receipt, so its time-stamp is not checked here")
+        ev.fail("witness", f"the card's witness receipt does not verify ({r.witness_status or 'no status'})")
     ev.card_record = maya.note(CARD_RECEIVED, {"seller": key, "anchor": r.anchor, "card_sha256": card_digest(r.card)},
                                subject_ref=key)["record_id"]
     return ev
