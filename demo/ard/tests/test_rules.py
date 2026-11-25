@@ -38,8 +38,8 @@ def pair(tmp_path):
     return maya, alder
 
 
-def stub_engine(tmp_path, *, caps_fail_when_history: bool = True, other_fail: bool = False, rc: int = 0, err: str = "",
-                verdict: str = ""):
+def stub_engine(tmp_path, *, caps_fail_when_history: bool = True, other_fail: bool = False, do_fail: bool = False,
+                rc: int = 0, err: str = "", verdict: str = ""):
     """A stand-in `capsule-engine`: records its argv and the limits file, answers from the input's history."""
     log = tmp_path / "engine-calls.jsonl"
     script = tmp_path / "engine"
@@ -59,11 +59,14 @@ if {caps_fail_when_history!r} and inp["history"]:
                      "reason": "the 7-day total with this purchase is over the 7-day limit you set", "limit": 2000, "value": 4000}})
 if {other_fail!r}:
     findings.append({{"id": "r06-new-merchant", "check": "counterparty_seen_before/4.0.0", "verdict": "fail",
-                     "reason": "no earlier payment to this merchant"}})
+                     "reason": "no earlier payment to this merchant (the engine looked in this deal only)"}})
+if {do_fail!r}:
+    findings.append({{"id": "r02-ordinary-purchase", "check": "counterparty_seen_before/4.0.0", "verdict": "fail",
+                     "reason": "no earlier payment to this merchant (the engine looked in this deal only)"}})
 findings.append({{"id": "r05-spending-limits#per_purchase", "check": "caps/5.1.0", "verdict": "pass", "limit": 2000, "value": 2000}})
 print(json.dumps({{"schema": "external-check-result/v0", "ruleset_id": "asg/everyday/0.3.8", "definition_digest": "ab" * 32,
-                  "verdict": {verdict!r} or ("escalate" if len(findings) > 1 else "allow"), "tier": "recomputed",
-                  "findings": findings}}))
+                  "verdict": {verdict!r} or ("escalate" if any(f["verdict"] == "fail" for f in findings) else "allow"),
+                  "tier": "recomputed", "findings": findings}}))
 """)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     return script, log
@@ -83,6 +86,19 @@ def test_the_cut_check_and_pay_is_the_reference_method_cut_at_the_payment(tmp_pa
         del j["body"]["reference_commitment"]
         j["x-deal-v0"].pop("commit_alg", None)
     assert act["body"] == ref["body"] and act["x-deal-v0"]["refs"] == ref["x-deal-v0"]["refs"]
+    maya.close(); alder.close()
+
+
+def test_the_check_states_the_whole_price_is_due_up_front_and_nothing_else_differs_from_the_reference(tmp_path):
+    maya, alder = pair(tmp_path)
+    t = terms(ITEM, 2000, CURRENCY, "simulated")
+    chain = maya.new_deal("deal-00000000000000c3", "buyer", alder.key_id, t)
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    body = json.loads(rules.pay_check(chain, AT, upfront=True)[0].payload)["body"]
+    assert body.pop("upfront_amount_minor") == 2000
+    chain2 = maya.new_deal("deal-00000000000000c4", "buyer", alder.key_id, t)
+    maya.open_deal(chain2, chain2.open(AT, "ask"))
+    assert body == json.loads(rules.pay_check(chain2, AT)[0].payload)["body"]
     maya.close(); alder.close()
 
 
@@ -145,14 +161,37 @@ def test_a_held_order_the_person_approves_goes_on_to_the_payment_and_the_approva
     maya.close(); alder.close()
 
 
-def test_a_pack_ask_that_is_not_the_limit_is_not_held(tmp_path, monkeypatch):
-    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
+def test_any_failing_ask_rule_holds_the_order_as_one_ask_listing_every_reason_in_the_rules_words(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True, do_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
     chain = maya.new_deal("deal-00000000000000a5", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
     maya.open_deal(chain, chain.open(AT, "ask"))
-    outcome = rules.gate(maya, chain, 2000, AT)
-    assert outcome.held is False and outcome.asks == ["no earlier payment to this merchant"] and outcome.verdict == "escalate"
+    asked = []
+    outcome = rules.gate(maya, chain, 2000, AT, lambda o: asked.append(o) or True)
+    # rule 6 (ASK) holds, with the engine's note on how it looked left out; rule 2 (DO) only withholds an allowance
+    assert outcome.held and outcome.reasons == ["no earlier payment to this merchant"] and len(asked) == 1
+    assert outcome.asks and outcome.verdict == "escalate" and outcome.decision == "approved"
+    maya.close(); alder.close()
+
+
+def test_with_ask_always_the_person_is_asked_about_an_order_nothing_holds_and_a_no_pays_nothing(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False)
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    chain = maya.new_deal("deal-00000000000000a7", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    asked = []
+    assert rules.gate(maya, chain, 2000, AT, lambda o: asked.append(o) or True).decision == "" and not asked
+    chain = maya.new_deal("deal-00000000000000a8", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    outcome = rules.gate(maya, chain, 2000, AT, lambda o: asked.append(o) or True, ask_always=True)
+    assert len(asked) == 1 and not asked[0].held and outcome.decision == "approved"
+    chain = maya.new_deal("deal-00000000000000a9", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    with pytest.raises(rules.RuleHeld) as no:
+        rules.gate(maya, chain, 2000, AT, lambda o: False, ask_always=True)
+    assert no.value.reasons == [] and "not approved" in str(no.value)
     maya.close(); alder.close()
 
 
@@ -181,7 +220,11 @@ def has_limits_flag() -> bool:
 def test_the_real_everyday_rules_block_the_second_order_over_the_limit(tmp_path):
     maya, alder = pair(tmp_path)
     t = terms(ITEM, 2000, CURRENCY, "simulated")
-    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000)
+    first = []
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, approve=lambda o: first.append(o) or True)
+    # a first order to a seller not paid before is held too (rules 6 and 8, one ask), not only an order over the limit
+    assert first[0].reasons == ["no earlier payment to this merchant from this profile", "the payment is not refundable",
+                                "the up-front amount 2000 is above the share limit"]
     with pytest.raises(rules.RuleHeld) as held:
         deals.run_deal(maya, alder, t, "ask", "", pay=lambda: pytest.fail("a declined order is not paid"), limit=2000,
                        approve=lambda o: False)
@@ -282,19 +325,23 @@ def test_with_no_limit_and_no_click_the_records_are_todays(tmp_path):
     maya.close(); alder.close()
 
 
-def test_a_pack_ask_pauses_the_check_and_the_pay_click_answers_it(tmp_path, monkeypatch):
-    """The real Everyday Rules escalate the first order too (a new merchant, a payment that cannot be undone): that is a
-    pause, answered by the person's Pay click; with no click (the gate off, tests only) it is the agent card's answer,
-    since standing intent approves only a pass."""
+def test_a_pack_ask_pauses_the_check_and_the_persons_answer_to_the_hold_approves_it(tmp_path, monkeypatch):
+    """The real Everyday Rules escalate the first order too (a new merchant, a payment that cannot be undone): each is an
+    ASK rule, so the order is held and the person's Approve answers the pause (#230). A pause no ASK rule makes (a DO rule
+    only) with no click (the gate off, tests only) is the agent card's answer, since standing intent approves only a pass."""
     engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     maya, alder = pair(tmp_path)
     t = terms(ITEM, 2000, CURRENCY, "simulated")
-    click = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")
-    clicked = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, clicked=click))
-    assert clicked["verdict"]["body"]["result"] == "pause" and clicked["approval"]["body"]["approver"] == "user"
-    assert clicked["verdict"]["body"]["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r06_new_merchant"}]
+    said = rules.Answer("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves. The Everyday Rules held this "
+                        "order for your OK: no earlier payment to this merchant. Nothing has been paid yet. Approve this "
+                        "order anyway, or decline?", "Approve")
+    held = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=2000, approve=lambda o: said))
+    assert held["verdict"]["body"]["result"] == "pause" and held["approval"]["body"]["approver"] == "user"
+    assert held["verdict"]["body"]["differences"] == [{"question": "safety", "rule": "rules_escalate", "field": "r06_new_merchant"}]
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, do_fail=True)
     unclicked = _records(maya, deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-2", limit=2000))
+    assert unclicked["verdict"]["body"]["result"] == "pause"
     assert unclicked["approval"]["body"] == {"choice": "proceed", "proceed": True, "approver": "agent_card"}
     maya.close(); alder.close()
 
@@ -397,11 +444,31 @@ def test_every_finding_the_engine_returns_is_kept_and_sealed_in_the_note(tmp_pat
     maya, alder = pair(tmp_path)
     chain = maya.new_deal("deal-00000000000000a6", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
     maya.open_deal(chain, chain.open(AT, "ask"))
-    outcome = rules.gate(maya, chain, 2000, AT)
+    outcome = rules.gate(maya, chain, 2000, AT, lambda o: True)
     assert [(f["id"], f["verdict"]) for f in outcome.findings] == [
         ("r06-new-merchant", "fail"), ("r05-spending-limits#per_purchase", "pass")], "a passing finding is kept too"
     note = [p for _, p in maya.notes(rules.CHECKED)][-1]
-    assert note["findings"] == outcome.findings and note["asks"] == ["no earlier payment to this merchant"]
+    assert note["findings"] == outcome.findings and note["reasons"] == ["no earlier payment to this merchant"] and note["asks"] == []
+    maya.close(); alder.close()
+
+
+def test_a_failing_never_rule_is_refused_and_not_put_to_the_person_and_a_renamed_caps_finding_still_holds(tmp_path, monkeypatch):
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False)
+    never = ('findings = [{"id": "r23-secrets-and-authentication", "check": "credential_pattern/1.0.0", '
+             '"verdict": "fail", "reason": "outgoing content matches a credential pattern"}]')
+    engine.write_text(engine.read_text().replace("findings = []", never, 1))
+    monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
+    maya, alder = pair(tmp_path)
+    chain = maya.new_deal("deal-00000000000000d1", "buyer", alder.key_id, terms(ITEM, 2000, CURRENCY, "simulated"))
+    maya.open_deal(chain, chain.open(AT, "ask"))
+    asked = []
+    with pytest.raises(rules.RulesRefused, match="refused by the Everyday Rules, not put to you: outgoing content"):
+        rules.gate(maya, chain, 2000, AT, lambda o: asked.append(o) or True, ask_always=True)
+    assert asked == [], "a NEVER rule is not a question for the person"
+    note = [p for _, p in maya.notes(rules.CHECKED)][-1]
+    assert note["refused"] == ["outgoing content matches a credential pattern"] and note["decision"] == ""
+    assert rules._is_ask({"id": "something-else", "check": "caps/5.1.0"})
+    assert not rules._is_ask({"id": "r04-x", "check": "action_class_gate/1.2.0"})
     maya.close(); alder.close()
 
 
@@ -410,13 +477,14 @@ def test_every_finding_the_engine_returns_is_kept_and_sealed_in_the_note(tmp_pat
 def test_the_real_rules_know_a_seller_paid_before_and_flag_the_repeated_payment(tmp_path):
     maya, alder = pair(tmp_path)
     t = terms(ITEM, 2000, CURRENCY, "simulated")
-    # the person's Pay click (#261): an act no one approved is not a decide Capsule, so it does not count as a payment made
-    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=5000, clicked=rules.Answer("Pay 2000?", "Pay"))
+    deals.run_deal(maya, alder, t, "ask", "", pay=lambda: "ref-1", limit=5000, approve=lambda o: True)
     chain = maya.new_deal("deal-00000000000000b2", "buyer", alder.key_id, t)
     maya.open_deal(chain, chain.open(AT, "ask"))
-    outcome = rules.gate(maya, chain, 5000, AT)
+    outcome = rules.gate(maya, chain, 5000, AT, lambda o: True)
     by_id = {f["id"]: f["verdict"] for f in outcome.findings}
     assert by_id["r02-ordinary-purchase"] == "pass" and by_id["r06-new-merchant"] == "pass", "a seller paid before is not new"
     assert by_id["r27-no-commitment-beyond-task-bounds"] == "fail", "the same act in another deal is flagged"
-    assert by_id["r08-non-refundable-or-hard-to-undo"] == "fail" and outcome.held is False
+    assert by_id["r08-non-refundable-or-hard-to-undo"] == "fail" and outcome.held is True
+    assert outcome.reasons == ["the payment is not refundable", "the up-front amount 2000 is above the share limit",
+                               "the same act was taken in another deal inside the window"]
     maya.close(); alder.close()

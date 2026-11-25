@@ -401,7 +401,8 @@ def receipt_view(node: gn.Node, label: str, deal_id: str, seller: bool = False, 
 # -- Maya's half of the deal ----------------------------------------------------------------------
 
 def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_wait: float = 120, on_paid=None,
-               limit: int | None = None, approve=None, clicked: rules.Answer | None = None) -> object:
+               limit: int | None = None, approve=None, clicked: rules.Answer | None = None,
+               ask_always: bool = False) -> object:
     """Maya's half of :func:`deals.run_deal`: open, wait for the seller's half, pay, exchange halves, close.
     With ``limit`` her deal check runs the Everyday Rules under her spending limit first; an order over it is held for
     her OK (``approve``) and a decline raises :class:`rules.RuleHeld`: nothing is paid. ``clicked`` is her Pay click,
@@ -414,7 +415,7 @@ def buyer_deal(maya: gn.Node, peer: Peer, chain, rail, price_msat: int, seller_w
     deals._reconcile(maya, s1, peer)
     outcome = None
     if limit is not None:
-        outcome = rules.gate(maya, maya.deal(deal_id), limit, now(), approve)  # a decline raises RuleHeld: nothing is paid
+        outcome = rules.gate(maya, maya.deal(deal_id), limit, now(), approve, ask_always)  # a decline raises RuleHeld: nothing is paid
     payment = rail.pay(price_msat)
     if on_paid is not None:
         on_paid(payment)  # at once: what follows (the seller's half, the close) can fail after the money moved

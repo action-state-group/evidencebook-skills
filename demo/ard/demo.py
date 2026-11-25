@@ -222,7 +222,7 @@ class Run:
         return pick
 
     def pay_deal(self, made: dict[str, buyer.Assessment], chosen: str, pick: str, limit: int | None = None, approve=None,
-                 clicked=None) -> None:
+                 clicked=None, ask_always: bool = False) -> None:
         a = made[chosen]
         seller = self.w.nodes[chosen]
         name = SELLERS[chosen]["label"]
@@ -240,7 +240,7 @@ class Run:
             return payment.reference
 
         deals.run_deal(self.maya, seller, chain.terms, ASK, "", opened=chain, pay=send, limit=limit, approve=approve,
-                       clicked=clicked)
+                       clicked=clicked, ask_always=ask_always)
         after = self.rail.balances()
         print(f"operator check, not shown as the price: balances {before} → {after}")
         rule("7  Both halves compared, deal closed, card after the next checkpoint")

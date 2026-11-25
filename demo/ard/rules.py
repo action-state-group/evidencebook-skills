@@ -6,10 +6,10 @@ The limit is ``ARD_LIMIT_MSAT``: the most Maya may spend in a rolling week, and 
 runs and the demo behaves as before. With it set, each order's check record is sealed first, handed to
 ``capsule-engine guard check --limits FILE`` with Maya's earlier paid orders as history, and a failing caps finding
 (an order over the limit the person set) is HELD for the person's OK, not refused (Steven, ops u325, 2026-10-12: a failing
-caps check on a person-set limit is ESCALATE): the screen names the rule, the limit and the amount and asks the person
-to approve or decline. A decline pays nothing; an approval goes on to the payment. Either answer is sealed as a note of
-Maya's (:data:`CHECKED`). The pack's other asks (a new merchant, a payment that cannot be undone) are not held: the
-person's Pay click, made before the check runs, answers them until evidencebook-skills#223 names them in the dialog.
+caps check on a person-set limit is ESCALATE). So is any other failing ASK rule (a new merchant, a payment that cannot
+be undone, a repeated payment): Sherlock2 2026-11-23, rules doc section 4.5, any failing ASK rule makes the order one ask
+that lists every reason, each in the rule's own words. A decline pays nothing; an approval goes on to the payment.
+Either answer is sealed as a note of Maya's (:data:`CHECKED`).
 
 The check record is sealed before the payment and the act after it, so the deal check can stop the order. The
 evidencebook goose reference seals the check, its verdict, the approval and the act in one call
@@ -78,14 +78,16 @@ class Outcome:
     held: bool
     limit_msat: int
     amount_msat: int
-    reasons: list[str] = field(default_factory=list)  # the failing caps findings: the rule's reason with its numbers
-    asks: list[str] = field(default_factory=list)  # the pack's other failing rules: the presenter's dialog covers these
+    reasons: list[str] = field(default_factory=list)  # every failing ASK rule in its own words, caps with its numbers
+    asks: list[str] = field(default_factory=list)  # a failing DO rule (no allowance given): sealed, never asked about
+    refused: list[str] = field(default_factory=list)  # a failing NEVER rule (23 to 25): the order is not put to the person
     ruleset: str = ""
     findings: list[dict] = field(default_factory=list)  # every finding the engine returned: id, check, verdict, reason (and limit, value when it names them)
-    decision: str = ""  # "approved" or "declined" when the order was held and the person was asked, else ""
+    decision: str = ""  # "approved" or "declined" when the person was asked (a held order, or any under ask_always), else ""
     rules: dict = field(default_factory=dict)  # the verdict record's ``rules`` block, as sealed
     differences: list[dict] = field(default_factory=list)  # the verdict's differences: one per failing finding
-    answer: Answer | None = None  # the person's answer to a held order (Approve), when they approved it
+    answer: Answer | None = None  # the person's answer (Approve on a held order, or Pay under ask_always), when they said yes
+    over_limit: bool = False  # every held reason is a spending limit (caps): the ask says "over a spending limit you set"
 
     @property
     def paused(self) -> bool:
@@ -105,8 +107,10 @@ def limit_msat() -> int | None:
 
 # -- the check record, sealed before the payment ---------------------------------------------------------------
 
-def pay_check(chain: dr.DealChain, at: datetime) -> list[dr.Step]:
-    """The buyer's check on the payment: ``check_and_pay`` up to and including its check record."""
+def pay_check(chain: dr.DealChain, at: datetime, upfront: bool = False) -> list[dr.Step]:
+    """The buyer's check on the payment: ``check_and_pay`` up to and including its check record. With ``upfront`` (the
+    deal check under a limit, :func:`gate`) it also states that the whole price is due up front (the demo pays first,
+    delivery follows), which the reference does not state and Everyday Rule 22 reads."""
     if chain._seller:
         raise ValueError("only a buyer pays")
     chain._open_for_more()
@@ -118,6 +122,8 @@ def pay_check(chain: dr.DealChain, at: datetime) -> list[dr.Step]:
             "spend_authorized_minor": t.price_minor, "taxonomy_version": dr.TAXONOMY_VERSION,
             "terms": {"item": t.item, "price_minor": t.price_minor, "currency": t.currency},
             "recourse": {"rail": t.rail, "refundable": t.refundable}}
+    if upfront:  # rule 22 (up-front above 25%) reads it and asks
+        body["upfront_amount_minor"] = t.price_minor
     chain._step(chain._untyped(deal.TYPE_CHECK, at, body, counterparty=chain._counterparty(deal.FP_ALG)),
                 at, {"check": "pay"})
     return chain._since(n)
@@ -264,9 +270,10 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
     if result["verdict"] not in ("allow", "escalate", "deny", "not_evaluable"):
         raise RulesError(f"the deal check could not run: the engine answered {result['verdict']!r}")
     failing = [f for f in result["findings"] if f["verdict"] == "fail"]
-    caps = [f for f in failing if str(f.get("check", "")).startswith("caps/")]
-    reasons = [_words(f) for f in caps]
-    asks = [f["reason"] for f in failing if f not in caps and f.get("reason")]
+    asking = [f for f in failing if _is_ask(f)]
+    refusing = [f for f in failing if _is_never(f)]
+    reasons = list(dict.fromkeys(_words(f) for f in asking))  # one line per rule's own words; rules 5 to 22, 26 and 27
+    asks = [f["reason"] for f in failing if f not in asking and f.get("reason")]  # a DO rule that gave no allowance
     sealed = {"status": "evaluated", "ruleset_id": result["ruleset_id"], "definition_digest": result["definition_digest"],
               "checker_sha256": _sha256(engine()), "verdict": result["verdict"],
               "tier": result.get("tier") if result.get("tier") in ("recomputed", "judged") else "not_stated",
@@ -276,8 +283,10 @@ def check(node, chain: dr.DealChain, check_step_index: int, limit: int) -> Outco
         sealed["grade"] = result["grade"]
     seen = [{k: f[k] for k in ("id", "check", "verdict", "reason", "limit", "value") if f.get(k) is not None}
             for f in result["findings"]]
-    return Outcome(result["verdict"], bool(caps), limit, chain.terms.price_minor, reasons, asks, result["ruleset_id"], seen,
-                   rules=sealed, differences=_differences(result))
+    return Outcome(result["verdict"], bool(asking), limit, chain.terms.price_minor, reasons, asks,
+                   refused=[_words(f) for f in refusing], ruleset=result["ruleset_id"], findings=seen, rules=sealed,
+                   differences=_differences(result),
+                   over_limit=bool(asking) and all(str(f.get("check", "")).startswith("caps/") for f in asking))
 
 
 #: The members of a finding the verdict seals (x-deal-v0 section 8); the checker's own words (``reason``) are not sealed.
@@ -312,8 +321,26 @@ def _sha256(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
+#: The rules whose disposition is ASK (the rules doc, Everyday Rules 27 v0.2): a failing one holds the order for the
+#: person's OK, all of them as one ask (section 4.5). Rules 1 to 4 are DO (a failing one only withholds an allowance)
+#: and 23 to 25 are NEVER (nothing here asks about them).
+ASK_RULES = frozenset(range(5, 23)) | {26, 27}
+
+
+def _is_ask(finding: dict) -> bool:
+    m = re.match(r"r(\d{2})", str(finding.get("id", "")))
+    return str(finding.get("check", "")).startswith("caps/") or (bool(m) and int(m.group(1)) in ASK_RULES)
+
+
+def _is_never(finding: dict) -> bool:
+    m = re.match(r"r(\d{2})", str(finding.get("id", "")))
+    return bool(m) and int(m.group(1)) in (23, 24, 25)
+
+
 def _words(finding: dict) -> str:
-    out = finding.get("reason", "over the limit you set")
+    """The rule's own words for the person: the engine's reason without a trailing parenthetical about how the engine
+    looked (Sherlock2, 2026-11-23); a caps finding adds its limit and the amount."""
+    out = re.sub(r"\s*\([^)]*\)$", "", finding.get("reason", "over the limit you set"))
     if finding.get("limit") is not None and finding.get("value") is not None:
         out += f" (limit {finding['limit']:,} msat, this order would bring it to {finding['value']:,} msat)"
     return out
@@ -324,39 +351,45 @@ def seal_note(node, deal_id: str, outcome: Outcome) -> None:
     seals the findings without them)."""
     node.note(CHECKED, {"deal_id": deal_id, "ruleset": outcome.ruleset, "verdict": outcome.verdict,
                         "held": outcome.held, "decision": outcome.decision, "limit_msat": outcome.limit_msat,
-                        "amount_msat": outcome.amount_msat, "reasons": outcome.reasons, "asks": outcome.asks,
+                        "amount_msat": outcome.amount_msat, "reasons": outcome.reasons, "asks": outcome.asks, "refused": outcome.refused,
                         "findings": outcome.findings}, subject_ref=deal_id)
 
 
 def gate(node, chain: dr.DealChain, limit: int, at: datetime,
-         approve: Callable[[Outcome], bool] | None = None) -> Outcome:
+         approve: Callable[[Outcome], bool] | None = None, ask_always: bool = False) -> Outcome:
     """Seal the check record and run the rules on it; return what they said once the order may go ahead. An order the
-    rules hold is put to the person through ``approve``, which returns the :class:`Answer` it showed them for an
-    Approve (or a plain truthy value, when its words are :func:`screens.rules_ask`'s), and a falsy value for a decline
-    (no ``approve``: declined); a decline raises
-    :class:`RuleHeld`: the check is sealed, nothing else, and nothing is paid. Either answer is sealed as a note. An
-    approval is kept on the outcome as the person's :class:`Answer` (the dialog's words and Approve), for the approval
-    record. A ``deny`` or a ``not_evaluable`` verdict pays nothing: there is no way to proceed."""
-    node.seal(chain, pay_check(chain, at))
+    rules hold is put to the person through ``approve`` (no ``approve``: declined); with ``ask_always`` every order is,
+    held or not, so the one dialog that releases the payment also carries any hold reasons. A decline raises
+    :class:`RuleHeld` (``reasons`` empty when nothing was held): the check is sealed, nothing else, and nothing is
+    paid. Either answer is sealed as a note. ``approve`` returns the :class:`Answer` it showed the person (the dialog's
+    words and the button) for a yes, or a plain truthy value when its words are :func:`screens.rules_ask`'s, and a falsy
+    value for a decline; an approval is kept on the outcome as that :class:`Answer`, for the approval record. A failing
+    NEVER rule (23 to 25), a ``deny`` or a ``not_evaluable`` verdict raises :class:`RulesRefused`: there is no way to
+    proceed, and nothing is asked or paid."""
+    node.seal(chain, pay_check(chain, at, upfront=True))
     outcome = check(node, chain, len(node.deal_payloads(chain.deal_id)) - 1, limit)
+    if outcome.refused:  # a NEVER rule failed: not a question for the person, and nothing is paid
+        seal_note(node, chain.deal_id, outcome)
+        raise RulesRefused("refused by the Everyday Rules, not put to you: " + "; ".join(outcome.refused))
     if outcome.verdict in ("deny", "not_evaluable"):
         seal_note(node, chain.deal_id, outcome)
         raise RulesRefused(f"the Everyday Rules answered {outcome.verdict} on this order, so it cannot go ahead")
-    if outcome.held:
+    if outcome.held or ask_always:
         try:
             ok = approve(outcome) if approve is not None else False
         except Exception as exc:  # the question could not be put: nothing is paid and the order is not approved
             outcome.decision = "declined"
             seal_note(node, chain.deal_id, outcome)
-            raise RulesError(f"the person could not be asked about the held order: {type(exc).__name__}: {exc}") from None
+            raise RulesError(f"the person could not be asked: {type(exc).__name__}: {exc}") from None
         outcome.decision = "approved" if ok else "declined"
         if isinstance(ok, Answer):
             outcome.answer = ok  # the words the dialog actually showed
-        elif ok:
+        elif ok and outcome.held:
             import screens  # here, not at the top: screens imports buyer, which imports this module
 
-            outcome.answer = Answer(screens.rules_ask(outcome.reasons), "Approve")
+            outcome.answer = Answer(screens.rules_ask(outcome.reasons, outcome.over_limit), "Approve")
     seal_note(node, chain.deal_id, outcome)
     if outcome.decision == "declined":
-        raise RuleHeld("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons), outcome.reasons)
+        raise RuleHeld(("held for your OK at deal check, and declined: " + "; ".join(outcome.reasons)) if outcome.held
+                       else "the payment was not approved", outcome.reasons)
     return outcome

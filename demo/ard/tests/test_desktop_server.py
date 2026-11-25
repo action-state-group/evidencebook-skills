@@ -148,10 +148,13 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
     assert "REFUSED:" in second and "Held for your OK at deal check, nothing paid" in second and "limit you set" in second
     assert "limit 2,000 msat" in second and "4,000 msat" in second and "declined" in second
     assert len(asked) == 1 and "Approve this order anyway, or decline?" in asked[0]
-    assert asked[0].startswith("This order is over a spending limit you set")
+    # one dialog: the payment, then every reason; a limit with the other ASK rules is not only "over a spending limit"
+    assert asked[0].startswith("Pay Alder Print Co.") and "The Everyday Rules held this order for your OK: " in asked[0]
     assert tools._session.run.rail.paid == [2000]
     # a held order the person declines is not an attempted payment, and the earlier order stays paid
     assert "alder" not in tools._session.attempted and "alder" in tools._session.paid
+    # the declined order hands the agent the question on the next call (no dialog); only the call after it runs the check
+    assert "opens no dialog" in tools.ard_pay("alder")
     # the same when the check cannot run at all (no engine): nothing paid, the session as it was, and a retry is possible
     monkeypatch.setenv("CAPSULE_ENGINE", "/nonexistent/capsule-engine")
     failed = tools.ard_pay("alder")
@@ -161,21 +164,27 @@ def test_with_a_spending_limit_a_second_order_is_held_for_the_persons_ok_and_a_d
 
 
 @pytest.mark.skipif(not __import__("test_rules").has_limits_flag(), reason="CAPSULE_ENGINE has no `guard check --limits` (capsule-engine#314)")
-def test_a_declined_payment_dialog_on_a_second_order_keeps_the_seller_paid_and_an_approved_hold_pays(tools, monkeypatch):
+def test_under_a_limit_one_dialog_after_the_deal_check_carries_every_hold_reason_and_an_approval_pays(tools, monkeypatch):
+    """With the limit set the payment dialog moves after the deal check: a held order is one dialog (payment and every
+    reason, Approve or Decline); the first dialog is never shown before the rules have answered."""
     s = tools._session
     assert s.run.rail.paid == [2000] and "alder" in s.paid
     monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
-    # the presenter cancels the payment dialog of the second order: nothing started, the first order still counts as paid
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: False)
-    assert "the presenter did not approve" in tools.ard_pay("alder")
+    monkeypatch.setattr(tools, "approve_payment", lambda summary: pytest.fail("the payment dialog is not shown first under a limit"))
+    asked = []
+    monkeypatch.setattr(tools, "approve_hold", lambda summary: asked.append(summary) or False)
+    declined = tools.ard_pay("alder")
+    assert "REFUSED:" in declined and "declined" in declined and len(asked) == 1
+    # the one question names the payment, the limit, and the other failing rules in their own words
+    assert "Pay Alder Print Co." in asked[0] and "The Everyday Rules held this order for your OK:" in asked[0] and "limit you set" in asked[0]
+    assert "the payment is not refundable" in asked[0] and "the same act was taken in another deal" in asked[0]
+    assert "the up-front amount 2000 is above the share limit" in asked[0]
     assert "alder" in s.paid and "alder" not in s.attempted and s.run.rail.paid == [2000]
-    # the next call opens no dialog (it hands the agent the question), and still leaves the seller paid
-    assert "opens no dialog" in tools.ard_pay("alder") and "alder" in s.paid
-    # now the person clicks Pay, the rules hold the order, and the person approves: the payment goes on
-    monkeypatch.setattr(tools, "approve_payment", lambda summary: True)
+    # a decline, like a cancelled payment dialog, leaves the next call to hand the agent the question: no dialog opens
+    assert "opens no dialog" in tools.ard_pay("alder") and len(asked) == 1
     monkeypatch.setattr(tools, "approve_hold", lambda summary: True)
     approved = tools.ard_pay("alder")
-    assert "You approved this order over your limit" in approved
+    assert "You approved this held order" in approved
     assert s.run.rail.paid == [2000, 2000] and "alder" in s.paid
     # #261: the deal's own records name the person's Approve click and what the rules said
     import json as _json
@@ -212,3 +221,18 @@ def tools_module():
     import desktop_server
 
     return desktop_server
+
+
+def test_the_one_question_under_a_limit_is_the_payment_dialog_for_an_order_nothing_holds(monkeypatch):
+    import types
+
+    mod = tools_module()
+    shown = []
+    monkeypatch.setattr(mod, "approve_payment", lambda summary: shown.append(summary) or False)
+    monkeypatch.setattr(mod, "approve_hold", lambda summary: pytest.fail("nothing is held"))
+    ask = mod._ask_order("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", False, "fake")
+    assert ask(types.SimpleNamespace(held=False, reasons=[])) is None and shown == ["Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves."]
+    monkeypatch.setattr(mod, "approve_payment", lambda summary: True)
+    # the Pay click is the person's answer, which the approval record commits to (#261)
+    assert ask(types.SimpleNamespace(held=False, reasons=[])) == mod.rules.Answer(
+        "Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", "Pay")

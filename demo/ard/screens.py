@@ -104,16 +104,19 @@ def check_lines(ev: Evidence) -> list[str]:
     return [f"{'–' if c.stated else '✓' if c.ok else '✗'} {c.name}: {c.detail}" for c in ev.checks]
 
 
-def rules_ask(reasons: list[str]) -> str:
+def rules_ask(reasons: list[str], over_limit: bool = True) -> str:
     """The question the approval dialog asks when the Everyday Rules hold an order (hand run 2026-11-24: the answer was
-    asked after the screen already said "held ... nothing paid", and nothing said what happened after Approve)."""
-    return ("This order is over a spending limit you set: " + "; ".join(reasons)
-            + ". Nothing has been paid yet. Approve this order anyway, or decline?")
+    asked after the screen already said "held ... nothing paid", and nothing said what happened after Approve).
+    ``over_limit``: every reason is a spending limit the person set; otherwise another ASK rule holds it too (Sherlock2,
+    2026-11-23: any failing ASK rule is one ask listing every reason in the rule's own words)."""
+    lead = "This order is over a spending limit you set: " if over_limit else "The Everyday Rules held this order for your OK: "
+    return lead + "; ".join(reasons) + ". Nothing has been paid yet. Approve this order anyway, or decline?"
 
 
-def rules_approved(reasons: list[str]) -> str:
+def rules_approved(reasons: list[str], over_limit: bool = True) -> str:
     """What the screen says after the person approves a held order."""
-    return ("You approved this order over your limit (" + "; ".join(reasons) + "). Paying now. Your approval goes "
+    what = "this order over your limit" if over_limit else "this held order"
+    return (f"You approved {what} (" + "; ".join(reasons) + "). Paying now. Your approval goes "
             "into this deal's records and will show on its receipt.")  # Sherlock2 on #265: not recorded until paid
 
 

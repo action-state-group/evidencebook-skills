@@ -126,9 +126,9 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
             name = _rules_name(str(rules.get("ruleset_id", "")))
             if rules.get("verdict") == "allow":
                 return f"Checked against {name}: allowed"
-            if _held_by_limit(body):
-                return f"Checked against {name}: over your limit, so the order was held for your approval"
             asks, n = _asks(rules)
+            if _held_by_limit(body):  # with the other failing checks, if any (#230: one ask lists every reason)
+                return f"Checked against {name}: {asks}, so the order was held for your approval"
             return f"Checked against {name}: {asks}, which {'needs' if n == 1 else 'need'} your approval"
         result = body.get("result") or body.get("disposition")
         return f"Checked: {result}, {len(body.get('differences') or body.get('findings') or [])} difference(s)"
@@ -138,9 +138,9 @@ def _line(kind: str, body: dict, simulated: bool, answered: dict | None = None) 
         if body.get("approver") == "user" and _held_by_limit(answered):
             return "Held by your spending limit, then approved by you"  # Sherlock2 on #261
         if body.get("approver") == "user" and (answered or {}).get("result") == "pause":
-            # The pack's other asks: no dialog named them, and the Pay click came first (Sherlock2's call A on #265,
-            # until #223 shows them in the dialog).
-            return "Approved by you (your Pay click, made before this check ran)"
+            # The pack's other asks: under a limit the one dialog comes after the check and names every reason (#230,
+            # which does #223; Sherlock2's call A on #265 held only until then).
+            return "Held for your approval, then approved by you"
         return {"user": "Approved by you",
                 "standing_intent": "Went ahead under the instructions you gave your agent",
                 "agent_card": "Went ahead on the agent's card"}.get(body.get("approver"), "Approved")

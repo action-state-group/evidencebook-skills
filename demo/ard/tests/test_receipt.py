@@ -346,8 +346,8 @@ def test_a_sample_deal_its_owner_marked_did_not_hold_says_so_on_its_receipt(seed
 
 def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit():
     """#261 (Sherlock2's wording): the person's click reads "Approved by you"; after a hold by their spending limit it
-    reads "Held by your spending limit, then approved by you"; a pause for the pack's other asks names no limit, and
-    says the Pay click came before the check (Sherlock2's call A on #265)."""
+    reads "Held by your spending limit, then approved by you"; a pause for the pack's other asks names no limit (#230:
+    the one dialog comes after the check and lists every reason, so no click came before it)."""
     caps = {"result": "pause", "rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
                       "findings": [{"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail"}]}}
     other = {"result": "pause", "rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate",
@@ -355,12 +355,15 @@ def test_the_approval_line_says_who_approved_and_names_the_hold_only_for_a_limit
                                     {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "pass"}]}}
     user = {"approver": "user"}
     assert receipt._line("approval", user, True, caps) == "Held by your spending limit, then approved by you"
-    assert receipt._line("approval", user, True, other) == "Approved by you (your Pay click, made before this check ran)"
+    assert receipt._line("approval", user, True, other) == "Held for your approval, then approved by you"
     assert receipt._line("approval", user, True, {"rules": {"status": "not_configured"}}) == "Approved by you"
     assert receipt._line("approval", user, True, {"result": "pass", "rules": {"status": "evaluated", "verdict": "allow"}}) \
         == "Approved by you"
     assert receipt._line("verdict", caps, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
                                                     "over your limit, so the order was held for your approval")
+    both = {"result": "pause", "rules": {**caps["rules"], "findings": caps["rules"]["findings"] + other["rules"]["findings"]}}
+    assert receipt._line("verdict", both, True).endswith(  # the limit with the other failing checks, each named once
+        ": over your limit and a seller you have not paid before, so the order was held for your approval")
     assert receipt._line("verdict", other, True) == ("Checked against the Everyday Rules (0.3.8) and your spending limit: "
                                                      "a seller you have not paid before, which needs your approval")
     first = {"rules": {"status": "evaluated", "ruleset_id": "asg/everyday/0.3.8", "verdict": "escalate", "findings": [
@@ -410,13 +413,14 @@ def test_a_held_then_approved_order_s_receipt_says_the_limit_held_it_and_the_per
 @pytest.mark.parametrize("clicked,limit,approver", [(True, False, "user"), (False, True, "agent_card")])
 def test_each_new_approval_shape_verifies_on_the_buyers_receipt(seeded, tmp_path, monkeypatch, clicked, limit, approver):
     """#265 review: capsulectl verify --bundle (the Go profile checker) takes a no-limit Pay click (`user`, the act
-    disposed by the human) and a pack-ask pause with no click (`agent_card`, no decide Capsule on the act)."""
+    disposed by the human) and a pause with no click (`agent_card`, no decide Capsule on the act): a failing DO rule
+    pauses without holding (#230: a failing ASK rule holds and is put to the person)."""
     import deals
     import rules
     from test_rules import stub_engine
     from world import CURRENCY, ITEM, SELLERS, terms
 
-    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, other_fail=True)
+    engine, _ = stub_engine(tmp_path, caps_fail_when_history=False, do_fail=True)
     monkeypatch.setenv("CAPSULE_ENGINE", str(engine))
     world, _ = seeded
     maya, alder = world.nodes["maya"], world.nodes["alder"]
