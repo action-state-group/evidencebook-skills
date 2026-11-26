@@ -320,7 +320,7 @@
   },
   {
    "case": "t1-stranger-climbs-on-its-own-card",
-   "why": "A stranger with no history with us reaches T1 on its own fresh, witnessed card with claims held (design \u00a74).",
+   "why": "A stranger with no history with us reaches T1 on its own fresh, witnessed commerce card, with at least 10 decided deals in the deal's band (design \u00a74; #385).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -335,9 +335,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -380,10 +392,6 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
-     },
      "disputes": {
       "open": 0,
       "of": 2,
@@ -391,7 +399,15 @@
        "against": 1,
        "of": 2
       }
-     }
+     },
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ]
     },
     "selection": {},
     "own": {
@@ -433,10 +449,6 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
-     },
      "disputes": {
       "open": 1,
       "of": 3,
@@ -444,7 +456,15 @@
        "against": 0,
        "of": 2
       }
-     }
+     },
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ]
     },
     "selection": {},
     "own": {
@@ -470,8 +490,8 @@
    }
   },
   {
-   "case": "t1-disputes-without-decided-are-recorded",
-   "why": "The card's disputes come without the decided ones: the disputes-against row reads not_read (no_dispute_tally), is recorded and does not limit, until #281 (#280).",
+   "case": "t1-disputes-without-decided-limit",
+   "why": "The card's received disputes come without the decided ones: the disputes-against row reads not_read (no_dispute_tally) and limits to T0. The commerce card read at T1 carries the tally, which ends #281's interim (#385).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -486,67 +506,18 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
-     },
      "disputes": {
       "open": 0,
       "of": 1
-     }
-    },
-    "selection": {},
-    "own": {
-     "exchanges": 0,
-     "settled": 0,
-     "held_halves": 0,
-     "conflicting": 0,
-     "verdicts": []
-    },
-    "operator": {
-     "deny_listed": false
-    },
-    "vouches": [],
-    "subject": "",
-    "judged": {},
-    "asks": {},
-    "asks_made": 0
-   },
-   "expected": {
-    "verdict": "GO",
-    "source": "rows",
-    "tier": "T1"
-   }
-  },
-  {
-   "case": "t1-unverifiable-card-with-a-tally-limits",
-   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason, and the card rows limit to T0 (#280; the pack asks for no card, #380).",
-   "input": {
-    "now": "2026-10-30T12:00:00Z",
-    "amount": "20000",
-    "currency": "sat",
-    "platform": {
-     "release_attestation": "valid",
-     "owner_signed": true
-    },
-    "card": {
-     "state": "unverifiable",
-     "first_checkpoint_at": "2026-06-01T00:00:00Z",
-     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
-     "witness": "placeholder-witness",
-     "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
      },
-     "disputes": {
-      "open": 0,
-      "of": 1,
-      "decided": {
-       "against": 0,
-       "of": 1
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
       }
-     }
+     ]
     },
     "selection": {},
     "own": {
@@ -572,8 +543,65 @@
    }
   },
   {
-   "case": "t1-no-card-limits",
-   "why": "The card is required from T1: with no card, every card row limits to T0. The pack asks for no card (Steven, 2026-11-25, Q6; #380).",
+   "case": "t1-unverifiable-card-with-a-tally-asks",
+   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason; the card rows limit, and the card is asked for again (#280).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "unverifiable",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "disputes": {
+      "open": 0,
+      "of": 1,
+      "decided": {
+       "against": 0,
+       "of": 1
+      }
+     },
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ]
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "ASK",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-no-card-asks",
+   "why": "The card is required from T1: one standard_history/3 ask answers every card row (#385).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -601,7 +629,7 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "LIMIT",
+    "verdict": "ASK",
     "source": "rows",
     "tier": "T0"
    }
@@ -634,7 +662,9 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {},
+    "asks": {
+     "standard_history/3": "refused"
+    },
     "asks_made": 0
    },
    "expected": {
@@ -644,8 +674,8 @@
    }
   },
   {
-   "case": "t1-stale-card-limits",
-   "why": "A stale card limits to T0.",
+   "case": "t1-stale-card-asks-again",
+   "why": "A stale card is asked for again.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -660,9 +690,21 @@
      "latest_checkpoint_at": "2026-10-01T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -683,14 +725,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "LIMIT",
+    "verdict": "ASK",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
    "case": "t1-thin-card-limits",
-   "why": "Too few claims held: LIMIT to T0, with count and denominator.",
+   "why": "Fewer than 10 decided deals in the deal's band, already asked: LIMIT to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -705,10 +747,362 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 3,
-      "total": 3
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 3,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-thin-card-asks",
+   "why": "Fewer than 10 decided deals in the deal's band, not yet asked: the card is asked for again, once for every card row.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 3,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "ASK",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-too-many-not-held-limits",
+   "why": "12 decided deals in the deal's band, 2 of them not held: 166 per thousand is over 100, already asked: LIMIT to T0.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 2
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-not-held-at-the-bound-goes",
+   "why": "10 decided deals in the deal's band, 1 not held: 100 per thousand is within the bound: GO at T1.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 10,
+       "adverse": 1
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-history-in-a-higher-band-goes",
+   "why": "History in a higher band than the deal's earns the deal's band too (profile \u00a73.1): GO at T1.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-history-only-in-a-lower-band-limits",
+   "why": "History only in a band below the deal's does not earn the deal's band, already asked: LIMIT to T0.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -5,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-card-without-a-tally-limits",
+   "why": "A verified card that carries no dispute tally limits to T0 (#385 ends #281's interim).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ]
     },
     "selection": {},
     "own": {
@@ -750,9 +1144,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "witness-z",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -795,9 +1201,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -840,9 +1258,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -885,9 +1315,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -922,6 +1364,140 @@
    }
   },
   {
+   "case": "t2-history-a-band-lower-holds-t1",
+   "why": "A $50 deal whose card earns only decade 0 ($1 to $9.99): the band row holds the tier its history earns, T1 (profile \u00a73.1, Effect).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "50",
+    "currency": "USDC",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 0,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {
+     "state": "verified",
+     "unanswered_disputes": []
+    },
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {
+     "adjacent-domain": {
+      "met": true,
+      "judge": "placeholder-judge"
+     }
+    },
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t2-history-two-bands-lower-holds-t0",
+   "why": "A $50 deal whose card earns only decade -1: no tier above T0 holds it, so the band row limits to T0.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "50",
+    "currency": "USDC",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": -1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {
+     "state": "verified",
+     "unanswered_disputes": []
+    },
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {
+     "adjacent-domain": {
+      "met": true,
+      "judge": "placeholder-judge"
+     }
+    },
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
    "case": "t2-no-selection-asks",
    "why": "The default first time at T2: ask for a bound selection.",
    "input": {
@@ -938,9 +1514,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -988,9 +1576,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},
@@ -1040,9 +1640,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "other-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1093,9 +1705,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1148,9 +1772,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1201,9 +1837,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1254,9 +1902,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 1,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1311,9 +1971,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1364,9 +2036,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "other-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1417,9 +2101,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "USDC",
+       "decade": 3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {
@@ -1470,9 +2166,21 @@
      "latest_checkpoint_at": "2026-10-28T00:00:00Z",
      "witness": "placeholder-witness",
      "controller": "placeholder-controller",
-     "claims": {
-      "held": 12,
-      "total": 14
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
      }
     },
     "selection": {},

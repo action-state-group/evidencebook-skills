@@ -60,7 +60,7 @@ jobs:
     # `terms test` on an admission pack, decided by a real capsule-engine build at a pinned commit.
     runs-on: ubuntu-latest
     env:
-      CAPSULE_ENGINE_REF: f5a84681835498907da70615701cca7b08edd465
+      CAPSULE_ENGINE_REF: 08ac9fbe7dcc549056c58e584a6e509e6496bb74
     steps:
       - uses: actions/checkout@v4
         with:

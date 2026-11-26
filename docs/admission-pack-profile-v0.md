@@ -198,8 +198,10 @@ Freshness is measured from the holder's checkpoint, never from when a card
 arrived (design §8). Verifying a card or a selection is the caller's job before
 it reaches the evaluator: the signature, the witness receipt, that its subject
 presented it, and for a selection its inclusion proofs and our nonce (design
-§3, §5). Today only `served_summary/1` carries counts. `history_card/1`
-carries checkpoints only, so `card.claims_held` reads `not_read` on it.
+§3, §5). Only `served_summary/1`, which no pack here asks for any more
+(#380), carries claims counts; on any other card `card.claims_held` reads
+`not_read`. The baseline and Muse packs read a track record from the
+commerce card's bands instead (§3.1, #385).
 
 ## 3. The value band and the tier
 
@@ -261,15 +263,16 @@ that rule.
   earns a tier, not just a pass.
 
 No served card carries per-band counts of corroborated, net-settled subjects
-yet (§6), so the baseline has no ladder row. The rule ships with its own
-conformance pack,
+yet (§6). The rule ships with its own conformance pack,
 `conformance-vectors/admission/v0/packs/history-or-stake.yaml` in
 capsule-engine.
 
-**From a `standard_history/1` card.** The one served card with per-band
-counts is `standard_history/1` (AAC `spec/standard-history-v0.md` §4, §5.3).
-capsule-engine's `StandardHistoryCounts` reads a verified card's `bands` into
-the card input. The artifact must be the JCS of the card, as that spec's §3
+**From a `standard_history/1` or `/3` card.** The served cards with per-band
+counts are `standard_history/1` and `/3`, the commerce card (AAC
+`spec/standard-history-v0.md` §4, §5.3, §11). capsule-engine's
+`StandardHistoryCounts` and `StandardHistory3Counts` read a verified card's
+`bands` into the card input; a `/3` card's `bands` and `disputes` members are
+§4's, read the same way. The artifact must be the JCS of the card, as that spec's §3
 says; bytes that are not exactly the JCS of their own parse are refused, so
 every evaluator reads one card one way:
 
@@ -283,10 +286,16 @@ every evaluator reads one card one way:
 A ladder filled this way counts decided deals by outcome claim, not
 corroborated, net-settled subjects: a `/1` band carries no corroboration split
 (`happened` is card-level), no netting, and both roles. It is therefore not
-the ladder §3A.14 describes, and the baseline still gets no ladder row from it.
-Counting `did_not_hold` as adverse is the conservative direction: the card
-does not say which side failed, and counting it against the counterparty can
-only lower an earned band, never raise one.
+the ladder §3A.14 describes. Counting `did_not_hold` as adverse is the
+conservative direction: the card does not say which side failed, and counting
+it against the counterparty can only lower an earned band, never raise one.
+
+It is the track record the baseline and Muse packs read at T1 (Steven's ruling
+on #385): their `band-history` row asks for a `standard_history/3` card and
+reads its bands this way, with `k` 10, `max_adverse_permille` 100 and
+`step_decades` 0. The earned band is the highest decade that qualifies, so
+history in a band above the deal's earns the deal's band too, and history only
+in bands below it does not. The row replaces `claims-held` there.
 
 ### 3.2 Rails
 
@@ -326,19 +335,14 @@ its received disputes without `decided` (§5), the row reads `not_read` with
 `reason: no_dispute_tally`, never a pass. `card.open_disputes` still reads
 `{open, of}` without `decided`.
 
-The baseline and Muse packs ask for no card at T1 (Steven, 2026-11-25, Q6:
-`served_summary/1` is no longer asked; #380); they read the card they are
-given. Their T1 card rows still read the members of `served_summary/1`, the
-only card that carries claims counts, until #385 moves them to the one
-commerce card; until then a counterparty that serves no card, or a card that
-is not `served_summary/1` (a `standard_history/5` card, say), is limited to T0
-by `claims-held`. `served_summary/1` carries no dispute tally, and the
-card that carries the tally carries no claims counts. So until one card read
-at T1 carries both (#281), those packs give this row `on_unread: "record"`: a
-shown loss limits, and a verified card with no tally is recorded with its
-reason and never passes, without limiting. An unverified card still limits.
-Once that card is served, the packs drop `on_unread`, and a missing tally
-limits.
+The baseline and Muse packs ask for the one commerce card at T1,
+`standard_history/3` (Steven's ruling on #385; `served_summary/1` is no longer
+asked, Steven, 2026-11-25, Q6, #380). That card carries the tally, so their
+`card.disputes_against` row has no `on_unread`: a verified card with no tally
+limits, as a shown loss does. This ends #281's interim, under which the packs
+recorded a missing tally without limiting while the card they asked for
+carried claims counts and no tally. `on_unread` stays in the format for a
+pack whose card may lack the tally.
 
 A party that does not enter a ruling in its own book has a card that shows no
 `against` for it. The buyer cannot see that gap; the adjudicator can, with
@@ -516,7 +520,7 @@ step 4 for that deal, and only when all of these hold:
   was served (the pack must read `card.verified` there, so a served card that fails
   verification reads `fail`, never `not_read`). A card that was served and verifies, fails or is stale speaks for
   itself, and the lift does not apply. The cost is named: a merchant that serves a
-  valid card with too few claims held, or one with no witness, is limited by the
+  valid card with too few decided deals in the deal's band, or one with no witness, is limited by the
   rows as written, while one that serves none is lifted. A card that was refused is
   read as served none (a refusal and silence both read `not_read`; Sherlock2,
   buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=84a0b5acffe67d368b869be55470d61a1b070c260112871373d77efbf57e362f).
@@ -602,8 +606,9 @@ Added after the first v0 compile (#79, #87, capsule-engine#273):
 
 - **The per-band ladder** with k and a step-up (§3.1; Reference v3 §3A.14,
   item 26). The evaluator reads it. No served card carries per-band counts of
-  corroborated, net-settled subjects yet, so the baseline does not use it, and
-  its k, step-up and adverse share have no calibrated value.
+  corroborated, net-settled subjects yet. The baseline and Muse packs use it on
+  a `standard_history/3` card's decided deals (§3.1, #385), with Steven's `k`
+  and adverse share and no step-up.
 - **Rails in `trust_roots`** (§3.2), pinned by adapter declaration id plus
   digest (AAC#406).
 - **The ladder from a `standard_history/1` card** (§3.1) and
