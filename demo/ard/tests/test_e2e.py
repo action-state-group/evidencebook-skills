@@ -172,7 +172,9 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
         if not later:
             return "The adjudicator's stamp was delivered in time, so the ruling's receipt did not reach Maya's records."
         if later[-1].is_alive():
-            return f"The adjudicator was still waiting for {pt.WITNESS_NAME} to take the ruling's stamp."
+            # the thread stamps, then sends the ruling again (adjudicator._send_ruling): alive is either step
+            return (f"The adjudicator's background stamp was still running: waiting for {pt.WITNESS_NAME} to take the "
+                    "ruling's stamp, or sending the stamped ruling again.")
         return "The adjudicator's wait for the ruling's stamp had ended."
     stamp_wait(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
         w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"] or w["maya"].notes(flow.RULING_STAMPED)),
