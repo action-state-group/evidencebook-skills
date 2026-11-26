@@ -107,7 +107,7 @@ def witness_line(witnessed: dict | None, name: str) -> str:
     if status == "verified":
         at = witnessed.get("at", "")
         when = f" at {screens.local_time(at, date=True)}" if at else ""
-        return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as capsulectl verify reported on {name}'s own book."
+        return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as checked on {name}'s own book."
     if status == "failed":
         return (f"  No witness time: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
                 "book.")
