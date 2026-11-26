@@ -60,10 +60,10 @@ step, to the demo host's tool and to the capsule host's existing command.
 |---|---|---|---|
 | record | 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (capsule-cli#571) |
 | show | 2 Share the History card | done by the demo's seller process: its shared `standard_history/3` card, as of each checkpoint | `deal standard-history card --shared` |
-| ask | 2 Answer evidence requests | done by the demo's seller process | `respond` over the mailbox (capsule-cli#573) |
+| ask (answer) | 2 Answer evidence requests | done by the demo's seller process | `respond` over the mailbox (capsule-cli#573) |
 | check | 3 Take the sale | done by the demo's seller process | `deal admit`, `deal check` with `"action":"commit"` |
 | record | 3 Record the sale | done by the demo's seller process | `deal receive`, `deal agree`, `deal perform` |
-| ask | 4 Answer a dispute | done by the demo's seller process: its full answer to the adjudicator's request | `deal respond` to the adjudicator's request |
+| ask (answer) | 4 Answer a dispute | done by the demo's seller process: its full answer to the adjudicator's request | `deal respond` to the adjudicator's request |
 | record | 4 Enter a ruling | done by the demo's seller process: the ruling entered in its own records | `deal receive` the ruling |
 | show | What happened | `ard_seller_activity` | `deal` and `deal list` |
 | show | The History card | `ard_show_card`, `ard_open_card_page` (as a page) | `deal standard-history card` |

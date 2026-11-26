@@ -1,4 +1,4 @@
-"""Agent skills teach five verbs and nothing else (Steven's ruling, ops u632; asg-agent-team-ethan#391).
+"""Agent skills teach five verbs and nothing else (Steven's ruling, 2026-11-25).
 
 Each agent skill maps check, record, ask, verify and show to existing commands in one table, "The five verbs",
 and names no expert command in its own text: setup, operations, judging and `x-deal-v0` sales live in its
@@ -18,8 +18,8 @@ PACK_AUTHOR_SKILLS = ("evaluation-compiler", "evidence-contract-compile", "daily
                       "weekly-blind-expert", "terms-pack-author")
 VERBS = {"check", "record", "ask", "verify", "show"}
 
-# The taught paths that became expert commands (the plan on asg-agent-team-ethan#391, issuecomment-7159138897,
-# section 1: setup and operations, pack authoring, and the x-deal-v0 sale path).
+# The taught paths that became expert commands under that ruling: setup and operations, pack authoring, and the
+# x-deal-v0 sale path.
 EXPERT = (
     "store init", "profile create", "profile update", "plugin install", "plugin ls", "plugin remove",
     "deal init", "deal set-version", "deal tick", "deal audit-host", "book doctor", "cll checkpoint cadence",
@@ -44,10 +44,10 @@ def expert_commands_named(text):
 
 
 def verb_table_rows(text):
-    """The first cell of each body row of the skill's "The five verbs" table."""
+    """The verb in the first cell of each body row of the skill's "The five verbs" table (`ask (answer)` is ask)."""
     section = text.split("\n## The five verbs\n", 1)[1].split("\n## ", 1)[0]
     rows = [line for line in section.splitlines() if line.startswith("|")]
-    return [row.split("|")[1].strip() for row in rows[2:]]
+    return [row.split("|")[1].strip().removesuffix(" (answer)") for row in rows[2:]]
 
 
 class FiveVerbs(unittest.TestCase):
