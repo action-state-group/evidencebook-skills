@@ -429,7 +429,7 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
 
    **Expect:** the same held-order question for Alder Print Co. at 2,000 msat. Its reasons: "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat", "No earlier payment to this merchant from this profile" and "The payment is not refundable", then capsulectl's card ("… over your 2,000 msat limit").
 
-   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you every reason the dialog listed ("The Everyday Rules held this order for your OK, and nothing was paid: …") without naming any tool, and the wallet balances do not change.
+   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you every reason the dialog listed ("The Everyday Rules held this order for your OK, and nothing was paid: …") without naming any tool, and the wallet balances do not change. Maya's book keeps the cancelled offer and her answer. Alder Print Co.'s book has no record of the deal.
 
 4. Ask for the order again:
 
