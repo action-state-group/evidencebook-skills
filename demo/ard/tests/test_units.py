@@ -426,6 +426,39 @@ def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
         p.add_witness()
 
 
+def test_the_e2e_names_a_local_witness_only_where_a_party_asked_for_one(tmp_path, monkeypatch):
+    """#371: with ARD_E2E_WITNESS_URL and _KEY, test_e2e makes a witnessed profile with --no-witness and names that
+    witness; one made without a witness (seed's sellers and sample buyers) stays without; one variable alone is refused."""
+    import party as pt
+    from test_e2e import _local_witness
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    calls = []
+
+    def ctl_run(self, *args):  # what deal init writes, without the witness lines
+        calls.append(args)
+        prof = self.dir / ".config" / "capsule" / "profiles" / f"{self.profile}.yaml"
+        prof.parent.mkdir(parents=True, exist_ok=True)
+        prof.write_text("name: x\ncheckpoint:\n    signing:\n        file: k\n")
+        return {}
+    monkeypatch.setattr(pt.Party, "run", ctl_run)
+    monkeypatch.setenv("ARD_E2E_WITNESS_URL", "https://localhost:8443")
+    with pytest.MonkeyPatch.context() as m:
+        with pytest.raises(pytest.UsageError):
+            _local_witness(m)
+    monkeypatch.setenv("ARD_E2E_WITNESS_KEY", "ab" * 32)
+    with pytest.MonkeyPatch.context() as m:
+        _local_witness(m)
+        assert buyer.OPERATOR_FACTS["witness"] == "ab" * 32
+        for name, witnessed in (("seller", True), ("sample", False)):
+            p = pt.Party(tmp_path, name)
+            p.run(*(["init", "--dir", "d"] + ([] if witnessed else ["--no-witness"])))
+            assert calls[-1].count("--no-witness") == 1
+            text = (p.dir / ".config" / "capsule" / "profiles" / f"{p.profile}.yaml").read_text()
+            assert ("endpoint: https://localhost:8443" in text) is witnessed
+    assert buyer.OPERATOR_FACTS["witness"] == pt.WITNESS_KEY != "ab" * 32  # undone with the context
+
+
 def test_a_seller_agent_waits_for_the_minute_its_sample_deals_count_held(tmp_path, monkeypatch):
     import time
 

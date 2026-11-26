@@ -1,25 +1,66 @@
 # SPDX-License-Identifier: Apache-2.0
 """The whole story, end to end, with the real binaries: capsulectl-deal (``CAPSULECTL_DEAL``), capsule-engine
-(``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and Action State's hosted witness, which every
-agreement names. It seeds a home (about a minute), then runs
+(``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and a witness every agreement names:
+Action State's hosted one in CI, or the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh
+starts one on this machine; :func:`_local_witness`). It seeds a home (about a minute), then runs
 deal 1 (Maya buys from Kestrel, Kestrel's own delivery record says 150 of 200, Maya disputes, the adjudicator rules
 against Kestrel, both enter the ruling) and deal 2 (Kestrel's card counts the lost dispute; Maya's own ruling makes it
 NO; a buyer who holds no ruling sees LIMIT from the card alone; Alder is GO and paid).
 
-It needs the network and runs only with ``ARD_E2E=1`` (CI's ard-demo job sets it). The approval dialogs are answered in
+With the hosted witness it needs the network. It runs only with ``ARD_E2E=1`` (CI's ard-demo job sets it). The approval dialogs are answered in
 the test, as ``demo.py run --auto`` does: never on a real rail."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import time
 
 import pytest
+from _stampwait import stamp_wait, try_tick
 
 pytestmark = pytest.mark.skipif(os.environ.get("ARD_E2E") != "1" or not all(
     os.environ.get(v) for v in ("CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_EVIDENCEBOOK")),
     reason="ARD_E2E=1 with CAPSULECTL_DEAL, CAPSULE_ENGINE and ARD_EVIDENCEBOOK set")
+
+
+def _local_witness(mp: pytest.MonkeyPatch) -> None:
+    """Name the witness ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` give, instead of the hosted one, in every
+    place the demo names a witness: scripts/check.sh starts one on this machine (capsule-anchor's ci/local-witness,
+    evidencebook-skills#371), so parallel local checks neither wait on nor load Action State's service. Test-only: a
+    person's run, and CI's on main and nightly, keep the hosted witness. ``deal init`` can name only the hosted witness
+    (evidencebook capsulectl ``deal.go``, ``DealDefaultWitness``), so it runs with ``--no-witness`` and the profile then
+    names this one, as :meth:`party.Party.add_witness` does for a profile made without a witness. The buyer's pack
+    trusts this witness's key in place of the hosted one's, or no card would read as witnessed."""
+    import buyer
+    import pack as packs
+    import party as pt
+
+    url, key = os.environ.get("ARD_E2E_WITNESS_URL", ""), os.environ.get("ARD_E2E_WITNESS_KEY", "")
+    if bool(url) != bool(key):
+        raise pytest.UsageError("set both ARD_E2E_WITNESS_URL and ARD_E2E_WITNESS_KEY, or neither")
+    if not url:
+        return
+    hosted = pt.WITNESS_KEY
+    mp.setattr(pt, "WITNESS_URL", url)
+    mp.setattr(pt, "WITNESS_KEY", key)
+    mp.setitem(buyer.OPERATOR_FACTS, "witness", key)
+
+    def starting():  # the pack's witness trust root is the hosted witness's key (pack-source.yaml trust_roots)
+        text = packs.source_path().read_text()
+        assert text.count(hosted) == 1, "the pack names the hosted witness's key once, in trust_roots"
+        return packs.compile_source(text.replace(hosted, key), packs.version_of(text))
+    mp.setattr(packs, "starting", starting)
+    run = pt.Party.run
+
+    def init_then_name(self, *args):
+        if args[:1] != ("init",) or "--no-witness" in args:
+            return run(self, *args)
+        out = run(self, *args, "--no-witness")
+        self.add_witness()
+        return out
+    mp.setattr(pt.Party, "run", init_then_name)
 
 
 @pytest.fixture(scope="module")
@@ -35,17 +76,20 @@ def world(tmp_path_factory):
     import stage
     from cast import SELLERS
 
-    home = tmp_path_factory.mktemp("ard-e2e")
-    seed.seed(home, say=lambda *_: None)
-    st = stage.Stage(home)
-    agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
-    entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
-    w = {"home": home, "stage": st, "agents": agents, "maya": pt.Party(home, "maya"), "adj": adj.Adjudicator(home),
-         "pack": packs.starting(), "entries": entries, "keys": {e["id"]: e["commitment"]["key_id"] for e in entries}}
-    yield w
-    for a in agents.values():
-        a.stop()
-    st.close()
+    with pytest.MonkeyPatch.context() as mp:  # undone however the fixture ends, a failed set-up too
+        _local_witness(mp)
+        home = tmp_path_factory.mktemp("ard-e2e")
+        seed.seed(home, say=lambda *_: None)
+        st = stage.Stage(home)
+        agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
+        entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+        w = {"home": home, "stage": st, "agents": agents, "maya": pt.Party(home, "maya"), "adj": adj.Adjudicator(home),
+             "pack": packs.starting(), "entries": entries,
+             "keys": {e["id"]: e["commitment"]["key_id"] for e in entries}}
+        yield w
+        for a in agents.values():
+            a.stop()
+        st.close()
 
 
 def _assess(w, buyer_party):
@@ -123,10 +167,30 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
            and w["maya"].notes(flow.BOOK_SENT), 300)
     _until(lambda: w["agents"]["kestrel"].party.notes(flow.BOOK_SENT), 300)
     # the ruling's witnessed time reaches Maya: with the ruling, or on the ruling file sent again once stamped (#307)
-    assert _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
+    def ruling_stamp_line() -> str:
+        later = [t for t in adj.LATER if t.name == f"ruling-stamp-{deal.deal_id[5:13]}"]
+        if not later:
+            return "The adjudicator's stamp was delivered in time, so the ruling's receipt did not reach Maya's records."
+        if later[-1].is_alive():
+            # the thread stamps, then sends the ruling again (adjudicator._send_ruling): alive is either step
+            return (f"The adjudicator's background stamp was still running: waiting for {pt.WITNESS_NAME} to take the "
+                    "ruling's stamp, or sending the stamped ruling again.")
+        return "The adjudicator's wait for the ruling's stamp had ended."
+    stamp_wait(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
         w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"] or w["maya"].notes(flow.RULING_STAMPED)),
-        adj.LATER_S + 30)
-    assert {x["words"] for x in w["adj"].entries(_fresh(w, deal.deal_id))} == {"entered"}
+        "the ruling's witnessed time in Maya's records", adj.LATER_S + 30, detail=ruling_stamp_line)
+    # both entries read time-stamped once the witness has taken each side's book: Maya's proof goes on a later round of
+    # her entering (flow.enter_rulings), Kestrel's with its agent's; as long as the demo waits for a stamp taken later
+    read: list[str] = []
+
+    def both_witnessed():
+        flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None)
+        read[:] = sorted({x["words"] for x in w["adj"].entries(_fresh(w, deal.deal_id))})
+        return read == ["entered"]
+    stamp_wait(both_witnessed, "both parties' entries of the ruling", adj.LATER_S, step=5,
+               detail=lambda: f"The adjudicator's entry check read {read}" + (
+                   f": {pt.WITNESS_NAME} had not stamped every book sent with an entry yet."
+                   if any("not witnessed" in x for x in read) else "."))
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
     import buyer as b
@@ -134,13 +198,20 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert b.seller_of(w["maya"])(deal.deal_id) == "kestrel"
     assert _fresh(w, deal.deal_id)["ruling"]["against"] == "seller"
 
-    # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence)
+    # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence), as its agent's
+    # republish(now=True) does; the tick is kept to say whether the witness had taken the stamp
+    kestrel, ticks = w["agents"]["kestrel"].party, [None]
+
     def kestrel_card():
-        w["agents"]["kestrel"].republish(now=True)
-        c, _, _ = flow.read_card(w["home"] / "stage" / "cards" / "kestrel.json")
+        ticks[0] = try_tick(kestrel.stamp)  # a refusal is tried again next round, as the agent's republish does
+        published = try_tick(lambda: {"card": flow.publish_card(w["home"], kestrel)})
+        if "error" in published:
+            ticks[0] = {"error": f"publishing the card: {published['error']}"}
+            return None
+        c, _, _ = flow.read_card(published["card"])
         # the dispute's count and the deal's outcome can come one checkpoint apart: wait for both
         return c if c["disputes"]["received"]["by_outcome"]["against"] and c["outcomes"]["did_not_hold"] else None
-    card = _until(kestrel_card, 30, step=2)
+    card = stamp_wait(kestrel_card, "Kestrel's card counting the ruling", adj.LATER_S, tick=lambda: ticks[0])
     assert card["outcomes"]["did_not_hold"] == 1 and flow.decided(card)["decided"] == {"against": 1, "of": 1}
 
     # deal 2: Maya's own ruling makes Kestrel NO, and the card's count shows with it
@@ -287,6 +358,20 @@ def _fresh(w, deal_id: str) -> dict:
     return next(c for c in w["adj"].cases() if c["deal_id"] == deal_id)
 
 
+@contextlib.contextmanager
+def _witness_unreachable(monkeypatch):
+    """The witness answers nothing while inside, its endpoint unchanged. The hosted one: a proxy on a closed port. A
+    local one (:func:`_local_witness`) is on localhost, which Go never sends through a proxy, so its certificate is left
+    out of the trusted roots instead and every delivery fails before it reaches the witness."""
+    with monkeypatch.context() as m:
+        if os.environ.get("ARD_E2E_WITNESS_URL"):
+            roots = next(f for f in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt") if os.path.isfile(f))
+            m.setenv("SSL_CERT_FILE", roots)  # the system roots alone (macOS's file, Ubuntu's), as start.sh reads them
+        else:
+            m.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+        yield
+
+
 def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after_a_re_entry(world, monkeypatch):
     """evidencebook-skills#287: a checkpoint whose delivery failed (here, a proxy that answers nothing) stays pending, and
     a later tick, run by a new process on the same home as a reopened window does, is accepted by the witness and
@@ -297,21 +382,31 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     import party as pt
 
     w = world
-    p = pt.Party(w["home"], "kestrel")
-    p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
-    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
-    failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
-    assert failed["pending"], failed
-    monkeypatch.delenv("HTTPS_PROXY")
-    again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
-    ticks: list[dict] = []
+    # Kestrel's agent ticks the same profile on its own cadence: closed for this test (as a closed window is), so the
+    # failed delivery is this test's and the recovery is the reopened window's, never the agent's; reopened after.
+    agent = w["agents"]["kestrel"]
+    agent.stop()
+    for t in agent.threads:
+        t.join(60)
+    assert not any(t.is_alive() for t in agent.threads), "Kestrel's agent did not stop"
+    try:
+        p = pt.Party(w["home"], "kestrel")
+        p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
+        with _witness_unreachable(monkeypatch):  # reachable again on every way out, before the agent reopens
+            failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
+        assert failed["pending"], failed
+        again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
+        ticks: list[dict] = []
 
-    def delivered():
-        t = again.tick()
-        ticks.append(t)
-        return t if t.get("delivered") and not t.get("pending") else None
-    done = _until(delivered, 420, step=10)
-    assert done, (failed, ticks[-3:])
+        # done once this window's ticks have delivered and the newest leaves nothing pending: a slow witness may take
+        # the failed checkpoint and its successors over more than one tick
+        def delivered():
+            ticks.append(try_tick(again.tick))
+            return ticks[-1] if any(t.get("delivered") for t in ticks) and ticks[-1].get("pending") == [] else None
+        stamp_wait(delivered, f"Kestrel's checkpoint {failed.get('checkpoint')} after its failed delivery", 420, step=10,
+                   tick=lambda: ticks[-1] if ticks else None)
+    finally:
+        w["agents"]["kestrel"] = flow.SellerAgent(w["home"], "kestrel")
 
 
 def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, monkeypatch):

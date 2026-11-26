@@ -11,16 +11,19 @@
 #
 # Every job runs; the exit status is non-zero when any failed. The pins
 # (commits, tags, release versions) are read from the workflow files, so they
-# stay the one source. Pinned checkouts, built binaries, released binaries and
-# Python environments are kept in ~/.cache/evidencebook-skills-check
-# (CHECK_DEPS) and reused. A short path: pip and uv write a console script's
+# stay the one source; the one exception is ard-demo's end-to-end test, which
+# here stamps on a witness started on this machine where CI uses the hosted
+# one (LOCAL_WITNESS_REF below, evidencebook-skills#371). Pinned checkouts,
+# built binaries, released binaries and Python environments are kept in
+# ~/.cache/evidencebook-skills-check (CHECK_DEPS) and reused. A short path: pip and uv write a console script's
 # shebang only when its interpreter path is short, and the live-engine test
 # reads that shebang.
 #
 # Needs: git, gh (signed in: the pinned checkouts and releases are
 # action-state-group's), Go, uv (it provides Python 3.12), python3 and Google
-# Chrome (the report pages' check), and network: ard-demo's end-to-end test
-# uses Action State's hosted witness and viewer-drift reads capsule-viewer's
+# Chrome (the report pages' check), openssl, and network: ard-demo's end-to-end
+# test stamps on a capsule-anchor witness it starts on this machine (never the
+# hosted one, evidencebook-skills#371) and viewer-drift reads capsule-viewer's
 # release tags. No secret: nothing here calls a model.
 # Released binaries are taken for this machine's platform (darwin-arm64 or
 # linux-amd64), where CI takes linux-amd64.
@@ -162,9 +165,35 @@ else:
 PY
 }
 
+# The witness the local check's ard-demo end-to-end test stamps on (evidencebook-skills#371): capsule-anchor at the
+# release Action State's hosted witness runs, v0.1.4 (Cloud Run capsule-witness, revision capsule-witness-00014-b6h,
+# label git-sha=78a69853bc83, read on 2026-11-26), started by capsule-anchor's own ci/local-witness/start.sh (#118) on
+# https://localhost:<free port> with a throwaway key, an in-memory store and a self-signed certificate that
+# capsulectl trusts through SSL_CERT_FILE. Local only: tests.yml keeps CI's run on main and nightly on the hosted
+# witness, so that path stays covered.
+LOCAL_WITNESS_REF=78a69853bc83c9c65b9fe79a8270b83727c55304 # capsule-anchor v0.1.4: move it with the hosted witness
+LOCAL_WITNESS_START_REF=42f5fab488d2edc1fe7338f7da09a31de1b0d5b7 # capsule-anchor main: ci/local-witness (#118)
+
+# local_witness DIR: start that witness with its files under DIR; prints the url=, public-key=, ca-bundle= and log=
+# lines start.sh writes, and leaves its process id in DIR/local-witness/pid.
+local_witness() {
+  local src tools out="$1/outputs"
+  src=$(checkout capsule-anchor "$LOCAL_WITNESS_REF")
+  tools=$(checkout capsule-anchor "$LOCAL_WITNESS_START_REF")
+  : >"$out"
+  # BLOCK=false: blocking the hosted witness's names in /etc/hosts needs sudo; the end-to-end step routes every
+  # other host to a closed port instead (job_ard_demo).
+  # start.sh checks the witness on localhost with curl and urllib: an inherited proxy must not take those calls, while
+  # it may still be what pip needs to install capsule-anchor.
+  NO_PROXY="localhost,127.0.0.1${NO_PROXY:+,$NO_PROXY}" no_proxy="localhost,127.0.0.1${no_proxy:+,$no_proxy}" \
+    RUNNER_TEMP="$1" SRC="$src" BLOCK=false GITHUB_OUTPUT="$out" PYTHON="$(uv python find 3.12)" \
+    bash "$tools/ci/local-witness/start.sh" >&2
+  cat "$out"
+}
+
 job_ard_demo() {
   # The tests' directory as a variable, for the same reason as in job_tau2_live.
-  local w=tests.yml eb_ref ce_tag eb ce deal py port t=demo/ard/tests
+  local w=tests.yml eb_ref ce_tag eb ce deal py port t=demo/ard/tests wdir outs url key ca log
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
   eb=$(checkout evidencebook "$eb_ref")
@@ -178,10 +207,26 @@ job_ard_demo() {
   py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
     python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
-  # Both deals end to end against Action State's hosted witness (network), as CI runs them.
+  # Both deals end to end, on a witness this run starts (local_witness), where CI uses the hosted one. Every
+  # host but this machine goes through a proxy on a closed port, so a call that still reaches for the hosted
+  # witness fails the run instead of loading it.
+  wdir=$(mktemp -d "$tmp/witness.XXXX")
+  # The job runs in its own subshell, so this trap fires when the job ends, after its locals are gone: the path is
+  # written into it now.
+  trap "kill \"\$(cat '$wdir/local-witness/pid' 2>/dev/null)\" 2>/dev/null || true" EXIT
+  outs=$(local_witness "$wdir")
+  url=$(sed -n 's/^url=//p' <<<"$outs")
+  key=$(sed -n 's/^public-key=//p' <<<"$outs")
+  ca=$(sed -n 's/^ca-bundle=//p' <<<"$outs")
+  log=$(sed -n 's/^log=//p' <<<"$outs")
   port=$(stage_port)
   ARD_E2E=1 ARD_STAGE_PORT="$port" ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
+    ARD_E2E_WITNESS_URL="$url" ARD_E2E_WITNESS_KEY="$key" SSL_CERT_FILE="$ca" \
+    HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
+    NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 \
     python -m pytest -v "$t/test_e2e.py"
+  # The run stamped on this witness, not on none (capsule-anchor's ci/local-witness/check does the same in CI).
+  grep -qE '"POST /checkpoints HTTP/[0-9.]+" 2[0-9][0-9]' "$log" || { cat "$log" >&2; echo "ard-demo: the local witness took no stamp" >&2; return 1; }
 }
 
 job_viewer_drift() {
