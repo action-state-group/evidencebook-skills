@@ -145,6 +145,37 @@ def within_limit(price_msat: int, limit_msat: int | None) -> str:
     return f" Over your limit of {msat(limit_msat)} for one order: the order would wait for your OK at payment."
 
 
+def listing_lines(item: dict) -> list[str]:
+    """A seller's ARD listing as the search fetched and checked it (evidencebook-skills#345): named fields only, never
+    the entry's free text, and the offer marked as the seller's own unsigned words; checked only when every check
+    passed. Names no party."""
+    name = item.get("name", "the seller")
+    entry = item.get("entry")
+    out = [f"{name}: its listing, as fetched at the search"]
+    if entry is None:
+        return out + [f"  no listing could be read from the seller: {item.get('problem', 'not fetched')}"]
+    checked = "problem" not in item
+    out.append(f"  fetched from {item.get('fetched_from', '?')}")
+    out.append(f"  publisher its identity names: {item.get('publisher') or '?'} (a local stand-in here: nothing "
+               "proves domain control)")
+    reg = item.get("registry") or {}
+    if (reg.get("url"), reg.get("displayName")) != (entry.get("url"), entry.get("displayName")):
+        out.append(f"  the registry lists it as {reg.get('displayName')} at {reg.get('url')}; the seller's own entry "
+                   f"says {entry.get('displayName')} at {entry.get('url')}")
+    else:
+        out.append(f"  address: {entry.get('url')}")
+    offer = entry.get("x-demo-offer") or {}
+    if offer:
+        price = offer.get("price_msat")
+        stated = msat(price) if isinstance(price, int) else str(price)
+        out.append(f"  offer: {offer.get('item')} at {stated}, the seller's own words, not signed"
+                   + ("" if checked else ", and this entry did not pass its checks"))
+    out += [f"  checked: {c}" for c in item.get("checks", [])]
+    if not checked:
+        out.append(f"  not passed: {item['problem']}")
+    return out
+
+
 def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:

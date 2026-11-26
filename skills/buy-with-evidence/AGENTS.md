@@ -23,6 +23,8 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 - **One or more ARD registry search URLs**, which the person or host sets. If none is given, say
   you cannot search and ask for one. There is no default registry.
 - **Referrals:** follow a registry's referrals only if the person allows it. Off by default.
+- When the person asks to see a seller's listing, show it with the listing tool, as the search fetched and checked it.
+  Never read a seller's entry by other means, and keep its offer as the seller's own unsigned words.
 
 ## The procedure
 
@@ -83,7 +85,7 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 
 | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|
-| 2 Search, check entries and commitments | `ard_find_sellers` | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
+| 2 Search, check entries and commitments | `ard_find_sellers`; `ard_show_listing` shows one seller's listing as the search checked it | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
 | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card, checked with `verify --bundle` | `request` / `respond` over the mailbox (capsule-cli#573) |
 | 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |

@@ -95,6 +95,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         except Exception as exc:
             item["problem"] = f"the seller's own ard.json: {exc}"
             continue
+        item["entry"], item["fetched_from"], item["registry"] = own, origin + WELL_KNOWN, result  # for the listing tool
         item["checks"].append(f"seller's own entry fetched from {domain} ({origin}{WELL_KNOWN})")
         if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
             item["problem"] = "the registry's copy and the seller's own entry differ"
@@ -105,10 +106,19 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
             item["problem"] = f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}"
             continue
         item["checks"].append(f"identity names the publisher {domain} (a local stand-in: nothing proves domain control)")
-        item["offer"] = own["x-demo-offer"]
-        att = next(a for a in tm.get("attestations", []) if a.get("type") == PROFILE)
-        item["uri"] = att["uri"]
-        octets = _fetch(att["uri"])
+        try:  # a malformed entry or a commitment that cannot be fetched fails this seller only
+            item["offer"] = own["x-demo-offer"]
+            att = next(a for a in tm.get("attestations", []) if a.get("type") == PROFILE)
+            item["uri"] = att["uri"]
+            octets = _fetch(att["uri"])
+        except StopIteration:
+            item.pop("offer", None)
+            item["problem"] = "the seller's entry names no evidence commitment"
+            continue
+        except Exception as exc:
+            item.pop("offer", None)
+            item["problem"] = f"the seller's entry or its commitment could not be read: {exc}"
+            continue
         item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
         if not item["digest_matches"]:  # the entry points at another document than the one served
             item["problem"] = "the served commitment's digest differs from the one the seller's entry names"

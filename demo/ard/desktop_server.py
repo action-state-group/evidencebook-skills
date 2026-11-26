@@ -8,6 +8,7 @@ starting ``REFUSED:`` and changes nothing.
 
 ``maya``   the buyer:
     ard_find_sellers  ->  her ask and ARD discovery
+    ard_show_listing  ->  a seller's ARD listing, as the search fetched and checked it
     ard_show_history  ->  each seller's History card, fetched and checked
     ard_assess        ->  the assessment of each seller under her pack
     ard_pick          ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
@@ -347,6 +348,27 @@ def ard_find_sellers() -> None:
         # the search's own checks are not shown in her chat (#332, Sherlock2)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
+
+
+@_tool("maya")
+def ard_show_listing(seller: str) -> None:
+    """Show a seller's ARD listing, as the last search fetched and checked it from the seller's own
+    /.well-known/ard.json: where it came from, its address, its stated offer (unsigned) and which checks it passed. It
+    fetches nothing new. ``seller`` is a name or identifier from the search. Call after ard_find_sellers, when the
+    person asks to see a seller's listing."""
+    s = session()
+    if not s.entries:
+        raise RuntimeError("search first (ard_find_sellers): a listing is shown as the search fetched it")
+    want = seller.strip().lower()
+    found = [e for e in s.entries if want and want in (e.get("identifier", "").lower(), e.get("id", "").lower(),
+                                                       e.get("name", "").lower())]
+    if not found:
+        found = [e for e in s.entries if want and e.get("name", "").lower().startswith(want)]
+    if len(found) != 1:
+        names = ", ".join(e.get("name", e.get("identifier", "?")) for e in s.entries)
+        raise RuntimeError(f"{'no seller' if not found else 'more than one seller'} from the search matches {seller!r}; "
+                           f"the search found: {names}")
+    print("\n".join(screens.listing_lines(found[0])))
 
 
 @_tool("maya")
