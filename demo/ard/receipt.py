@@ -119,8 +119,8 @@ def countersign_line(cs: dict | None, name: str, counterparty: str) -> str:
         k, n = cs.get("through_step"), cs.get("steps")
         line = (f"Countersigned by {cs.get('signer') or 'a countersigner'}"
                 + (f" at {screens.local_time(at, date=True)}" if at else "")
-                + f", as capsulectl reports. It signed {name}'s records of this deal, 1 to {k} of {n}, as digests only, "
-                f"and does not cover {counterparty}'s records. In this demo the operator runs it and every party, so it "
+                + f", as capsulectl reports. It signed {name}'s own records of this deal, 1 to {k} of {n}: their digests "
+                f"and seal times, and {name}'s own payments' amounts, fees, references and status. It does not cover {counterparty}'s records. In this demo the operator runs it and every party, so it "
                 "is not independent of them.")
         if rung == "countersigned_in_part" and isinstance(k, int) and isinstance(n, int) and k < n:
             line += f" Records {k + 1} to {n} are not countersigned yet."

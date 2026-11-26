@@ -453,11 +453,11 @@ def test_the_countersigner_screen_says_what_it_signed_and_that_it_is_not_indepen
     feeds.countersigned(tmp_path, "maya", "deal-0123456789abcdef", {"finding": "not_countersigned"})
     a, b = [feeds.words("countersigner", json.loads(x), label)
             for x in feeds.path(tmp_path, "countersigner").read_text().splitlines()]
-    assert ("Maya's book sent its records of deal 01234567 (digests, and its own payments' amounts, fees, references "
-            "and status; never the other side's records); the demo's countersigner signed records 1 to 7 of 7, as "
-            "capsulectl reports.") in a
+    assert ("Maya's book sent its own records of deal 01234567 (digests and seal times, and its own payments' amounts, "
+            "fees, references and status; never the other side's records); the demo's countersigner signed records 1 to "
+            "7 of 7, as capsulectl reports.") in a
     assert "no countersignature counts yet (capsulectl's finding: not_countersigned)" in b
     # u640: the countersigner sees the party's own payment legs, never a preimage or the counterparty's legs
-    assert "payment reference" in feeds.HEADINGS["countersigner"] and "never a payment's secret" in feeds.HEADINGS[
+    assert "seal times" in feeds.HEADINGS["countersigner"] and "payment reference" in feeds.HEADINGS["countersigner"] and "never a payment's secret" in feeds.HEADINGS[
         "countersigner"] and "not independent" in feeds.HEADINGS["countersigner"]
     assert "not independent" in testbed.TITLES["countersigner"]

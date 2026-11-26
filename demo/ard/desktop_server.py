@@ -595,7 +595,8 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
 def ard_countersign(seller: str, deal: str = "") -> None:
     """Have the demo's countersigner countersign Maya's own records of her latest deal with ``seller`` (the countersign
     upgrade, after a deal is done). Call only when Maya asks for it, never on your own. It sends the countersigner her
-    records as digests only, none of their contents, and nothing to the seller. With more than one deal with that
+    own records as digests with their seal times, and her own payments' amounts, fees, references and status (never a
+    payment's secret, never the seller's records), and nothing to the seller. With more than one deal with that
     seller, pass ``deal`` (the deal id, or its first characters)."""
     import countersigner as cs
     import receipt

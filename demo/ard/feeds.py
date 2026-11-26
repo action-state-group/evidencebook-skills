@@ -86,8 +86,8 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
         return f"{at}  " + "; ".join(parts) + "."
     if role == "countersigner":
         who = label(event["party"])
-        sent = (f"{who}'s book sent its records of deal {event['deal']} (digests, and its own payments' amounts, fees, "
-                "references and status; never the other side's records)")
+        sent = (f"{who}'s book sent its own records of deal {event['deal']} (digests and seal times, and its own "
+                "payments' amounts, fees, references and status; never the other side's records)")
         if event.get("rung") in ("countersigned", "countersigned_in_part"):
             return (f"{at}  {sent}; the demo's countersigner signed records 1 to {event['through']} of "
                     f"{event['steps']}, as capsulectl reports.")
@@ -114,9 +114,10 @@ HEADINGS = {
                "sees only each book's key and log id.",
     "rail": "The payment rail, as the buyer's agent reports each invoice and payment.",
     "countersigner": "The countersigner, as each party's book reports it: a party sends it its own records of one deal "
-                     "as digests, and for each of its own payments the amount, fees, payment reference and status "
-                     "(never a payment's secret, never the other side's records), and it signs them. It is the demo's "
-                     "own, run by the operator, who also runs every party here, so it is not independent of them.",
+                     "as digests with their seal times, and for each of its own payments whether it sent or received "
+                     "it, the amount, fees, payment reference, status and when it saw it (never a payment's secret, "
+                     "never the other side's records), and it signs them. It is the demo's own, run by the operator, "
+                     "who also runs every party here, so it is not independent of them.",
     "catalog": "The catalog, a stand-in for a store platform's product catalog (not a real store), as the demo's stage "
                "that serves it reports: what it lists, and each time an agent reads a product from it.",
 }
