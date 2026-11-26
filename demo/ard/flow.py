@@ -89,14 +89,16 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
     local.write_bytes(src.read_bytes())
     out = reader.verify(local)
     card, as_of, signer = read_card(local)
+    stamp = pt.anchor_witness(out)
     if out.get("verdict") != "VALID":
+        if stamp == "fail":  # a receipt that does not check makes the verdict INVALID (evidencebook#957)
+            raise pt.Refused(f"{label(seller)}'s card does not verify: {pt.STAMP_FAILED}")
         raise pt.Refused(f"{label(seller)}'s card does not verify: {out.get('verdict')}")
     if signer != key_id:
         raise pt.Refused(f"{label(seller)}'s card is not signed by the key its commitment names")
     if card.get("derivation") != pt.CARD_DERIVATION:
         raise pt.Refused(f"{label(seller)}'s card is not the kind of History card this buyer reads")
-    return CardRead(card, as_of["anchor"], as_of["anchor_time"], signer, out["verdict"],
-                    out.get("witnesses", {}).get("status", ""), local)
+    return CardRead(card, as_of["anchor"], as_of["anchor_time"], signer, out["verdict"], stamp, local)
 
 
 def decided(card: dict) -> dict:

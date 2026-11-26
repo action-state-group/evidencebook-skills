@@ -207,7 +207,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me each seller's History card.
    ```
 
-   **Expect:** Alder: "History card: 15 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 15 deals are sample history the operator made before this run." Kestrel: the same with 10 deals and "Its first 10 deals …". The witness line reads "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet" (evidencebook#891).
+   **Expect:** Alder: "History card: 15 deals, every one went as agreed. Disputes others raised about it: 0 decided against it, of 0 decided; 0 open." and "Signed by … These are the seller's own counts. Its first 15 deals are sample history the operator made before this run." Kestrel: the same with 10 deals and "Its first 10 deals …". The witness line reads "time-stamped by Action State's witness: its receipt verifies under the witness's key", and the "Signed by" line adds "and time-stamped by Action State's witness. The operator, Action State, also runs every party here, so the witness is not independent of them." (with `ARD_WITNESS=off`: "this card's time-stamp is not checked here: the card carries no receipt for it").
 
 4. Type.
 

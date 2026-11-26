@@ -98,6 +98,9 @@ def _assess(w, buyer_party):
     out = {}
     for e in w["entries"]:
         ev = buyer.gather(w["home"], buyer_party, e)
+        # #350: a real verify of each seeded shared card checks its witness's receipt for the card's anchor
+        # (reader_witnesses, evidencebook#957), so Maya is told it is time-stamped
+        assert ev.read is not None and ev.read.witness_status == "pass", (e["id"], ev.checks)
         out[e["id"]] = (ev, buyer.assess(buyer_party, ev, w["keys"][e["id"]], e["offer"]["price_msat"], w["pack"]))
     return out
 

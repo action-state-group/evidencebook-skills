@@ -20,6 +20,20 @@ PACK_NOTE = "example rules for this demo, not a published set"  # Sherlock2 on #
 OPERATOR_NOTE = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
                  "list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's "
                  "key.")
+#: The note once some card shown carries a time-stamp receipt that verified (evidencebook#957): who time-stamps a card
+#: is set by the operator only where its receipt is not checked, and not at all once every card's receipt verified.
+OPERATOR_NOTE_SOME_STAMPED = ("Some inputs were set by the operator and not checked: which marketplace the seller is "
+                              "on, the list of sellers this pack accepts, who time-stamps a seller's card whose receipt "
+                              "is not checked, and who controls the seller's key.")
+OPERATOR_NOTE_STAMPED = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
+                         "list of sellers this pack accepts, and who controls the seller's key.")
+
+
+def operator_note(stamped: int, of: int) -> str:
+    """The operator note for ``of`` cards shown, ``stamped`` of them with a time-stamp receipt that verified."""
+    if of and stamped == of:
+        return OPERATOR_NOTE_STAMPED
+    return OPERATOR_NOTE_SOME_STAMPED if stamped else OPERATOR_NOTE
 ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick decides who is paid, "
                    "and nothing is paid above a seller's limit")
 #: Said wherever a seller's card is shown as signed or time-stamped: its first deals are the seed's sample history, so a
@@ -178,7 +192,7 @@ def listing_lines(item: dict) -> list[str]:
 
 
 def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
-    """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
+    """Who signed the card, and its time-stamp when its receipt verified (``witness_checked``)."""
     if witness_checked:
         return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts. {sample_note(seller)}"
     return f"Signed by {name}. These are the seller's own counts. {sample_note(seller)}"

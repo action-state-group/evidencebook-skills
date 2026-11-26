@@ -408,7 +408,8 @@ def ard_assess() -> None:
     print(f"The assessment rules: {screens.PACK_NOTE}")  # its version and digest are in the buyer's assessment records
     print(screens.limit_line(limit, _ceilings(p)))
     print(f"({screens.ASSESSMENT_NOTE})")
-    print(f"({screens.OPERATOR_NOTE})\n")
+    cards = [ev for ev in s.evidence.values() if ev.read is not None]
+    print(f"({screens.operator_note(sum(ev.read.witness_status == 'pass' for ev in cards), len(cards))})\n")
     for e in s.entries:
         ev = s.evidence.get(e["id"])
         if ev is None or ev.card is None:

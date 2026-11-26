@@ -35,11 +35,14 @@ CARD_RECEIVED = "ard_card_received"
 DEAL_OPENED = "ard_deal_opened"
 LISTING_CHECKED = "ard_listing_checked"  # one per seller a search found: what was fetched and checked (#345)
 #: What the operator fills in for the rows the card cannot answer: the controller the pack's trust roots name, and the
-#: witness of the card's checkpoint. At the pinned evidencebook neither the card bundle nor the history_card/2 staple
-#: carries the anchor's witness receipt (evidencebook#891), so ``gather`` finds none to check and the screen says the
-#: witness is filled in by the operator, not checked (``screens.OPERATOR_NOTE``); a card that does carry one is checked
-#: there. Never printed.
+#: witness of the card's checkpoint. A card carries its witness's receipt for its anchor and ``verify --bundle`` checks
+#: it (evidencebook#957, ``flow.anchor_witness``); ``gather`` shows that check, and the operator note names the witness
+#: as unchecked only when some card's receipt did not pass (``screens.operator_note``). The pack's witness input stays
+#: the operator's either way, so a card with no receipt (``ARD_WITNESS=off``) is assessed as before. Never printed.
 OPERATOR_FACTS = {"controller": "demo-controller", "witness": pt.WITNESS_KEY}
+#: The witness line when the card's time-stamp is not checked: a receipt that could not be checked, or none.
+STAMP_WITHHELD = "this card's time-stamp is not checked here: it carries a receipt this buyer could not check"
+STAMP_NONE = "this card's time-stamp is not checked here: the card carries no receipt for it"
 
 
 @dataclass
@@ -123,7 +126,7 @@ def record_search(maya: pt.Party, registry_url: str, query: str, entries: list[d
 
 def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
     """Fetch one seller's shared History card and check it: VALID under ``verify --bundle``, signed by the key the
-    seller's verified commitment names, a ``standard_history/3`` card, its witness receipts checked."""
+    seller's verified commitment names, a ``standard_history/3`` card, its time-stamp receipt checked."""
     ev = Evidence(entry["id"])
     if entry.get("problem") or "commitment" not in entry:
         ev.fail("commitment", entry.get("problem", "no commitment"))
@@ -142,8 +145,10 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
     ev.ok("History card", f"signed by {name}, and it checks out, as of {screens.local_time(r.anchor_time, date=True)}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
-    elif r.witness_status in ("withheld", ""):  # none carried, or none reported: no verb hands a buyer one (#891)
-        ev.stated("witness", "this card's time-stamp is not checked here: no receipt for it is available to the buyer yet")
+    elif r.witness_status == "withheld":  # verify could not check it: no directory row, or the card's checkpoint
+        ev.stated("witness", STAMP_WITHHELD)
+    elif r.witness_status == "":  # no receipt carried: no witness took the card's checkpoint (or ARD_WITNESS=off)
+        ev.stated("witness", STAMP_NONE)
     else:
         ev.fail("witness", f"the card's witness receipt does not verify ({r.witness_status or 'no status'})")
     ev.card_record = maya.note(CARD_RECEIVED, {"seller": key, "anchor": r.anchor, "card_sha256": card_digest(r.card)},

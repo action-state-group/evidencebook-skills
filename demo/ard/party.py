@@ -64,6 +64,18 @@ class WitnessSlow(Refused):
     last tick's output goes to the party's own log (:meth:`Party.log`), never into a chat."""
 
 
+#: Said when the card's time-stamp receipt does not check out under the witness's key.
+STAMP_FAILED = "its time-stamp receipt does not check out"
+
+
+def anchor_witness(out: dict) -> str:
+    """The status of a History card's time-stamp, as ``verify --bundle`` reports it (evidencebook#957):
+    ``reader_witnesses`` checks the witness's receipt for the card's anchor (pass; withheld when it could not be checked
+    under the directory given; fail), and is absent when the card carries no receipt (""). The core ``witnesses`` row
+    beside it is about the card bundle's own log, which no witness sees, so it is never read for a card."""
+    return (out.get("reader_witnesses") or {}).get("status", "")
+
+
 def witnessed() -> bool:
     """True unless ``ARD_WITNESS=off``: a Mac with no network can still run, its records then timed locally only."""
     return os.environ.get("ARD_WITNESS", "public") != "off"
