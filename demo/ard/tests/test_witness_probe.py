@@ -19,9 +19,6 @@ class FakeParty:
             raise pt.Refused("capsulectl-deal init refused")
         return self
 
-    def add_witness(self):
-        pass
-
     def wait_checkpoint(self, seconds):
         if FakeParty.outcome(self.name) == "slow":
             raise pt.WitnessSlow(f"{pt.WITNESS_NAME} took no stamp within {int(seconds)} s")

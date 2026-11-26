@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     os.environ["ARD_WITNESS"] = "public"
     url, key = os.environ.get("ARD_E2E_WITNESS_URL", ""), os.environ.get("ARD_E2E_WITNESS_KEY", "")
-    if url:  # as test_e2e names a local witness: a profile made without a witness, then this one named in it
+    if url:  # as test_e2e's _local_witness names it; Party.create then names it in each profile (#382)
         pt.WITNESS_URL, pt.WITNESS_KEY = url, key
     witness = pt.WITNESS_URL
     home = Path(tempfile.mkdtemp(prefix="witness-probe-"))
@@ -48,9 +48,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def probe(i: int) -> None:
         try:
-            p = pt.Party(home, f"probe-{i}").create("node", witness=not url)
-            if url:
-                p.add_witness()
+            p = pt.Party(home, f"probe-{i}").create("node")
             for n in range(args.stamps):
                 t0 = time.monotonic()
                 try:
