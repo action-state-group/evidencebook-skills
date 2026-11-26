@@ -55,6 +55,7 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     if not seller:
         lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller")]
     lines += proof_lines(p, deal_id, name)
+    lines.append("  " + countersign_line(_countersigned(p, deal_id), name, counterparty or "the other side"))
     if seller and real:
         owed = next((r.get("owed", {}).get("amount_minor") for r in report.get("rows", []) if r["id"] == pt.PAID), None)
         if owed:
@@ -95,6 +96,41 @@ def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str
     else:
         lines = ["  The other side's half is not in this copy."]
     return lines + [witness_line(next((e.get("witnessed") for e in entries if e.get("witnessed")), None), name)]
+
+
+def _countersigned(p: pt.Party, deal_id: str) -> dict | None:
+    try:
+        return p.countersigned(deal_id)
+    except pt.Refused as exc:
+        p.log(f"countersign of {deal_id}: {exc!r}")
+        return None
+
+
+def countersign_line(cs: dict | None, name: str, counterparty: str) -> str:
+    """The receipt's countersign line from capsulectl's report of the deal (``countersign``, the stamp evidencebook
+    states from its stored countersignatures, ``deal_grade.go`` ``storedCountersignOf``), never computed here: the rung
+    ``countersigned`` or ``countersigned_in_part`` with the signer, its time and how far into the party's records it
+    reaches; with no rung, ``finding`` says why. Sherlock2's words on #383 (Buzz f903059c)."""
+    if cs is None:
+        return f"No countersign line: capsulectl's report of {name}'s records is not ready yet; ask again in a minute."
+    rung = cs.get("rung")
+    if rung in ("countersigned", "countersigned_in_part"):
+        at = cs.get("recomputed_at", "")
+        k, n = cs.get("through_step"), cs.get("steps")
+        line = (f"Countersigned by {cs.get('signer') or 'a countersigner'}"
+                + (f" at {screens.local_time(at, date=True)}" if at else "")
+                + f", as capsulectl reports. It signed {name}'s records of this deal, 1 to {k} of {n}, as digests only, "
+                f"and does not cover {counterparty}'s records. In this demo the operator runs it and every party, so it "
+                "is not independent of them.")
+        if rung == "countersigned_in_part" and isinstance(k, int) and isinstance(n, int) and k < n:
+            line += f" Records {k + 1} to {n} are not countersigned yet."
+        return line
+    finding = cs.get("finding", "not_countersigned")
+    if finding == "not_countersigned":
+        return f"Not countersigned yet: no countersigner has signed {name}'s records of this deal."
+    # a countersignature is held but does not count (unchecked, unverified, unresolved_signer, self_countersigned)
+    return (f"Not countersigned: capsulectl holds a countersignature for {name}'s records of this deal that does not "
+            f"count ({finding.replace('_', ' ')}).")
 
 
 def witness_line(witnessed: dict | None, name: str) -> str:

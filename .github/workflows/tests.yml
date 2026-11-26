@@ -36,6 +36,7 @@ jobs:
     env:
       EVIDENCEBOOK_REF: 63f2d610aa8e6b4fff52b847f06afa0493aabb96  # main: #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61), #991 and #992 (capsule-cli 052a8a6a: a continuity 409 is sent once more, then re-anchored)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
+      CAPSULE_CLI_REF: 052a8a6a7de4360a9e18b1269ba558bf71d0fef2  # capsulectl itself, the RUNBOOK's pin: countersign request (#383)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,6 +53,12 @@ jobs:
           ref: ${{ env.CAPSULE_ENGINE_TAG }}
           path: .deps/capsule-engine
           persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-cli
+          ref: ${{ env.CAPSULE_CLI_REF }}
+          path: .deps/capsule-cli
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: .deps/evidencebook/capsulectl/go.mod
@@ -64,11 +71,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bin
-          key: ard-bins-v3-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}
-      - name: build capsulectl-deal and capsule-engine
+          key: ard-bins-v4-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.CAPSULE_CLI_REF }}
+      - name: build capsulectl, capsulectl-deal and capsule-engine
         if: steps.bins.outputs.cache-hit != 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
+          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
           (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
       - name: the demo's tests
@@ -79,7 +87,7 @@ jobs:
       - name: both deals end to end (Action State's hosted witness)
         run: |
           ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
-            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" \
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" \
             python -m pytest -v demo/ard/tests/test_e2e.py
 
   tau2-live:

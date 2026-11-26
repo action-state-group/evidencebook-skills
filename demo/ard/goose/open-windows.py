@@ -19,6 +19,7 @@ import argparse
 import base64
 import json
 import os
+import shutil
 import shlex
 import subprocess
 import sys
@@ -114,6 +115,12 @@ def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
                 "ARD_NOTIFY"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
+    if role == "maya":  # the countersign upgrade (ard_countersign): capsule-cli's own capsulectl and the countersigner's folder
+        core = os.environ.get("CAPSULECTL") or shutil.which("capsulectl")
+        if core:
+            env.append(f"CAPSULECTL={core}")
+        if os.environ.get("ARD_COUNTERSIGN_DIR"):
+            env.append(f"ARD_COUNTERSIGN_DIR={os.environ['ARD_COUNTERSIGN_DIR']}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):

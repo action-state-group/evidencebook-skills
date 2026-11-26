@@ -62,3 +62,15 @@ def test_the_testbed_starts_the_witness_the_local_check_starts():
     check = (Path(__file__).resolve().parents[3] / "scripts" / "check.sh").read_text()
     pins = dict(re.findall(r"(?m)^(LOCAL_WITNESS(?:_START)?_REF)=([0-9a-f]{40})", check))
     assert pins == {"LOCAL_WITNESS_REF": testbed.CAPSULE_ANCHOR_PIN, "LOCAL_WITNESS_START_REF": testbed.LOCAL_WITNESS_START_PIN}
+
+
+def test_ci_builds_the_header_capsulectl():
+    """#383: the countersign upgrade's `countersign request` is capsulectl's own, at the RUNBOOK's capsule-cli pin."""
+    m = re.search(r"CAPSULE_CLI_REF: ([0-9a-f]{40})", CI.split("ard-demo:", 1)[1])
+    assert m and m.group(1) == _commit("capsule-cli")
+
+
+def test_the_countersigner_is_the_header_capsule_anchor():
+    import countersigner
+
+    assert f"capsule-anchor {countersigner.ANCHOR_REF[:7]} " in HEADER

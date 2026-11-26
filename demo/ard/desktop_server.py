@@ -591,6 +591,38 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
     print(f"Maya's statement sent to {name}: she received what she paid for.")
 
 
+@_tool("maya")
+def ard_countersign(seller: str, deal: str = "") -> None:
+    """Have the demo's countersigner countersign Maya's own records of her latest deal with ``seller`` (the countersign
+    upgrade, after a deal is done). Call only when Maya asks for it, never on your own. It sends the countersigner her
+    records as digests only, none of their contents, and nothing to the seller. With more than one deal with that
+    seller, pass ``deal`` (the deal id, or its first characters)."""
+    import countersigner as cs
+    import receipt
+
+    s = session()
+    key = _seller_key(seller)
+    name = SELLERS[key]["label"]
+    mine = [d for d in s.deals if d.seller == key]
+    if not mine:
+        raise RuntimeError(f"Maya has no deal with {name} in this run")
+    if deal:
+        found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
+        if len(found) != 1:
+            raise RuntimeError(f"{'no' if not found else 'more than one'} deal with {name} matches {deal!r}: her deals "
+                               "with it are " + ", ".join(d.deal_id[5:13] for d in mine))
+        target = found[0]
+    else:
+        target = mine[-1]
+    try:
+        service = cs.env(Path(os.environ.get("ARD_COUNTERSIGN_DIR") or cs.default_dir(s.home)))
+    except cs.CountersignerError as exc:
+        raise RuntimeError(str(exc)) from None
+    with s.pay_lock:  # not while another of Maya's steps writes her book
+        stamp = s.maya.countersign(target.deal_id, service)
+    print(f"Maya's deal {target.deal_id[5:13]} with {name}: " + receipt.countersign_line(stamp, "Maya", name))
+
+
 #: How the dispute dialog ended other than Dispute, in Maya's terms (as RECEIVED_NOT_YES).
 DISPUTE_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in time",
                    NOT_SHOWN: "the dialog could not be shown"}

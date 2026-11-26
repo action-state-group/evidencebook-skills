@@ -31,6 +31,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import countersigner
+
 SAVED_RECIPE = "maya-buys-conference-badges.yaml"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"  # demo.DEFAULT_HOME, kept here so reset needs no evidencebook checkout
 HERE = Path(__file__).resolve().parent  # this checkout's demo/ard: a stage or server run from here is ours
@@ -227,6 +229,8 @@ def holders(home: Path) -> tuple[set[int], dict[int, str], set[int]]:
     found = _lsof("+D", str(home)) if home.exists() else []
     near = {pid for pid, _, _ in found} | set(_listeners())
     ours |= {pid for pid in near - ours - holding_locks - {os.getpid()} if _started_for(pid, home)}
+    # the demo's countersigner on this home (countersigner.py: capsule-anchor, its folder inside the home)
+    ours |= {pid for pid in near - ours - {os.getpid()} if countersigner.is_ours(countersigner.default_dir(home), pid)}
     for pid, fd, name in found:
         if pid == os.getpid() or pid in ours:
             continue
@@ -403,7 +407,7 @@ def reset(home: Path, say=print, root: Path | None = None) -> int:
     try:
         if ours:
             _stop(home, ours)
-            say("stopped stage.py and desktop_server.py on this home: " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
+            say("stopped stage.py and desktop_server.py on this home (and its countersigner, if it ran): " + ", ".join(f"pid {pid}" for pid in sorted(ours)))
         again, others, inside = holders(home)  # again: nothing may have taken the home meanwhile
         if again:
             raise ResetRefused(f"stage.py or desktop_server.py {sorted(again)} did not stop. Stop them (kill -9 <pid>), then reset again.")
