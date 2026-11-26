@@ -152,7 +152,11 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
 
     def kestrel_card():
         ticks[0] = try_tick(kestrel.stamp)  # a refusal is tried again next round, as the agent's republish does
-        c, _, _ = flow.read_card(flow.publish_card(w["home"], kestrel))
+        published = try_tick(lambda: {"card": flow.publish_card(w["home"], kestrel)})
+        if "error" in published:
+            ticks[0] = {"error": f"publishing the card: {published['error']}"}
+            return None
+        c, _, _ = flow.read_card(published["card"])
         # the dispute's count and the deal's outcome can come one checkpoint apart: wait for both
         return c if c["disputes"]["received"]["by_outcome"]["against"] and c["outcomes"]["did_not_hold"] else None
     card = stamp_wait(kestrel_card, "Kestrel's card counting the ruling", adj.LATER_S, tick=lambda: ticks[0])
@@ -322,10 +326,10 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     try:
         p = pt.Party(w["home"], "kestrel")
         p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
-        monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
-        failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
+        with monkeypatch.context() as m:  # the proxy is gone on every way out, before the agent reopens
+            m.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+            failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
         assert failed["pending"], failed
-        monkeypatch.delenv("HTTPS_PROXY")
         again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
         ticks: list[dict] = []
 
