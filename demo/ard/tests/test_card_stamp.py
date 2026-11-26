@@ -82,12 +82,12 @@ def test_a_card_whose_stamp_receipt_passed_reads_time_stamped(monkeypatch, tmp_p
 
 def test_a_card_whose_stamp_receipt_could_not_be_checked_says_so(monkeypatch, tmp_path):
     assert gathered(monkeypatch, tmp_path, "withheld") == [
-        "– witness: this card's time-stamp is not checked here: it carries a receipt this buyer could not check"]
+        "– witness: not checked: the card carries a time-stamp receipt this buyer could not check"]
 
 
 def test_a_card_with_no_stamp_receipt_says_so(monkeypatch, tmp_path):
     assert gathered(monkeypatch, tmp_path, "") == [
-        "– witness: this card's time-stamp is not checked here: the card carries no receipt for it"]
+        "– witness: not checked: the card carries no time-stamp receipt"]
 
 
 def test_no_line_still_says_no_receipt_is_available_to_the_buyer(monkeypatch, tmp_path):
@@ -97,15 +97,16 @@ def test_no_line_still_says_no_receipt_is_available_to_the_buyer(monkeypatch, tm
 
 
 def test_the_operator_note_names_the_witness_only_for_cards_whose_receipt_is_not_checked():
+    # Sherlock2 on #350 (option c): a passing receipt shows only that the stamp came from the key the operator named
     assert screens.operator_note(0, 2) == screens.OPERATOR_NOTE  # PM's words, unchanged when none was checked
     assert screens.operator_note(0, 0) == screens.OPERATOR_NOTE
     assert screens.operator_note(1, 2) == (
         "Some inputs were set by the operator and not checked: which marketplace the seller is on, the list of sellers "
-        "this pack accepts, who time-stamps a seller's card whose receipt is not checked, and who controls the "
-        "seller's key.")
+        "this pack accepts, who time-stamps a seller's card whose receipt is not checked, which key belongs to the "
+        "witness, and who controls the seller's key.")
     assert screens.operator_note(2, 2) == (
         "Some inputs were set by the operator and not checked: which marketplace the seller is on, the list of sellers "
-        "this pack accepts, and who controls the seller's key.")
+        "this pack accepts, which key belongs to the witness, and who controls the seller's key.")
 
 
 class OwnCard:
@@ -141,6 +142,7 @@ def test_a_partys_own_card_page_is_time_stamped_only_when_its_receipt_passed(mon
 
 def test_a_partys_own_card_page_never_draws_a_failed_receipt_as_not_run(monkeypatch, tmp_path):
     monkeypatch.setattr(pages, "home", lambda: tmp_path)
-    with pytest.raises(pt.Refused, match="its time-stamp receipt does not check out"):
+    with pytest.raises(pt.Refused) as exc:
         pages.card_page(OwnCard(tmp_path, report("fail", verdict="INVALID")), "Alder Print Co.", rail="simulated",
                         seller=True)
+    assert str(exc.value) == "Your History card does not verify: its time-stamp receipt does not check out."

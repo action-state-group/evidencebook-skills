@@ -37,12 +37,13 @@ LISTING_CHECKED = "ard_listing_checked"  # one per seller a search found: what w
 #: What the operator fills in for the rows the card cannot answer: the controller the pack's trust roots name, and the
 #: witness of the card's checkpoint. A card carries its witness's receipt for its anchor and ``verify --bundle`` checks
 #: it (evidencebook#957, ``flow.anchor_witness``); ``gather`` shows that check, and the operator note names the witness
-#: as unchecked only when some card's receipt did not pass (``screens.operator_note``). The pack's witness input stays
+#: as unchecked only for cards whose receipt did not pass (``screens.operator_note``). The pack's witness input stays
 #: the operator's either way, so a card with no receipt (``ARD_WITNESS=off``) is assessed as before. Never printed.
 OPERATOR_FACTS = {"controller": "demo-controller", "witness": pt.WITNESS_KEY}
-#: The witness line when the card's time-stamp is not checked: a receipt that could not be checked, or none.
-STAMP_WITHHELD = "this card's time-stamp is not checked here: it carries a receipt this buyer could not check"
-STAMP_NONE = "this card's time-stamp is not checked here: the card carries no receipt for it"
+#: The witness line when the card's time-stamp is not checked: a receipt that could not be checked, or none (Sherlock2's
+#: words on #350).
+STAMP_WITHHELD = "not checked: the card carries a time-stamp receipt this buyer could not check"
+STAMP_NONE = "not checked: the card carries no time-stamp receipt"
 
 
 @dataclass

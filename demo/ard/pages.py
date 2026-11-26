@@ -162,7 +162,7 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
     out = p.verify(bundle)
     stamp = pt.anchor_witness(out)
     if stamp == "fail":  # never drawn as "not run": a receipt that does not check makes the card INVALID (#957)
-        raise pt.Refused(f"this party's History card does not verify: {pt.STAMP_FAILED}")
+        raise pt.Refused(f"Your History card does not verify: {pt.STAMP_FAILED}.")
     witnessed = {"by": pt.WITNESS_NAME, "at": ext["as_of"]["anchor_time"]} if stamp == "pass" else None
     view = history_input(ext.get("deals", []), name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))

@@ -20,13 +20,15 @@ PACK_NOTE = "example rules for this demo, not a published set"  # Sherlock2 on #
 OPERATOR_NOTE = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
                  "list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's "
                  "key.")
-#: The note once some card shown carries a time-stamp receipt that verified (evidencebook#957): who time-stamps a card
-#: is set by the operator only where its receipt is not checked, and not at all once every card's receipt verified.
+#: The note once some card shown carries a time-stamp receipt that verified (evidencebook#957; Sherlock2's words on
+#: #350): who time-stamps a card is the operator's only where its receipt is not checked, and a passing receipt shows
+#: only that the stamp came from the key the operator named (``party.witness_directory``), so that stays on the screen.
 OPERATOR_NOTE_SOME_STAMPED = ("Some inputs were set by the operator and not checked: which marketplace the seller is "
                               "on, the list of sellers this pack accepts, who time-stamps a seller's card whose receipt "
-                              "is not checked, and who controls the seller's key.")
+                              "is not checked, which key belongs to the witness, and who controls the seller's key.")
 OPERATOR_NOTE_STAMPED = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
-                         "list of sellers this pack accepts, and who controls the seller's key.")
+                         "list of sellers this pack accepts, which key belongs to the witness, and who controls the "
+                         "seller's key.")
 
 
 def operator_note(stamped: int, of: int) -> str:
@@ -42,7 +44,7 @@ def sample_note(seller: str) -> str:
     """Said wherever a seller's card is shown: how many of its deals are the sample history ``demo.py seed`` made."""
     return f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before this run."
 WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
-                "witness is not independent of them.")
+                "witness is not independent of the parties.")
 #: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
 ADJUDICATOR_INDEPENDENCE = ("This adjudicator is run by the operator, who also runs every party here: it is not "
                             "independent of the parties.")
