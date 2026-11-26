@@ -27,7 +27,7 @@ skills that evolution compiles. The two cron skills run (see "Running the two cr
 ## Two kinds of skill: agent skills and pack-author skills
 
 **Agent skills** teach five verbs and nothing else (Steven's ruling, ops u632): **check** before an act,
-**record** what was done, **ask** the other side for evidence, **verify** what comes back, and **show** a card
+**record** what was done, **ask** the other side for evidence, or answer when it asks, **verify** what comes back, and **show** a card
 or a receipt. Each agent skill has one table, "The five verbs", that maps each verb to the existing command,
 host tool or library call; no command is renamed or added. Commands outside the five (setting up a store or a
 profile, plugins, windows, judges, contracts, `x-deal-v0` sales) are expert commands: an agent skill names none

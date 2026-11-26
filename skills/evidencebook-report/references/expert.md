@@ -16,7 +16,8 @@ run resolves it in step 1. Run on its own, the check is an action, so seal it wi
 ## Show what a stranger sees
 
 "Show me what they see" asks the holder's own responder as a stranger would:
-`capsulectl book doctor --probe`. It asks for checkpoints, then `history_card/1`, through the
+`capsulectl book doctor --probe`. It asks for checkpoints, then `history_card/1` (which Steven's ruling u632 retired as an
+asked form; moving the probe to `history_card/2` is tracked in action-state-group/evidencebook#995), through the
 in-process `book respond` path (no `--requester`, not a network endpoint), verifies both and
 shows the answer. A match shows what a stranger is served, not that the share policy is
 verified. It seals nothing.

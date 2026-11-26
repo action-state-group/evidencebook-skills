@@ -86,7 +86,7 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 ## The five verbs
 
 This skill teaches five verbs and nothing else: **check** before you act, **record** what was done, **ask** the
-other side for evidence, **verify** what you get, and **show** a card or a receipt. Each row maps a verb, at one
+other side for evidence, or answer when it asks, **verify** what you get, and **show** a card or a receipt. Each row maps a verb, at one
 step, to the demo host's tool and to the capsule host's existing command.
 
 | Verb | Step | On the demo host (step A): this demo host's tools | On a capsule host |
