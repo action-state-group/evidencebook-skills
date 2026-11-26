@@ -37,6 +37,7 @@ CONTINUED=0
 LOG=""
 DOING=""
 MODEL=""
+EXTENSIONS_TURNED_OFF=0
 
 say() { printf '%s\n' "$*"; }
 # A step that is already done says so once; after the hand-over to the checkout's copy (step 2) the checks of "What
@@ -372,9 +373,12 @@ choose_model() {
     quit_goose
     status=$(goose_status off) || stop "the demo Goose's settings could not be read."
     [ "$(field "$status" '.error // ""')" = "" ] || stop "$(field "$status" .error)"
+    [ "$(field "$status" .changed)" = false ] || EXTENSIONS_TURNED_OFF=1
     if [ "$(field "$status" .needs_choice)" = false ]; then break; fi
     say ""
-    say "  Not yet: $(field "$status" '.problem // "no model is chosen in the demo'"'"'s Goose yet"')."
+    # with no model chosen yet, open-windows.py's message points at a command; this step is where the person is
+    if [ "$(field "$status" '.provider // ""')" = "" ]; then say "  Not yet: no model is chosen in the demo's Goose yet."
+    else say "  Not yet: $(field "$status" .problem)."; fi
     say "  Starting the demo's Goose again: choose the model as above."
     start_demo_goose
   done
@@ -399,10 +403,10 @@ goose_settings_step() {
     quit_goose
     status=$(goose_status off) || stop "the demo Goose's settings could not be read."
     [ "$(field "$status" '.error // ""')" = "" ] || stop "$(field "$status" .error)"
-    say "  Turned off every Goose extension in the demo's Goose."
-  else
-    already "Goose extensions: already all off"
+    EXTENSIONS_TURNED_OFF=1
   fi
+  if [ "$EXTENSIONS_TURNED_OFF" = 1 ]; then say "  Turned off every Goose extension in the demo's Goose."
+  else already "Goose extensions: already all off"; fi
   [ "$(field "$status" '.on | length')" = 0 ] \
     || stop "these Goose extensions are still on: $(field "$status" '.on | join(", ")'). One switched on in /etc/goose/config.yaml cannot be switched off here; ask whoever looks after this Mac."
   status=$(goose_status) || stop "the demo Goose's settings could not be read."

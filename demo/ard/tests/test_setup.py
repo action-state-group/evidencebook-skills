@@ -274,7 +274,9 @@ def test_another_provider_is_chosen_in_goose_with_a_second_try(mac):
     run = mac.run(stdin="3\n2\n\n\n")
     assert run.returncode == 0, run.stdout + run.stderr
     assert "Pick your provider and follow its screens" in run.stdout
-    assert "Not yet: the demo's Goose has no provider yet" in run.stdout
+    assert "  Not yet: no model is chosen in the demo's Goose yet." in run.stdout and "open-windows" not in run.stdout
+    # the choice's own check turned the extensions off, and the run says so rather than "already all off"
+    assert "Turned off every Goose extension in the demo's Goose." in run.stdout and "already all off" not in run.stdout
     # Goose is quit before its settings are read or written, every time
     assert [c.split()[0] for c in mac.calls() if c.startswith(("open", "osascript"))] == \
         ["open", "osascript", "open", "osascript"]
