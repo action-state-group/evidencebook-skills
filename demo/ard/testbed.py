@@ -238,7 +238,7 @@ def up(c: dict, say=print, ask=input) -> int:
         raise Stop("reset refused (it says why above); nothing else was done")
     stop_witness(say)  # only once the reset went through: a refused reset leaves the earlier run as it was
     witness: dict[str, str] = {}
-    started = False
+    started, ok = False, False
     try:
         if c["witness"] == "local":
             started = True  # from here: start.sh may leave its witness running even when it fails
@@ -253,17 +253,32 @@ def up(c: dict, say=print, ask=input) -> int:
             if role in c["roles"]:
                 open_screen(role, env)
         rc = open_windows(env, c["rail"])
-        if rc == 0:
-            started = False  # the windows are open: the witness now belongs to them, until `down`
-        else:
-            say("the windows did not all open; stopping this run's witness. Run testbed.py down, then up again")
+        ok = rc == 0  # the windows are open: the witness and the screens now belong to them, until `down`
+        if not ok:
+            say("the windows did not all open; stopping this run's screens and witness. Run testbed.py up again")
         return rc
     except KeyboardInterrupt:
         say("\ninterrupted")
         return 130
     finally:
-        if started:
-            stop_witness(say)
+        if not ok:  # a failed or interrupted run leaves nothing of its own running
+            stop_screens(home())
+            if started:
+                stop_witness(say)
+
+
+def stop_screens(h: Path) -> None:
+    """Stop the screens (``watch.py``) open on this home: each holds ``.watch-<role>.lock``, and only a process running
+    our ``watch.py`` is signalled, as reset does."""
+    import reset
+
+    for lock in sorted(h.glob(".watch-*.lock")):
+        for pid, _, _ in reset._lsof(str(lock)):
+            if pid != os.getpid() and reset._runs_our_script(pid):
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
 
 
 def reopen(c: dict) -> int:

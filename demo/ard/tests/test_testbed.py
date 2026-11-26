@@ -68,6 +68,7 @@ def world(tmp_path, monkeypatch):
         "ARD_WITNESS": "local", "ARD_WITNESS_URL": "https://localhost:1", "ARD_WITNESS_KEY": "ab" * 32})
     monkeypatch.setattr(testbed, "stop_witness", lambda say=print: steps.append("witness down"))
     monkeypatch.setattr(testbed, "open_screen", lambda role, env: steps.append(f"screen {role}"))
+    monkeypatch.setattr(testbed, "stop_screens", lambda h: steps.append("screens down"))
     return steps, fail
 
 
@@ -88,14 +89,14 @@ def test_a_failed_seed_stops_the_witness_this_run_started(world):
     fail.add("seed")
     with pytest.raises(testbed.Stop, match="seed failed"):
         _up()
-    assert steps[-1] == "witness down" and "windows" not in steps
+    assert steps[-2:] == ["screens down", "witness down"] and "windows" not in steps
 
 
 def test_ctrl_c_stops_the_witness_this_run_started(world):
     steps, fail = world
     fail.add("seed^C")
     assert _up() == 130
-    assert steps[-1] == "witness down" and "windows" not in steps
+    assert steps[-2:] == ["screens down", "witness down"] and "windows" not in steps
 
 
 def test_a_refused_reset_starts_nothing_and_stops_nothing(world):
@@ -125,14 +126,14 @@ def test_a_witness_that_fails_to_start_is_stopped(world, monkeypatch):
     monkeypatch.setattr(testbed, "start_witness", failing)
     with pytest.raises(testbed.Stop):
         _up()
-    assert steps[-2:] == ["witness up", "witness down"] and "seed" not in steps
+    assert steps[-3:] == ["witness up", "screens down", "witness down"] and "seed" not in steps
 
 
 def test_windows_that_do_not_open_stop_the_witness_this_run_started(world):
     steps, fail = world
     fail.add("windows")
     assert _up() == 1
-    assert steps[-2:] == ["windows", "witness down"]
+    assert steps[-3:] == ["windows", "screens down", "witness down"]  # the screens it opened, too
 
 
 def test_a_local_witness_without_python_311_is_refused_before_anything_changes(world, monkeypatch):
@@ -345,3 +346,20 @@ def test_reset_counts_an_open_screen_among_the_demos_own(tmp_path):
     (tmp_path / ".watch-rail.lock").write_text("")
     assert tmp_path / ".watch-rail.lock" in reset._locks(tmp_path)
     assert "watch.py" in reset.SCRIPTS
+
+
+def test_a_successful_up_leaves_its_screens_and_witness_running(world):
+    steps, _ = world
+    assert _up() == 0
+    assert "screens down" not in steps and steps[-1] == "windows"
+
+
+def test_stop_screens_signals_only_our_own_watch_process(tmp_path, monkeypatch):
+    import reset
+    (tmp_path / ".watch-rail.lock").write_text("")
+    killed = []
+    monkeypatch.setattr(reset, "_lsof", lambda *a: [(111, "3w", a[0]), (222, "4w", a[0])])
+    monkeypatch.setattr(reset, "_runs_our_script", lambda pid: pid == 111)
+    monkeypatch.setattr(testbed.os, "kill", lambda pid, sig: killed.append(pid))
+    testbed.stop_screens(tmp_path)
+    assert killed == [111]
