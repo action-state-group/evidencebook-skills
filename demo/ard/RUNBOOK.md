@@ -76,6 +76,8 @@ What it does, in order (you do not type these):
 
 10. Leaves that Goose quit.
 
+11. Checks that Action State's witness takes a real stamp, not only that its home page loads: it makes one test stamp on a new, empty log of its own (the witness receives only that log's hashes) and waits up to 60 seconds for the witness's receipt. If the witness refuses it or does not answer, the set-up stops with one line saying which. To check again just before a run: `ARD_EVIDENCEBOOK=~/ard-demo/evidencebook CAPSULECTL_DEAL=~/.local/lib/capsulectl/plugins/capsulectl-deal ~/ard-demo/evidencebook-skills/.venv/bin/python ~/ard-demo/evidencebook-skills/demo/ard/witness_check.py`.
+
 ## Real rail, once
 
 Do a full run on the simulated rail first, then the real rail. This moves real bitcoin on Lightning mainnet. Use new wallets and small amounts. Not yet run at these pins. Lexe's fees, from [docs.lexe.tech/pricing](https://docs.lexe.tech/pricing) (read 2026-11-18; the page says rates may change): receiving payments 0.5%, sending to other Lexe users 0.5% of the payment amount, and "Lightning sends and receives have a minimum fee of ₿0.1 (100 msat …). It only applies to payments under ₿20." At 2,000 msat, 0.5% is 10 msat, so the 100 msat minimum applies on both sides: the buyer needs 2,100 msat and the seller should receive about 1,900.
