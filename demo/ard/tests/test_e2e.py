@@ -76,20 +76,20 @@ def world(tmp_path_factory):
     import stage
     from cast import SELLERS
 
-    mp = pytest.MonkeyPatch()
-    _local_witness(mp)
-    home = tmp_path_factory.mktemp("ard-e2e")
-    seed.seed(home, say=lambda *_: None)
-    st = stage.Stage(home)
-    agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
-    entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
-    w = {"home": home, "stage": st, "agents": agents, "maya": pt.Party(home, "maya"), "adj": adj.Adjudicator(home),
-         "pack": packs.starting(), "entries": entries, "keys": {e["id"]: e["commitment"]["key_id"] for e in entries}}
-    yield w
-    for a in agents.values():
-        a.stop()
-    st.close()
-    mp.undo()
+    with pytest.MonkeyPatch.context() as mp:  # undone however the fixture ends, a failed set-up too
+        _local_witness(mp)
+        home = tmp_path_factory.mktemp("ard-e2e")
+        seed.seed(home, say=lambda *_: None)
+        st = stage.Stage(home)
+        agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
+        entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+        w = {"home": home, "stage": st, "agents": agents, "maya": pt.Party(home, "maya"), "adj": adj.Adjudicator(home),
+             "pack": packs.starting(), "entries": entries,
+             "keys": {e["id"]: e["commitment"]["key_id"] for e in entries}}
+        yield w
+        for a in agents.values():
+            a.stop()
+        st.close()
 
 
 def _assess(w, buyer_party):

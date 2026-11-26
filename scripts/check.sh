@@ -183,7 +183,10 @@ local_witness() {
   : >"$out"
   # BLOCK=false: blocking the hosted witness's names in /etc/hosts needs sudo; the end-to-end step routes every
   # other host to a closed port instead (job_ard_demo).
-  RUNNER_TEMP="$1" SRC="$src" BLOCK=false GITHUB_OUTPUT="$out" PYTHON="$(uv python find 3.12)" \
+  # start.sh checks the witness on localhost with curl and urllib: an inherited proxy must not take those calls, while
+  # it may still be what pip needs to install capsule-anchor.
+  NO_PROXY="localhost,127.0.0.1${NO_PROXY:+,$NO_PROXY}" no_proxy="localhost,127.0.0.1${no_proxy:+,$no_proxy}" \
+    RUNNER_TEMP="$1" SRC="$src" BLOCK=false GITHUB_OUTPUT="$out" PYTHON="$(uv python find 3.12)" \
     bash "$tools/ci/local-witness/start.sh" >&2
   cat "$out"
 }
