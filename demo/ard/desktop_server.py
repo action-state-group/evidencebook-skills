@@ -343,8 +343,7 @@ def ard_find_sellers() -> None:
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
         print(f"found: {e['name']:18} {price:>10}   commitment {'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
-        for line in e.get("checks", []):
-            print(f"       {line}")
+        # the search's checks stay in Maya's records (ard_show_listing shows them on request), not in her chat (#332)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
 

@@ -15,7 +15,7 @@ from cast import SAMPLE_DEALS
 if TYPE_CHECKING:
     from buyer import Assessment, Evidence
 
-PACK_NOTE = "a copy, not published, with placeholder thresholds"
+PACK_NOTE = "example rules for this demo, not a published set"  # Sherlock2 on #332 (buzz 458673a9)
 #: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
 OPERATOR_NOTE = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
                  "list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's "

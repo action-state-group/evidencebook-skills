@@ -255,3 +255,22 @@ def test_a_dispute_says_the_payment_was_met_only_when_it_went_through(tmp_path, 
         buyer.wire.path(tmp_path, KESTREL.seller, KESTREL.deal_id, "paid").write_text("{}")
     buyer.dispute(tmp_path, m, KESTREL, lambda *_: None)
     assert m.statements == [(KESTREL.deal_id, rows)]
+
+
+def test_mayas_card_check_line_is_plain(monkeypatch, tmp_path):
+    """Sherlock2 on #352 (#332): "Alder's card: signed by Alder, and it checks out, as of <local time>"; the
+    commitment and checkpoint words stay in her records."""
+    read = flow.CardRead(card={"outcomes": {}}, anchor="a" * 64, anchor_time="2026-11-25T22:00:00Z", signer="k",
+                         verdict="VALID", witness_status="withheld", file=tmp_path / "c.json")
+    monkeypatch.setattr(flow, "fetch_card", lambda home, m, seller, key: read)
+    m = FakeMaya()
+    m.note = lambda *a, **k: {"record_id": "r"}
+    ev = buyer.gather(tmp_path, m, {"id": "north", "name": "North Wind Supply", "commitment": {"key_id": "k"}})
+    lines = screens.check_lines(ev)
+    assert lines[0] == ("✓ History card: signed by North Wind Supply, and it checks out, as of "
+                        + screens.local_time("2026-11-25T22:00:00Z", date=True))
+    assert not any("commitment" in line or "checkpoint" in line or "key" in line for line in lines)
+
+
+def test_the_assessment_rules_note_is_plain():
+    assert screens.PACK_NOTE == "example rules for this demo, not a published set"
