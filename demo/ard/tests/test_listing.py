@@ -177,11 +177,12 @@ def _boom(*a, **k):
     ("not json", ard.UNREADABLE, "JSONDecodeError"),
     ("not listed", ard.NOT_LISTED, "has no entry urn:air:a.example:s:a"),
     ("bad signature", ard.NOT_VERIFIED, "bad signature"),
+    ("terms not json", ard.COMMITMENT_UNREADABLE, "JSONDecodeError"),  # Codex's round 1: unreadable, not a bad signature
 ])
 def test_a_refused_seller_gets_a_plain_reason_and_keeps_the_detail(monkeypatch, case, reason, detail):
     import hashlib
     import json
-    doc = json.dumps({"key_id": "k"}).encode()
+    doc = b"<not json>" if case == "terms not json" else json.dumps({"key_id": "k"}).encode()
     entry = {"identifier": "urn:air:a.example:s:a", "displayName": "A", "url": "ua", "x-demo-offer": {"item": "y",
              "price_msat": 2}, "trustManifest": {"identity": "a.example", "attestations": [
                  {"type": ard.PROFILE, "uri": "http://c/a", "digest": "sha256:" + hashlib.sha256(doc).hexdigest()}]}}
@@ -213,6 +214,7 @@ class FakeMaya:
 
 
 def test_the_search_keeps_each_sellers_checks_in_the_buyers_records():
+    import json
     import buyer
     unreachable = {"identifier": "urn:air:south.example:s:south", "id": "south", "name": "South Shop",
                    "checks": [],
@@ -228,14 +230,14 @@ def test_the_search_keeps_each_sellers_checks_in_the_buyers_records():
     assert {t for t, _, _ in maya.kept} == {buyer.LISTING_CHECKED}
     (_, g, gkw), (_, u, _), (_, m, _), (_, f, _) = maya.kept
     assert gkw == {"subject_ref": "north"} and g["passed"] and "problem" not in g
-    assert g["checks"] == CHECKED["checks"] and g["offer_stated"] == ENTRY["x-demo-offer"] and len(g["entry_sha256"]) == 64
+    assert g["checks"] == CHECKED["checks"] and json.loads(g["offer_stated"]) == ENTRY["x-demo-offer"] and len(g["entry_sha256"]) == 64
     assert g["entry_sha256"] == buyer.card_digest(ENTRY) and g["sellers_found"] == 4
     assert len({r["search"] for _, r, _ in maya.kept}) == 1  # one search id for the whole batch
     assert g["fetched_from"] == CHECKED["fetched_from"] and g["registry"] == "http://r/search" and g["query"] == "lanyards"
     assert not u["passed"] and u["problem"] == ard.UNREACHABLE and u["entry_sha256"] == "" and "south.example" in u["detail"]
     assert u["offer_stated"] is None
     assert m["problem"] == ard.COMMITMENT_UNREADABLE and m["detail"] == "KeyError('x-demo-offer')"
-    assert f["problem"] == ard.DIFFERS and f["detail"] == "" and f["offer_stated"] == ENTRY["x-demo-offer"]
+    assert f["problem"] == ard.DIFFERS and f["detail"] == "" and json.loads(f["offer_stated"]) == ENTRY["x-demo-offer"]
     assert f["entry_sha256"] not in ("", g["entry_sha256"])
 
 
@@ -276,3 +278,20 @@ def test_a_record_that_cannot_be_kept_refuses_the_search_and_keeps_the_last_one(
     assert out == "REFUSED: The search could not be saved to your records, so its results are not used. The reason is " \
                   "in agent.log." and "/secret" not in out
     assert s.entries is before and any("disk full" in line for line in logged)
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("CAPSULECTL_DEAL"), reason="CAPSULECTL_DEAL names capsulectl-deal")
+def test_the_records_are_sealed_in_a_real_node_book(tmp_path):
+    """The notes go through capsulectl's node append as they are (a float score, a null offer, lists), and read back."""
+    import buyer
+    import party as pt
+    maya = pt.Party(tmp_path, "maya").create("node", neutral=True, witness=False)
+    unreachable = {"identifier": "urn:air:south.example:s:south", "id": "south", "name": "South Shop", "checks": [],
+                   "score": 0.5, "entry": {"x-demo-offer": {"item": "x", "price_msat": 2.5}}, "problem": ard.UNREACHABLE, "detail": "publisher south.example is not one the buyer can reach"}
+    ids = buyer.record_search(maya, "http://r/search", "lanyards", [{**CHECKED, "score": 1.0}, unreachable])
+    kept = {n["record_id"]: n for n in maya.notes(buyer.LISTING_CHECKED)}
+    assert set(ids) <= set(kept) and len(ids) == 2
+    south = kept[ids[1]]["statement"]
+    assert south["problem"] == ard.UNREACHABLE and south["score"] == "0.5"
+    assert south["offer_stated"] == '{"item":"x","price_msat":2.5}'  # a seller's float price never stops her records
+    assert kept[ids[0]]["statement"]["checks"] == CHECKED["checks"]

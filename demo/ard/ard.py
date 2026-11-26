@@ -113,6 +113,9 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     # the next check line says both: the terms are the ones named, and the signature checks out
     try:
         doc_c = json.loads(octets)
+    except ValueError as exc:  # the terms are the ones named but are not JSON: unreadable, not a failed signature
+        return _refuse(item, COMMITMENT_UNREADABLE, repr(exc))
+    try:
         cm.verify(doc_c)
     except Exception as exc:  # noqa: BLE001
         return _refuse(item, NOT_VERIFIED, repr(exc))

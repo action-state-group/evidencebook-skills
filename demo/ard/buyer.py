@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,20 +92,27 @@ class Assessment:
     own: Own
 
 
+def _as_text(value: object) -> str | None:
+    """A value the registry or a seller supplied, as canonical JSON text: the node book seals no floats, so a seller's
+    float price or the registry's relevance score must not stop the buyer's records (or her search)."""
+    return None if value is None else json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def record_search(maya: pt.Party, registry_url: str, query: str, entries: list[dict]) -> list[str]:
     """Keep the search's checks in Maya's own records, one ``ard_listing_checked`` note per seller found
     (evidencebook-skills#345, Sherlock2 on #352): its identifier, the address its entry was fetched (or tried) from,
     the sha256 of that entry's canonical JSON (:func:`card_digest`'s form), the offer the entry stated (the seller's
-    own words), each check it passed and, when one failed, the plain reason and its detail. Each search adds its own
+    own words, as JSON text), each check it passed and, when one failed, the plain reason and its detail. Each search adds its own
     notes under one ``search`` id with the number of sellers it found, so an incomplete batch shows; none is rewritten.
     Returns the record ids."""
     search_id, ids = uuid.uuid4().hex, []
     for e in entries:
         own = e.get("entry")
         rec = {"search": search_id, "sellers_found": len(entries), "seller": e.get("id", ""),
-               "identifier": e.get("identifier", ""), "registry": registry_url, "query": query, "score": e.get("score"),
-               "fetched_from": e.get("fetched_from", ""), "entry_sha256": card_digest(own) if own is not None else "",
-               "offer_stated": own.get("x-demo-offer") if isinstance(own, dict) else None,
+               "identifier": str(e.get("identifier", "")), "registry": registry_url, "query": query,
+               "score": _as_text(e.get("score")), "fetched_from": e.get("fetched_from", ""),
+               "entry_sha256": card_digest(own) if own is not None else "",
+               "offer_stated": _as_text(own.get("x-demo-offer")) if isinstance(own, dict) else None,
                "checks": list(e.get("checks", [])), "passed": "problem" not in e}
         if "problem" in e:
             rec["problem"] = e["problem"]
