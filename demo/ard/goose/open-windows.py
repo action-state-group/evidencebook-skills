@@ -138,44 +138,117 @@ def link(role: str, rail: str, placeholders: bool = False) -> str:
 
 
 #: Goose Desktop 1.59.2 ignores a window position or size set from outside, and every window is titled "Goose", so the
-#: windows are tiled the way a person does it: the Window, Move & Resize, Quarters menu item, which puts the four
-#: windows in the screen's four quarters, the front window (Maya's, opened last) among them.
+#: windows are tiled the way a person does it: the Window, Move & Resize, Quarters menu item, which puts the four front
+#: windows in the screen's four quarters, the front window (Maya's, opened last) among them. Two items of that menu are
+#: named Quarters: a disabled heading above Top Left and the item under Arrange; only the enabled one tiles, and a click on
+#: the heading does nothing and raises no error (evidencebook-skills#322).
 #: Both lines go to System Events, so macOS asks for one permission only (no second "control Goose" prompt).
 TILE = ["osascript", "-e", 'tell application "System Events" to set frontmost of process "Goose" to true', "-e",
-        'tell application "System Events" to tell process "Goose" to click menu item "Quarters" of menu '
-        '"Move & Resize" of menu item "Move & Resize" of menu "Window" of menu bar 1']
+        'tell application "System Events" to tell process "Goose" to click (first menu item of menu "Move & Resize" of '
+        'menu item "Move & Resize" of menu "Window" of menu bar 1 whose name is "Quarters" and enabled is true)']
+#: Every Goose window's frame, front to back, one ``x y width height`` line each: what the tile is judged on, since a menu
+#: click that exits 0 says nothing about where the windows are (#322).
+LAYOUT = ["osascript", "-e", 'tell application "System Events" to tell process "Goose"', "-e", 'set out to ""', "-e",
+          "repeat with w in windows", "-e", "set {x, y} to position of w", "-e", "set {ww, hh} to size of w", "-e",
+          'set out to out & x & " " & y & " " & ww & " " & hh & linefeed', "-e", "end repeat", "-e", "return out",
+          "-e", "end tell"]
 
 #: What osascript says when the terminal may not script System Events or use Accessibility yet.
 _NOT_ALLOWED = ("-1719", "-1743", "-25211", "not allowed", "assistive access")
 GRANT = ("Turn on your terminal app in System Settings, Privacy & Security, "
          "Accessibility, and allow it to control System Events when macOS asks. ")
 MANUAL = ("Then click Maya's window and run the line below to tile again (no new windows), or tile by hand: "
-          "Window, Move & Resize, Quarters.")
+          "Window, Move & Resize, then Quarters under Arrange (the Quarters above Top Left is only a heading).")
 
 
 #: After a failed tile (the first run, while macOS asks for the permission), try again this often, this many times.
 RETRY_S, RETRIES = 10, 2
+#: After the click, the frames are read this often, this many times, until they show the tile (the windows move with an
+#: animation).
+SETTLE_S, SETTLE_READS = 0.5, 6
+#: Frames that share at most this many points along an edge still count as side by side (rounding at the screen's middle).
+EDGE_PT = 2
+#: A quarter is at least this share of the width and height the four windows cover (less than half: macOS can leave
+#: margins between tiled windows).
+QUARTER_MIN = 0.4
+
+
+def _osascript(cmd: list[str]) -> tuple[str | None, str, bool]:
+    """``(stdout, why, grant)``: stdout when osascript exits 0, else None and the cause on one line, and whether it is a
+    permission (or a timeout, which a pending permission prompt causes). Never raises."""
+    try:
+        run = subprocess.run(cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired as e:
+        return None, " ".join(str(e).split()), True
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, " ".join((str(e) or type(e).__name__).split()), False
+    if run.returncode == 0:
+        return run.stdout, "", False
+    why = " ".join((run.stderr.strip() or f"osascript exit {run.returncode}").split())  # one line, whatever it printed
+    return None, why, any(mark in why for mark in _NOT_ALLOWED)
+
+
+def frames(text: str) -> list[tuple[int, int, int, int]]:
+    """The ``(x, y, width, height)`` of each window in :data:`LAYOUT`'s output, front to back."""
+    out = []
+    for line in text.splitlines():
+        if line.strip():
+            x, y, w, h = (int(float(v)) for v in line.replace(",", " ").split())
+            out.append((x, y, w, h))
+    return out
+
+
+def _shown(frame: tuple[int, int, int, int]) -> str:
+    x, y, w, h = frame
+    return f"{x},{y} {w}x{h}"
+
+
+def layout_problem(seen: list[tuple[int, int, int, int]]) -> str | None:
+    """None when Goose shows exactly the four windows, side by side in a two by two grid (no two overlap by more than
+    :data:`EDGE_PT`, each in its own quarter of the area the four cover and at least :data:`QUARTER_MIN` of that area's
+    width and height); else what was read, on one line. Goose started on the first window's link, so it has no window of
+    its own: any other count means a window is missing or one is not the demo's."""
+    if len(seen) != 4:
+        return f"Goose shows {len(seen)} window{'s' if len(seen) != 1 else ''}, not four"
+    if any(w <= 0 or h <= 0 for _, _, w, h in seen):
+        return "a window has no size, at " + "; ".join(_shown(f) for f in seen)
+    left, top = min(f[0] for f in seen), min(f[1] for f in seen)
+    width, height = max(f[0] + f[2] for f in seen) - left, max(f[1] + f[3] for f in seen) - top
+    quarters = {(f[0] + f[2] / 2 >= left + width / 2, f[1] + f[3] / 2 >= top + height / 2) for f in seen}
+    overlap = any(min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > EDGE_PT
+                  and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > EDGE_PT
+                  for i, a in enumerate(seen) for b in seen[i + 1:])
+    small = any(w < QUARTER_MIN * width or h < QUARTER_MIN * height for _, _, w, h in seen)
+    if overlap or small or len(quarters) != 4:
+        return "the four windows are not in quarters, at " + "; ".join(_shown(f) for f in seen)
+    return None
 
 
 def _tile_once() -> tuple[bool, str, bool]:
-    """``(tiled, why, grant)``: the cause on one line, and whether it is a permission (or a timeout, which a pending
-    permission prompt causes). Never raises."""
-    try:
-        run = subprocess.run(TILE, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
-    except subprocess.TimeoutExpired as e:
-        return False, " ".join(str(e).split()), True
-    except (OSError, subprocess.SubprocessError) as e:
-        return False, " ".join((str(e) or type(e).__name__).split()), False
-    if run.returncode == 0:
-        return True, "", False
-    why = " ".join((run.stderr.strip() or f"osascript exit {run.returncode}").split())  # one line, whatever it printed
-    return False, why, any(mark in why for mark in _NOT_ALLOWED)
+    """``(tiled, why, grant)``: tiled only once the frames read back after the click show the four windows in quarters,
+    read again every :data:`SETTLE_S` seconds :data:`SETTLE_READS` times while the windows move; else the cause on one
+    line (what the last read showed), and whether it is a permission (or a timeout). Never raises."""
+    out, why, grant = _osascript(TILE)
+    if out is None:
+        return False, why, grant
+    for _ in range(SETTLE_READS):
+        time.sleep(SETTLE_S)
+        out, why, grant = _osascript(LAYOUT)
+        if out is None:
+            return False, f"could not read the windows back: {why}", grant
+        try:
+            why = layout_problem(frames(out))
+        except ValueError:
+            why = "could not read the windows back: " + " ".join(out.split())[:200]
+        if not why:
+            return True, "", False
+    return False, why, False
 
 
 def tile(say=lambda line: print(line, file=sys.stderr)) -> str | None:
     """Tile the four windows with Maya in front, trying again every :data:`RETRY_S` seconds :data:`RETRIES` times
-    (time to allow the permission macOS asks for); None when it worked, else the message to print, which ends with
-    the command after a blank line. Never raises."""
+    (time to allow the permission macOS asks for, or for the last window to open); None once the windows read back side
+    by side, else the message to print, which ends with the command after a blank line. Never raises."""
     for attempt in range(RETRIES + 1):
         tiled, why, grant = _tile_once()
         if tiled:
@@ -320,8 +393,11 @@ def check_provider(root: Path) -> tuple[str | None, str | None]:
     return None, provider
 
 
-def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str | None:
-    """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
+def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False, first: str | None = None) -> str | None:
+    """Start Goose Desktop on ``root``, opening the recipe link ``first`` as it starts; None once it runs, else why not.
+    Started with a link, Goose 1.59.2 opens that recipe's window and no window of its own (ui/desktop/src/main.ts: the
+    open-url handler sets openUrlHandledLaunch), so every Goose window is one the demo opened. The caller has checked
+    Goose is not running:
     a running Goose would take the recipe links into its own settings. For the windows the provider must pass
     :func:`check_provider`, and Goose gets exactly the provider it checked; with ``setup`` (the settings only, no
     window, no dialog) Goose opens on whatever it is set to, with no provider pinned, so a person can change it, and the
@@ -342,7 +418,8 @@ def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str |
                         "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(LOCKED_DIR)])}",
                         "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}",
                         # the provider the check above read (#340); Goose takes GOOSE_PROVIDER from its environment first
-                        *(["--env", f"GOOSE_PROVIDER={provider}"] if provider else [])], check=True,
+                        *(["--env", f"GOOSE_PROVIDER={provider}"] if provider else []), *([first] if first else [])],
+                       check=True,
                        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"
@@ -353,6 +430,18 @@ def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str |
         time.sleep(0.5)
     time.sleep(5)  # its server starts after the app: give it a moment before the first link
     return None
+
+
+def already_trusted(recipes: list[dict]) -> list[str]:
+    """The titles of the recipes Goose already trusts. Goose Desktop 1.59.2 skips the Trust and Execute prompt only for a
+    recipe whose trust file exists (ui/desktop/src/sessions.ts ensureRecipeConsent, utils/recipeHash.ts, at v1.59.2
+    9da692f), named as reset.trust_hash computes it, so these windows open and run with no prompt (#322)."""
+    folder = reset._hashes()
+    return [r["title"] for r in recipes if (folder / f"{reset.trust_hash(r)}.hash").is_file()]
+
+
+TRUSTED = ("Goose already trusts these recipes, so their windows open with no Trust and Execute prompt: {titles}. To be "
+           "asked again, quit Goose and run demo.py reset, then open the windows again.")
 
 
 RUNNING = ("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then run this again. "
@@ -405,18 +494,24 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as e:  # a recipe reset could not clear again: open nothing rather than leave trust behind
             print(f"open-windows.py: {e}; nothing was opened (evidencebook-skills#277)", file=sys.stderr)
             return 2
-        if failed := launch_goose(root):
+        if trusted := already_trusted(recipes):
+            print(TRUSTED.format(titles="; ".join(trusted)), file=sys.stderr)
+        # Goose starts on the first window's link, so it opens no window of its own for the tile to count (#322)
+        if failed := launch_goose(root, first=to_link(recipes[0])):
             print(failed, file=sys.stderr)
             return 1
-        for r in recipes:
+        for r in recipes[1:]:
             subprocess.run(["open", to_link(r)], check=True)
             time.sleep(3)
     unset = [v for v in PLACEHOLDER if not os.environ.get(v)]
     if args.show and args.rail == "local" and unset:
         print(f"printed with placeholder paths for {', '.join(unset)}: set them before opening the windows "
               "(open-windows.py without --print checks them)", file=sys.stderr)
-    if not args.show and not args.only and (failed := tile()):
-        print(failed, file=sys.stderr)  # the windows are open either way: tiling is a convenience
+    if not args.show and not args.only:
+        if failed := tile():
+            print(failed, file=sys.stderr)  # the windows are open either way: tiling is a convenience
+        else:
+            print("tiled the four windows in quarters, Maya's in front (read back from the screen)")
     return 0
 
 
