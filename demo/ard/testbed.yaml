@@ -1,8 +1,8 @@
 # The multi-role testbed (evidencebook-skills#382): which roles `testbed.py up` brings up, each on its own screen.
-# The four agents, the witness and the simulated rail; a catalog stand-in and the countersign step come next.
+# The four agents, the witness, the simulated rail and the catalog stand-in; the countersign step comes next.
 
-# Each role gets one screen: a Goose window for the four that run an agent, a Terminal window for the two that do not.
-roles: [alder, kestrel, adjudicator, maya, witness, rail]
+# Each role gets one screen: a Goose window for the four that run an agent, a Terminal window for each that does not.
+roles: [alder, kestrel, adjudicator, maya, witness, rail, catalog]
 
 # public: Action State's hosted witness, the free default every agreement names.
 # local: a capsule-anchor witness started on this Mac at the release the hosted one runs (test runs, and the fallback

@@ -8,7 +8,7 @@ Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evide
 
 ## What you will see
 
-Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Alder starts with 15 sample deals and Kestrel with 10, all held, and no disputes: a longer track record against half the price. Each seller's offer and what it discloses to a buyer are in its own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`. Edit one, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
+Maya needs 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi). Two sellers offer them: Kestrel Print at 1,000 msat and Alder Print Co. at 2,000 msat. Alder starts with 15 sample deals and Kestrel with 10, all held, and no disputes: a longer track record against half the price. Each seller's own file, `demo/ard/sellers/kestrel.yaml` and `alder.yaml`, names the product it offers and what it discloses to a buyer; the product's title and price are in the catalog stand-in, `demo/ard/catalog.yaml` (a stand-in for a store platform's product catalog, not a real store). Edit either, then reset and seed: the seller signs a new commitment from what it discloses, and its ARD entry lists the new offer and links its product in the catalog, which Maya's agent checks. The steps below quote today's values. Maya's budget stays 3,000 msat, and the story needs Kestrel to be the cheaper seller.
 
 1. **Discovery.** Maya's agent searches a local stand-in ARD registry, then fetches each seller's own entry and checks its signed commitment.
 
@@ -111,15 +111,15 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
 ## The testbed: every role in one step
 
-The testbed (evidencebook-skills#382) brings up every role of the deal, each on its own screen, with one command: the four agents in their Goose windows as below, and two roles that run no agent, each in a Terminal window showing what the parties sent that role and got back: the witness (each hash a party's book sent it, never a record, and each time-stamp it signed) and the payment rail (each invoice and payment, who paid whom). Which roles, which witness and which rail are in `demo/ard/testbed.yaml`.
+The testbed (evidencebook-skills#382) brings up every role of the deal, each on its own screen, with one command: the four agents in their Goose windows as below, and three roles that run no agent, each in a Terminal window showing what the parties sent that role and got back: the witness (each hash a party's book sent it, never a record, and each time-stamp it signed), the payment rail (each invoice and payment, who paid whom) and the catalog stand-in (each seller's products and prices, and each time an agent reads one). Which roles, which witness and which rail are in `demo/ard/testbed.yaml`.
 
-1. Bring it up. It runs the set-up script first (which skips everything already done). If Goose is running, it asks before quitting it. Then it resets, starts the witness when `witness: local`, makes the sample history (about a minute), opens the witness and rail screens, and opens the four Goose windows as "Before each run" steps 4 to 6 do. The first time, macOS asks to let your terminal control Terminal: allow it.
+1. Bring it up. It runs the set-up script first (which skips everything already done). If Goose is running, it asks before quitting it. Then it resets, starts the witness when `witness: local`, makes the sample history (about a minute), opens the witness, rail and catalog screens, and opens the four Goose windows as "Before each run" steps 4 to 6 do. The first time, macOS asks to let your terminal control Terminal: allow it.
 
    ```
    ~/ard-demo/evidencebook-skills/demo/ard/testbed.sh
    ```
 
-   **Expect:** "sample history made and stamped in … s", two Terminal windows titled Witness (testbed) and Rail (testbed), then the four Goose windows. Then carry on from "Before each run" step 6 (tiling by hand if they came up stacked), wait two minutes after the sample history before the first message, and follow "The run". The Terminal windows sit over the Goose windows: put them on a second display, or beside the Goose windows, where the room can read them.
+   **Expect:** "sample history made and stamped in … s", three Terminal windows titled Witness (testbed), Rail (testbed) and Catalog (testbed), then the four Goose windows. Then carry on from "Before each run" step 6 (tiling by hand if they came up stacked), wait two minutes after the sample history before the first message, and follow "The run". The Terminal windows sit over the Goose windows: put them on a second display, or beside the Goose windows, where the room can read them.
 
 2. The witness. `witness: public` (the default) names Action State's hosted witness, the free default every agreement names. `--witness local` starts a witness on this Mac instead, the local test witness (capsule-anchor at the release the hosted one runs, under `~/ard-demo/testbed`; it needs Python 3.11 or later): for test runs, and as the fallback when the hosted one is slow on the day. It keeps nothing when stopped, so each `up` resets and makes the sample history again.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The screen of a testbed role that runs no agent: the witness or the payment rail (evidencebook-skills#382).
+"""The screen of a testbed role that runs no agent: the witness, the payment rail or the catalog stand-in (evidencebook-skills#382).
 
-    python watch.py witness|rail [--home DIR] [--once]
+    python watch.py witness|rail|catalog [--home DIR] [--once]
 
 Prints what that role saw so far, then each new event as it comes (:mod:`feeds`), until Ctrl-C or ``demo.py reset``,
 which stops it like the demo's other processes (it holds ``<home>/.watch-<role>.lock``). ``--once`` prints what is
@@ -31,7 +31,12 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     home = Path(os.environ.get("ARD_HOME", args.home)).expanduser()
     sys.stdout.reconfigure(line_buffering=True)
-    print(feeds.HEADINGS[args.role] + "\n")
+    print(feeds.HEADINGS[args.role])
+    if args.role == "catalog":
+        from cast import catalog
+
+        print("\n".join(feeds.catalog_lines(catalog(), label)))
+    print()
     if args.once:
         if feeds.path(home, args.role).is_file():
             for line in feeds.path(home, args.role).read_text().splitlines():

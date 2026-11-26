@@ -345,7 +345,7 @@ def ard_find_sellers(ask: str) -> None:
     if not ask.strip():
         raise RuntimeError("pass the person's ask, in their own words")
     s = session()
-    found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY, stage.CATALOG_ORIGIN)
     try:  # the checks, kept in her own records before the search's results are used (#345)
         buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
     except Exception as exc:  # noqa: BLE001

@@ -81,7 +81,8 @@ def _up(witness="local", ask=lambda q: "n"):
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
     steps, _ = world
     assert _up() == 0
-    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "windows"]
+    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "screen catalog",
+                     "windows"]
 
 
 def test_a_failed_seed_stops_the_witness_this_run_started(world):
@@ -298,7 +299,7 @@ def test_the_witness_screen_says_what_it_received_and_never_a_record(tmp_path):
     assert set(event) == {"at", "party", "witness", "stamp", "covers", "taken", "waiting"}
     from cast import label
     said = feeds.words("witness", event, label)
-    assert "Kestrel Print's book sent its hash no. 4;" in said and "27" not in said  # an MMR size, not a count
+    assert "Kestrel Print's book sent its hash no. 4;" in said and "entries" not in said  # an MMR size is no count of entries; the clock may read 27
     assert "Action State's witness took 2 of Kestrel Print's stamps" in said
 
 
@@ -363,3 +364,64 @@ def test_stop_screens_signals_only_our_own_watch_process(tmp_path, monkeypatch):
     monkeypatch.setattr(testbed.os, "kill", lambda pid, sig: killed.append(pid))
     testbed.stop_screens(tmp_path)
     assert killed == [111]
+
+
+C = "http://127.0.0.1:9"  # the catalog stand-in's origin, as the buyer knows it
+
+
+def _check(monkeypatch, offer, served):
+    import ard
+    monkeypatch.setattr(ard, "_fetch", lambda url, body=None: json.dumps(served).encode())
+    item = {"id": "kestrel", "checks": []}
+    return ard._catalog_check(item, offer, C), item
+
+
+OFFER = {"item": "200 badges", "price_msat": 1000, "product": "badges-200",
+         "catalog": f"{C}/catalog/kestrel/badges-200.json"}
+SERVED = {"seller": "kestrel", "product": "badges-200", "title": "200 badges", "price_msat": 1000}
+
+
+def test_a_listing_is_checked_against_this_sellers_entry_in_the_catalog(monkeypatch):
+    import ard
+    ok, item = _check(monkeypatch, OFFER, SERVED)
+    assert ok and "problem" not in item and "catalog (a stand-in)" in item["checks"][0]
+    ok, item = _check(monkeypatch, OFFER, {**SERVED, "price_msat": 500})  # the catalog says 500 msat: refused
+    assert not ok and item["problem"] == ard.CATALOG_DIFFERS
+
+
+@pytest.mark.parametrize("link", [
+    f"{C}/catalog/alder/badges-200.json",  # another seller's entry, copying its price
+    "http://127.0.0.1:8/catalog/kestrel/badges-200.json",  # a catalog on another host the listing names
+    None,  # no catalog at all: refused, never passed in silence
+])
+def test_a_listing_that_links_no_entry_of_this_seller_in_the_catalog_is_refused(monkeypatch, link):
+    import ard
+    offer = {k: v for k, v in OFFER.items() if k != "catalog"} | ({"catalog": link} if link else {})
+    ok, item = _check(monkeypatch, offer, SERVED)
+    assert not ok and item["problem"] == ard.CATALOG_UNLINKED
+
+
+def test_an_entry_the_catalog_serves_for_another_seller_is_refused(monkeypatch):
+    import ard
+    ok, item = _check(monkeypatch, OFFER, {**SERVED, "seller": "alder"})
+    assert not ok and item["problem"] == ard.CATALOG_DIFFERS
+
+
+def test_the_stage_serves_each_sellers_product_and_shows_each_read(tmp_path, monkeypatch):
+    import stage
+    st = stage.Stage.__new__(stage.Stage)
+    st.home = tmp_path
+    got = json.loads(st.page("/catalog/kestrel/badges-200.json"))
+    assert (got["title"], got["price_msat"], got["stand_in"]) == ("200 conference badges, delivered by Friday", 1000, True)
+    assert st.page("/catalog/kestrel/mugs.json") is None and st.page("/catalog/../x.json") is None
+    from cast import label
+    (event,) = [json.loads(x) for x in feeds.path(tmp_path, "catalog").read_text().splitlines()]
+    assert "A buyer's agent read Kestrel Print's product badges-200" in feeds.words("catalog", event, label)
+
+
+def test_the_catalog_screen_lists_what_the_catalog_holds(tmp_path):
+    run = subprocess.run([sys.executable, str(HERE / "watch.py"), "catalog", "--once", "--home", str(tmp_path)],
+                         capture_output=True, text=True, env={k: v for k, v in os.environ.items() if k != "ARD_HOME"})
+    assert run.returncode == 0, run.stderr
+    assert "not a real store" in run.stdout
+    assert "Kestrel Print: product badges-200, 200 conference badges, delivered by Friday, 1,000 msat" in run.stdout
