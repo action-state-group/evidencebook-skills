@@ -67,7 +67,9 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
 def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str]:
     """What the party's own copy proves, in the receipt's words (Sherlock2's what-confirmation on #242):
 
-    - "Signed by both sides" only when ``capsulectl deal verify --bundle`` passes on the whole copy and its
+    - "Stamped by both sides" (the page's words, capsule-viewer#420; evidencebook-skills#348: it claims the other
+      side's signed, stamped agreement only, never that they signed the outcome) only when ``capsulectl deal verify
+      --bundle`` passes on the whole copy and its
       ``counterparty_half`` verifies (evidencebook #885-#887); never "countersigned".
     - The witness time exactly as the receipt page gets it (evidencebook-skills#329): a stamp waited for as the page
       waits (:data:`PAGE_WAIT_S`), then ``verify --bundle --stamp-proof --witness-directory`` on the copy and its own
@@ -89,7 +91,7 @@ def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str
     if checked.get("verdict") != "VALID":
         lines = [f"  This copy did not verify (capsulectl deal verify: {checked.get('verdict')})."]
     elif half and half.get("status") == "verified":
-        lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
+        lines = ["  Stamped by both sides: the other side's signed agreement, stamped in its own book, verifies (capsulectl deal verify)."]
     else:
         lines = ["  The other side's half is not in this copy."]
     return lines + [witness_line(next((e.get("witnessed") for e in entries if e.get("witnessed")), None), name)]
