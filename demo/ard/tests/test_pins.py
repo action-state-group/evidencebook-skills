@@ -56,11 +56,11 @@ def test_the_code_pins_are_in_the_header():
 
 
 def test_the_testbed_starts_the_witness_the_local_check_starts():
-    # one witness release for the testbed's local witness and the local check's (scripts/check.sh, #371): moved together
+    # one witness release for the testbed's local witness and the local check's and CI's local leg (#371, #378): moved
+    # together; scripts/check.sh reads them from tests.yml's ard-demo job
     import testbed
 
-    check = (Path(__file__).resolve().parents[3] / "scripts" / "check.sh").read_text()
-    pins = dict(re.findall(r"(?m)^(LOCAL_WITNESS(?:_START)?_REF)=([0-9a-f]{40})", check))
+    pins = dict(re.findall(r"(?m)^      (LOCAL_WITNESS(?:_START)?_REF): ([0-9a-f]{40})", CI.split("ard-demo:", 1)[1]))
     assert pins == {"LOCAL_WITNESS_REF": testbed.CAPSULE_ANCHOR_PIN, "LOCAL_WITNESS_START_REF": testbed.LOCAL_WITNESS_START_PIN}
 
 
