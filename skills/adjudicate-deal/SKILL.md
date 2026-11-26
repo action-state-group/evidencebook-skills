@@ -5,7 +5,7 @@ description: Assist a deal's adjudicator. Gathers the case a party sent (the dis
 # Adjudicate a deal
 
 > **Demo host, step A.** This skill runs today only on the ARD two-seller demo's host, whose adjudicator is its own
-> capsulectl-deal profile, run by the demo operator (the host table at the end). Do not copy the
+> capsulectl-deal profile, run by the demo operator (the five verbs' table at the end). Do not copy the
 > demo host's tools into another host.
 
 A buyer or a seller disputed one row of a deal whose agreement names this adjudicator. You show the person who
@@ -32,13 +32,18 @@ rules what the case holds. The ruling is theirs: you never decide it, suggest it
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent listing, no tool search
   except to load your own tools.
 
-## Host table
+## The five verbs
 
-| Step | On the demo host (step A) | On a capsule host |
-|---|---|---|
-| 1 Show the case | `ard_case`: the request to each side, their `deal respond` answers | the hosted adjudicator's intake (evidencebook#861 PR 3) |
-| 2 Record the ruling | `ard_rule`: the presenter's dialog, then `deal ruling --answer` and the stamp | `deal ruling --answer` |
-| 3 Report the entries | `ard_case_activity` | `deal ruling entries` |
+This skill teaches five verbs and nothing else: **check** before you act, **record** what was done, **ask** the
+other side for evidence, or answer when it asks, **verify** what you get, and **show** a card or a receipt. Each row maps a verb, at one
+step, to the demo host's tool and to the capsule host's existing command.
+
+| Verb | Step | On the demo host (step A) | On a capsule host |
+|---|---|---|---|
+| ask | 1 Ask each side for its books | `ard_case`: the request to each side, their `deal respond` answers | the hosted adjudicator's intake (evidencebook#861 PR 3) |
+| show | 1 Show the case | `ard_case` | the hosted adjudicator's intake (evidencebook#861 PR 3) |
+| record | 2 Record the ruling | `ard_rule`: the presenter's dialog, then `deal ruling --answer` and the stamp | `deal ruling --answer` |
+| show | 3 Report the entries | `ard_case_activity` | `deal ruling entries` |
 
 ## On the demo host
 

@@ -24,6 +24,23 @@ Grade 3 is never narrated: a question about one deal is answered by reading its 
 and saying so. Grade 1 may be answered freely, under the rules below. Grade 2 is produced
 only through the verbs, never written by the agent.
 
+## The five verbs
+
+Agent skills teach five verbs: **check**, **record**, **ask**, **verify** and **show**. This skill uses three
+of them; asking and answering other parties is the deal skills' work, and judging a pack's cases is the
+pack-author skill `daily-judge-and-close`'s.
+
+| Verb | Grade | Command |
+|---|---|---|
+| show | 1 | `cll list`, `get --raw --output FILE`, `book reconcile` (read-only) |
+| verify | 1, 2 | `verify --capsule FILE`, `verify --bundle`, `book report check` |
+| record | 2 | `book result build`, `book report build --seal` (seals the page's digest) |
+| show | 2 | the bundle, `book report build` |
+| show | 3 | the receipt (`deal`), the History card (`deal standard-history card`) |
+
+Two expert checks are not taught here; [references/expert.md](references/expert.md) keeps them for an operator:
+resolving a judge pin by hand, and probing the holder's own responder as a stranger.
+
 ## Choosing the grade
 
 1. The person asks about **one deal** ("the cleaner", "the bike sale", "that $40 lesson"):
@@ -89,8 +106,8 @@ Preconditions, checked before any verb runs:
   week covers the same deals. A Muse personal-deals pack (intentions, approvals, both
   halves) is **not written yet**: an agent asked for an EvidenceBook report it would
   cover says so (`packs.py refuse`) and offers grade 1 or the History card.
-- For a judged pack, the pack's **judge pin** resolves (`judge pin FILE`), as
-  `daily-judge-and-close` requires.
+- For a judged pack, the pack's **judge pin** resolves, as `daily-judge-and-close` requires;
+  step 1's judge run resolves it (by hand: [references/expert.md](references/expert.md)).
 - The book profile is the holder's own (`--profile NAME`).
 
 Steps, in order; each one's output is the next one's input. For the airline support and
@@ -167,17 +184,19 @@ does not promise it.
   "Show me the other side's receipt" shows the counterparty half as received, labelled so.
   A receipt whose other side is missing is "your receipt only"; the skill never calls it
   agreed.
-- **The History card**: a derivation the holder's book serves (`history_card/1` today:
-  checkpoints, receipts and consistency proofs, no counts; the standard card with counts
-  once its derivation is registered). "Show me what they see" asks the holder's own
-  responder as a stranger would (`book doctor --probe`) and shows the answer. The card is
-  never typed by the agent.
+- **The History card**: the one commerce card, `standard_history`, a signed count of the
+  holder's deals as of a witnessed checkpoint (`deal standard-history card`). Its continuity
+  proof, `history_card/2`, carries checkpoints, receipts and consistency proofs and no
+  counts. A Mesh node's service card (`service_history`) and its liar-catch checks are
+  Mesh's own exception, not a second commerce card. "Show me what they see" is an expert
+  probe ([references/expert.md](references/expert.md)). The card is never typed by the agent.
 
 ## Every action seals a record
 
 Steps 2 and 4 (with `--seal`) are primary actions: running them is the record. Step 1
 seals its reports as `daily-judge-and-close` does. Steps 3 and 5 and every grade-1 read
-seal nothing. Any other action this skill takes (a judge pin resolved on its own) is
+seal nothing. Any other action this skill takes (an expert check from
+[references/expert.md](references/expert.md), such as a judge pin resolved on its own) is
 sealed with `scripts/skill_action.py` as a `skill-action/v1` capsule, digests only. A seal
 that fails is reported as `evidence unavailable` and the skill stops before the next
 consequential step.

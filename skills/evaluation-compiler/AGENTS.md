@@ -4,6 +4,10 @@ description: Turn a user scenario and value proposition into evaluation axes and
 ---
 # Evaluation compiler
 
+> **Pack-author skill.** For whoever writes and runs a Terms Pack (an Evidence Contract), not for an agent
+> buying, selling or adjudicating; the agent skills teach only five verbs (check, record, ask, verify, show).
+> This skill keeps its authoring commands.
+
 Compile an evaluation workflow into instructions for an agent, not into a program. The output is axes plus a scenario skill. The generated skill directs its host agent and uses the Capsule CLI for Capsule, artifact and CLL operations. Never generate helper programs, runners, scripts, a Go module or a Makefile.
 
 The evaluation source is always a CLL of recorded interactions. A native benchmark or dataset (e.g. a customer-service task set) is not evaluated directly: its interactions are first backfilled into a CLL as Capsules, and the generated skill then evaluates that CLL exactly like any other source. Axes and judging remain the compiler's job even when the dataset ships its own scoring contract.

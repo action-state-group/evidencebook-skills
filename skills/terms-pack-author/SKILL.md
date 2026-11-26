@@ -4,6 +4,10 @@ description: Turn a seller's deal terms, said in words, into a rows file, try th
 ---
 # Terms: write them in words, try them, switch them on
 
+> **Pack-author skill.** For whoever writes and runs a Terms Pack (an Evidence Contract), not for an agent
+> buying, selling or adjudicating; the agent skills teach only five verbs (check, record, ask, verify, show).
+> This skill keeps its authoring commands.
+
 A seller tells you what a sale should look like. You write it as rows in one small file,
 try the rows over the sales already made, show what came through, and only when the seller
 says so, publish them. The seller talks in their own words. They never need to hear a
