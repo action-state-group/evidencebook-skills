@@ -39,6 +39,8 @@ HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "testbed.yaml"
 AGENTS = ("alder", "kestrel", "adjudicator", "maya")
 SCREENS = ("witness", "rail", "catalog", "countersigner")
+#: A screen's window title where the role's name alone would say too little once its heading scrolls away.
+TITLES = {"countersigner": "Countersigner (testbed, not independent)"}
 WITNESSES = ("public", "local", "off")
 RAILS = ("fake",)  # a rail that moves real money stays behind the RUNBOOK's real-rail steps
 #: capsule-anchor at the release Action State's hosted witness runs (v0.1.4: Cloud Run capsule-witness, label
@@ -147,8 +149,9 @@ def _checkout() -> Path:
 
 
 def witness_python() -> str:
-    """A Python 3.11 or later for the local witness's own venv (capsule-anchor needs it; the set-up accepts 3.10): this
-    one, else the newest ``python3.N`` on the PATH. Refused before anything changes when there is none."""
+    """A Python 3.11 or later for the local witness's own venv, which the countersigner needs too (both run
+    capsule-anchor; the set-up accepts 3.10): this one, else the newest ``python3.N`` on the PATH. Refused before
+    anything changes when there is none."""
     if sys.version_info >= (3, 11):
         return sys.executable
     for name in ("python3.14", "python3.13", "python3.12", "python3.11", "python3"):
@@ -156,7 +159,8 @@ def witness_python() -> str:
         if exe and subprocess.run([exe, "-c", "import sys; sys.exit(sys.version_info < (3, 11))"],
                                   capture_output=True, stdin=subprocess.DEVNULL).returncode == 0:
             return exe
-    raise Stop("the local witness needs Python 3.11 or later (brew install python); nothing was changed")
+    raise Stop("the local witness and the countersigner need Python 3.11 or later (brew install python); nothing "
+               "was changed")
 
 
 def start_witness(say=print) -> dict[str, str]:
@@ -204,7 +208,7 @@ def open_screen(role: str, env: dict[str, str]) -> None:
     """One Terminal window running ``watch.py <role>``, its title the role's."""
     keep = ("ARD_HOME",)
     exports = "".join(f"export {k}={shlex.quote(env[k])}; " for k in keep if env.get(k))
-    cmd = f"{exports}printf '\\033]0;{role.capitalize()} (testbed)\\007'; clear; exec {shlex.quote(_python())} {shlex.quote(str(HERE / 'watch.py'))} {role}"
+    cmd = f"{exports}printf '\\033]0;{TITLES.get(role, role.capitalize() + ' (testbed)')}\\007'; clear; exec {shlex.quote(_python())} {shlex.quote(str(HERE / 'watch.py'))} {role}"
     script = f'tell application "Terminal"\n  do script {_applescript(cmd)}\n  activate\nend tell'
     subprocess.run(["osascript", "-e", script], check=True, capture_output=True, stdin=subprocess.DEVNULL)
 
@@ -232,8 +236,8 @@ def _goose_check(ask=input) -> None:
 
 def up(c: dict, say=print, ask=input) -> int:
     _goose_check(ask)
-    if c["witness"] == "local":
-        witness_python()  # refused here, before the reset, rather than after it
+    if c["witness"] == "local" or "countersigner" in c["roles"]:
+        witness_python()  # both run capsule-anchor, which needs 3.11: refused here, before the reset, not after it
     if subprocess.run([_python(), str(HERE / "demo.py"), "reset"], env=os.environ).returncode != 0:
         raise Stop("reset refused (it says why above); nothing else was done")
     stop_witness(say)  # only once the reset went through: a refused reset leaves the earlier run as it was

@@ -54,7 +54,7 @@ def payment(home: Path, kind: str, payer: str, payee: str, amount_msat: int, ref
 
 def countersigned(home: Path, party: str, deal_id: str, stamp: dict) -> None:
     """One countersign upgrade a party asked for: what capsulectl's report says the countersigner signed (the rung, how
-    far into the party's records), never a record or a digest."""
+    far into the party's records), never a record, a digest or a payment's detail."""
     _append(home, "countersigner", {"party": party, "deal": deal_id[5:13], "rung": stamp.get("rung"),
                                     "finding": stamp.get("finding"), "through": stamp.get("through_step"),
                                     "steps": stamp.get("steps")})
@@ -86,11 +86,13 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
         return f"{at}  " + "; ".join(parts) + "."
     if role == "countersigner":
         who = label(event["party"])
-        sent = f"{who}'s book sent digests of its records of deal {event['deal']} (never their contents)"
+        sent = (f"{who}'s book sent its records of deal {event['deal']} (digests, and its own payments' amounts, fees, "
+                "references and status; never the other side's records)")
         if event.get("rung") in ("countersigned", "countersigned_in_part"):
-            return (f"{at}  {sent}; the countersigner signed records 1 to {event['through']} of {event['steps']}, "
-                    "as capsulectl reports.")
-        return f"{at}  {sent}; no countersignature counts yet ({event.get('finding') or 'not countersigned'})."
+            return (f"{at}  {sent}; the demo's countersigner signed records 1 to {event['through']} of "
+                    f"{event['steps']}, as capsulectl reports.")
+        return (f"{at}  {sent}; no countersignature counts yet (capsulectl's finding: "
+                f"{event.get('finding') or 'not_countersigned'}).")
     if role == "catalog":
         return f"{at}  A buyer's agent read {label(event['seller'])}'s product {event['product']} to check its listing."
     simulated = " (simulated: no money moves)" if event["rail"] == "simulated" else ""
@@ -111,9 +113,10 @@ HEADINGS = {
                "record), and it signs back the time it saw that hash. The names are this demo's labels: the witness "
                "sees only each book's key and log id.",
     "rail": "The payment rail, as the buyer's agent reports each invoice and payment.",
-    "countersigner": "The countersigner, as each party's book reports it: a party sends it digests of its records of one "
-                     "deal (never their contents), and it signs them. It is the demo's own, run by the operator, who also "
-                     "runs every party here, so it is not independent of them.",
+    "countersigner": "The countersigner, as each party's book reports it: a party sends it its own records of one deal "
+                     "as digests, and for each of its own payments the amount, fees, payment reference and status "
+                     "(never a payment's secret, never the other side's records), and it signs them. It is the demo's "
+                     "own, run by the operator, who also runs every party here, so it is not independent of them.",
     "catalog": "The catalog, a stand-in for a store platform's product catalog (not a real store), as the demo's stage "
                "that serves it reports: what it lists, and each time an agent reads a product from it.",
 }
