@@ -58,10 +58,11 @@ def test_a_seller_file_with_a_wrong_or_extra_member_is_refused(tmp_path, monkeyp
 
 def test_an_edited_seller_file_is_what_the_sellers_own_entry_lists(tmp_path, monkeypatch):
     (tmp_path / "alder.yaml").write_text(
-        "label: Alder Print Co.\noffer: {item: 300 lanyards, price_msat: 1500}\n"
+        "label: Alder Print Co.\noffer: {product: lanyards-300}\n"
         "discloses: {subjects: [checkpoints], derivations: [history_card/2], human_gated: true, answers_within: PT2H}\n")
     monkeypatch.setattr(cast, "SELLERS_DIR", tmp_path)
-    alder = cast.seller_file("alder")
+    alder = cast.seller_file("alder", {"alder": {"lanyards-300": {"title": "300 lanyards", "price_msat": 1500}}})
+    assert (alder["product"], alder["item"], alder["price_msat"]) == ("lanyards-300", "300 lanyards", 1500)
     assert alder["discloses"] == {"subjects": ["checkpoints"], "derivations": ["history_card/2"], "human_gated": True,
                                   "answers_within": "PT2H"}
     monkeypatch.setattr(cm, "verify", lambda doc: None)
@@ -150,3 +151,34 @@ def test_a_changed_seller_file_changes_the_signed_commitment_the_entry_and_the_s
         d.close()
     assert hashlib.sha256(policy).hexdigest() == doc["lcap"]["policy_digest"]
     assert json.loads(policy)["key_id"] == doc["key_id"]
+
+
+def test_a_seller_offers_only_a_product_the_catalog_lists_for_it(tmp_path, monkeypatch):
+    # evidencebook-skills#382: the offer's title and price are the catalog stand-in's, by the product id the file names
+    (tmp_path / "alder.yaml").write_text(
+        "label: Alder Print Co.\noffer: {product: mugs}\n"
+        "discloses: {subjects: [checkpoints], derivations: [history_card/2], human_gated: true, answers_within: PT2H}\n")
+    monkeypatch.setattr(cast, "SELLERS_DIR", tmp_path)
+    with pytest.raises(ValueError, match="does not list for alder"):
+        cast.seller_file("alder", {"alder": {"badges-200": {"title": "t", "price_msat": 1}}})
+    with pytest.raises(ValueError, match="does not list for alder"):  # another seller's product is not this one's
+        cast.seller_file("alder", {"kestrel": {"mugs": {"title": "t", "price_msat": 1}}})
+
+
+@pytest.mark.parametrize("body", [
+    "products: {alder: {badges-200: {title: t, price_msat: 0}}}\n",
+    "products: {alder: {badges-200: {title: '', price_msat: 5}}}\n",
+    "products: {alder: {badges-200: {title: t, price_msat: 5, discount: 1}}}\n",
+    "products: {alder: {}}\n",
+    "products: {}\nextra: 1\n",
+    "just text\n",
+])
+def test_a_catalog_with_a_wrong_or_extra_member_is_refused(tmp_path, body):
+    (tmp_path / "catalog.yaml").write_text(body)
+    with pytest.raises(ValueError, match="needs products"):
+        cast.catalog(tmp_path / "catalog.yaml")
+
+
+def test_the_shipped_catalog_lists_each_sellers_offer():
+    assert {n: (s["product"], s["price_msat"]) for n, s in cast.SELLERS.items()} == {
+        "alder": ("badges-200", 2000), "kestrel": ("badges-200", 1000)}

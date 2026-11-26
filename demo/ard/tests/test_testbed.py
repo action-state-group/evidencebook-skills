@@ -81,7 +81,8 @@ def _up(witness="local", ask=lambda q: "n"):
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
     steps, _ = world
     assert _up() == 0
-    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "windows"]
+    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "screen catalog",
+                     "windows"]
 
 
 def test_a_failed_seed_stops_the_witness_this_run_started(world):
@@ -363,3 +364,35 @@ def test_stop_screens_signals_only_our_own_watch_process(tmp_path, monkeypatch):
     monkeypatch.setattr(testbed.os, "kill", lambda pid, sig: killed.append(pid))
     testbed.stop_screens(tmp_path)
     assert killed == [111]
+
+
+def test_a_listing_is_checked_against_the_catalog_it_links(monkeypatch):
+    import ard
+    served = {"product": "badges-200", "title": "200 badges", "price_msat": 1000}
+    monkeypatch.setattr(ard, "_fetch", lambda url, body=None: json.dumps(served).encode())
+    offer = {"item": "200 badges", "price_msat": 1000, "product": "badges-200", "catalog": "http://c/x.json"}
+    item = {"checks": []}
+    assert ard._catalog_check(item, offer) and "problem" not in item and "catalog (a stand-in)" in item["checks"][0]
+    served["price_msat"] = 500  # the listing says 1,000 msat, the catalog 500: refused
+    item = {"checks": []}
+    assert not ard._catalog_check(item, offer) and item["problem"] == ard.CATALOG_DIFFERS
+
+
+def test_the_stage_serves_each_sellers_product_and_shows_each_read(tmp_path, monkeypatch):
+    import stage
+    st = stage.Stage.__new__(stage.Stage)
+    st.home = tmp_path
+    got = json.loads(st.page("/catalog/kestrel/badges-200.json"))
+    assert (got["title"], got["price_msat"], got["stand_in"]) == ("200 conference badges, delivered by Friday", 1000, True)
+    assert st.page("/catalog/kestrel/mugs.json") is None and st.page("/catalog/../x.json") is None
+    from cast import label
+    (event,) = [json.loads(x) for x in feeds.path(tmp_path, "catalog").read_text().splitlines()]
+    assert "A buyer's agent read Kestrel Print's product badges-200" in feeds.words("catalog", event, label)
+
+
+def test_the_catalog_screen_lists_what_the_catalog_holds(tmp_path):
+    run = subprocess.run([sys.executable, str(HERE / "watch.py"), "catalog", "--once", "--home", str(tmp_path)],
+                         capture_output=True, text=True, env={k: v for k, v in os.environ.items() if k != "ARD_HOME"})
+    assert run.returncode == 0, run.stderr
+    assert "not a real store" in run.stdout
+    assert "Kestrel Print: product badges-200, 200 conference badges, delivered by Friday, 1,000 msat" in run.stdout

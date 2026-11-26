@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""What the testbed's two roles without an agent saw, for their own screens (evidencebook-skills#382).
+"""What the testbed's roles without an agent saw, for their own screens (evidencebook-skills#382).
 
 The witness and the payment rail run no agent and keep no book of the demo's, so their screens are fed from where the
 demo already knows the facts: each stamp a party sends the witness (:meth:`party.Party.tick` and ``stamp``, from
@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Iterator
 
-ROLES = ("witness", "rail")
+ROLES = ("witness", "rail", "catalog")
 
 
 def path(home: Path, role: str) -> Path:
@@ -52,6 +52,17 @@ def payment(home: Path, kind: str, payer: str, payee: str, amount_msat: int, ref
                            "reference": reference[:12], "rail": rail})
 
 
+def catalog_read(home: Path, seller: str, product: str) -> None:
+    """One read of a seller's product from the catalog stand-in (a buyer's agent checking a listing)."""
+    _append(home, "catalog", {"kind": "read", "seller": seller, "product": product})
+
+
+def catalog_lines(products: dict[str, dict[str, dict]], label: Callable[[str], str]) -> list[str]:
+    """What the catalog stand-in lists: each seller's products, titles and prices."""
+    return [f"  {label(seller)}: product {pid}, {p['title']}, {p['price_msat']:,} msat"
+            for seller, items in products.items() for pid, p in items.items()]
+
+
 def words(role: str, event: dict, label: Callable[[str], str]) -> str:
     """One event as the role's screen says it."""
     at = datetime.fromisoformat(event["at"]).astimezone().strftime("%H:%M:%S")
@@ -65,6 +76,8 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
         if event.get("waiting"):
             parts.append(f"{event['waiting']} of {who}'s stamps are still waiting for {witness_name}")
         return f"{at}  " + "; ".join(parts) + "."
+    if role == "catalog":
+        return f"{at}  A buyer's agent read {label(event['seller'])}'s product {event['product']} to check its listing."
     simulated = " (simulated: no money moves)" if event["rail"] == "simulated" else ""
     amount = f"{event['amount_msat']:,} msat"
     if event["kind"] == "invoice":
@@ -83,6 +96,8 @@ HEADINGS = {
                "record), and it signs back the time it saw that hash. The names are this demo's labels: the witness "
                "sees only each book's key and log id.",
     "rail": "The payment rail, as the buyer's agent reports each invoice and payment.",
+    "catalog": "The catalog, a stand-in for a store platform's product catalog (not a real store), as the demo's stage "
+               "that serves it reports: what it lists, and each time an agent reads a product from it.",
 }
 
 

@@ -46,7 +46,10 @@ def entry(name: str, seller: dict, doc: dict, origin: str) -> dict:
             "trustManifest": {"identity": publisher(name), "attestations": [{
                 "type": PROFILE, "uri": uri, "mediaType": MEDIA,
                 "digest": "sha256:" + hashlib.sha256(commitment_octets(doc)).hexdigest(), "description": DESCRIPTION}]},
-            "x-demo-offer": {"item": seller["item"], "price_msat": seller["price_msat"], "currency": "msat"}}
+            "x-demo-offer": {"item": seller["item"], "price_msat": seller["price_msat"], "currency": "msat",
+                             # the product it offers in the catalog stand-in, and where that catalog serves it (#382)
+                             **({"product": seller["product"], "catalog": seller["catalog_url"]}
+                                if seller.get("catalog_url") else {})}}
 
 
 def manifest(name: str, seller: dict, doc: dict, origin: str) -> dict:
@@ -83,12 +86,30 @@ NO_COMMITMENT = "the listing does not say how to ask this seller for evidence"
 NOT_NAMED = "the seller's signed terms are not the ones its listing names"
 NOT_VERIFIED = "the seller's signature on its terms does not check out"
 COMMITMENT_UNREADABLE = "the seller's listing or its signed terms could not be read"
+CATALOG_DIFFERS = "the listing's offer is not the one the catalog lists for this seller"
+CATALOG_UNREADABLE = "the catalog could not be read"
 
 
 def _refuse(item: dict, reason: str, detail: str = "") -> None:
     item["problem"] = reason
     if detail:
         item["detail"] = detail
+
+
+def _catalog_check(item: dict, offer: dict) -> bool:
+    """The listing's offer against the product the catalog stand-in lists at the address the offer links (#382): the
+    same product, title and price. False, with ``problem`` set, when it differs or cannot be read."""
+    try:
+        listed = json.loads(_fetch(offer["catalog"]))
+    except Exception as exc:  # noqa: BLE001
+        _refuse(item, CATALOG_UNREADABLE, f"{offer['catalog']}: {exc!r}")
+        return False
+    if (listed.get("product"), listed.get("title"), listed.get("price_msat")) != (
+            offer.get("product"), offer.get("item"), offer.get("price_msat")):
+        _refuse(item, CATALOG_DIFFERS, f"the catalog lists {listed!r}")
+        return False
+    item["checks"].append("the offer is the product the catalog (a stand-in) lists for this seller, at the same price")
+    return True
 
 
 def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
@@ -105,6 +126,9 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     if att is None:
         return _refuse(item, NO_COMMITMENT, f"no {PROFILE} attestation in the entry's trustManifest")
     item["offer"] = own["x-demo-offer"]
+    if isinstance(item["offer"], dict) and item["offer"].get("catalog"):
+        if not _catalog_check(item, item["offer"]):
+            return None
     item["uri"] = att["uri"]
     octets = _fetch(att["uri"])
     item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()

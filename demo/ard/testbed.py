@@ -38,7 +38,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "testbed.yaml"
 AGENTS = ("alder", "kestrel", "adjudicator", "maya")
-SCREENS = ("witness", "rail")
+SCREENS = ("witness", "rail", "catalog")
 WITNESSES = ("public", "local", "off")
 RAILS = ("fake",)  # a rail that moves real money stays behind the RUNBOOK's real-rail steps
 #: capsule-anchor at the release Action State's hosted witness runs (v0.1.4: Cloud Run capsule-witness, label

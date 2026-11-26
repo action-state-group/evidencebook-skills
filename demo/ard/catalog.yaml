@@ -1,0 +1,13 @@
+# A stand-in for a store platform's product catalog (evidencebook-skills#382): each seller's products, with the title
+# and price the seller sells them at. A seller's own file (sellers/<name>.yaml) names which product it offers; its ARD
+# listing then states this product's title and price and links its catalog entry, which the stage serves at
+# /catalog/<seller>/<product>.json. Not a real store or platform. Edit a title or a price, then reset and seed.
+products:
+  alder:
+    badges-200:
+      title: 200 conference badges, delivered by Friday
+      price_msat: 2000
+  kestrel:
+    badges-200:
+      title: 200 conference badges, delivered by Friday
+      price_msat: 1000

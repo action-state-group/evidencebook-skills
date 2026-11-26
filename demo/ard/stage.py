@@ -23,6 +23,7 @@ sys.path.insert(0, str(HERE))
 
 import adjudicator as adj  # noqa: E402
 import ard  # noqa: E402
+import feeds  # noqa: E402
 from cast import SELLERS  # noqa: E402
 
 HTTP_PORT = int(os.environ.get("ARD_STAGE_PORT", "47481"))  # the stand-in registry's POST /search, and the rules page
@@ -36,6 +37,14 @@ QUERY = "conference badges print"
 #: The one form of ``lcap.policy_uri`` a seller's commitment carries (evidencebook ``commitment.build``): a file under
 #: ``commitments/policies/``, never a path out of it.
 POLICY_URI = re.compile(r"policies/[0-9a-f]{64}\.json")
+#: Where the catalog stand-in serves a seller's product (#382), on the registry's port.
+CATALOG_PATH = re.compile(r"/catalog/([a-z0-9-]+)/([a-z0-9-]+)\.json")
+
+
+def catalog_url(seller: str, product: str) -> str:
+    return f"http://127.0.0.1:{HTTP_PORT}/catalog/{seller}/{product}.json"
+
+
 #: The file a stage holds open under ``<home>/stage`` for as long as it runs (``demo.py reset`` finds it by it).
 STAGE_LOCK = ".stage.lock"
 
@@ -52,7 +61,9 @@ class Stage:
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
         self._held = open(self.dir / STAGE_LOCK, "a")
         self.adjudicator = adj.Adjudicator(self.home).create()
-        self.discovery = Discovery(SELLERS, self.commitment, HTTP_PORT, SELLER_PORTS, get=self.page, policy=self.policy)
+        # each seller's listing links its product in the catalog stand-in, which this stage serves (#382)
+        sellers = {n: {**s, "catalog_url": catalog_url(n, s["product"])} for n, s in SELLERS.items()}
+        self.discovery = Discovery(sellers, self.commitment, HTTP_PORT, SELLER_PORTS, get=self.page, policy=self.policy)
         self.url = self.discovery.registry.url
 
     def commitment(self, name: str) -> dict | None:
@@ -67,8 +78,18 @@ class Stage:
         return f.read_bytes() if f.is_file() else None
 
     def page(self, path: str) -> bytes | None:
-        """The adjudicator's published rules, whose SHA-256 every agreement names."""
-        return adj.RULES_TEXT.encode() if path == "/adjudicator/rules" else None
+        """The adjudicator's published rules, whose SHA-256 every agreement names; and the catalog stand-in's products
+        (``/catalog/<seller>/<product>.json``), each read also shown on the catalog's screen (:mod:`feeds`)."""
+        if path == "/adjudicator/rules":
+            return adj.RULES_TEXT.encode()
+        m = CATALOG_PATH.fullmatch(path)
+        seller = SELLERS.get(m.group(1)) if m else None  # the catalog as this stage read it at its start
+        if seller is None or seller["product"] != m.group(2):
+            return None
+        feeds.catalog_read(self.home, m.group(1), m.group(2))
+        return json.dumps({"seller": m.group(1), "product": m.group(2), "title": seller["item"],
+                           "price_msat": seller["price_msat"], "currency": "msat", "stand_in": True},
+                          sort_keys=True).encode()
 
     def serve_forever(self) -> None:
         try:

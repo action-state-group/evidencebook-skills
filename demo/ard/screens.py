@@ -247,7 +247,8 @@ def listing_lines(item: dict) -> list[str]:
     elif offer:
         price = offer.get("price_msat")
         stated = msat(price) if isinstance(price, int) else str(price)
-        out.append(f"  offer: {offer.get('item')} at {stated} (the seller's own words, not signed)")
+        product = f", product {offer['product']} in the catalog (a stand-in)" if offer.get("product") else ""
+        out.append(f"  offer: {offer.get('item')} at {stated} (the seller's own words, not signed{product})")
     out += [f"  checked: {c}" for c in item.get("checks", [])]
     if not checked:
         out.append(f"  not passed: {item['problem']}")
