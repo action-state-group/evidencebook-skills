@@ -326,13 +326,15 @@ its received disputes without `decided` (§5), the row reads `not_read` with
 `reason: no_dispute_tally`, never a pass. `card.open_disputes` still reads
 `{open, of}` without `decided`.
 
-The card the baseline and Muse packs ask for at T1, `served_summary/1`,
-carries claims counts and no dispute tally, and the card that carries the
-tally carries no claims counts. So until one card the packs ask for at T1
-carries both (#281), those packs give this row `on_unread: "record"`: a shown
-loss limits, and a verified card with no tally is recorded with its reason and
-never passes, without limiting. An unverified card still limits. Once that card
-is served, the packs drop `on_unread`, and a missing tally limits.
+The baseline and Muse packs ask for no card at T1 (Steven, 2026-11-25, Q6:
+`served_summary/1` is no longer asked; #380); they read the card they are
+given. `served_summary/1` carries claims counts and no dispute tally, and the
+card that carries the tally carries no claims counts. So until one card read
+at T1 carries both (#281), those packs give this row `on_unread: "record"`: a
+shown loss limits, and a verified card with no tally is recorded with its
+reason and never passes, without limiting. An unverified card still limits.
+Once that card is served, the packs drop `on_unread`, and a missing tally
+limits.
 
 A party that does not enter a ruling in its own book has a card that shows no
 `against` for it. The buyer cannot see that gap; the adjudicator can, with
