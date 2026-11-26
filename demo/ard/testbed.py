@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """The multi-role testbed (evidencebook-skills#382): every role of the ARD deal, each on its own screen, in one step.
 
-    python testbed.py up [--witness public|local|off]   # reset, start the witness, seed, open every screen
+    python testbed.py up [--witness public|local|off]   # reset, start the witness, seed, start the countersigner, open every screen
     python testbed.py reopen                             # open the screens again (after quitting Goose), same witness
     python testbed.py down                               # close the screens, reset, stop the witness
     python testbed.py env                                # the export lines for this testbed's witness
 
 The roles and their choices are in ``testbed.yaml``. The four agents (Alder and Kestrel, the sellers; Maya, the buyer;
-the adjudicator) each get a Goose window (``goose/open-windows.py``); the witness and the payment rail, which run no
-agent, each get a Terminal window showing what the parties sent that role and got back (``watch.py``). ``up`` runs,
+the adjudicator) each get a Goose window (``goose/open-windows.py``); the witness, the payment rail, the catalog
+stand-in and the countersigner, which run no agent, each get a Terminal window showing what the parties sent that role and got back (``watch.py``). ``up`` runs,
 in this order: if Goose is running, ask before quitting it; ``demo.py reset`` (which also stops the screens of an
 earlier run); stop the witness an earlier ``up`` started; start the witness (``witness: local``), ``demo.py seed``, open the two
 Terminal screens, open the Goose windows. A failure or Ctrl-C before the windows open stops the witness this run
@@ -38,7 +38,7 @@ import yaml
 HERE = Path(__file__).resolve().parent
 CONFIG = HERE / "testbed.yaml"
 AGENTS = ("alder", "kestrel", "adjudicator", "maya")
-SCREENS = ("witness", "rail", "catalog")
+SCREENS = ("witness", "rail", "catalog", "countersigner")
 WITNESSES = ("public", "local", "off")
 RAILS = ("fake",)  # a rail that moves real money stays behind the RUNBOOK's real-rail steps
 #: capsule-anchor at the release Action State's hosted witness runs (v0.1.4: Cloud Run capsule-witness, label
@@ -238,7 +238,7 @@ def up(c: dict, say=print, ask=input) -> int:
         raise Stop("reset refused (it says why above); nothing else was done")
     stop_witness(say)  # only once the reset went through: a refused reset leaves the earlier run as it was
     witness: dict[str, str] = {}
-    started, ok = False, False
+    started, ok, countersigner = False, False, False
     try:
         if c["witness"] == "local":
             started = True  # from here: start.sh may leave its witness running even when it fails
@@ -249,6 +249,12 @@ def up(c: dict, say=print, ask=input) -> int:
         env = run_env(witness)
         if subprocess.run([_python(), str(HERE / "demo.py"), "seed"], env=env).returncode != 0:
             raise Stop("seed failed (it says why above)")
+        # the countersign upgrade's countersigner (countersigner.py, evidencebook-skills#383): after the seed, which makes
+        # the parties it admits; it trusts the run's witness certificate through env's SSL_CERT_FILE; reset stops it
+        if "countersigner" in c["roles"]:
+            countersigner = True  # from here: a failed start leaves nothing, but a later failure leaves it running
+            if subprocess.run([_python(), str(HERE / "countersigner.py"), "up"], env=env).returncode != 0:
+                raise Stop("the countersigner did not start (it says why above)")
         for role in SCREENS:
             if role in c["roles"]:
                 open_screen(role, env)
@@ -263,6 +269,8 @@ def up(c: dict, say=print, ask=input) -> int:
     finally:
         if not ok:  # a failed or interrupted run leaves nothing of its own running
             stop_screens(home())
+            if countersigner:
+                subprocess.run([_python(), str(HERE / "countersigner.py"), "down"], env=os.environ)
             if started:
                 stop_witness(say)
 
