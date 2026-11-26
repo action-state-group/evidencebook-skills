@@ -51,8 +51,8 @@ class Selection(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "change")
 
-    def plan(self, *args):
-        run = subprocess.run([str(self.repo / "scripts" / "check.sh"), "--plan", *args], cwd=self.repo,
+    def plan(self, *args, env=None):
+        run = subprocess.run([str(self.repo / "scripts" / "check.sh"), "--plan", *args], cwd=self.repo, env=env,
                              capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         lines = run.stdout.splitlines()
@@ -118,6 +118,25 @@ class Selection(unittest.TestCase):
     def test_without_a_merge_base_it_runs(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
         self.assertRuns(self.plan(), "no merge base with origin/main")
+
+    def failing_git(self, subcommand):
+        """An environment whose git fails for SUBCOMMAND and is the real git otherwise."""
+        real = shutil.which("git")
+        bindir = self.repo.parent / f"{self.repo.name}-bin"
+        bindir.mkdir()
+        self.addCleanup(shutil.rmtree, bindir)
+        wrapper = bindir / "git"
+        wrapper.write_text(f'#!/bin/sh\nfor a in "$@"; do [ "$a" = {subcommand} ] && exit 128; done\nexec "{real}" "$@"\n')
+        wrapper.chmod(0o755)
+        return {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
+
+    def test_a_failing_git_diff_runs_it(self):
+        self.commit("docs/a.md")
+        self.assertRuns(self.plan(env=self.failing_git("diff")), "git could not list the files changed")
+
+    def test_a_failing_git_ls_files_runs_it(self):
+        self.commit("docs/a.md")
+        self.assertRuns(self.plan(env=self.failing_git("ls-files")), "git could not list the files changed")
 
     def test_an_unknown_argument_is_refused(self):
         run = subprocess.run([str(self.repo / "scripts" / "check.sh"), "--fast"], cwd=self.repo,

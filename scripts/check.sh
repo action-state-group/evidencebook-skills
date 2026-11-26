@@ -66,7 +66,7 @@ ARD_INPUTS=(demo/ard/ skills/ scripts/ packs/ schemas/ vocab/ wording/ contracts
 
 # select_ard: sets ard_runs (1 or 0) and ard_why, the one line that says why.
 select_ard() {
-  local base f p
+  local base f p list
   local -a changed
   ard_runs=1
   if ((full)); then
@@ -78,7 +78,15 @@ select_ard() {
     return
   fi
   # --no-renames: a rename is a deletion and an addition, so a file moved out of the inputs still counts.
-  mapfile -d '' changed < <(git diff --no-renames --name-only -z "$base" --; git ls-files --others --exclude-standard -z)
+  # Through a file, not a process substitution, so a failing git is seen (and NULs survive, which $(...) drops).
+  list=$(mktemp)
+  if ! { git diff --no-renames --name-only -z "$base" -- >"$list" && git ls-files --others --exclude-standard -z >>"$list"; }; then
+    rm -f "$list"
+    ard_why="ard-demo: runs (git could not list the files changed since the merge base with origin/main)"
+    return
+  fi
+  mapfile -d '' changed <"$list"
+  rm -f "$list"
   for f in "${changed[@]}"; do
     for p in "${ARD_INPUTS[@]}"; do
       if [[ "$f" == "$p" || ( "$p" == */ && "$f" == "$p"* ) ]]; then
