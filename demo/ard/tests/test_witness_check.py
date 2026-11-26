@@ -11,6 +11,7 @@ import ssl
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -85,9 +86,9 @@ def cert(tmp_path_factory):
     return d
 
 
-def serve(cert: Path, status: int, hang: threading.Event | None = None):
-    """A witness on 127.0.0.1 that answers every stamp with ``status`` (or, with ``hang``, not until it is set); its
-    home page answers 200."""
+def serve(cert: Path, status: int, hang: threading.Event | None = None, delay: float = 0):
+    """A witness on 127.0.0.1 that answers every stamp with ``status`` after ``delay`` seconds (or, with ``hang``, not
+    until it is set); its home page answers 200."""
     posts: list[str] = []
 
     class H(http.server.BaseHTTPRequestHandler):
@@ -96,6 +97,7 @@ def serve(cert: Path, status: int, hang: threading.Event | None = None):
             posts.append(self.path)
             if hang is not None:
                 hang.wait(120)
+            time.sleep(delay)
             self.send_response(status)
             self.end_headers()
             self.wfile.write(b"refused")
@@ -148,6 +150,48 @@ def test_refused(witness_on, monkeypatch, cert, tmp_path, status):
 
 
 @needs_ctl
+def test_a_slow_answer_is_waited_for(witness_on, monkeypatch, cert, tmp_path):
+    """The wait reaches each witness request: an answer after 8 s, past capsulectl's default 5 s delivery budget, is
+    still read (here a refusal, since a fake witness cannot sign a receipt)."""
+    monkeypatch.setenv("SSL_CERT_FILE", str(cert / "c.pem"))
+    srv, posts = serve(cert, 409, delay=8)
+    try:
+        r = wc.check(log=tmp_path / "check.log", endpoint=f"https://127.0.0.1:{srv.server_address[1]}", wait_s=20)
+    finally:
+        srv.shutdown()
+    assert r.line.startswith("Action State's witness answered but refused a test stamp (HTTP 409)."), r.line
+    assert len(posts) == 1
+
+
+def test_each_tick_gets_the_time_left_and_none_starts_after_the_wait(witness_on, monkeypatch):
+    """Each tick's --deliver-for is the time left, and no tick starts with under MIN_TRY_S left."""
+    now = [0.0]
+    calls: list[tuple[float, tuple]] = []
+
+    class Ctl:
+        def __init__(self, home, profile, binary=None):
+            pass
+
+        def run(self, *args):
+            calls.append((now[0], args))
+            if args[0] == "tick":
+                now[0] += 7  # a tick that spends its time and takes no stamp
+            return {"delivered": [], "pending": [{"reason": "witness_timeout", "text": "pending: slow"}]}
+
+    import ctl
+
+    monkeypatch.setattr(ctl, "Ctl", Ctl)
+    monkeypatch.setattr(wc.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(wc.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    r = wc.check(wait_s=20)
+    ticks = [(t, a) for t, a in calls if a[0] == "tick"]
+    assert [a for _, a in ticks] == [("tick", "--now", "--deliver-for", f"{20 - t:.1f}s") for t, _ in ticks]
+    assert all(20 - t >= wc.MIN_TRY_S for t, _ in ticks)
+    assert len(ticks) == 3  # at 0, 9 and 18 s; none at 27 s
+    assert r == wc.Result(False, "Action State's witness did not answer a test stamp within 20 seconds.")
+
+
+@needs_ctl
 def test_not_reached(witness_on, monkeypatch, cert, tmp_path):
     monkeypatch.setenv("SSL_CERT_FILE", str(cert / "c.pem"))
     r = wc.check(log=tmp_path / "check.log", endpoint=f"https://127.0.0.1:{free_port()}", wait_s=3)
@@ -160,11 +204,13 @@ def test_no_answer(witness_on, monkeypatch, cert, tmp_path):
     monkeypatch.setenv("SSL_CERT_FILE", str(cert / "c.pem"))
     hang = threading.Event()
     srv, posts = serve(cert, 200, hang)
+    start = time.monotonic()
     try:
         r = wc.check(log=tmp_path / "check.log", endpoint=f"https://127.0.0.1:{srv.server_address[1]}", wait_s=3)
     finally:
         hang.set()
         srv.shutdown()
+    assert time.monotonic() - start < 3 + 5, "the wait bounds the witness request too"
     assert posts
     assert r == wc.Result(False, "Action State's witness did not answer a test stamp within 3 seconds.")
 

@@ -76,7 +76,7 @@ What it does, in order (you do not type these):
 
 10. Leaves that Goose quit.
 
-11. Checks that Action State's witness takes a real stamp, not only that its home page loads: it makes one test stamp on a new, empty log of its own (the witness receives only that log's hashes) and waits up to 30 seconds for the witness's receipt. If the witness refuses it or does not answer, the set-up stops with one line saying which. To check again just before a run: `ARD_EVIDENCEBOOK=~/ard-demo/evidencebook CAPSULECTL_DEAL=~/.local/lib/capsulectl/plugins/capsulectl-deal ~/ard-demo/evidencebook-skills/.venv/bin/python ~/ard-demo/evidencebook-skills/demo/ard/witness_check.py`.
+11. Checks that Action State's witness takes a real stamp, not only that its home page loads: it makes one test stamp on a new, empty log of its own (the witness receives only that log's hashes) and waits up to 60 seconds for the witness's receipt. If the witness refuses it or does not answer, the set-up stops with one line saying which. To check again just before a run: `ARD_EVIDENCEBOOK=~/ard-demo/evidencebook CAPSULECTL_DEAL=~/.local/lib/capsulectl/plugins/capsulectl-deal ~/ard-demo/evidencebook-skills/.venv/bin/python ~/ard-demo/evidencebook-skills/demo/ard/witness_check.py`.
 
 ## Real rail, once
 

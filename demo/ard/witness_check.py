@@ -11,7 +11,9 @@ witness's receipt:
    ``capsulectl/internal/deal/deal.go``), so the check never touches a person's or a demo deal's log and cannot advance
    or fork one. The folder is deleted afterwards.
 2. On-demand stamps (``deal tick --now``) for up to :data:`WAIT_S` seconds, until one tick reports a checkpoint
-   ``delivered``: the witness answered it with a receipt capsulectl checked.
+   ``delivered``: the witness answered it with a receipt capsulectl checked. Each tick gets the time left as its
+   ``--deliver-for`` budget (the default 5 s would end a slower witness's request first), and none starts with under
+   :data:`MIN_TRY_S` left.
 3. A refusal for good (any answered 4xx but 403, which capsulectl records as "not retried", capsule-cli
    ``cli/checkpoint.go``) fails at once; a witness not reached, timing out or answering 403 or 5xx fails once the wait
    is over. Each failure is one plain line; capsulectl's own output goes to a log file, never to the screen.
@@ -38,8 +40,13 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import _paths  # noqa: E402
 
-#: How long the check waits for the witness to take a stamp. A well witness takes one in 3 to 6 s (party.STAMP_TRY_S).
-WAIT_S = 30
+#: How long the check waits for the witness to take a stamp. A well witness takes one in 3 to 6 s (party.STAMP_TRY_S);
+#: under load it took 13 to 46 s (evidencebook-skills#370), and a slow witness that does take stamps should not stop
+#: the set-up. capsulectl ends one witness request after 30 s, so this leaves room for a second try.
+WAIT_S = 60
+#: capsulectl starts no witness request with under 2 s of its budget left (capsule-cli ``witnessBudgetFloor``), and a
+#: ``--deliver-for`` of 0 means no limit, so no tick is run with less than this left.
+MIN_TRY_S = 2
 #: The witness's name in what a person reads (party.WITNESS_NAME, kept here so the check needs none of the demo's
 #: heavier modules).
 WITNESS_NAME = "Action State's witness"
@@ -115,9 +122,9 @@ def check(say: Callable[[str], None] = print, log: Path | None = None, endpoint:
             note(f"deal init: {exc}")
             return Result(False, "The witness check could not make its test log: capsulectl-deal refused it.")
         stop, tick = time.monotonic() + wait_s, {}
-        while True:
+        while (left := stop - time.monotonic()) >= MIN_TRY_S:
             try:
-                tick = ctl.run("tick", "--now")
+                tick = ctl.run("tick", "--now", "--deliver-for", f"{left:.1f}s")
             except Refused as exc:
                 tick = {}
                 note(f"deal tick --now: {exc}")
@@ -125,9 +132,8 @@ def check(say: Callable[[str], None] = print, log: Path | None = None, endpoint:
                 note(f"deal tick --now: {tick}")
             if (r := classify(tick)) is not None:
                 return r
-            if time.monotonic() >= stop:
-                return Result(False, last_reason(tick, wait_s))
-            time.sleep(min(2.0, max(0.0, stop - time.monotonic())))
+            time.sleep(min(2.0, max(0.0, stop - time.monotonic() - MIN_TRY_S)))
+        return Result(False, last_reason(tick, wait_s))
     finally:
         shutil.rmtree(home, ignore_errors=True)
 
