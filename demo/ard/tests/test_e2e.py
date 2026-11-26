@@ -16,6 +16,7 @@ import re
 import time
 
 import pytest
+from _stampwait import stamp_wait, try_tick
 
 pytestmark = pytest.mark.skipif(os.environ.get("ARD_E2E") != "1" or not all(
     os.environ.get(v) for v in ("CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_EVIDENCEBOOK")),
@@ -126,7 +127,18 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
         w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"] or w["maya"].notes(flow.RULING_STAMPED)),
         adj.LATER_S + 30)
-    assert {x["words"] for x in w["adj"].entries(_fresh(w, deal.deal_id))} == {"entered"}
+    # both entries read time-stamped once the witness has taken each side's book: Maya's proof goes on a later round of
+    # her entering (flow.enter_rulings), Kestrel's with its agent's; as long as the demo waits for a stamp taken later
+    read: list[str] = []
+
+    def both_witnessed():
+        flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None)
+        read[:] = sorted({x["words"] for x in w["adj"].entries(_fresh(w, deal.deal_id))})
+        return read == ["entered"]
+    stamp_wait(both_witnessed, "both parties' entries of the ruling", adj.LATER_S, step=5,
+               detail=lambda: f"The adjudicator's entry check read {read}" + (
+                   f": {pt.WITNESS_NAME} had not stamped every book sent with an entry yet."
+                   if any("not witnessed" in x for x in read) else "."))
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
     import buyer as b
@@ -134,13 +146,16 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert b.seller_of(w["maya"])(deal.deal_id) == "kestrel"
     assert _fresh(w, deal.deal_id)["ruling"]["against"] == "seller"
 
-    # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence)
+    # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence), as its agent's
+    # republish(now=True) does; the tick is kept to say whether the witness had taken the stamp
+    kestrel, ticks = w["agents"]["kestrel"].party, [None]
+
     def kestrel_card():
-        w["agents"]["kestrel"].republish(now=True)
-        c, _, _ = flow.read_card(w["home"] / "stage" / "cards" / "kestrel.json")
+        ticks[0] = try_tick(kestrel.stamp)  # a refusal is tried again next round, as the agent's republish does
+        c, _, _ = flow.read_card(flow.publish_card(w["home"], kestrel))
         # the dispute's count and the deal's outcome can come one checkpoint apart: wait for both
         return c if c["disputes"]["received"]["by_outcome"]["against"] and c["outcomes"]["did_not_hold"] else None
-    card = _until(kestrel_card, 30, step=2)
+    card = stamp_wait(kestrel_card, "Kestrel's card counting the ruling", adj.LATER_S, tick=lambda: ticks[0])
     assert card["outcomes"]["did_not_hold"] == 1 and flow.decided(card)["decided"] == {"against": 1, "of": 1}
 
     # deal 2: Maya's own ruling makes Kestrel NO, and the card's count shows with it
@@ -297,21 +312,32 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     import party as pt
 
     w = world
-    p = pt.Party(w["home"], "kestrel")
-    p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
-    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
-    failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
-    assert failed["pending"], failed
-    monkeypatch.delenv("HTTPS_PROXY")
-    again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
-    ticks: list[dict] = []
+    # Kestrel's agent ticks the same profile on its own cadence: closed for this test (as a closed window is), so the
+    # failed delivery is this test's and the recovery is the reopened window's, never the agent's; reopened after.
+    agent = w["agents"]["kestrel"]
+    agent.stop()
+    for t in agent.threads:
+        t.join(60)
+    assert not any(t.is_alive() for t in agent.threads), "Kestrel's agent did not stop"
+    try:
+        p = pt.Party(w["home"], "kestrel")
+        p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
+        monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+        failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
+        assert failed["pending"], failed
+        monkeypatch.delenv("HTTPS_PROXY")
+        again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
+        ticks: list[dict] = []
 
-    def delivered():
-        t = again.tick()
-        ticks.append(t)
-        return t if t.get("delivered") and not t.get("pending") else None
-    done = _until(delivered, 420, step=10)
-    assert done, (failed, ticks[-3:])
+        # done once this window's ticks have delivered and the newest leaves nothing pending: a slow witness may take
+        # the failed checkpoint and its successors over more than one tick
+        def delivered():
+            ticks.append(try_tick(again.tick))
+            return ticks[-1] if any(t.get("delivered") for t in ticks) and ticks[-1].get("pending") == [] else None
+        stamp_wait(delivered, f"Kestrel's checkpoint {failed.get('checkpoint')} after its failed delivery", 420, step=10,
+                   tick=lambda: ticks[-1] if ticks else None)
+    finally:
+        w["agents"]["kestrel"] = flow.SellerAgent(w["home"], "kestrel")
 
 
 def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, monkeypatch):
