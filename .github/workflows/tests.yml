@@ -29,7 +29,8 @@ jobs:
     # The ARD two-seller demo (demo/ard): its tests, against the pins the run sheet names: an evidencebook checkout
     # (the Goose reference's Ctl and Node) and the capsulectl-deal built from it, which every party and the adjudicator
     # run, and a capsule-engine built from a tag; the receipt page is capsulectl's own. The end-to-end test runs both
-    # deals against Action State's hosted witness (network), as a person's run does.
+    # deals against Action State's hosted witness (network), as a person's run does: this job, on main and nightly, is
+    # the one run of that path; scripts/check.sh stamps on a witness it starts locally instead (#371).
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:

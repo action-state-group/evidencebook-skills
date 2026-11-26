@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 """The whole story, end to end, with the real binaries: capsulectl-deal (``CAPSULECTL_DEAL``), capsule-engine
-(``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and Action State's hosted witness, which every
-agreement names. It seeds a home (about a minute), then runs
+(``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and a witness every agreement names:
+Action State's hosted one in CI, or the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh
+starts one on this machine; :func:`_local_witness`). It seeds a home (about a minute), then runs
 deal 1 (Maya buys from Kestrel, Kestrel's own delivery record says 150 of 200, Maya disputes, the adjudicator rules
 against Kestrel, both enter the ruling) and deal 2 (Kestrel's card counts the lost dispute; Maya's own ruling makes it
 NO; a buyer who holds no ruling sees LIMIT from the card alone; Alder is GO and paid).
 
-It needs the network and runs only with ``ARD_E2E=1`` (CI's ard-demo job sets it). The approval dialogs are answered in
+With the hosted witness it needs the network. It runs only with ``ARD_E2E=1`` (CI's ard-demo job sets it). The approval dialogs are answered in
 the test, as ``demo.py run --auto`` does: never on a real rail."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -21,6 +23,44 @@ from _stampwait import stamp_wait, try_tick
 pytestmark = pytest.mark.skipif(os.environ.get("ARD_E2E") != "1" or not all(
     os.environ.get(v) for v in ("CAPSULECTL_DEAL", "CAPSULE_ENGINE", "ARD_EVIDENCEBOOK")),
     reason="ARD_E2E=1 with CAPSULECTL_DEAL, CAPSULE_ENGINE and ARD_EVIDENCEBOOK set")
+
+
+def _local_witness(mp: pytest.MonkeyPatch) -> None:
+    """Name the witness ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` give, instead of the hosted one, in every
+    place the demo names a witness: scripts/check.sh starts one on this machine (capsule-anchor's ci/local-witness,
+    evidencebook-skills#371), so parallel local checks neither wait on nor load Action State's service. Test-only: a
+    person's run, and CI's on main and nightly, keep the hosted witness. ``deal init`` can name only the hosted witness
+    (evidencebook capsulectl ``deal.go``, ``DealDefaultWitness``), so it runs with ``--no-witness`` and the profile then
+    names this one, as :meth:`party.Party.add_witness` does for a profile made without a witness. The buyer's pack
+    trusts this witness's key in place of the hosted one's, or no card would read as witnessed."""
+    import buyer
+    import pack as packs
+    import party as pt
+
+    url, key = os.environ.get("ARD_E2E_WITNESS_URL", ""), os.environ.get("ARD_E2E_WITNESS_KEY", "")
+    if bool(url) != bool(key):
+        raise pytest.UsageError("set both ARD_E2E_WITNESS_URL and ARD_E2E_WITNESS_KEY, or neither")
+    if not url:
+        return
+    hosted = pt.WITNESS_KEY
+    mp.setattr(pt, "WITNESS_URL", url)
+    mp.setattr(pt, "WITNESS_KEY", key)
+    mp.setitem(buyer.OPERATOR_FACTS, "witness", key)
+
+    def starting():  # the pack's witness trust root is the hosted witness's key (pack-source.yaml trust_roots)
+        text = packs.source_path().read_text()
+        assert text.count(hosted) == 1, "the pack names the hosted witness's key once, in trust_roots"
+        return packs.compile_source(text.replace(hosted, key), packs.version_of(text))
+    mp.setattr(packs, "starting", starting)
+    run = pt.Party.run
+
+    def init_then_name(self, *args):
+        if args[:1] != ("init",) or "--no-witness" in args:
+            return run(self, *args)
+        out = run(self, *args, "--no-witness")
+        self.add_witness()
+        return out
+    mp.setattr(pt.Party, "run", init_then_name)
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +76,8 @@ def world(tmp_path_factory):
     import stage
     from cast import SELLERS
 
+    mp = pytest.MonkeyPatch()
+    _local_witness(mp)
     home = tmp_path_factory.mktemp("ard-e2e")
     seed.seed(home, say=lambda *_: None)
     st = stage.Stage(home)
@@ -47,6 +89,7 @@ def world(tmp_path_factory):
     for a in agents.values():
         a.stop()
     st.close()
+    mp.undo()
 
 
 def _assess(w, buyer_party):
@@ -313,6 +356,20 @@ def _fresh(w, deal_id: str) -> dict:
     return next(c for c in w["adj"].cases() if c["deal_id"] == deal_id)
 
 
+@contextlib.contextmanager
+def _witness_unreachable(monkeypatch):
+    """The witness answers nothing while inside, its endpoint unchanged. The hosted one: a proxy on a closed port. A
+    local one (:func:`_local_witness`) is on localhost, which Go never sends through a proxy, so its certificate is left
+    out of the trusted roots instead and every delivery fails before it reaches the witness."""
+    with monkeypatch.context() as m:
+        if os.environ.get("ARD_E2E_WITNESS_URL"):
+            roots = next(f for f in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt") if os.path.isfile(f))
+            m.setenv("SSL_CERT_FILE", roots)  # the system roots alone (macOS's file, Ubuntu's), as start.sh reads them
+        else:
+            m.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+        yield
+
+
 def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after_a_re_entry(world, monkeypatch):
     """evidencebook-skills#287: a checkpoint whose delivery failed (here, a proxy that answers nothing) stays pending, and
     a later tick, run by a new process on the same home as a reopened window does, is accepted by the witness and
@@ -333,8 +390,7 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
     try:
         p = pt.Party(w["home"], "kestrel")
         p.note(flow.JOINED, {"operator": p.profile, "key_id": p.key_id})  # something new, so the next tick checkpoints
-        with monkeypatch.context() as m:  # the proxy is gone on every way out, before the agent reopens
-            m.setenv("HTTPS_PROXY", "http://127.0.0.1:9")  # nothing listens: the delivery fails
+        with _witness_unreachable(monkeypatch):  # reachable again on every way out, before the agent reopens
             failed = _until(lambda: (lambda t: t if t.get("state") == "ticked" else None)(p.tick()), 120, step=5)
         assert failed["pending"], failed
         again = pt.Party(w["home"], "kestrel")  # a reopened window: a new object, each verb a new process
