@@ -50,6 +50,11 @@ def calls(monkeypatch, tmp_path):
     acp.mkdir(parents=True)
     (acp / "claude-agent-acp").write_text("#!/bin/sh\n")
     monkeypatch.setenv("ARD_ACP_PREFIX", str(tmp_path / "acp"))
+    # the demo Goose set to Claude Code ACP, with no system layer and nothing in launchd's environment (#340)
+    (tmp_path / "goose-root" / "config").mkdir(parents=True)
+    (tmp_path / "goose-root" / "config" / "config.yaml").write_text("active_provider: claude-acp\n")
+    monkeypatch.setattr(ow, "SYSTEM_CONFIG", tmp_path / "no-system.yaml")
+    monkeypatch.setattr(ow, "launchd_env", lambda name: "")
     made.result = result
     return made
 
@@ -135,7 +140,7 @@ def test_the_default_goose_root_is_outside_the_default_home():
 
 def test_a_missing_demo_adapter_refuses_with_the_pinned_local_install(calls, capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("ARD_ACP_PREFIX", str(tmp_path / "no-acp"))
-    assert ow.main(["--goose-only"]) == 1
+    assert ow.main(["--rail", "fake"]) == 1  # the windows need the adapter with Claude Code ACP (#340)
     assert not any(c[:3] == ["open", "-a", "Goose"] for c in calls)
     err = capsys.readouterr().err
     assert f"npm install --prefix {tmp_path / 'no-acp'} @agentclientprotocol/claude-agent-acp@{ow.ACP_PIN}" in err

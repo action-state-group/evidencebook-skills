@@ -2,9 +2,9 @@
 
 How to run the ARD two-seller deal on your own Mac: four Goose Desktop windows, one buyer agent, two seller agents and the adjudicator's assistant. The buyer finds the sellers through ARD and reads their signed History cards. In the first deal the cheaper seller ships short, the buyer disputes, and the adjudicator rules against the seller. In the second deal the seller's card and the buyer's own records show that ruling, and the buyer buys from the other seller. The simulated rail is the default; the real rail steps are marked Real.
 
-This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli dcecbf5 (capsulectl v0.1.0-main.dcecbf5a, with evidencebook's book and deal plugins installed at the same version; capsule-cli#644: a slow witness reads as slow, never as a consent ask) · evidencebook 184fec5 (main, with #935's receipt page, #933's `deal tick --now`, #954's rules history, which counts an earlier x-deal-v1 payment to a merchant, #965's `witness_timeout` and #971's receipt page on capsule-viewer 8fe749b; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer: the receipt page is drawn by capsulectl with capsule-viewer's Go receipt package at the 8fe749b evidencebook pins (capsule-viewer#437: term names in words, local times in the records table, the time and witness columns on your own copy only), and the History page vendors capsule-viewer's 0.27.2 script · Goose Desktop 1.59.2 · real rail: ln-pay-local 4b936bb
+This guide runs evidencebook-skills main. The other repositories are pinned: capsule-cli 16ec5bc (capsulectl v0.1.0-main.16ec5bc9, with evidencebook's book and deal plugins installed at the same version; capsule-cli#644: a slow witness reads as slow, never as a consent ask; capsule-cli#646: one witness delivery ends at its deadline) · evidencebook 4c07d0f (main, with #935's receipt page, #933's `deal tick --now`, #954's rules history, which counts an earlier x-deal-v1 payment to a merchant, #965's `witness_timeout`, #972's Everyday Rules 0.3.10, whose r02 and r06 say "not fully checked" on an incomplete history, and #974's receipt page on capsule-viewer 2aa43cf; the book and deal plugins are built from it) · capsule-engine 0263ff1 (go/v0.8.0) · capsule-viewer: the receipt page is drawn by capsulectl with capsule-viewer's Go receipt package at the 2aa43cf evidencebook pins (capsule-viewer#437: term names in words, local times in the records table, the time and witness columns on your own copy only; capsule-viewer#438: the page names its wording pack capsuleviewer.receipt.wording.en/v1), and the History page vendors capsule-viewer's 0.27.2 script · Goose Desktop 1.59.2 · Claude Code ACP adapter 0.108.0 (only with Claude Code ACP) · real rail: ln-pay-local 4b936bb. **This line is the one place for the pins:** the set-up commands below use the same commits, a test checks that they agree, and a commit anyone gives you that differs from this line is not the one this guide was checked at.
 
-Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); the receipt page, capsulectl's own `deal report --html` (evidencebook#935, #951) on capsule-viewer bb8169bb (#310, #320); the History page on capsule-viewer 0.27.2, evidencebook 684dd44 and ln-pay-local 4b936bb (#320); the Python environment without capsule-viewer's Python package (#270); evidencebook 47a35cd (evidencebook#954: a repeat order to a seller Maya already paid no longer lists "No earlier payment to this merchant"); capsule-cli dcecbf5 and evidencebook 184fec5 (evidencebook#965: a witness that times out reads as slow, never as a consent ask; evidencebook#971: the receipt page on capsule-viewer 8fe749b). Open: the windows open stacked, not tiled. The spending-limit section (Everyday Rules as Maya's pinned rules checker on x-deal-v1, evidencebook#890) and the card shown under every payment dialog that pauses (Sherlock2's ruling on evidencebook#890) are new in #321: their dialog lines were captured with the real capsulectl-deal and capsule-engine on the simulated rail, not yet run by hand in Goose.
+Status: run by hand on 2026-11-25 on a Mac at evidencebook-skills cd33ab8, evidencebook 45eaceb and capsule-viewer d56da4d: steps 1 to 15 passed, then the re-entry (Goose quit and reopened, no reset). Changed since, not yet run by hand: the 10-minute dialogs, local times, both agents' ruling and witness wording (#305); the buyer's agent asks before saying it received what it paid for (#306); a ruling the witness stamps late is sent again with its time (#308); this set-up (#311); the receipt page, capsulectl's own `deal report --html` (evidencebook#935, #951) on capsule-viewer bb8169bb (#310, #320); the History page on capsule-viewer 0.27.2, evidencebook 684dd44 and ln-pay-local 4b936bb (#320); the Python environment without capsule-viewer's Python package (#270); evidencebook 47a35cd (evidencebook#954: a repeat order to a seller Maya already paid no longer lists "No earlier payment to this merchant"); capsule-cli dcecbf5 and evidencebook 184fec5 (evidencebook#965: a witness that times out reads as slow, never as a consent ask; evidencebook#971: the receipt page on capsule-viewer 8fe749b); capsule-cli 16ec5bc and evidencebook 4c07d0f (evidencebook#972: Everyday Rules 0.3.10 and one witness delivery bounded by its deadline; evidencebook#974: the receipt page names its wording pack en/v1); Maya's spending-limit lines in Sherlock2's words (#354). Open: the windows open stacked, not tiled. The spending-limit section (Everyday Rules as Maya's pinned rules checker on x-deal-v1, evidencebook#890) and the card shown under every payment dialog that pauses (Sherlock2's ruling on evidencebook#890) are new in #321: their dialog lines were captured with the real capsulectl-deal and capsule-engine on the simulated rail, not yet run by hand in Goose.
 
 ## What you will see
 
@@ -73,7 +73,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
    brew install node
    ```
 
-8. The `claude` CLI, signed in to a Claude Code subscription. Install it only if missing, sign in, check. The Goose windows use Claude Code as their model.
+8. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. With Claude Code ACP only: install the `claude` CLI if missing, sign in, check. With another provider, skip this block; you enter its sign-in or key in set-up step 8.
 
    ```
    command -v claude || npm install -g @anthropic-ai/claude-code
@@ -123,8 +123,8 @@ Paste each block into the same terminal window, one at a time, and wait for each
    ```
    mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
    [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
-   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 184fec5bfc47763a6ecc6686f30fdc447c6d9199; git -C evidencebook checkout -q 184fec5bfc47763a6ecc6686f30fdc447c6d9199
-   [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin dcecbf5a45583532cb694e265705794ffcc9acb5; git -C capsule-cli checkout -q dcecbf5a45583532cb694e265705794ffcc9acb5
+   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 4c07d0fd70562423e76e9d57afbff61623b05b43; git -C evidencebook checkout -q 4c07d0fd70562423e76e9d57afbff61623b05b43
+   [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 16ec5bc9c966e68a1f60c59d1dab64602be653a3; git -C capsule-cli checkout -q 16ec5bc9c966e68a1f60c59d1dab64602be653a3
    [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
    ```
 
@@ -134,7 +134,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    ```
    cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
-   CORE_SHA=dcecbf5a45583532cb694e265705794ffcc9acb5 EB_SHA=184fec5bfc47763a6ecc6686f30fdc447c6d9199 V=v0.1.0-main.dcecbf5a P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
+   CORE_SHA=16ec5bc9c966e68a1f60c59d1dab64602be653a3 EB_SHA=4c07d0fd70562423e76e9d57afbff61623b05b43 V=v0.1.0-main.16ec5bc9 P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
    mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
    (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
    install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
@@ -146,7 +146,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
    capsulectl --version; capsulectl plugin ls | python3 -c 'import json,sys; d=json.load(sys.stdin); print([(p["name"], p["version"]) for p in d["plugins"]], "refused:", d["refused"])'
    ```
 
-   **Expect:** `capsulectl v0.1.0-main.dcecbf5a (commit dcecbf5a…)`, then `[('book', 'v0.1.0-main.dcecbf5a'), ('deal', 'v0.1.0-main.dcecbf5a')] refused: []`.
+   **Expect:** `capsulectl v0.1.0-main.16ec5bc9 (commit 16ec5bc9…)`, then `[('book', 'v0.1.0-main.16ec5bc9'), ('deal', 'v0.1.0-main.16ec5bc9')] refused: []`.
 
 4. Build capsule-engine, and make the Python environment.
 
@@ -168,11 +168,13 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    **Expect:** `/Applications/Goose.app` exists, and Goose > About Goose shows 1.59.2. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
 
-6. Install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
+6. Claude Code ACP only (skip with another provider): install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
 
    ```
    npm install --prefix $HOME/ard-demo/acp @agentclientprotocol/claude-agent-acp@0.108.0
    ```
+
+   **The demo's Goose has its own settings.** It runs on its own folder, `~/.config/ard-commerce-goose`, never on your own Goose's settings. So a provider, sign-in or key you set up in your own Goose is not there: you enter it again in step 8, on the demo Goose's own Connect to a Provider screen (later: Settings, Models).
 
 7. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
 
@@ -183,10 +185,10 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
 
-8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider, type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
+8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example ChatGPT Codex, then sign in; or Google or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
    **Expect:** a chat opens and answers a short message.
 
-9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
+9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Computer Controller, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
 
 10. Quit that Goose.
 
@@ -295,9 +297,9 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 6. If the windows are stacked, tile them by hand: click Maya's window, then Window, Move & Resize, Quarters. The script can print no error while the windows are still stacked (evidencebook-skills#322: hand runs on 2026-11-25 found them stacked), and the menu item works only while a Goose window is in front, which the click makes it.
 
 7. Click Trust and Execute in all four windows, in any order. Click each window once first: a window behind the others takes the first click only to come forward. Maya's window can open with no Trust prompt and answer at once. After an upgrade from a version before evidencebook-skills#277 that is expected once (Troubleshooting 7); otherwise it was seen on another Mac on 2026-11-25, after a reset that cleared all four recipes' trust, with the cause not known yet (evidencebook-skills#322). On the simulated rail, carry on: step 8 checks that it has only its own `ard_maya` tools. On the real rail, Maya's window is the one that pays and the prompt is your check of what it runs: quit Goose and do "Before each run" again from step 1 (reset, seed and its wait, the balances, the windows). If Maya's window again opens with no Trust prompt, stop: run on the simulated rail instead.
-   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya's window shows her own History card and her spending limit ("Your spending limit: … for one order and over 7 days" with `ARD_LIMIT_MSAT` set, otherwise "No spending limit is set, so only this pack's limits apply: deals under 10 msat, 1,000 msat or 10,000 msat, by the seller's history."), then says it is ready; the adjudicator's assistant only says it is ready.
+   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya's window shows her own History card and her spending limit ("Your spending limit: … for any one order, and … in total over 7 days. Each payment is checked against it." with `ARD_LIMIT_MSAT` set, otherwise "No spending limit is set, so only this pack's limits apply: deals under 10 msat, 1,000 msat or 10,000 msat, depending on the seller's history."), then says it is ready; the adjudicator's assistant only says it is ready.
 
-8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
+8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. Change no provider or extension while the windows are open; if you do, quit Goose and open the windows again, so open-windows.py checks them again. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** that window's own `ard_…` tools and nothing else (with Claude Code ACP they show as `mcp__ard_…`, beside ToolSearch, which only loads them; with another provider their names may show without the prefix, and any other tool means an extension is still on): Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
 9. Keep the screen awake and unlocked: the payment and ruling dialogs appear on it.
 
@@ -504,6 +506,17 @@ To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the window
    ```
    rm -rf ~/ard-demo ~/.config/ard-commerce-goose
    ```
+
+## Running this guide with an agent
+
+An agent with a terminal can run the command blocks for you: What you need items 1 and 3 to 7 and 9 to 10, Set up steps 1 to 7 and 10, Real rail, In every terminal, Before each run steps 1 to 5 (reset, seed and its wait, the balances, opening the windows), and the shutdown. It must stop and hand over to you for:
+
+- anything that asks for your password or a sign-in: Homebrew's install (What you need item 2), `claude auth login` (item 8), the provider sign-in or key in Set up step 8, funding a real-rail wallet;
+- the safety steps: turning every extension off (Set up step 9) and checking each window's extensions (Before each run step 8). They are what keeps a window's agent to its own tools, so you do them, not the agent;
+- Goose's Trust and Execute prompts, every macOS permission prompt and tiling the windows by hand (Before each run step 6);
+- the run itself: typing in the windows and answering every dialog (Pay, Received, Dispute, Rule). Only your click answers a dialog.
+
+While the demo's windows are open, the agent that drives this guide must not have screen control (computer use): with it, it could answer a dialog itself. Run the run's steps yourself.
 
 ## Troubleshooting
 

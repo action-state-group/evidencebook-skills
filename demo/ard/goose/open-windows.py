@@ -212,13 +212,126 @@ def goose_root() -> Path:
     return reset.goose_root()
 
 
-def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
+#: Goose 1.59.2 providers that run their own agent, with its own tools (a shell among them), outside Goose's extensions:
+#: set-up step 9's switches do not reach them, so a window's agent could operate the payment dialog (#276). Ids from
+#: goose v1.59.2 crates/goose/src/providers/*.rs. Claude Code ACP runs through the demo's locked adapter instead.
+AGENT_PROVIDERS = frozenset({"claude-code", "codex", "cursor-agent", "gemini-cli", "codex-acp", "amp-acp", "copilot-acp",
+                             "pi-acp"})
+LOCKED_PROVIDER = "claude-acp"
+#: Goose's scheduler stays on (set-up step 9, the hand run of 2026-11-24): it schedules recipes, it gives no agent a tool
+#: that acts on the screen or a shell.
+KEPT_ON = frozenset({"scheduler"})
+
+
+#: Goose 1.59.2 reads its config from these layers, later ones overriding (crates/goose/src/config/base.rs Config::default:
+#: the system file, then GOOSE_ADDITIONAL_CONFIG_FILES, then the root's own file). ``open -a`` starts Goose with
+#: launchd's environment, not the terminal's, so additional files can come only from there: provider_problem refuses
+#: when launchd names any (launchd_env).
+SYSTEM_CONFIG = Path("/etc/goose/config.yaml")
+
+
+class ConfigError(Exception):
+    pass
+
+
+def _yaml(f: Path) -> dict:
+    import yaml
+    try:
+        doc = yaml.safe_load(f.read_text())
+    except FileNotFoundError:
+        return {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ConfigError(f"{f} cannot be read as Goose's config ({' '.join(str(exc).split())[:200]})") from None
+    if doc is None:
+        return {}
+    if not isinstance(doc, dict):
+        raise ConfigError(f"{f} is not a Goose config (not a mapping)")
+    return doc
+
+
+def goose_config(root: Path) -> dict:
+    """The config the demo's Goose runs on: the system file under the root's own (``<root>/config/config.yaml``),
+    extensions merged by name; {} before set-up."""
+    system, own = _yaml(SYSTEM_CONFIG), _yaml(root / "config" / "config.yaml")
+    cfg = {**system, **own}
+    # field by field, as Goose merges its layers (config/base.rs): an own entry that sets only display_name keeps the
+    # system file's enabled
+    sys_ext, own_ext = system.get("extensions") or {}, own.get("extensions") or {}
+    for f, ext in ((SYSTEM_CONFIG, sys_ext), (root / "config" / "config.yaml", own_ext)):
+        if not isinstance(ext, dict) or any(v and not isinstance(v, dict) for v in ext.values()):
+            raise ConfigError(f"{f} has an extensions entry that is not a mapping")
+    cfg["extensions"] = {k: {**(sys_ext.get(k) or {}), **(own_ext.get(k) or {})}
+                         for k in {*sys_ext, *own_ext}}
+    return cfg
+
+
+def launchd_env(name: str) -> str:
+    """A variable in launchd's environment, which ``open -a`` hands Goose; "" when unset or not readable."""
+    try:
+        run = subprocess.run(["launchctl", "getenv", name], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                             timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return run.stdout.strip() if run.returncode == 0 else ""
+
+
+def provider_of(cfg: dict) -> str | None:
+    """The active provider as Goose 1.59.2 picks it (config/providers.rs get_active_provider): GOOSE_PROVIDER in Goose's
+    own environment first (launch_goose passes the one checked here), then ``active_provider``, then ``GOOSE_PROVIDER``."""
+    return cfg.get("active_provider") or cfg.get("GOOSE_PROVIDER")
+
+
+def provider_problem(root: Path) -> str | None:
+    return check_provider(root)[0]
+
+
+def check_provider(root: Path) -> tuple[str | None, str | None]:
+    """Why the demo's Goose must not open the windows with the provider it is set to (or None), and the provider that
+    check read, which launch_goose hands Goose as is (#340). Claude Code ACP needs the demo's pinned, locked adapter; a
+    provider where Goose runs the tools needs every Goose extension off (set-up step 9), so only each window's own
+    extension reaches its agent; a provider that runs its own agent is refused."""
+    if extra := launchd_env("GOOSE_ADDITIONAL_CONFIG_FILES"):
+        return (f"launchd hands Goose more config files ({extra}), which this check does not read: launchctl unsetenv "
+                "GOOSE_ADDITIONAL_CONFIG_FILES, then run this again"), None
+    try:
+        cfg = goose_config(root)
+    except ConfigError as exc:
+        return str(exc), None
+    provider = launchd_env("GOOSE_PROVIDER") or provider_of(cfg)
+    if provider == LOCKED_PROVIDER:
+        if not (acp_prefix() / "node_modules" / ".bin" / "claude-agent-acp").exists():
+            return (f"the demo's own Claude Code adapter is not installed: {acp_install()} (pinned, under the demo's "
+                    "folder; never npm install -g, which changes the adapter other tools use)"), provider
+        return None, provider
+    if provider in AGENT_PROVIDERS:
+        # Sherlock2 on #340 (ops c0813d7e, amended f5adbf20; #356): the allowed choices by the names Goose shows,
+        # and where to switch, in plain words, no provider id
+        return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
+                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a ChatGPT sign-in), "
+                "an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the demo's Goose with "
+                "open-windows.py --goose-only and change it in Settings, Models"), provider
+    if not provider:
+        return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)", None
+    on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
+                if isinstance(v, dict) and v.get("enabled") and k not in KEPT_ON)
+    if on:
+        return ("with this provider, every Goose extension must be off so each window's agent has only its own "
+                "demo tools (set-up step 9); still on: " + ", ".join(on)), provider
+    return None, provider
+
+
+def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str | None:
     """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
-    a running Goose would take the recipe links into its own settings."""
-    bin_dir = acp_prefix() / "node_modules" / ".bin"
-    if not (bin_dir / "claude-agent-acp").exists():
-        return (f"the demo's own Claude Code adapter is not installed: {acp_install()} "
-                "(pinned, under the demo's folder; never npm install -g, which changes the adapter other tools use)")
+    a running Goose would take the recipe links into its own settings. For the windows the provider must pass
+    :func:`check_provider`, and Goose gets exactly the provider it checked; with ``setup`` (the settings only, no
+    window, no dialog) Goose opens on whatever it is set to, with no provider pinned, so a person can change it, and the
+    problem is printed as a note."""
+    problem, checked = check_provider(root)
+    if problem and not setup:
+        return problem
+    if problem:
+        print(f"note: {problem}; change it in this Goose's Settings, Models before opening the windows")
+    provider = None if setup else checked
     root.mkdir(parents=True, exist_ok=True)
     # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
     # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first. It finds the
@@ -227,7 +340,9 @@ def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
     try:
         subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}",
                         "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(LOCKED_DIR)])}",
-                        "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}"], check=True,
+                        "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}",
+                        # the provider the check above read (#340); Goose takes GOOSE_PROVIDER from its environment first
+                        *(["--env", f"GOOSE_PROVIDER={provider}"] if provider else [])], check=True,
                        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"
@@ -263,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
         if reset.goose_running():
             print(RUNNING.format(root=root), file=sys.stderr)
             return 2
-        failed = launch_goose(root)
+        failed = launch_goose(root, setup=True)
         print(failed or f"started the demo's own Goose on {root}", file=sys.stderr if failed else sys.stdout)
         return 1 if failed else 0
     # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.

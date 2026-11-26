@@ -14,14 +14,14 @@ import screens
 
 
 def test_a_set_limit_is_shown_as_the_person_set_it():
-    assert screens.limit_line(4500, [10, 1000]) == ("Your spending limit: 4,500 msat for one order and over 7 days; each "
-                                                    "payment is checked against it.")
+    assert screens.limit_line(4500, [10, 1000]) == ("Your spending limit: 4,500 msat for any one order, and 4,500 msat "
+                                                    "in total over 7 days. Each payment is checked against it.")
 
 
 def test_no_limit_names_every_limit_of_the_pack_from_the_pack():
     assert screens.limit_line(None, [10000, 10, 1000]) == ("No spending limit is set, so only this pack's limits apply: "
-                                                          "deals under 10 msat, 1,000 msat or 10,000 msat, by the seller's "
-                                                          "history.")
+                                                          "deals under 10 msat, 1,000 msat or 10,000 msat, depending on the "
+                                                          "seller's history.")
 
 
 @pytest.mark.parametrize("price,want", [
@@ -103,7 +103,7 @@ def test_only_a_seller_that_can_be_paid_gets_the_limit_words(monkeypatch, capsys
     assert two.endswith("GO: line. Within your limit of 500 msat for one order; your 7-day total is checked at payment.")
 
 
-@pytest.mark.parametrize("limit,want", [("4500", "Your spending limit: 4,500 msat for one order and over 7 days"),
+@pytest.mark.parametrize("limit,want", [("4500", "Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days"),
                                         ("", "No spending limit is set, so only this pack's limits apply")])
 def test_the_buyers_card_shows_her_limit_even_when_the_witness_takes_no_stamp(monkeypatch, limit, want):
     """Codex's round 1: through the tool itself, with a buyer named outside the demo cast and a stamp that fails."""
