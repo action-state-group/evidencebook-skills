@@ -202,8 +202,11 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
                            "over it waits for your OK.", "Set limit")
     assert ds.ard_set_limit(0).startswith("REFUSED: a spending limit is a whole number")
 
-    # her click: sealed with the words she saw, and every tool reads it
+    # her click: sealed with the words she saw, and every tool reads it; never while a payment holds the lock
     monkeypatch.setattr(ds, "dialog_answer", answer("yes"))
+    sealing = limits.seal
+    monkeypatch.setattr(limits, "seal", lambda *args: (s.pay_lock.locked() or pytest.fail("sealed outside the lock"))
+                        and sealing(*args))
     out = ds.ard_set_limit(4500)
     assert out == ("Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days. "
                    "Each payment is checked against it.")

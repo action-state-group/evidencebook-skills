@@ -449,6 +449,7 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     import buyer
     import flow
     import limits
+    import party as pt
     import pay
     import screens
     import wire
@@ -484,6 +485,18 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     deal, _ = made
     assert buyer.shipped(buyer.await_delivery(w["home"], w["maya"], deal))
 
+    # a reopened window (a new Party on the same home) reads the limit she confirmed last: raised to this order's
+    # price, the order fits on its own, and her earlier payments this week still count, so the weekly limit holds it
+    # (Codex on #361)
+    raised = a.price_msat
+    limits.seal(w["maya"], raised, f"Set your spending limit to {raised:,} msat?\nAnswer: Set limit")
+    again = pt.Party(w["home"], "maya")
+    assert limits.sealed(again) == raised
+    assert buyer.open_and_pay(w["home"], again, "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
+                              "Pay (test)", answer("no"), lambda *_: None, simulated=True) is None
+    held = asked[-1].held
+    assert held is not None and "per_order" not in held.limits and held.limits["weekly"][0] == raised
+    assert held.limits["weekly"][1] >= 2 * a.price_msat  # this order and at least the one paid above, kept
 
 def test_the_set_ups_witness_check_takes_a_real_stamp(monkeypatch, tmp_path):
     """The set-up's witness check (evidencebook-skills#359) against Action State's hosted witness: one throwaway log,

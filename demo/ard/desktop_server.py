@@ -345,7 +345,6 @@ def ard_find_sellers(ask: str) -> None:
     if not ask.strip():
         raise RuntimeError("pass the person's ask, in their own words")
     s = session()
-    s.ask = ask
     found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
     try:  # the checks, kept in her own records before the search's results are used (#345)
         buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
@@ -353,7 +352,9 @@ def ard_find_sellers(ask: str) -> None:
         _log(f"keeping the search's checks: {exc!r}")
         raise RuntimeError("The search could not be saved to your records, so its results are not used. The reason "
                            "is in agent.log.") from None
-    s.entries = found
+    # her ask and the sellers found replace the last search's only once this one is kept; a pick belongs to the search
+    # it came from, so a new search clears it (Codex on #361: a pick never pays under another search's ask)
+    s.entries, s.ask, s.picked = found, ask, set()
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
@@ -439,10 +440,12 @@ def ard_set_limit(limit_msat: int) -> None:
     limit = limits.check_amount(limit_msat)
     s = session()
     title, text = screens.limit_question(limit)
-    how = "yes" if gate_off() else dialog_answer(title, text, screens.LIMIT_YES)
-    if how != "yes":
-        raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so no spending limit was set. Do not retry on your own; ask Maya.")
-    limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + f"\nAnswer: {screens.LIMIT_YES}")
+    with s.pay_lock:  # never while a payment is checked or waits for her answer under the limit it read (Codex on #361)
+        how = "yes" if gate_off() else dialog_answer(title, text, screens.LIMIT_YES)
+        if how != "yes":
+            raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so no spending limit was set. Do not retry on your own; ask "
+                               "Maya.")
+        limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + f"\nAnswer: {screens.LIMIT_YES}")
     print(screens.limit_line(limits.sealed(s.maya), _ceilings(s.pack or packs.starting())))
 
 
