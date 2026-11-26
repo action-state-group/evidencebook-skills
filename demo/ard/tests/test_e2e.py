@@ -221,7 +221,7 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert list(entered) == [deal.deal_id]
     rep = kestrel.report(deal.deal_id)
     seller_line = screens.ruled_for_seller(rep.get("report", rep), entered[deal.deal_id])
-    assert len(seller_line) == 1 and seller_line[0].startswith("Ruled against this seller: delivery not met. ")
+    assert len(seller_line) == 1 and seller_line[0].startswith("Ruled against you: delivery not met. ")
     assert seller_line[0].endswith(screens.NO_REFUND)
 
     # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence), as its agent's

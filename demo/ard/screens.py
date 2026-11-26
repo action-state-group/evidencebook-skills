@@ -167,7 +167,7 @@ def ruled_for_seller(report: dict, stamped_at: str) -> list[str]:
             continue
         what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
         found = "not met" if r.get("value") == "not_met" else "met"
-        who = {"seller": "Ruled against this seller", "buyer": "Ruled for this seller"}.get(r.get("against"), "Ruled")
+        who = {"seller": "Ruled against you", "buyer": "Ruled for you"}.get(r.get("against"), "Ruled")
         when = (f"Time-stamped by {pt.WITNESS_NAME} at {local_time(stamped_at, date=True)}." if stamped_at
                 else f"Not time-stamped by {pt.WITNESS_NAME} yet.")
         line = f"{who}: {what} {found}. {when}"
