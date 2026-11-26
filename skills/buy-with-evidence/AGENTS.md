@@ -23,6 +23,9 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 - **One or more ARD registry search URLs**, which the person or host sets. If none is given, say
   you cannot search and ask for one. There is no default registry.
 - **Referrals:** follow a registry's referrals only if the person allows it. Off by default.
+- When the person asks to see a seller's listing, show it as the search fetched and checked it (on the demo host,
+  `ard_show_listing`; on a capsule host, the entry the ARD search verb checked), and keep its offer as the seller's
+  own unsigned words. Never fetch a seller's entry by other means.
 
 ## The procedure
 
@@ -35,8 +38,9 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
    stays with you: use it only in the assessment and at the pick; the deadline is theirs to judge. Each result is only a
    pointer. For each result, fetch the seller's own entry from its own `/.well-known/ard.json`,
    compare it with the registry's copy, check that the entry's identity names its publisher, then
-   fetch and verify the seller's signed commitment. A seller that fails any check is shown as
-   failed and is never assessed. Keep two things apart when you tell the person: the entry's offer
+   fetch and verify the seller's signed commitment. Keep what each check found in the person's own
+   records. A seller that fails any check is shown as failed, with its reason in plain words, and is
+   never assessed. Keep two things apart when you tell the person: the entry's offer
    (item and price) is not signed; the signed commitment says how to ask the seller for evidence
    and under which key. A commitment with no witness is "unwitnessed": say so, and pin its first
    checkpoint on first contact.
@@ -83,7 +87,7 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 
 | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|
-| 2 Search, check entries and commitments | `ard_find_sellers` | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
+| 2 Search, check entries and commitments | `ard_find_sellers`; `ard_show_listing` shows one seller's listing as the search checked it | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
 | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card, checked with `verify --bundle` | `request` / `respond` over the mailbox (capsule-cli#573) |
 | 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
 | 5 Record the pick | `ard_pick` | `deal note --kind intent` |

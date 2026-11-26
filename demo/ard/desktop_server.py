@@ -8,6 +8,7 @@ starting ``REFUSED:`` and changes nothing.
 
 ``maya``   the buyer:
     ard_find_sellers  ->  her ask and ARD discovery
+    ard_show_listing  ->  a seller's ARD listing, as the search fetched and checked it
     ard_show_history  ->  each seller's History card, fetched and checked
     ard_assess        ->  the assessment of each seller under her pack
     ard_pick          ->  the pick (a seller outside its limit ends here: no deal opens, nothing is paid)
@@ -339,7 +340,14 @@ def ard_find_sellers() -> None:
     """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its listing
     checks out. Call this first."""
     s = session()
-    s.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    try:  # the checks, kept in her own records before the search's results are used (#345)
+        buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
+    except Exception as exc:  # noqa: BLE001
+        _log(f"keeping the search's checks: {exc!r}")
+        raise RuntimeError("The search could not be saved to your records, so its results are not used. The reason "
+                           "is in agent.log.") from None
+    s.entries = found
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
@@ -347,6 +355,27 @@ def ard_find_sellers() -> None:
         # the search's own checks are not shown in her chat (#332, Sherlock2)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
+
+
+@_tool("maya")
+def ard_show_listing(seller: str) -> None:
+    """Show a seller's ARD listing, as the last search fetched and checked it from the seller's own
+    /.well-known/ard.json: whether it checks out, the seller's site, its stated offer (unsigned) and which checks it
+    passed. It fetches nothing new. ``seller`` is a name or identifier from the search. Call after ard_find_sellers, when the
+    person asks to see a seller's listing."""
+    s = session()
+    if not s.entries:
+        raise RuntimeError("search first (ard_find_sellers): a listing is shown as the search fetched it")
+    want = seller.strip().lower()
+    found = [e for e in s.entries if want and want in (e.get("identifier", "").lower(), e.get("id", "").lower(),
+                                                       e.get("name", "").lower())]
+    if not found:
+        found = [e for e in s.entries if want and e.get("name", "").lower().startswith(want)]
+    if len(found) != 1:
+        names = ", ".join(e.get("name", e.get("identifier", "?")) for e in s.entries)
+        raise RuntimeError(f"{'no seller' if not found else 'more than one seller'} from the search matches {seller!r}; "
+                           f"the search found: {names}")
+    print("\n".join(screens.listing_lines(found[0])))
 
 
 @_tool("maya")

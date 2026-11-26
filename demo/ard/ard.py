@@ -71,55 +71,91 @@ def _publisher_of(ident: str) -> str:
     return parts[2] if len(parts) >= 4 and parts[:2] == ["urn", "air"] else ""
 
 
+#: Why a seller's listing was refused, one plain sentence each for the person (evidencebook-skills#345, Sherlock2 on
+#: #352 and in buzz 9a59de7c): no file names, digests or error text, and "signed terms", not "commitment" (#332). The technical detail goes to the item's ``detail`` and the buyer's own
+#: records, never to her chat.
+UNREACHABLE = "the seller's site could not be reached"
+NOT_LISTED = "the seller's site does not list this seller"
+UNREADABLE = "the seller's own listing could not be read"
+DIFFERS = "the registry's copy of the listing differs from the seller's own"
+WRONG_SITE = "the listing does not name the site it was published on"
+NO_COMMITMENT = "the listing does not say how to ask this seller for evidence"
+NOT_NAMED = "the seller's signed terms are not the ones its listing names"
+NOT_VERIFIED = "the seller's signature on its terms does not check out"
+COMMITMENT_UNREADABLE = "the seller's listing or its signed terms could not be read"
+
+
+def _refuse(item: dict, reason: str, detail: str = "") -> None:
+    item["problem"] = reason
+    if detail:
+        item["detail"] = detail
+
+
+def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
+    """The checks on one seller's own entry, recorded on ``item``: its copy matches the registry's, its identity names
+    its publisher, and the commitment it names is the one served and verifies. A failed check sets ``problem``."""
+    if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
+        return _refuse(item, DIFFERS)
+    item["checks"].append("the registry's copy matches the seller's own")
+    tm = own.get("trustManifest") or {}
+    if tm.get("identity") != domain:
+        return _refuse(item, WRONG_SITE, f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}")
+    item["checks"].append("the listing names the site it was published on")
+    att = next((a for a in tm.get("attestations") or [] if isinstance(a, dict) and a.get("type") == PROFILE), None)
+    if att is None:
+        return _refuse(item, NO_COMMITMENT, f"no {PROFILE} attestation in the entry's trustManifest")
+    item["offer"] = own["x-demo-offer"]
+    item["uri"] = att["uri"]
+    octets = _fetch(att["uri"])
+    item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
+    if not item["digest_matches"]:  # the entry points at another document than the one served
+        return _refuse(item, NOT_NAMED, f"the digest of {att['uri']} differs from the entry's {att['digest']}")
+    # the next check line says both: the terms are the ones named, and the signature checks out
+    try:
+        doc_c = json.loads(octets)
+    except ValueError as exc:  # the terms are the ones named but are not JSON: unreadable, not a failed signature
+        return _refuse(item, COMMITMENT_UNREADABLE, repr(exc))
+    try:
+        cm.verify(doc_c)
+    except Exception as exc:  # noqa: BLE001
+        return _refuse(item, NOT_VERIFIED, repr(exc))
+    item["identity"] = doc_c["key_id"]
+    item["commitment"] = doc_c
+    item["checks"].append("the seller's signed terms are the ones the listing names, and the signature checks out")
+
+
 def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
     """Search the registry, then check each result against the seller's own entry and commitment. Each
-    item says what was checked (``checks``); an item that fails a check has ``problem`` set and no
-    ``commitment``. ``origins`` maps a publisher domain to the address it is served at."""
+    item says what was checked (``checks``); an item that fails a check has ``problem`` set (a plain reason above),
+    ``detail`` when there is more to keep, and no ``commitment``. ``origins`` maps a publisher domain to the address it
+    is served at."""
     found = []
     for result in search(registry_url, text).get("results", []):
         ident = result.get("identifier", "")
         domain = _publisher_of(ident)
         item: dict[str, Any] = {"identifier": ident, "id": ident.rsplit(":", 1)[-1], "name": result.get("displayName", ident),
-                                "publisher": domain,
-                                "checks": [f"registry result: {ident} (relevance {result.get('score')}, a pointer only)"]}
+                                "publisher": domain, "score": result.get("score"),
+                                "checks": []}
         found.append(item)
         origin = origins.get(domain)
         if not origin:
-            item["problem"] = f"publisher {domain or '?'} is not one the buyer can reach"
+            _refuse(item, UNREACHABLE, f"publisher {domain or '?'} is not one the buyer can reach")
             continue
+        item["fetched_from"] = origin + WELL_KNOWN  # the address tried, kept in the buyer's records even on a failure
         try:
             own = next(e for e in json.loads(_fetch(origin + WELL_KNOWN))["entries"] if e["identifier"] == ident)
         except StopIteration:
-            item["problem"] = "the seller's own ard.json has no entry with this identifier"
+            _refuse(item, NOT_LISTED, f"{origin}{WELL_KNOWN} has no entry {ident}")
             continue
-        except Exception as exc:
-            item["problem"] = f"the seller's own ard.json: {exc}"
+        except Exception as exc:  # noqa: BLE001
+            _refuse(item, UNREADABLE, f"{origin}{WELL_KNOWN}: {exc!r}")
             continue
-        item["checks"].append(f"seller's own entry fetched from {domain} ({origin}{WELL_KNOWN})")
-        if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
-            item["problem"] = "the registry's copy and the seller's own entry differ"
-            continue
-        item["checks"].append("registry copy matches the seller's own entry")
-        tm = own.get("trustManifest", {})
-        if tm.get("identity") != domain:
-            item["problem"] = f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}"
-            continue
-        item["checks"].append(f"identity names the publisher {domain} (a local stand-in: nothing proves domain control)")
-        item["offer"] = own["x-demo-offer"]
-        att = next(a for a in tm.get("attestations", []) if a.get("type") == PROFILE)
-        item["uri"] = att["uri"]
-        octets = _fetch(att["uri"])
-        item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
-        if not item["digest_matches"]:  # the entry points at another document than the one served
-            item["problem"] = "the served commitment's digest differs from the one the seller's entry names"
-            continue
-        item["checks"].append("the commitment served is the one the seller's entry names")
-        try:
-            doc_c = json.loads(octets)
-            cm.verify(doc_c)
-            item["identity"] = doc_c["key_id"]
-            item["commitment"] = doc_c
-            item["checks"].append("commitment signature verifies")
-        except Exception as exc:
-            item["problem"] = f"commitment: {exc}"
+        item["entry"], item["registry"] = own, result  # for the listing tool
+        item["checks"].append("found in the registry, then read from the seller's own site")
+        try:  # any malformed field or fetch fails this seller only; the entry fetched stays for the listing
+            _check_entry(item, own, result, domain)
+        except Exception as exc:  # noqa: BLE001
+            for k in ("offer", "commitment", "identity"):
+                item.pop(k, None)
+            _refuse(item, COMMITMENT_UNREADABLE, repr(exc))
     return found
