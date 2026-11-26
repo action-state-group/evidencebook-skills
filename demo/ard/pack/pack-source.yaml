@@ -19,7 +19,7 @@ pack_id: demo/ard_admission/2.1.0
 pack_version: 2.1.0
 scope:
   kind: admission
-source: "demo copy of evidencebook-skills admission-baseline@1; placeholder thresholds, for this demo only"
+source: "demo copy of evidencebook-skills admission-baseline@1; placeholder thresholds, for this demo only, except the band row, which is the baseline's"
 
 outcomes: ["GO", "ASK", "LIMIT", "NO"]
 # A missing input limits to T0; it is never a silent GO.
