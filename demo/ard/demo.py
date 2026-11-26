@@ -208,7 +208,7 @@ class Script:
             print(f"Not yet time-stamped: {pt.WITNESS_NAME} did not answer within 12 seconds. Both parties have the "
                   f"ruling without a stamp. This run keeps asking for {adj.LATER_S // 60} minutes and, once stamped, "
                   "sends the ruling to both parties again with its stamp.")
-        print(f"Ruling recorded: not met, against {SELLERS[deal.seller]['label']}. Sent to both parties; each enters it.")
+        print(f"Ruling recorded: not met, against {screens.stop(SELLERS[deal.seller]['label'])} Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 60
         while time.time() < stop and not (self.maya.notes(flow.RULING_ENTERED) and agent.party.notes(flow.RULING_ENTERED)):

@@ -122,9 +122,10 @@ before paying is its own approval dialog.
   answer themselves. Never call it on your own. A dispute moves no money
   and asks the deal's adjudicator, which the operator runs, to rule.
 - Say a card's counts and the verdicts in these words (Steven's, from his hand runs): "deals that didn't go as
-  agreed" for the did-not-hold count (never "failed deals"), "every one went as agreed" when that count is 0,
-  "Good to buy" for GO, "Small orders only" for LIMIT and "Not from this seller" for NO; say why in the tool's own
-  words (a dispute decided against it, a ruling you hold against it). Never name a tool to the person (say
+  agreed" for the did-not-hold count (never "failed deals"), "every one went as agreed" only when there are deals
+  and that count is 0, "No deals yet, and no disputes." for a card with neither (never "0 deals, every one went as
+  agreed"), "Good to buy" for GO, "Small orders only" for LIMIT and "Not from this seller" for NO; say why in the
+  tool's own words (a dispute decided against it, a ruling you hold against it). Never name a tool to the person (say
   "the payment", never `ard_pay`).
 - The assessment takes some inputs from the operator without checking them (which marketplace the seller is on,
   the list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's key); the
