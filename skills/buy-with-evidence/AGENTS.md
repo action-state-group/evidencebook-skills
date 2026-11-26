@@ -93,7 +93,7 @@ step, to the demo host's tool and to the capsule host's existing command.
 
 | Verb | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|---|
-| record | 1 Spending limit | `ard_set_limit`, only after the person's yes to the proposed limit: a dialog asks them, and only their click sets it | the confirmed limit as the profile's rules checker, capsule-engine's `guard check --limits` |
+| record | 1 Spending limit | `ard_set_limit`, only after the person's yes to the proposed limit: a dialog asks them, and only their click sets it | the confirmed limit, set by the operator as the profile's rules checker (capsule-engine's `guard check --limits`) |
 | ask | 2 Search | `ard_find_sellers`, given the person's ask word for word (kept for each deal's intent; the registry gets the item only) | an ARD search verb (capsule-cli#572) |
 | verify | 2 Check entries and commitments | `ard_find_sellers` checks each one; `ard_show_listing` shows one seller's listing as the search checked it | `capsulectl commitment find`, which checks the commitment's signature, key and staples |
 | ask | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card | `request` / `respond` over the mailbox (capsule-cli#573) |
