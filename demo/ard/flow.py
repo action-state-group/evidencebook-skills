@@ -9,6 +9,7 @@ record or computes a row's status: each step is a capsulectl verb, and what the 
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -33,6 +34,7 @@ CASE = "ard_case"            # a party's dispute went to the adjudicator
 RULING_ENTERED = "ard_ruling_entered"
 RULING_STAMPED = "ard_ruling_stamped"  # the ruling's witnessed time, once a later file carried its receipt
 BOOK_SENT = "ard_book_sent"
+PROOF_SENT = "ard_proof_witnessed"  # the stamp proof of the book sent, with the witness's receipt, went to the adjudicator
 DELIVERED_SEEN = "ard_delivery_seen"
 #: How long a party waits for the other side's next file before it gives up on that step.
 WAIT_S = 180
@@ -133,7 +135,16 @@ class SellerAgent:
 
     def say(self, line: str) -> None:
         with self._lock:
+            # the trying-again lines said since the last other line (set here, so an agent made without __init__ has it)
+            if not screens.once_per_failure(self.__dict__.setdefault("_failing", set()), line):
+                return
             self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
+
+    def failed(self, what: str, exc: BaseException) -> None:
+        """One plain line for a step that failed this round (evidencebook-skills#327), said once while it keeps failing
+        the same way (:meth:`say`); the error itself goes to the seller's own log every time."""
+        self.party.log(f"{what}: {exc!r}")
+        self.say(screens.trying_again(what, exc))
 
     def stop(self, take_rulings: bool = False) -> None:
         """Stop the agent's loop; with ``take_rulings``, then take any ruling file waiting for it (a ruling sent again
@@ -145,7 +156,7 @@ class SellerAgent:
             try:
                 self._rulings()
             except Exception as exc:  # shown in its log, as a failed loop step is
-                self.say(f"refused or failed: {exc}")
+                self.failed("entering the adjudicator's ruling", exc)
         self.party.close()
 
     def advertise(self) -> dict:
@@ -181,19 +192,25 @@ class SellerAgent:
             self.party.stamp() if now else self.party.tick()
             publish_card(self.home, self.party)
         except pt.Refused as exc:
-            self.say(f"card not published yet: {exc}")
+            self.failed("publishing this seller's History card", exc)
 
     def _loop(self) -> None:
         last_card = 0.0
         while not self._stop.is_set():
-            for step in (self._offers, self._agreements, self._payments, self._statements, self._disputes, self._requests,
-                         self._rulings, self._named):
+            for what, step in (("taking the buyer's offer", self._offers), ("keeping the buyer's agreement", self._agreements),
+                               ("taking the payment and delivering", self._payments),
+                               ("keeping the buyer's statement", self._statements), ("keeping the dispute", self._disputes),
+                               ("answering the adjudicator's request for this seller's books", self._requests),
+                               ("entering the adjudicator's ruling", self._rulings), ("keeping the buyer's copy of the ruling", self._named)):
                 try:
                     step()
-                except Exception as exc:  # one failed step is shown in the seller's log and retried next round
-                    self.say(f"refused or failed: {exc}")
+                except Exception as exc:  # one plain line in the seller's log, retried next round
+                    self.failed(what, exc)
             if time.monotonic() - last_card > 20:
-                self.republish()
+                try:
+                    self.republish()
+                except Exception as exc:  # never ends the seller's loop
+                    self.failed("publishing this seller's History card", exc)
                 last_card = time.monotonic()
             self._stop.wait(0.5)
 
@@ -335,10 +352,13 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
     """For each ruling the adjudicator sent this party: enter it in the party's own book (``deal receive --out``), hand the
     naming statement to the other side, and send the adjudicator this party's book with the entry and its stamp proof,
     for its entry check. A ruling file that arrives again after the adjudicator's stamp reached the witness is taken again
-    for its receipt. Returns the deals whose ruling was entered now."""
+    for its receipt. A book sent before the witness took its stamp has its proof sent again, with the witness's receipt,
+    once the witness has taken it (evidencebook-skills#328), so the adjudicator sees the entry time-stamped. Returns the
+    deals whose ruling was entered now."""
     entered = {n["statement"]["deal_id"]: n["statement"].get("stamped_at", "") for n in p.notes(RULING_ENTERED)}
     stamped = {n["statement"]["deal_id"] for n in p.notes(RULING_STAMPED)}
-    sent = {n["statement"]["deal_id"] for n in p.notes(BOOK_SENT)}
+    sent = {n["statement"]["deal_id"]: n["statement"].get("copy", "") for n in p.notes(BOOK_SENT)}
+    proved = {n["statement"]["deal_id"] for n in p.notes(PROOF_SENT)}
     done = []
     for deal_id, file in wire.pending(home, p.name, "ruling"):
         if deal_id not in entered:
@@ -352,19 +372,42 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 + (f" (time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)})" if when else ""))
         elif not entered[deal_id] and deal_id not in stamped and pt.witnessed():
             mark = p.dir / "handled" / f"{deal_id}.ruling-seen"
-            if not mark.exists() or file.stat().st_mtime > mark.stat().st_mtime:
-                mark.parent.mkdir(exist_ok=True)
-                mark.touch()
+            arrived = file.stat().st_mtime
+            if not mark.exists() or arrived > mark.stat().st_mtime:
                 when = _stamped(p.receive(file))
                 if when:
                     p.note(RULING_STAMPED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
                     stamped.add(deal_id)
                     say(f"the ruling on deal {deal_id[5:13]} was time-stamped by {pt.WITNESS_NAME} at "
                         f"{screens.local_time(when, date=True)}")
+                # marked only once taken and noted, at the version taken: a failure is tried again next round, and a
+                # file that arrives again meanwhile is still newer than the mark
+                mark.parent.mkdir(exist_ok=True)
+                mark.touch()
+                os.utime(mark, (arrived, arrived))
         if deal_id not in sent:
-            adj.send_book(home, p, deal_id, side, say)
-            p.note(BOOK_SENT, {"deal_id": deal_id}, subject_ref=deal_id)
-            sent.add(deal_id)
+            what = "sending this party's book, with the ruling entered, to the adjudicator"
+            try:
+                copy = adj.send_book(home, p, deal_id, side, say)
+                p.note(BOOK_SENT, {"deal_id": deal_id, "copy": str(copy)}, subject_ref=deal_id)
+            except Exception as exc:  # the ruling stays entered; the book goes on a later round
+                p.log(f"{what}: {exc!r}")
+                say(screens.trying_again(what, exc))
+                continue
+            sent[deal_id] = str(copy)
+        elif deal_id not in proved and pt.witnessed():
+            what = "sending the adjudicator this party's book's time-stamp"
+            # the copy sent; a note from before evidencebook-skills#328 names none: the copy the adjudicator holds
+            copy = Path(sent[deal_id] or wire.path(home, adj.ADJUDICATOR, deal_id, f"book-{side}"))
+            try:
+                got = adj.send_proof_once_witnessed(home, p, deal_id, copy, side, say)
+                if got and got != adj.GAVE_UP:
+                    p.note(PROOF_SENT, {"deal_id": deal_id, "copy": str(got)}, subject_ref=deal_id)
+                    proved.add(deal_id)
+            except Exception as exc:  # tried again on a later round
+                p.log(f"{what}: {exc!r}")
+                say(screens.trying_again(what, exc))
+                continue
     return done
 
 
@@ -456,4 +499,41 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
         who = names.get(c.ruling["against"], "no one")
         found = "not met" if c.ruling["value"] == "not_met" else "met"
         out.append(f"  ruling recorded: {found}, against {who} (ruling {c.ruling['ruling'][:8]}…)")
+    return out
+
+
+def entry_lines(deal_id: str, rows: list[dict], names: dict[str, str]) -> list[str]:
+    """Whether each party entered the adjudicator's ruling, from ``deal ruling entries`` (``rows``), saying which record
+    a missing stamp is on (evidencebook-skills#328): first the ruling's own stamp (its witnessed time, which capsulectl
+    reads from the adjudicator's own case book and reports with each party's row), then each party's entry, keeping
+    every state capsulectl tells apart (evidencebook ``xdealv1`` entry states, ``deal_v1_entries.go``)."""
+    short = deal_id[5:13]
+    if not rows:
+        return [f"deal {short}: no party has sent its book back yet; the ruling's time-stamp and each entry show once "
+                "one has"]
+    at = next((r["ruling_witnessed_at"] for r in rows if r.get("ruling_witnessed_at")), "")
+    out = [f"deal {short}: the ruling was time-stamped by {pt.WITNESS_NAME} at {screens.local_time(at, date=True)}"
+           if at else f"deal {short}: the ruling is not time-stamped yet ({pt.WITNESS_NAME} has not taken its stamp)"]
+    seen = set()
+    for r in rows:
+        who = names.get(r.get("party", ""), r.get("party", "a party"))
+        seen.add(r.get("party"))
+        state = r.get("state", "")
+        if state == "entered":
+            out.append(f"  {who}: entered it; the entry is time-stamped by {pt.WITNESS_NAME}")
+        elif state == "entered_unwitnessed":
+            out.append(f"  {who}: entered it; the entry is not time-stamped yet (its book's stamp has not reached "
+                       f"{pt.WITNESS_NAME}; it sends the stamp once it has)")
+        elif state == "not_entered":
+            out.append(f"  {who}: had not entered it as of its book's checkpoint at "
+                       f"{screens.local_time(r.get('checkpoint_at', ''), date=True)}")
+        elif state == "not_shown":
+            out.append(f"  {who}: its book does not show it entered yet "
+                       + ("(the ruling has no time-stamp yet to compare with)" if not at else
+                          "(its book was last sealed before the ruling's time-stamp)"))
+        else:  # a state this demo does not know: capsulectl's own words
+            out.append(f"  {who}: {r.get('words', state)}")
+    for side in ("buyer", "seller"):
+        if side not in seen and side in names:
+            out.append(f"  {names[side]}: has not sent their book back yet")
     return out

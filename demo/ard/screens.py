@@ -35,6 +35,32 @@ ADJUDICATOR_INDEPENDENCE = ("This adjudicator is run by the operator, who also r
                             "independent of the parties.")
 
 
+def trying_again(what: str, exc: BaseException) -> str:
+    """A step an agent does on its own that failed this round, in a person's words (evidencebook-skills#327, Sherlock2:
+    "one plain line saying it will retry"). A slow witness says so; any other failure says only that it is retried. The
+    failure's own text goes to the party's log (:meth:`party.Party.log`), never into a chat."""
+    if isinstance(exc, pt.WitnessSlow):
+        return f"{what}: waiting for {pt.WITNESS_NAME}, which is slow or not answering; {TRYING_AGAIN}"
+    return f"{what}: not done yet (the reason is in this party's log, agent.log); {TRYING_AGAIN}"
+
+
+#: How every :func:`trying_again` line ends: a party's log says it once until something else happens (once_per_failure).
+TRYING_AGAIN = "trying again"
+
+
+def once_per_failure(failing: set[str], line: str) -> bool:
+    """Whether ``line`` should be said: a :func:`trying_again` line only while it is not already said for this failure
+    (a step that keeps failing says so once, not every round or every request); any other line is said, and ends every
+    failure said so far, so a failure that comes back after progress is said again."""
+    if line.endswith(TRYING_AGAIN):
+        if line in failing:
+            return False
+        failing.add(line)
+        return True
+    failing.clear()
+    return True
+
+
 def fee_note(fee_msat: int | None, real: bool) -> str:
     """The fee on Maya's payment line: on a real rail it is the routing fee her own wallet reports for the
     send. It says nothing about what the seller's wallet was credited (Maya has no record of that)."""

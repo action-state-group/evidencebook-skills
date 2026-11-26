@@ -94,6 +94,8 @@ _PARTIES: dict[Path, pt.Party] = {}
 ANSWER_WAIT_S = 45
 #: How long a ruling stamp the witness did not take in the foreground keeps being taken in the background.
 LATER_S = 180
+#: One ask at a time in this process (Adjudicator.ask).
+_ASKING = threading.Lock()
 #: The background stamp threads started (Adjudicator.stamp), so a caller or a test can wait for them.
 LATER: list[threading.Thread] = []
 
@@ -145,14 +147,15 @@ class Adjudicator:
         """For each dispute sent here that it has not asked about yet: ask the deal's buyer and seller for their books
         (one request each, through the stage). Returns the deals asked about now."""
         asked = []
-        for deal_id, _f in wire.pending(self.home, ADJUDICATOR, "dispute"):
-            if wire.path(self.home, ADJUDICATOR, deal_id, "asked").is_file():
-                continue
-            parties = json.loads(wire.path(self.home, ADJUDICATOR, deal_id, "parties").read_text())
-            for side in ("buyer", "seller"):
-                wire.send_json(self.home, parties[side], deal_id, "adjrequest", request_for(deal_id))
-            wire.send_json(self.home, ADJUDICATOR, deal_id, "asked", {"at": _now(), **parties})
-            asked.append(deal_id)
+        with _ASKING:  # the window's ask-on-arrival loop and ard_case's own ask never send a request twice
+            for deal_id, _f in wire.pending(self.home, ADJUDICATOR, "dispute"):
+                if wire.path(self.home, ADJUDICATOR, deal_id, "asked").is_file():
+                    continue
+                parties = json.loads(wire.path(self.home, ADJUDICATOR, deal_id, "parties").read_text())
+                for side in ("buyer", "seller"):
+                    wire.send_json(self.home, parties[side], deal_id, "adjrequest", request_for(deal_id))
+                wire.send_json(self.home, ADJUDICATOR, deal_id, "asked", {"at": _now(), **parties})
+                asked.append(deal_id)
         return asked
 
     def cases(self) -> list[dict]:
@@ -298,7 +301,9 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
                 raise
             continue  # a record sealed since the stamp: stamped again on the next round
         if got.get("outcome") != "artifact":
-            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: {got.get('reason', got)}")
+            p.log(f"the adjudicator's request for deal {deal_id}: deal respond said {json.dumps(got)}")
+            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: this party's records refused it for this "
+                "party's books, so it is not tried again")
             mark.parent.mkdir(exist_ok=True)
             mark.touch()  # a refusal is final for that request: it is not tried again every round
             continue
@@ -311,10 +316,80 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
     return done
 
 
-def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> None:
+def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> Path:
     """After entering a ruling, send the adjudicator this party's copy (``deal report --share adjudicator``) so it can read
-    the entry (``deal ruling entries``)."""
+    the entry (``deal ruling entries``), with the stamp proof of the checkpoint it rests on. Returns the copy sent."""
     copy = p.bundle(deal_id, "adjudicator", "the deal's adjudicator", wait=30)
     wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", copy)
-    wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", p.proof(deal_id, copy))
-    say("this party's book, with the ruling entered, sent to the adjudicator")
+    proof = p.proof(deal_id, copy)
+    wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
+    say("this party's book, with the ruling entered, sent to the adjudicator"
+        + ("" if _receipts(proof) or not pt.witnessed() else
+           f"; its time-stamp follows once {pt.WITNESS_NAME} has taken it"))
+    return copy
+
+
+#: How often a party looks for the witness's receipt of a book it sent without one (send_proof_once_witnessed).
+PROOF_EVERY_S = 20
+
+
+def _receipts(proof: Path) -> bool:
+    try:
+        return bool(json.loads(Path(proof).read_text()).get("witness_receipts"))
+    except (OSError, ValueError):
+        return False
+
+
+def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path, side: str, say) -> Path | str | None:
+    """For a book sent before the witness took the stamp it rests on, at most every :data:`PROOF_EVERY_S`: deliver
+    pending stamps (``deal tick``), make that copy's stamp proof again and, once it carries the witness's receipt, send it
+    to the adjudicator, so ``deal ruling entries`` shows the entry time-stamped (evidencebook-skills#328). A proof is
+    always of its own copy (capsulectl binds them). When the book has changed since (a later statement or ruling file),
+    no later stamp covers the old copy, so one new copy is made, once per process (a shared copy seals a disclose
+    record, so a copy every round would keep changing the book), and, once its own proof carries a receipt, both go.
+
+    Returns the copy whose time-stamped proof was sent, :data:`GAVE_UP` once after :data:`PROOF_GIVE_UP_S` (said, and
+    not tried again by this process), or None when there is nothing new this round. The pace and the deadline are this
+    process's own (:data:`_PROOF_TRIES`): a reopened window is a new process and starts again, with nothing on disk to
+    carry an old deadline over."""
+    key, now = (p.dir, deal_id), time.time()
+    first, last = _PROOF_TRIES.get(key, (now, 0.0))
+    copy = _NEW_COPY.get(key, copy)
+    if first is None or now - last < PROOF_EVERY_S:  # gave up in this process, or tried less than PROOF_EVERY_S ago
+        return None
+    if now - first > PROOF_GIVE_UP_S:
+        _PROOF_TRIES[key] = (None, now)
+        p.log(f"deal {deal_id}: this party's time-stamped book not sent to the adjudicator in {PROOF_GIVE_UP_S} s; "
+              "stopped trying")
+        say(f"this party's book of deal {deal_id[5:13]}: its time-stamp could not be sent to the adjudicator in "
+            f"{PROOF_GIVE_UP_S // 60} minutes; the ruling is entered. Reopening this window tries again.")
+        return GAVE_UP
+    _PROOF_TRIES[key] = (first, now)
+    p.tick()
+    for c in ([copy] if copy.is_file() else []) + ([None] if key not in _NEW_COPY else []):
+        if c is None:  # the book changed since that copy: one new copy, on the checkpoints there are
+            try:
+                c = p.bundle(deal_id, "adjudicator", "the deal's adjudicator")
+            except pt.Refused:
+                return None  # a record after its last checkpoint: the next tick covers it
+            _NEW_COPY[key] = c
+        proof = p.proof(deal_id, c)
+        if _receipts(proof):
+            # the book and its own proof go together every time, so a retry after a half-sent pair never leaves the
+            # adjudicator one copy's proof beside another copy's book
+            wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", c)
+            wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
+            say(f"this party's book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by "
+                f"{pt.WITNESS_NAME}; sent to the adjudicator")
+            return c
+    return None
+
+
+#: How long a party keeps looking for its book's witness receipt (send_proof_once_witnessed).
+PROOF_GIVE_UP_S = 900
+#: send_proof_once_witnessed stopped looking, in this process.
+GAVE_UP = "gave up"
+#: Per party folder and deal: when this process first tried, and when it last tried (first None: it gave up).
+_PROOF_TRIES: dict[tuple[Path, str], tuple[float | None, float]] = {}
+#: Per party folder and deal: the one new copy this process made (send_proof_once_witnessed), tried from then on.
+_NEW_COPY: dict[tuple[Path, str], Path] = {}

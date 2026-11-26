@@ -360,7 +360,9 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    **Expect:** "Dispute raised on this deal's delivery. Sent to Kestrel Print and to the adjudicator your agreement names. Nothing is refunded by this step."
 
 8. Cmd+` to Kestrel's window, type `What happened?`.
-   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …: the adjudicator will ask for this seller's books". After step 9, also "the adjudicator asked for this party's books of deal …: sent in full (its own book and the copy it holds of the other side's)".
+   **Expect:** among the lines: "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so)", "the buyer disputed the delivery …: the adjudicator will ask for this seller's books". Once the adjudicator has asked (it asks as soon as the dispute arrives), also "the adjudicator asked for this party's books of deal …: sent in full (its own book and the copy it holds of the other side's)".
+
+   **Steps 9 to 11 wait on Action State's witness.** When it answers slowly, an answer can say "no answer yet", "not yet", "not time-stamped yet" or "trying again". Wait a minute and ask the same question again; nothing needs doing in another window. What a party's agent does on its own (answering the adjudicator, entering the ruling, sending its book) says in one line when it has to wait, and tries again; the error itself goes to that party's log (Troubleshooting 8).
 
 9. Cmd+` to the adjudicator's window, type:
 
@@ -368,7 +370,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Show me the case.
    ```
 
-   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "own book and the copy held of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". It waits up to 30 seconds for the answers; if one says "no answer yet", ask again.
+   **Expect:** "This adjudicator is run by the operator, who also runs every party here: it is not independent of the parties.", then "deal …, row delivered: disputed by Maya", "asked both sides for their books at …", "Maya answered at …" and "Kestrel Print answered at …" (each: "own book and the copy held of" the other side's), "Maya's statement on the row: not met" and "Kestrel Print's own signed delivery record: 150 of 200 badges". The adjudicator asked for the books when the dispute arrived (step 7), so they are usually in by now; it waits up to 30 seconds more for any still out. If one says "no answer yet", wait a minute and ask again.
 
 10. Type, then answer the dialog.
 
@@ -379,7 +381,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** the dialog "Rule on deal …, row delivered: not met, against Kestrel Print. Conflict: the operator runs this adjudicator and every party here, so it is not independent of the parties. Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." (default Cancel); click Rule. Then "Ruling recorded … not met, against Kestrel Print" and "Its stamp was taken by Action State's witness; each party's window shows the time it was stamped.", "Sent to both parties; each enters it in its own records." (when the witness is slow or out of reach: "Not yet time-stamped: Action State's witness did not answer within 12 seconds. Both parties have the ruling without a stamp. This window keeps asking for 3 minutes and, once stamped, sends the ruling to both parties again with its stamp. Keep this window open until then. If none comes by then, run this again.").
 
 11. After a few seconds, type `Did both parties enter it?`.
-    **Expect:** "Maya: entered" and "Kestrel Print: entered". Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
+    **Expect:** "deal …: the ruling was time-stamped by Action State's witness at …", then "Maya: entered it; the entry is time-stamped by Action State's witness" and the same for Kestrel Print. With a slow witness a line can say "not time-stamped yet" or "has not sent their book back yet": wait a minute and ask again, since each party sends its book and its stamp on its own. Cmd+` to Kestrel's window and ask `What happened?` again: "the adjudicator's ruling on deal … entered in this party's records", with the time Action State's witness stamped it.
 
 12. In Kestrel's window, type `Show my History card.`
     **Expect:** "11 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 10 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
@@ -399,7 +401,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "Maya's statement sent to Alder Print Co.: she received what she paid for." Cancel instead: "Maya chose Cancel, so nothing was sent in Maya's name."
 
 15. Type `Show your History card, then your receipt.`
-    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …" (or, before her next checkpoint reaches the witness, "Not time-stamped yet: the next checkpoint sends it to Action State's witness.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at … (… UTC), as capsulectl verify reported on your own book. This file carries no witness receipt, so this page did not check it itself." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are in this Mac's own zone, with UTC beside the due and window-end times.
+    **Expect:** Maya's card counts her 2 deals; her receipt reads each row's status as capsulectl reports it (Alder's deal: met so far, as both sides said, still open to dispute until its window ends), "Signed by both sides: the other side's half verifies (capsulectl deal verify).", "Time-stamped by Action State's witness at …, as capsulectl verify reported on Maya's own book." (the same time as the page below; with a slow witness, "Not time-stamped yet: Action State's witness has not taken Maya's latest stamp; ask again in a minute.") and "Test money: this deal's payment was on a simulated rail. No real money moved." Then type `Open your receipt as a page.` **Expect:** a browser page "Deal report" with "✓ Unchanged since it was sealed", "10 of 10 checks passed", "Time-stamped by Action State's witness at … (… UTC), as capsulectl verify reported on your own book. This file carries no witness receipt, so this page did not check it itself." and "Signed by both sides: this copy carries the other party's signed agreement, recorded in their own book." Its times are in this Mac's own zone, with UTC beside the due and window-end times.
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 
@@ -515,10 +517,12 @@ To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the window
 
 3. **A command says a variable is not set.** Copy the export line it prints, put in your own paths, and run it again.
 
-4. **The adjudicator's case says Kestrel Print: no answer yet.** Kestrel's window is not running: open it and ask again. The case can still be ruled on from Maya's answer, which carries the records Kestrel signed that she holds, its delivery record among them.
+4. **The adjudicator's case says Kestrel Print: no answer yet.** With a slow witness an answer can take a minute or two: wait and ask again. If it still says so, Kestrel's window is not running: open it and ask again. The case can still be ruled on from Maya's answer, which carries the records Kestrel signed that she holds, its delivery record among them.
 
 5. **A window shows nothing new.** Bring it to the front (Cmd+`); a background window may not draw its reply.
 
 6. **Maya finds only one seller.** A seller publishes its entry when its window starts. Wait until both seller windows are open, then ask again.
 
 7. **Goose asks Trust and Execute again.** Expected after every reset: reset clears the trust in the demo's recipes. Once, after moving to this version from one before evidencebook-skills#277: the first reset finds no note of the demo's recipes and deletes no trust, so the next windows may open without a Trust prompt; from the next reset on, it is asked again.
+
+8. **A window says a step is "not done yet (the reason is in this party's log, agent.log); trying again".** The window keeps trying on its own. The full error is in that party's log: `~/.config/ard-commerce-demo/<maya|alder|kestrel|adjudicator>/agent.log` (under `$ARD_HOME` if you set it).

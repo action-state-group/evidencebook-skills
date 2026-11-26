@@ -35,7 +35,7 @@ from ctl import Ctl, Refused  # noqa: E402
 os.environ.setdefault("GOOSE_CAPSULECTL_DEAL", os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"))
 os.environ.setdefault("GOOSE_CAPSULE_ENGINE", os.environ.get("CAPSULE_ENGINE", "capsule-engine"))
 
-__all__ = ["Party", "Refused", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "witnessed"]
+__all__ = ["Party", "Refused", "WitnessSlow", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "witnessed"]
 
 #: Action State's hosted witness, ``deal init``'s default (capsulectl ``DealDefaultWitness``, ``DealDefaultWitnessKey``,
 #: evidencebook ``capsulectl/internal/deal/deal_verify_names.go``). Run by Action State, so not independent of the demo's
@@ -57,6 +57,11 @@ FORUM = "external:ard-demo"
 #: The two rows of every demo deal (the Goose reference's own, ``goose_node.ROW`` and ``DELIVERED``).
 PAID, DELIVERED = gn.ROW, gn.DELIVERED
 CURRENCY = "BTC"  # capsulectl reads a BTC amount_minor in msat (deal_rules.go msatCurrency)
+
+
+class WitnessSlow(Refused):
+    """The witness took no stamp of this party's within a wait. Its words are a person's (evidencebook-skills#327): the
+    last tick's output goes to the party's own log (:meth:`Party.log`), never into a chat."""
 
 
 def witnessed() -> bool:
@@ -148,6 +153,17 @@ class Party:
         prof.write_text(text.replace("\ncheckpoint:\n",
                                      f"\ncheckpoint:\n    endpoint: {WITNESS_URL}\n    public_key: {WITNESS_KEY}\n", 1))
 
+    def log(self, line: str) -> None:
+        """Append a line to this party's own log (``<party>/agent.log``): what a chat line leaves out, such as a verb's
+        raw output, for whoever looks into a failure (evidencebook-skills#327). Never raises."""
+        if getattr(self, "dir", None) is None:  # a Party made without __init__ (tests) has no folder
+            return
+        try:
+            with open(self.dir / "agent.log", "a") as fh:
+                fh.write(f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}  {line}\n")
+        except OSError:
+            pass
+
     def run(self, *args: str) -> Any:
         with self._lock:
             return self.ctl.run(*args)
@@ -207,17 +223,20 @@ class Party:
         (it answers slowly or with an error under load). A new try starts only with :data:`STAMP_TRY_S` left of
         ``seconds``, so the whole wait stays near ``seconds``; a try already under way is not cut off (capsulectl is
         then mid-delivery), and what it did not deliver goes with the next tick."""
-        stop, wait = time.monotonic() + seconds, StampWait()
+        stop, wait, failed = time.monotonic() + seconds, StampWait(), None
         while True:
             try:
-                t = self.stamp()
+                t, failed = self.stamp(), None
             except Refused as exc:
-                t = {"error": str(exc)}
+                t, failed = {"error": str(exc)}, exc
             if wait.add(t):
                 return t
             time.sleep(1)
             if stop - time.monotonic() < STAMP_TRY_S:
-                raise Refused(f"{self.name}: no checkpoint in {int(seconds)} s (last: {json.dumps(t)[:300]})")
+                self.log(f"no stamp taken in {int(seconds)} s; last tick: {json.dumps(t)}")
+                if failed is not None and wait.first is None:  # no checkpoint was cut: this party's own failure
+                    raise failed
+                raise WitnessSlow(f"{WITNESS_NAME} took no stamp within {int(seconds)} s")
             if say:
                 say("this party's checkpoint did not go through; trying again")
                 say = None
@@ -369,7 +388,12 @@ class Party:
             except Refused as exc:
                 if "after its last checkpoint" not in str(exc) or time.monotonic() >= stop:
                     raise
-            self.wait_checkpoint(max(stop - time.monotonic(), 1), say)
+            try:
+                self.wait_checkpoint(max(stop - time.monotonic(), 1), say)
+            except WitnessSlow:
+                # the stamp was cut, and a report needs only that checkpoint, not the witness's receipt of it (a proof
+                # sent later carries the receipt, adjudicator.send_proof_once_witnessed): the report is tried once more
+                stop = time.monotonic()
             say = None
 
     def proof(self, deal_id: str, copy: Path) -> Path:
@@ -381,11 +405,15 @@ class Party:
     def deals(self) -> list[dict]:
         return self.run("list", "--json")
 
-    def verify(self, bundle: Path) -> dict:
-        """``capsulectl verify --bundle`` on a file, with the hosted witness's directory so its receipts are checked."""
+    def verify(self, bundle: Path, proof: Path | None = None) -> dict:
+        """``capsulectl verify --bundle`` on a file, with the hosted witness's directory so its receipts are checked. With
+        ``proof`` (``deal checkpoint proof`` of that same copy), its x-deal-v1 entry also says the book's witness time,
+        ``witnessed: {status, witness, at}``, as ``deal report --html`` draws it (evidencebook ``deal_v1_witnessed.go``)."""
         args = ["verify", "--bundle", str(bundle)]
         if witnessed():
             args += ["--witness-directory", self.write("witnesses.json", witness_directory())]
+            if proof is not None:
+                args += ["--stamp-proof", str(proof)]
         return self.run(*args)
 
 
