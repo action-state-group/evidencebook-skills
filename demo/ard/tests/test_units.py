@@ -495,8 +495,9 @@ def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
 
 
 def test_the_e2e_names_a_local_witness_only_where_a_party_asked_for_one(tmp_path, monkeypatch):
-    """#371: with ARD_E2E_WITNESS_URL and _KEY, test_e2e makes a witnessed profile with --no-witness and names that
-    witness; one made without a witness (seed's sellers and sample buyers) stays without; one variable alone is refused."""
+    """#371: with ARD_E2E_WITNESS_URL and _KEY, test_e2e names that witness, and the demo's own code (#382) makes a
+    witnessed profile with --no-witness and then names it; one made without a witness (seed's sellers and sample
+    buyers) stays without; one variable alone is refused."""
     import party as pt
     from test_e2e import _local_witness
 
@@ -520,8 +521,9 @@ def test_the_e2e_names_a_local_witness_only_where_a_party_asked_for_one(tmp_path
         assert buyer.OPERATOR_FACTS["witness"] == "ab" * 32
         for name, witnessed in (("seller", True), ("sample", False)):
             p = pt.Party(tmp_path, name)
-            p.run(*(["init", "--dir", "d"] + ([] if witnessed else ["--no-witness"])))
-            assert calls[-1].count("--no-witness") == 1
+            p.create("node", witness=witnessed)
+            init = next(c for c in reversed(calls) if c[0] == "init")
+            assert init.count("--no-witness") == 1
             text = (p.dir / ".config" / "capsule" / "profiles" / f"{p.profile}.yaml").read_text()
             assert ("endpoint: https://localhost:8443" in text) is witnessed
     assert buyer.OPERATOR_FACTS["witness"] == pt.WITNESS_KEY != "ab" * 32  # undone with the context
