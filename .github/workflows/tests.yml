@@ -176,8 +176,9 @@ jobs:
             python -m pytest -v -rf demo/ard/tests/test_e2e.py | tee "$RUNNER_TEMP/hosted-e2e.txt"
       - name: report a failed hosted end-to-end test to its ci-red issue
         # Nightly, or a dispatch that asks for it (report-hosted), as the report job reports a red run.
+        # !cancelled(): also after a failed probe, which would otherwise skip this step (an implied success()).
         if: >-
-          steps.hosted-e2e.outcome == 'failure' &&
+          !cancelled() && steps.hosted-e2e.outcome == 'failure' &&
           (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.report-hosted))
         env:
           GH_TOKEN: ${{ github.token }}
