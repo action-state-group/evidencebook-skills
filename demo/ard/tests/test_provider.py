@@ -62,7 +62,8 @@ def test_claude_code_acp_needs_the_pinned_adapter(tmp_path, monkeypatch):
                                       "copilot-acp", "pi-acp"])
 def test_a_provider_that_runs_its_own_agent_is_refused(tmp_path, provider):
     msg = _ow().provider_problem(_root(tmp_path, f"active_provider: {provider}\n" + OFF))
-    assert msg and "runs its own agent" in msg
+    assert msg and "runs its own agent" in msg and provider not in msg  # plain words, no provider id (ops c0813d7e)
+    assert "Gemini or ChatGPT sign-in, an API key, or Claude Code (ACP)" in msg and "Settings, Models" in msg
 
 
 @pytest.mark.parametrize("provider", ["gemini_oauth", "openai", "anthropic", "chatgpt_codex"])

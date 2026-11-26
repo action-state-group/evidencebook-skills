@@ -292,9 +292,11 @@ def provider_problem(root: Path) -> str | None:
                     "folder; never npm install -g, which changes the adapter other tools use)")
         return None
     if provider in AGENT_PROVIDERS:
-        return (f"the demo's Goose is set to {provider}, which runs its own agent with its own tools, so the windows' "
-                "agents could act outside the demo's tools: choose Claude Code ACP or a provider Goose runs itself (an API "
-                "key, or a sign-in such as Gemini or ChatGPT) in its Settings, Models (open-windows.py --goose-only)")
+        # Sherlock2 on #340 (ops c0813d7e): the allowed choices and where to switch, in plain words, no provider id
+        return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
+                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose a Gemini or ChatGPT sign-in, an API "
+                "key, or Claude Code (ACP): start the demo's Goose with open-windows.py --goose-only and change it in "
+                "Settings, Models")
     if not provider:
         return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)"
     on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
