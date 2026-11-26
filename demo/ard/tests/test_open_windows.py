@@ -88,7 +88,7 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
     assert ow.LAYOUT[2].startswith('tell application "System Events"')
     out = capsys.readouterr()
-    assert out.err == "" and "tiled the four windows in quarters" in out.out
+    assert out.err == "" and out.out.endswith("tiled the four windows in quarters (read back from the screen)\n")
 
 
 @pytest.mark.parametrize("code,stderr,exc,why,grant", [
@@ -183,7 +183,6 @@ def test_the_search_path_env_is_valid_json_with_an_expanded_absolute_path(calls,
 def test_a_recipe_reset_could_not_clear_opens_nothing(calls, capsys, monkeypatch):
     def refuse(recipes, root):
         raise ValueError("trust_hash covers the demo's recipe shape only")
-    monkeypatch.setattr(ow.reset, "_hashes", lambda user=None: tmp_path / "recipe_hashes")  # nothing trusted yet
     monkeypatch.setattr(ow.reset, "note_trust", refuse)
     assert ow.main(["--rail", "fake"]) == 2
     assert calls == []  # no Goose started, no window opened
@@ -274,7 +273,8 @@ def test_a_recipe_goose_already_trusts_is_named_before_its_window_opens(calls, c
     assert ow.main(["--rail", "fake"]) == 0
     err = capsys.readouterr().err
     assert err.startswith("Goose already trusts these recipes, so their windows open with no Trust and Execute prompt: "
-                          "maya. To be asked again, quit Goose and run demo.py reset")
+                          "maya. To be asked again, quit Goose and do the RUNBOOK's \"Before each run\" again from step 1 "
+                          "(reset, seed and its wait, the balances, the windows).")
     assert [c[1] for c in calls if c[0] == "open" and c[1].startswith("goose://")][-1].endswith("maya")  # still opens
 
 

@@ -440,8 +440,10 @@ def already_trusted(recipes: list[dict]) -> list[str]:
     return [r["title"] for r in recipes if (folder / f"{reset.trust_hash(r)}.hash").is_file()]
 
 
+#: Reset deletes the demo home too, so the way back is the RUNBOOK's whole "Before each run" (its step 7 says the same).
 TRUSTED = ("Goose already trusts these recipes, so their windows open with no Trust and Execute prompt: {titles}. To be "
-           "asked again, quit Goose and run demo.py reset, then open the windows again.")
+           "asked again, quit Goose and do the RUNBOOK's \"Before each run\" again from step 1 (reset, seed and its wait, "
+           "the balances, the windows).")
 
 
 RUNNING = ("Goose Desktop is running: quit it first (osascript -e 'quit app \"Goose\"'), then run this again. "
@@ -511,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
         if failed := tile():
             print(failed, file=sys.stderr)  # the windows are open either way: tiling is a convenience
         else:
-            print("tiled the four windows in quarters, Maya's in front (read back from the screen)")
+            print("tiled the four windows in quarters (read back from the screen)")  # where, not which window is where
     return 0
 
 
