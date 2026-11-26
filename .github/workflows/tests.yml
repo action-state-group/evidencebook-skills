@@ -34,7 +34,8 @@ jobs:
     # push to main does not wait on a shared service: on 2026-11-26 the hosted witness took 8-9 s a stamp for one
     # profile and up to 59 s, or none within 120 s, for six at once, and the test runs several parties at once.
     # `hosted`, nightly and by hand only, one run at a time: the path a person's run takes, on Action State's hosted
-    # witness (network); a probe first times its stamps against the receipt page's own wait (receipt.PAGE_WAIT_S).
+    # witness (network); a probe times its stamps against the receipt page's own wait (receipt.PAGE_WAIT_S) and gates
+    # the leg, and the end-to-end test then runs on it, reported but not gating (see its step).
     name: ard-demo (${{ matrix.witness }} witness)
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -151,8 +152,13 @@ jobs:
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" \
             python demo/ard/tests/witness_probe.py --stamps 3
       - name: both deals end to end (Action State's hosted witness)
-        # after a slow probe too, so the run shows both
+        # After a slow probe too, so the run shows both. Reported, not gating: the test runs several parties stamping at
+        # once and waits on its own bounds (CARD_STAMPED_WAIT_S, stamp_wait), which the hosted witness under that load
+        # can miss (#378: run 45895441345 took every probe stamp in 8-10 s, then missed a 120 s card wait); the local leg
+        # gates the demo's logic and the probe above gates the witness against the page's own wait. A failure here
+        # shows as a warning on the run, its line naming the witness.
         if: matrix.witness == 'hosted' && (success() || steps.probe.outcome == 'failure')
+        continue-on-error: true
         run: |
           ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" \
