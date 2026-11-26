@@ -43,7 +43,7 @@ WITNESSES = ("public", "local", "off")
 RAILS = ("fake",)  # a rail that moves real money stays behind the RUNBOOK's real-rail steps
 #: capsule-anchor at the release Action State's hosted witness runs (v0.1.4: Cloud Run capsule-witness, label
 #: git-sha=78a69853bc83, read 2026-11-26, evidencebook-skills#371), and the commit whose ci/local-witness/start.sh
-#: starts it (capsule-anchor#118). scripts/check.sh pins the same two.
+#: starts it (capsule-anchor#118). tests.yml pins the same two for CI and scripts/check.sh (#378).
 CAPSULE_ANCHOR_PIN = "78a69853bc83c9c65b9fe79a8270b83727c55304"
 LOCAL_WITNESS_START_PIN = "42f5fab488d2edc1fe7338f7da09a31de1b0d5b7"
 CAPSULE_ANCHOR_REPO = "https://github.com/action-state-group/capsule-anchor"

@@ -17,6 +17,11 @@ on:
     # vocabulary, wording and contracts) and the requirements manifest.
     paths: [".github/workflows/tests.yml", ".github/scripts/report-failure.sh", "requirements.txt", "demo/ard/**", "demo/tau2-live/**", "demo/tau2-outcomes/**", "airline-data/**", "skills/**", "scripts/**", "packs/**", "schemas/**", "vocab/**", "wording/**", "contracts/**"]
   workflow_dispatch:
+    inputs:
+      report-hosted:
+        description: "Report a failed hosted-witness end-to-end test to its ci-red issue, as a nightly does (to test the report)"
+        type: boolean
+        default: false
 permissions:
   contents: read
 # A run on main or a nightly is never cancelled or replaced (each gets its own
@@ -28,15 +33,37 @@ jobs:
   ard-demo:
     # The ARD two-seller demo (demo/ard): its tests, against the pins the run sheet names: an evidencebook checkout
     # (the Goose reference's Ctl and Node) and the capsulectl-deal built from it, which every party and the adjudicator
-    # run, and a capsule-engine built from a tag; the receipt page is capsulectl's own. The end-to-end test runs both
-    # deals against Action State's hosted witness (network), as a person's run does: this job, on main and nightly, is
-    # the one run of that path; scripts/check.sh stamps on a witness it starts locally instead (#371).
+    # run, and a capsule-engine built from a tag; the receipt page is capsulectl's own.
+    # Two legs (evidencebook-skills#378). `local`, on every trigger: the end-to-end test stamps on a witness this job
+    # starts (capsule-anchor's ci/local-witness at the release the hosted witness runs), as scripts/check.sh does, so a
+    # push to main does not wait on a shared service: on 2026-11-26 the hosted witness took 8-9 s a stamp for one
+    # profile and up to 59 s, or none within 120 s, for six at once, and the test runs several parties at once.
+    # `hosted`, nightly and by hand only, one run at a time: the path a person's run takes, on Action State's hosted
+    # witness (network); a probe times its stamps against the receipt page's own wait (receipt.PAGE_WAIT_S) and gates
+    # the leg, and the end-to-end test then runs on it, reported but not gating (see its step).
+    name: ard-demo (${{ matrix.witness }} witness)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false  # each leg reports on its own: a slow hosted witness never cancels the local leg
+      matrix:
+        witness: ${{ fromJSON(github.event_name == 'push' && '["local"]' || '["local", "hosted"]') }}
+    permissions:
+      contents: read
+      issues: write  # the hosted leg reports a failed end-to-end test to its ci-red issue
+    concurrency:
+      # Hosted legs queue behind each other, so two runs never load the hosted witness at once; a local leg never waits.
+      group: ${{ matrix.witness == 'hosted' && 'ard-demo-hosted-witness' || format('ard-demo-{0}', github.run_id) }}
+      cancel-in-progress: false
     env:
       EVIDENCEBOOK_REF: e5407dc1e7d60c5a50f446912805a9a83e8f86c5  # main: #1004 (the withheld bundle keeps a payment's settlement leg, #998: the countersign upgrade, #383), #994 (capsule-viewer bebf078), #989 and #990 (standing intents), #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61), #991 and #992 (capsule-cli 052a8a6a: a continuity 409 is sent once more, then re-anchored)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
       CAPSULE_CLI_REF: 052a8a6a7de4360a9e18b1269ba558bf71d0fef2  # capsulectl itself, the RUNBOOK's pin: countersign request (#383)
+      # The local leg's witness (#371, #378): capsule-anchor at the release Action State's hosted witness runs, v0.1.4
+      # (Cloud Run capsule-witness, revision capsule-witness-00014-b6h, label git-sha=78a69853bc83, read on 2026-11-26):
+      # move it with the hosted witness. It is started by ci/local-witness/start.sh (capsule-anchor#118) from main.
+      LOCAL_WITNESS_REF: 78a69853bc83c9c65b9fe79a8270b83727c55304
+      LOCAL_WITNESS_START_REF: 42f5fab488d2edc1fe7338f7da09a31de1b0d5b7
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,15 +107,91 @@ jobs:
           (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
       - name: the demo's tests
+        if: matrix.witness == 'local'  # the same in both legs: run once
         run: |
           ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" \
             python -m pytest -q --durations=20 -n 4 --dist loadfile demo/ard/tests --ignore demo/ard/tests/test_e2e.py
-      - name: both deals end to end (Action State's hosted witness)
+      - name: the local witness's source (local leg)
+        if: matrix.witness == 'local'
+        uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-anchor
+          ref: ${{ env.LOCAL_WITNESS_REF }}
+          path: .deps/capsule-anchor
+          persist-credentials: false
+      - name: the local witness's starter (local leg)
+        if: matrix.witness == 'local'
+        uses: actions/checkout@v4
+        with:
+          repository: action-state-group/capsule-anchor
+          ref: ${{ env.LOCAL_WITNESS_START_REF }}
+          path: .deps/capsule-anchor-ci
+          persist-credentials: false
+      - name: the witness this job starts (local leg)
+        id: witness
+        if: matrix.witness == 'local'
+        # BLOCK=true: the hosted witness's names resolve to this host for the rest of the job, so a call that still
+        # reaches for it fails the run instead of loading it.
+        run: |
+          SRC="$GITHUB_WORKSPACE/.deps/capsule-anchor" BLOCK=true PYTHON="$(command -v python)" \
+            bash .deps/capsule-anchor-ci/ci/local-witness/start.sh
+      - name: both deals end to end (the local witness)
+        if: matrix.witness == 'local'
+        env:
+          ARD_E2E_WITNESS_URL: ${{ steps.witness.outputs.url }}
+          ARD_E2E_WITNESS_KEY: ${{ steps.witness.outputs.public-key }}
+          SSL_CERT_FILE: ${{ steps.witness.outputs.ca-bundle }}
         run: |
           ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" \
             python -m pytest -v demo/ard/tests/test_e2e.py
+      - name: the local witness took the run's stamps
+        if: always() && steps.witness.outputs.log != ''
+        env:
+          LOG: ${{ steps.witness.outputs.log }}
+        run: |
+          echo "::group::local witness log"; cat "$LOG"; echo "::endgroup::"
+          grep -qE '"POST /checkpoints HTTP/[0-9.]+" 2[0-9][0-9]' "$LOG" || { echo "::error::the local witness took no stamp"; exit 1; }
+      - name: how long Action State's hosted witness takes a stamp (hosted leg)
+        id: probe
+        if: matrix.witness == 'hosted'
+        shell: bash  # -o pipefail: the probe's own exit status, through tee
+        run: |
+          ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" \
+            python demo/ard/tests/witness_probe.py --stamps 3 | tee "$RUNNER_TEMP/probe.txt"
+      - name: both deals end to end (Action State's hosted witness)
+        id: hosted-e2e
+        # After a slow probe too, so the run shows both. Not gating: the test runs several parties stamping at once and
+        # waits on its own bounds (CARD_STAMPED_WAIT_S, stamp_wait), which the hosted witness under that load can miss
+        # (#378: run 45895441345 took every probe stamp in 8-10 s, then missed a 120 s card wait); the local leg gates
+        # the demo's logic and the probe above gates the witness against the page's own wait. A failure here still
+        # reaches a person: the next step reports it to its own ci-red issue.
+        if: matrix.witness == 'hosted' && (success() || steps.probe.outcome == 'failure')
+        continue-on-error: true
+        shell: bash
+        run: |
+          ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
+            CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" \
+            python -m pytest -v -rf demo/ard/tests/test_e2e.py | tee "$RUNNER_TEMP/hosted-e2e.txt"
+      - name: report a failed hosted end-to-end test to its ci-red issue
+        # Nightly, or a dispatch that asks for it (report-hosted), as the report job reports a red run.
+        # !cancelled(): also after a failed probe, which would otherwise skip this step (an implied success()).
+        if: >-
+          !cancelled() && steps.hosted-e2e.outcome == 'failure' &&
+          (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.report-hosted))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "heavy tests: ard-demo's end-to-end test failed on Action State's hosted witness"
+          ASSIGNEE: ${{ vars.CI_FAILURE_ASSIGNEE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # report-failure.sh puts $RUN in the issue's body or comment: the run, the failing tests and the probe's numbers.
+          failed=$(grep -E '^FAILED ' "$RUNNER_TEMP/hosted-e2e.txt" | cut -c1-400 || true)
+          probe=$(grep -E 'stamps (taken|not taken) within' "$RUNNER_TEMP/probe.txt" || true)
+          RUN=$(printf '%s (head %s)\n\nFailing tests:\n~~~\n%s\n~~~\nProbe (receipt.PAGE_WAIT_S):\n~~~\n%s\n~~~\n' \
+            "$RUN_URL" "${GITHUB_SHA:0:12}" "${failed:-none listed}" "${probe:-no summary}") \
+            bash .github/scripts/report-failure.sh
 
   tau2-live:
     # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,

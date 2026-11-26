@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The whole story, end to end, with the real binaries: capsulectl-deal (``CAPSULECTL_DEAL``), capsule-engine
 (``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and a witness every agreement names:
-Action State's hosted one in CI, or the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh
-starts one on this machine; :func:`_local_witness`). It seeds a home (about a minute), then runs
+Action State's hosted one, or the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh and CI's
+local leg start one; :func:`_local_witness`). It seeds a home (about a minute), then runs
 deal 1 (Maya buys from Kestrel, Kestrel's own delivery record says 150 of 200, Maya disputes, the adjudicator rules
 against Kestrel, both enter the ruling) and deal 2 (Kestrel's card counts the lost dispute; Maya's own ruling makes it
 NO; a buyer who holds no ruling sees LIMIT from the card alone; Alder is GO and paid).
@@ -30,8 +30,9 @@ def _local_witness(mp: pytest.MonkeyPatch) -> None:
     starts one on this machine (capsule-anchor's ci/local-witness, evidencebook-skills#371), so parallel local checks
     neither wait on nor load Action State's service. The demo's own code then names it the way ``ARD_WITNESS=local`` does
     (evidencebook-skills#382): every profile after ``deal init`` (:meth:`party.Party.create`), and the buyer's pack trusts
-    its key (:func:`pack.starting`). Test-only here: a person's run, and CI's on main and nightly, keep the hosted
-    witness, and its name on the screens stays the hosted one's, which the page checks below read."""
+    its key (:func:`pack.starting`). CI's local leg starts one the same way (tests.yml, #378); a person's run, and CI's
+    hosted leg (nightly and by hand), keep the hosted witness. Its name on the screens stays the hosted one's, which the
+    page checks below read."""
     import buyer
     import party as pt
 
@@ -316,6 +317,7 @@ def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(worl
     """evidencebook-skills#295: an order the person declined, or a dialog nobody answered, must not show on the seller's
     card as a sale. The dialog comes before anything reaches the seller (#289), so the seller's own card counts the same
     deals and rows after both, and no offer reached its folder."""
+    import adjudicator as adj
     import buyer
     import flow
     import pay
@@ -325,7 +327,10 @@ def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(worl
     seller = w["agents"]["alder"].party
 
     def card():
-        seller.stamp()  # a stamp now: the card counts everything sealed before it
+        # A stamp the witness has taken: the card then counts everything sealed before it. A stamp alone is not enough,
+        # since a standard_history/3 card leaves out a deal the witness has not timed yet (evidencebook
+        # deal_standard_history3.go), so an earlier test's deal would join the count between the two reads (#378).
+        seller.wait_checkpoint(adj.LATER_S)
         c, _, _ = flow.read_card(seller.card_bundle(shared=True))
         return c["outcomes"], c["disputes"]["received"]["of"]
     # the seller's deal list (no checkpoint lag) and its card once a checkpoint covers the earlier tests' deals

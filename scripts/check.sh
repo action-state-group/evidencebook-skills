@@ -18,9 +18,9 @@
 # any failed. CI's tests.yml still runs ard-demo in full on main and nightly.
 #
 # The pins (commits, tags, release versions) are read from the workflow files, so they
-# stay the one source; the one exception is ard-demo's end-to-end test, which
-# here stamps on a witness started on this machine where CI uses the hosted
-# one (LOCAL_WITNESS_REF below, evidencebook-skills#371). Pinned checkouts,
+# stay the one source. ard-demo's end-to-end test stamps on a witness started on
+# this machine, as CI's local leg does (local_witness below, evidencebook-skills#371,
+# #378); CI's hosted leg, nightly only, is not run here. Pinned checkouts,
 # built binaries, released binaries and Python environments are kept in
 # ~/.cache/evidencebook-skills-check (CHECK_DEPS) and reused. A short path: pip and uv write a console script's
 # shebang only when its interpreter path is short, and the live-engine test
@@ -274,21 +274,18 @@ else:
 PY
 }
 
-# The witness the local check's ard-demo end-to-end test stamps on (evidencebook-skills#371): capsule-anchor at the
-# release Action State's hosted witness runs, v0.1.4 (Cloud Run capsule-witness, revision capsule-witness-00014-b6h,
-# label git-sha=78a69853bc83, read on 2026-11-26), started by capsule-anchor's own ci/local-witness/start.sh (#118) on
-# https://localhost:<free port> with a throwaway key, an in-memory store and a self-signed certificate that
-# capsulectl trusts through SSL_CERT_FILE. Local only: tests.yml keeps CI's run on main and nightly on the hosted
-# witness, so that path stays covered.
-LOCAL_WITNESS_REF=78a69853bc83c9c65b9fe79a8270b83727c55304 # capsule-anchor v0.1.4: move it with the hosted witness
-LOCAL_WITNESS_START_REF=42f5fab488d2edc1fe7338f7da09a31de1b0d5b7 # capsule-anchor main: ci/local-witness (#118)
+# The witness ard-demo's end-to-end test stamps on, here as in CI's local leg (evidencebook-skills#371, #378):
+# capsule-anchor at tests.yml's LOCAL_WITNESS_REF (the release Action State's hosted witness runs), started by
+# capsule-anchor's own ci/local-witness/start.sh (#118, at LOCAL_WITNESS_START_REF) on https://localhost:<free port>
+# with a throwaway key, an in-memory store and a self-signed certificate that capsulectl trusts through SSL_CERT_FILE.
+# CI's hosted leg (nightly and by hand) keeps the hosted witness's path covered; the local check never loads it.
 
 # local_witness DIR: start that witness with its files under DIR; prints the url=, public-key=, ca-bundle= and log=
 # lines start.sh writes, and leaves its process id in DIR/local-witness/pid.
 local_witness() {
   local src tools out="$1/outputs"
-  src=$(checkout capsule-anchor "$LOCAL_WITNESS_REF")
-  tools=$(checkout capsule-anchor "$LOCAL_WITNESS_START_REF")
+  src=$(checkout capsule-anchor "$(pin tests.yml ard-demo LOCAL_WITNESS_REF)")
+  tools=$(checkout capsule-anchor "$(pin tests.yml ard-demo LOCAL_WITNESS_START_REF)")
   # start.sh pip-installs SRC, and setuptools writes build/ into the source it builds: a copy of this run's own, so two
   # runs never write into the shared cached checkout at once (evidencebook-skills#372).
   cp -R "$src" "$1/capsule-anchor"
@@ -341,7 +338,7 @@ job_ard_demo() {
   py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
     python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
-  # Both deals end to end, on a witness this run starts (local_witness), where CI uses the hosted one. Every
+  # Both deals end to end, on a witness this run starts (local_witness), as CI's local leg does. Every
   # host but this machine goes through a proxy on a closed port, so a call that still reaches for the hosted
   # witness fails the run instead of loading it.
   wdir=$(mktemp -d "$tmp/witness.XXXX")
