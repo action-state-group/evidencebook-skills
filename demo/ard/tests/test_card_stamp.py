@@ -67,6 +67,15 @@ def test_a_stamp_receipt_that_does_not_check_out_refuses_the_card_in_words(tmp_p
         flow.fetch_card(tmp_path, Reader(tmp_path, report(None, verdict="INVALID")), "alder", "k")
 
 
+def test_a_failed_card_with_no_disclosed_card_is_refused_not_read(tmp_path):
+    # Codex on #350: verify reports INVALID with reader_witnesses fail for a bundle missing its agent_input
+    path = flow.stage_dir(tmp_path) / "cards" / "alder.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"records": [{"capsule_id": "c1", "key_id": "k"}], "disclosures": {}}))
+    with pytest.raises(pt.Refused, match="does not verify: its time-stamp receipt does not check out$"):
+        flow.fetch_card(tmp_path, Reader(tmp_path, report("fail", verdict="INVALID")), "alder", "k")
+
+
 def gathered(monkeypatch, tmp_path, status: str) -> list[str]:
     read = flow.CardRead(card={"outcomes": {}}, anchor="a" * 64, anchor_time="2026-11-25T22:00:00Z", signer="k",
                          verdict="VALID", witness_status=status, file=tmp_path / "c.json")
