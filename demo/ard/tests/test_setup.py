@@ -117,7 +117,13 @@ def mac(tmp_path):
     (skills / "demo").symlink_to(HERE.parent)  # the checkout's copy of the script is the one under test
     (skills / ".venv" / "bin").mkdir(parents=True)
     # with $STUB_DIR/venv-cut the venv was cut short: no pip and no packages, until pip installs them
-    _exe(skills / ".venv" / "bin" / "python", f'''if [ -f "$STUB_DIR/venv-cut" ]; then
+    # the witness check (witness_check.py) says $STUB_DIR/witness-out and exits with $STUB_DIR/witness-rc
+    _exe(skills / ".venv" / "bin" / "python", f'''case "${{1:-}}" in */witness_check.py)
+  echo "witness-check $ARD_EVIDENCEBOOK $CAPSULECTL_DEAL" >>"$STUB_LOG"
+  cat "$STUB_DIR/witness-out" 2>/dev/null || echo "Action State's witness took a test stamp."
+  exit "$(cat "$STUB_DIR/witness-rc" 2>/dev/null || echo 0)" ;;
+esac
+if [ -f "$STUB_DIR/venv-cut" ]; then
   case "$1 ${{2:-}}" in
     "-m pip") echo "venv pip $3" >>"$STUB_LOG"; [ "$3" != --version ] || exit 1; rm -f "$STUB_DIR/venv-cut"; exit 0 ;;
     "- ") exit 1 ;;
@@ -346,3 +352,25 @@ def test_the_script_runs_its_checkouts_copy_with_the_same_arguments(mac):
                          input="")
     assert run.returncode == 0, run.stdout + run.stderr
     assert "brew install rust" in mac.calls()
+
+
+def test_the_witness_takes_a_real_stamp_last(mac):
+    """The set-up ends with the witness check (evidencebook-skills#359), run with the demo's pinned checkout and
+    capsulectl-deal."""
+    run = mac.run()
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert (f"witness-check {mac.demo}/evidencebook {mac.home}/.local/lib/capsulectl/plugins/capsulectl-deal"
+            in mac.calls())
+    assert "Action State's witness ...\n  Action State's witness took a test stamp.\n" in run.stdout
+
+
+def test_a_witness_that_takes_no_stamp_stops_the_set_up(mac):
+    """A witness whose home page answers but that refuses stamps stops the set-up with the check's own words."""
+    (mac.stubs / "witness-out").write_text("Action State's witness answered but refused a test stamp (HTTP 409).\n"
+                                           "The details are in /tmp/x.log.\n")
+    (mac.stubs / "witness-rc").write_text("1")
+    run = mac.run()
+    assert run.returncode == 1
+    assert "Set-up stopped: Action State's witness answered but refused a test stamp (HTTP 409)." in run.stderr
+    assert "The details are in /tmp/x.log." in run.stderr
+    assert "Set-up is done" not in run.stdout

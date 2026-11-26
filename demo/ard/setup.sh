@@ -421,6 +421,19 @@ goose_settings_step() {
   esac
 }
 
+# Last: a real stamp on a throwaway log, so a witness whose home page answers but that takes no stamps stops the set-up
+# here and not in the middle of a run (evidencebook-skills#359; demo/ard/witness_check.py).
+witness_step() {
+  say "Action State's witness ..."
+  local out
+  if out=$(ARD_EVIDENCEBOOK="$DEMO/evidencebook" CAPSULECTL_DEAL="$PLUGINS/capsulectl-deal" \
+           "$VPY" "$SKILLS/demo/ard/witness_check.py" 2>&1); then
+    say "  $out"
+  else
+    stop "$out"
+  fi
+}
+
 main() {
   set -euo pipefail
   local arg
@@ -454,6 +467,7 @@ main() {
   engine_and_venv_step
   goose_step
   goose_settings_step
+  witness_step
   say ""
   say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), evidencebook ${EVIDENCEBOOK_PIN:0:7}, capsule-cli ${CAPSULE_CLI_PIN:0:7} (capsulectl $CORE_V), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, provider $PROVIDER."
   say "Next: \"Before each run\" in the RUNBOOK."

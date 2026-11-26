@@ -449,3 +449,13 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     assert over in asked[-1].held.reasons
     deal, _ = made
     assert buyer.shipped(buyer.await_delivery(w["home"], w["maya"], deal))
+
+
+def test_the_set_ups_witness_check_takes_a_real_stamp(monkeypatch, tmp_path):
+    """The set-up's witness check (evidencebook-skills#359) against Action State's hosted witness: one throwaway log,
+    its stamp taken."""
+    import witness_check as wc
+
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    r = wc.check(log=tmp_path / "check.log")
+    assert r == wc.Result(True, "Action State's witness took a test stamp."), (tmp_path / "check.log").read_text()
