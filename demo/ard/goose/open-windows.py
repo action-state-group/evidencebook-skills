@@ -223,23 +223,69 @@ LOCKED_PROVIDER = "claude-acp"
 KEPT_ON = frozenset({"scheduler"})
 
 
-def goose_config(root: Path) -> dict:
-    """The demo Goose's own config (``<root>/config/config.yaml``, Goose 1.59.2 ``config/paths.rs``); {} before set-up."""
+#: Goose 1.59.2 reads its config from these layers, later ones overriding (crates/goose/src/config/base.rs Config::default:
+#: the system file, then GOOSE_ADDITIONAL_CONFIG_FILES, then the root's own file). ``open -a`` starts Goose with
+#: launchd's environment, not the terminal's, so additional files can come only from there: provider_problem refuses
+#: when launchd names any (launchd_env).
+SYSTEM_CONFIG = Path("/etc/goose/config.yaml")
+
+
+class ConfigError(Exception):
+    pass
+
+
+def _yaml(f: Path) -> dict:
     import yaml
-    f = root / "config" / "config.yaml"
     try:
-        return yaml.safe_load(f.read_text()) or {}
+        doc = yaml.safe_load(f.read_text())
     except FileNotFoundError:
         return {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ConfigError(f"{f} cannot be read as Goose's config ({' '.join(str(exc).split())[:200]})") from None
+    if doc is None:
+        return {}
+    if not isinstance(doc, dict):
+        raise ConfigError(f"{f} is not a Goose config (not a mapping)")
+    return doc
 
 
-def provider_problem(root: Path, setup: bool = False) -> str | None:
+def goose_config(root: Path) -> dict:
+    """The config the demo's Goose runs on: the system file under the root's own (``<root>/config/config.yaml``),
+    extensions merged by name; {} before set-up."""
+    system, own = _yaml(SYSTEM_CONFIG), _yaml(root / "config" / "config.yaml")
+    cfg = {**system, **own}
+    cfg["extensions"] = {**(system.get("extensions") or {}), **(own.get("extensions") or {})}
+    return cfg
+
+
+def launchd_env(name: str) -> str:
+    """A variable in launchd's environment, which ``open -a`` hands Goose; "" when unset or not readable."""
+    try:
+        run = subprocess.run(["launchctl", "getenv", name], capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                             timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return run.stdout.strip() if run.returncode == 0 else ""
+
+
+def provider_of(cfg: dict) -> str | None:
+    """The active provider as Goose 1.59.2 picks it (config/providers.rs get_active_provider): GOOSE_PROVIDER in Goose's
+    own environment first (launch_goose passes the one checked here), then ``active_provider``, then ``GOOSE_PROVIDER``."""
+    return cfg.get("active_provider") or cfg.get("GOOSE_PROVIDER")
+
+
+def provider_problem(root: Path) -> str | None:
     """Why the demo's Goose must not open the windows with the provider it is set to, or None (#340). Claude Code ACP
     needs the demo's pinned, locked adapter; a provider where Goose runs the tools needs every Goose extension off (set-up
-    step 9), so only each window's own extension reaches its agent; a provider that runs its own agent is refused. With
-    ``setup`` (set-up step 7, no provider chosen yet), only the adapter question applies, and only for Claude Code ACP."""
-    cfg = goose_config(root)
-    provider = cfg.get("active_provider") or cfg.get("GOOSE_PROVIDER")
+    step 9), so only each window's own extension reaches its agent; a provider that runs its own agent is refused."""
+    if extra := launchd_env("GOOSE_ADDITIONAL_CONFIG_FILES"):
+        return (f"launchd hands Goose more config files ({extra}), which this check does not read: "
+                "launchctl unsetenv GOOSE_ADDITIONAL_CONFIG_FILES, then run this again")
+    try:
+        cfg = goose_config(root)
+    except ConfigError as exc:
+        return str(exc)
+    provider = launchd_env("GOOSE_PROVIDER") or provider_of(cfg)
     if provider == LOCKED_PROVIDER:
         if not (acp_prefix() / "node_modules" / ".bin" / "claude-agent-acp").exists():
             return (f"the demo's own Claude Code adapter is not installed: {acp_install()} (pinned, under the demo's "
@@ -248,10 +294,10 @@ def provider_problem(root: Path, setup: bool = False) -> str | None:
     if provider in AGENT_PROVIDERS:
         return (f"the demo's Goose is set to {provider}, which runs its own agent with its own tools, so the windows' "
                 "agents could act outside the demo's tools: choose Claude Code ACP or a provider Goose runs itself (an API "
-                "key, or a sign-in such as Gemini or ChatGPT) in its Settings, Models")
-    if setup or not provider:
-        return None
-    on = sorted(k for k, v in (cfg.get("extensions") or {}).items()
+                "key, or a sign-in such as Gemini or ChatGPT) in its Settings, Models (open-windows.py --goose-only)")
+    if not provider:
+        return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)"
+    on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
                 if isinstance(v, dict) and v.get("enabled") and k not in KEPT_ON)
     if on:
         return ("with " + str(provider) + ", every Goose extension must be off so each window's agent has only its own "
@@ -261,9 +307,15 @@ def provider_problem(root: Path, setup: bool = False) -> str | None:
 
 def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str | None:
     """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
-    a running Goose would take the recipe links into its own settings."""
-    if problem := provider_problem(root, setup=setup):
+    a running Goose would take the recipe links into its own settings. For the windows the provider must pass
+    :func:`provider_problem`; with ``setup`` (the settings only, no window, no dialog) Goose opens whatever it is set to,
+    so a person can change the provider, and the problem is printed as a note."""
+    problem = provider_problem(root)
+    if problem and not setup:
         return problem
+    if problem:
+        print(f"note: {problem}; change it in this Goose's Settings, Models before opening the windows")
+    provider = None if problem else provider_of(goose_config(root))
     root.mkdir(parents=True, exist_ok=True)
     # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
     # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first. It finds the
@@ -272,7 +324,9 @@ def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str |
     try:
         subprocess.run(["open", "-a", "Goose", "--env", f"GOOSE_PATH_ROOT={root}",
                         "--env", f"GOOSE_SEARCH_PATHS={json.dumps([str(LOCKED_DIR)])}",
-                        "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}"], check=True,
+                        "--env", f"ARD_ACP_PREFIX={acp_prefix()}", "--env", f"ARD_PYTHON={sys.executable}",
+                        # the provider the check above read (#340); Goose takes GOOSE_PROVIDER from its environment first
+                        *(["--env", f"GOOSE_PROVIDER={provider}"] if provider else [])], check=True,
                        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
     except (OSError, subprocess.SubprocessError) as e:
         return f"could not start Goose Desktop ({' '.join(str(e).split())}); is Goose.app in Applications?"
