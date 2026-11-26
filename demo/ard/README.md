@@ -24,6 +24,7 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 | The pages | `pages.py`, `receipt.py` | capsule-viewer's History view, vendored at 0.27.2; the receipt in words from capsulectl's report, and as capsulectl's own page |
 | The spending limit | `limits.py`, `buyer.question`, `screens.hold_question`, `ard_set_limit` | once the person confirms the limit her agent proposed from her words (`ard_set_limit` seals it with her answer in her own book; #361), capsule-engine's Everyday Rules (`guard check --limits`) pinned as Maya's rules checker (`profile update --rules-checker`), so `deal check` runs them on each payment, checked on her offer before it is sent; a held order is one question listing every reason, with capsulectl's card under it (evidencebook#890) |
 | Payment | `pay.py` | the simulated rail, the Brattain and Shockley test nodes, or two local Lexe wallets (`ln-pay-local`); the invoice is made first, so Maya's check binds its payment hash |
+| The testbed | `testbed.sh`, `testbed.py`, `testbed.yaml`, `feeds.py`, `watch.py` | one command: the set-up script, reset, the witness (`ARD_WITNESS=local`: capsule-anchor's own `ci/local-witness/start.sh` at the hosted witness's release, named in every profile after `deal init` and in the buyer's pack), the sample history, a Terminal screen for each role without an agent (the witness's stamps from each party's `deal tick` output; the rail's invoices and payments from where Maya's agent pays), then the four windows (evidencebook-skills#382) |
 
 ## What is not there yet
 

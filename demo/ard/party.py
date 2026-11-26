@@ -29,6 +29,7 @@ import _paths
 
 _paths.setup()
 
+import feeds  # noqa: E402
 import goose_node as gn  # noqa: E402
 import ctl as ctl_mod  # noqa: E402
 from ctl import Ctl, Refused  # noqa: E402
@@ -37,14 +38,29 @@ from ctl import Ctl, Refused  # noqa: E402
 os.environ.setdefault("GOOSE_CAPSULECTL_DEAL", os.environ.get("CAPSULECTL_DEAL", "capsulectl-deal"))
 os.environ.setdefault("GOOSE_CAPSULE_ENGINE", os.environ.get("CAPSULE_ENGINE", "capsule-engine"))
 
-__all__ = ["Party", "Refused", "WitnessSlow", "WITNESS_KEY", "WITNESS_URL", "WITNESS_NAME", "witnessed"]
+__all__ = ["Party", "Refused", "WitnessSlow", "HOSTED_WITNESS_KEY", "HOSTED_WITNESS_URL", "WITNESS_KEY", "WITNESS_URL",
+           "WITNESS_NAME", "witnessed"]
 
 #: Action State's hosted witness, ``deal init``'s default (capsulectl ``DealDefaultWitness``, ``DealDefaultWitnessKey``,
 #: evidencebook ``capsulectl/internal/deal/deal_verify_names.go``). Run by Action State, so not independent of the demo's
 #: parties, all of which the demo operator runs. It receives checkpoint hashes only.
-WITNESS_URL = "https://witness.agentactioncapsule.org"
-WITNESS_KEY = "39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"
-WITNESS_NAME = "Action State's witness"
+HOSTED_WITNESS_URL = "https://witness.agentactioncapsule.org"
+HOSTED_WITNESS_KEY = "39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e0491535840f96b5"
+
+
+def _witness() -> tuple[str, str, str]:
+    """The witness this run names: the hosted one, or with ``ARD_WITNESS=local`` the one ``ARD_WITNESS_URL`` and
+    ``ARD_WITNESS_KEY`` give (a capsule-anchor witness the testbed starts on this Mac, ``testbed.py``). Also run by
+    Action State, so no more independent of the parties than the hosted one."""
+    if os.environ.get("ARD_WITNESS") != "local":
+        return HOSTED_WITNESS_URL, HOSTED_WITNESS_KEY, "Action State's witness"
+    url, key = os.environ.get("ARD_WITNESS_URL", ""), os.environ.get("ARD_WITNESS_KEY", "")
+    if not (url and key):
+        raise SystemExit("ARD_WITNESS=local needs both ARD_WITNESS_URL and ARD_WITNESS_KEY (testbed.py sets them)")
+    return url, key, "Action State's test witness"
+
+
+WITNESS_URL, WITNESS_KEY, WITNESS_NAME = _witness()
 #: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter. A step that needs its
 #: records stamped does not wait for it: it stamps on demand (:meth:`Party.stamp`).
 CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
@@ -151,7 +167,9 @@ class Party:
             return self
         self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         args = ["init", "--dir", str(self.dir / "deal")]
-        if not witnessed() or not witness:
+        # ``deal init`` can name only the hosted witness (capsulectl ``DealDefaultWitness``): any other is named after it
+        other = witnessed() and witness and WITNESS_URL != HOSTED_WITNESS_URL
+        if not witnessed() or not witness or other:
             args.append("--no-witness")
         if key_file:
             args += ["--signing-key-file", key_file, "--checkpoint-key-file", key_file]
@@ -162,10 +180,13 @@ class Party:
         with open(prof, "a") as fh:
             fh.write(CADENCE)
         self.run("standard-history", "declare", "--holder-kind", holder_kind)
+        if other:
+            self.add_witness()
         return self
 
     def add_witness(self) -> None:
-        """Name the hosted witness in a profile made without one (``create(witness=False)``): its next stamp, which covers
+        """Name the run's witness (:data:`WITNESS_URL`) in a profile made without one (``create(witness=False)``, or
+        :meth:`create` for a witness other than the hosted one): its next stamp, which covers
         every record before it, is the first the witness sees. Unless ``ARD_WITNESS=off``."""
         if not witnessed():
             return
@@ -235,13 +256,18 @@ class Party:
 
     def tick(self) -> dict:
         """The cadence's poll: a checkpoint when one is due (a minute after the last), else nothing new."""
-        return self.run("tick")
+        return self._fed(self.run("tick"))
 
     def stamp(self) -> dict:
         """A checkpoint now, whatever the cadence (``deal tick --now``, evidencebook's on-demand stamp, as ``deal agree``
         takes): for a step that needs its records stamped, so no one waits for the cadence. The witness then sees a stamp
         off the cadence; the demo's parties accept that."""
-        return self.run("tick", "--now")
+        return self._fed(self.run("tick", "--now"))
+
+    def _fed(self, tick: dict) -> dict:
+        """A tick, also written to the witness's screen (:func:`feeds.stamp`)."""
+        feeds.stamp(self.dir.parent, self.name, WITNESS_NAME, tick)
+        return tick
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
         """Take a checkpoint now (:meth:`stamp`) that the witness takes (:class:`StampWait`: any checkpoint this wait

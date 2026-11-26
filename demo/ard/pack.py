@@ -102,6 +102,14 @@ def version_of(source: str) -> str:
 
 
 def starting() -> Pack:
-    """The demo pack as this checkout holds it."""
+    """The demo pack as this checkout holds it, trusting the run's witness: its source's one witness trust root is the
+    hosted witness's key (``pack-source.yaml`` ``trust_roots``), replaced by the testbed's own witness key when the run
+    names that one (``ARD_WITNESS=local``), or no card would read as witnessed."""
+    import party as pt
+
     text = source_path().read_text()
+    if pt.WITNESS_KEY != pt.HOSTED_WITNESS_KEY:
+        if text.count(pt.HOSTED_WITNESS_KEY) != 1:
+            raise PackError("the pack source must name the hosted witness's key once, in trust_roots")
+        return compile_source(text.replace(pt.HOSTED_WITNESS_KEY, pt.WITNESS_KEY), version_of(text))
     return compile_source(text, version_of(text))

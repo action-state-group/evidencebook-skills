@@ -255,7 +255,7 @@ def _pay_world(monkeypatch, check):
     class Rail:
         SEALED = "simulated"
         checked_invoice = staticmethod(lambda msat: calls.append("invoice") or type("I", (), {"payment_hash": "h"})())
-        pay_invoice = staticmethod(lambda inv: calls.append("paid") or type("P", (), {"reference": "r"})())
+        pay_invoice = staticmethod(lambda inv: calls.append("paid") or type("P", (), {"reference": "r", "status": "succeeded"})())
 
     class Who:
         name = "maya"

@@ -107,6 +107,40 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 
    **Expect:** `{"invoice": "lnbc…", "amount_msat": 10000}`. About 9,900 msat arrives after Lexe's 100 msat minimum receive fee: enough for 4 runs at 2,100 msat each.
 
+## The testbed: every role in one step
+
+The testbed (evidencebook-skills#382) brings up every role of the deal, each on its own screen, with one command: the four agents in their Goose windows as below, and two roles that run no agent, each in a Terminal window showing what that role saw: the witness (each stamp a party's book sent it, a hash only, and each receipt it signed) and the payment rail (each invoice and payment, who paid whom). Which roles, which witness and which rail are in `demo/ard/testbed.yaml`.
+
+1. Bring it up. It runs the set-up script first (which skips everything already done), then quits nothing without asking: if Goose runs, it asks whether to quit it. Then it resets, starts the witness when `witness: local`, makes the sample history (about a minute), opens the witness and rail screens, and opens the four Goose windows as "Before each run" steps 4 to 6 do. The first time, macOS asks to let your terminal control Terminal: allow it.
+
+   ```
+   ~/ard-demo/evidencebook-skills/demo/ard/testbed.sh
+   ```
+
+   **Expect:** "sample history made and stamped in … s", two Terminal windows titled Witness (testbed) and Rail (testbed), then the four Goose windows. Then carry on from "Before each run" step 6 (tiling by hand if they came up stacked), wait two minutes after the sample history before the first message, and follow "The run". The Terminal windows sit over the Goose windows: put them on a second display, or beside the Goose windows, where the room can read them.
+
+2. The witness. `witness: public` (the default) names Action State's hosted witness, the free default every agreement names. `--witness local` starts a witness on this Mac instead (capsule-anchor at the release the hosted one runs, under `~/ard-demo/testbed`): for test runs, and as the fallback when the hosted one is slow on the day. It keeps nothing when stopped, so each `up` resets and makes the sample history again.
+
+   ```
+   ~/ard-demo/evidencebook-skills/demo/ard/testbed.sh --witness local
+   ```
+
+3. Quit and re-entry. Quit Goose (Cmd+Q), then open the windows again on the same home and the same witness, without reset:
+
+   ```
+   (cd ~/ard-demo/evidencebook-skills && .venv/bin/python demo/ard/testbed.py reopen)
+   ```
+
+   This needs the three paths of "In every terminal" exported. With the local witness it refuses once that witness has stopped (after a restart of the Mac, say): bring the testbed up again.
+
+4. Shut down: quit Goose, then close the screens, reset and stop the local witness.
+
+   ```
+   (cd ~/ard-demo/evidencebook-skills && .venv/bin/python demo/ard/testbed.py down)
+   ```
+
+   **Expect:** "removed …" and, with the local witness, "stopped the testbed's local witness (pid …)". The Terminal windows say their process ended; close them.
+
 ## In every terminal
 
 1. Go to the checkout and set the three paths.

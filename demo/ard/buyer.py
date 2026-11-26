@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 import adjudicator as adj
 import ard
+import feeds
 import flow
 import limits
 import party as pt
@@ -386,6 +387,7 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name, limit=limit, request=request)
     try:  # until the offer is sent, any failure cancels it: the seller never hears of it
         inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
+        feeds.payment(home, "invoice", maya.name, seller, chosen.price_msat, inv.payment_hash, rail.SEALED)
         check = check_payment(maya, deal, inv.payment_hash)
         if check.get("verdict") == "deny":  # a rule that refuses (23 to 25): not put to the person, nothing is paid
             raise pt.Refused("refused by your rules, not put to you: " + "; ".join(limits.refusal(check)) +
@@ -409,8 +411,11 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
     try:
         payment = rail.pay_invoice(inv)
     except rails.PaymentFailed:  # the rail says no money moved: the payment no longer counts against the limit
+        feeds.payment(home, "not_paid", maya.name, seller, chosen.price_msat, inv.payment_hash, rail.SEALED)
         maya.payment_failed(deal.deal_id, check["check_id"])
         raise
+    feeds.payment(home, "paid" if payment.status == "succeeded" else "sent", maya.name, seller, chosen.price_msat,
+                  payment.reference, rail.SEALED)
     pay(home, maya, deal, check, payment.reference, simulated=simulated)
     return deal, payment
 
