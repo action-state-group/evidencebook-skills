@@ -378,9 +378,9 @@ def check_provider(root: Path) -> tuple[str | None, str | None]:
         # Sherlock2 on #340 (ops c0813d7e, amended f5adbf20; #356): the allowed choices by the names Goose shows,
         # and where to switch, in plain words, no provider id
         return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
-                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a ChatGPT sign-in), "
-                "an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the demo's Goose with "
-                "open-windows.py --goose-only and change it in Settings, Models"), provider
+                "the Set limit, Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a "
+                "ChatGPT sign-in), an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the "
+                "demo's Goose with open-windows.py --goose-only and change it in Settings, Models"), provider
     if not provider:
         return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)", None
     on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
