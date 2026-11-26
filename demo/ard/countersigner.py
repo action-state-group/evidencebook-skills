@@ -240,12 +240,13 @@ def start(d: str | Path, parties, ca_bundle: str | Path | None = None, say=lambd
                                 start_new_session=True)
     try:
         _wait_healthy(d, proc, url, key)
-    except BaseException:
+        (d / STATE).write_text(json.dumps({"pid": proc.pid, "url": url, "key": key, "issuers": allow}))
+        _name_directory(d, parties)
+    except BaseException:  # nothing half started is left: no service `down` cannot find, no state naming a dead one
         proc.kill()
         proc.wait()
+        (d / STATE).unlink(missing_ok=True)
         raise
-    (d / STATE).write_text(json.dumps({"pid": proc.pid, "url": url, "key": key, "issuers": allow}))
-    _name_directory(d, parties)
     return env(d)
 
 

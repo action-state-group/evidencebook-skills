@@ -293,14 +293,14 @@ def test_the_countersign_upgrade_after_deal_2(world, tmp_path):
         assert "Countersigned by the demo's countersigner at " in text and "not independent of them" in text
         # a restart keeps its key, so the countersignature still resolves (Codex, plan review)
         cs.stop(d)
-        cs.start(d, parties)
+        env = cs.start(d, parties)  # a new port: the outsider below must reach this one (Codex, round 1)
         assert maya.countersigned(deal2.deal_id)["rung"] == "countersigned"
         # someone the countersigner does not admit is refused, and nothing is stored for them
         outsider = pt.Party(w["home"], "sample-buyer-alder")  # the seed's buyer of Alder's sample deals
         outsider.core("profile", "update", "--profile", outsider.profile, "--countersign-directory", str(d / "directory.json"))
         deals = [x["deal_id"] for x in outsider.deals() if x.get("version") == "x-deal-v1"]
         assert deals
-        with pytest.raises(pt.Refused):
+        with pytest.raises(pt.Refused, match="is not enrolled"):  # capsule-anchor's strict refusal, not a lost connection
             outsider.countersign(deals[0], env)
         assert outsider.countersigned(deals[0]) == {"finding": "not_countersigned", "directory": str(d / "directory.json")}
     finally:

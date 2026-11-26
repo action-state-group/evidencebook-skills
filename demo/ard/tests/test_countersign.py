@@ -159,3 +159,49 @@ def test_reset_counts_the_homes_countersigner_as_the_demos_own(tmp_path):
     finally:
         holder.kill()
         holder.wait()
+
+
+@pytest.fixture
+def fake_start(tmp_path, monkeypatch):
+    """start() with every slow part stubbed; the 'service' is a sleeping process whose argv looks like this folder's
+    countersigner, so stop() and is_ours() treat it as the real one."""
+    fake = tmp_path / "fakepy"
+    fake.write_text(f"#!/bin/sh\nexec {sys.executable} -c 'import time; time.sleep(60)' \"$@\"\n")
+    fake.chmod(0o755)
+    started = []
+    real = subprocess.Popen
+
+    def popen(*a, **k):
+        p = real(*a, **k)
+        started.append(p)
+        return p
+    monkeypatch.setattr(cs, "_python", lambda d: fake)
+    monkeypatch.setattr(cs, "_keys", lambda d: ("seed", "ab" * 32))
+    monkeypatch.setattr(cs, "_certificate", lambda d: None)
+    monkeypatch.setattr(cs, "_ca_bundle", lambda d, ca: None)
+    monkeypatch.setattr(cs, "_wait_healthy", lambda d, proc, url, key: None)
+    monkeypatch.setattr(cs.subprocess, "Popen", popen)
+    yield started
+    for p in started:
+        p.kill()
+        p.wait()
+
+
+def test_a_start_that_fails_after_the_service_is_up_leaves_nothing_running(tmp_path, monkeypatch, fake_start):
+    """Codex, round 1: naming the directory in a profile can fail after the service answered; start then stops it and
+    keeps no state, and the next start works."""
+    d = tmp_path / "countersigner"
+    d.mkdir()
+    maya = _party(tmp_path, "maya", "deal-cadence/aaaa", "11" * 32)
+
+    def refuse(d, parties):
+        raise RuntimeError("profile update refused")
+    monkeypatch.setattr(cs, "_name_directory", refuse)
+    with pytest.raises(RuntimeError, match="profile update refused"):
+        cs.start(d, [maya], say=lambda *_: None)
+    first = fake_start[0]
+    assert first.poll() is not None and not (d / cs.STATE).exists() and cs.running(d) is None
+    monkeypatch.setattr(cs, "_name_directory", lambda d, parties: None)
+    assert cs.start(d, [maya], say=lambda *_: None)["ARD_COUNTERSIGN_KEY"] == "ab" * 32
+    assert cs.running(d)["pid"] == fake_start[1].pid
+    assert cs.stop(d) is True
