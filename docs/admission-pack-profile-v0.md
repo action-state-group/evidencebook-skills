@@ -330,8 +330,9 @@ The baseline and Muse packs ask for no card at T1 (Steven, 2026-11-25, Q6:
 `served_summary/1` is no longer asked; #380); they read the card they are
 given. Their T1 card rows still read the members of `served_summary/1`, the
 only card that carries claims counts, until #385 moves them to the one
-commerce card; until then a counterparty that serves no such card is limited
-to T0 by `claims-held`. `served_summary/1` carries no dispute tally, and the
+commerce card; until then a counterparty that serves no card, or a card that
+is not `served_summary/1` (a `standard_history/5` card, say), is limited to T0
+by `claims-held`. `served_summary/1` carries no dispute tally, and the
 card that carries the tally carries no claims counts. So until one card read
 at T1 carries both (#281), those packs give this row `on_unread: "record"`: a
 shown loss limits, and a verified card with no tally is recorded with its
