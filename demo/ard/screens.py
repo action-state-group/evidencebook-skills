@@ -40,7 +40,7 @@ def trying_again(what: str, exc: BaseException) -> str:
     "one plain line saying it will retry"). A slow witness says so; any other failure says only that it is retried. The
     failure's own text goes to the party's log (:meth:`party.Party.log`), never into a chat."""
     if isinstance(exc, pt.WitnessSlow):
-        return f"{what}: waiting for {pt.WITNESS_NAME}, which is slow to answer; {TRYING_AGAIN}"
+        return f"{what}: waiting for {pt.WITNESS_NAME}, which is slow or not answering; {TRYING_AGAIN}"
     return f"{what}: not done yet (the reason is in this party's log, agent.log); {TRYING_AGAIN}"
 
 

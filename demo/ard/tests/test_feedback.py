@@ -38,7 +38,7 @@ def test_a_failure_reads_as_one_plain_line_and_never_carries_raw_output():
                                                                                      "stamp within 29 s"))
     other = screens.trying_again("entering the adjudicator's ruling",
                                  pt.Refused('maya: no checkpoint in 29 s (last: {"cadence_log": []})'))
-    assert slow == ("entering the adjudicator's ruling: waiting for Action State's witness, which is slow to answer; "
+    assert slow == ("entering the adjudicator's ruling: waiting for Action State's witness, which is slow or not answering; "
                     "trying again")
     assert other == ("entering the adjudicator's ruling: not done yet (the reason is in this party's log, agent.log); "
                      "trying again")
@@ -169,7 +169,7 @@ def test_every_entry_state_stays_apart(row, want):
     lines = flow.entry_lines(DEAL, [row], NAMES)
     assert lines[0] == "deal 01234567: the ruling is not time-stamped yet (Action State's witness has not taken its stamp)"
     assert lines[1].startswith(want)
-    assert lines[2] == "  Maya: has not sent its book back yet"
+    assert lines[2] == "  Maya: has not sent their book back yet"
 
 
 def test_no_book_back_yet_says_so():
@@ -223,7 +223,7 @@ def test_the_ruling_stays_entered_when_its_book_waits_for_the_witness(tmp_path, 
     p, said = Book(tmp_path), []
     flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
     assert said[0].startswith("the adjudicator's ruling on deal 01234567 entered")
-    assert said[1].endswith("waiting for Action State's witness, which is slow to answer; trying again")
+    assert said[1].endswith("waiting for Action State's witness, which is slow or not answering; trying again")
     assert not p.notes(flow.BOOK_SENT)
     flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)  # the next round: the book goes
     assert p.notes(flow.BOOK_SENT)[0]["statement"]["copy"] == str(tmp_path / "copy.json")

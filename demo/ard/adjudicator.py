@@ -302,7 +302,7 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
             continue  # a record sealed since the stamp: stamped again on the next round
         if got.get("outcome") != "artifact":
             p.log(f"the adjudicator's request for deal {deal_id}: deal respond said {json.dumps(got)}")
-            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: capsulectl refused it for this "
+            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: this party's records refused it for this "
                 "party's books, so it is not tried again")
             mark.parent.mkdir(exist_ok=True)
             mark.touch()  # a refusal is final for that request: it is not tried again every round

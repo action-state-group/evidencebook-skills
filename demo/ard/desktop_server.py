@@ -193,7 +193,7 @@ class Session:
         """Maya's agent enters a ruling on her deals as soon as the adjudicator publishes it, as a seller's does."""
         while True:
             for what, step in (
-                    ("answering the adjudicator's request for Maya's books",
+                    ("answering the adjudicator's request for this buyer's books",
                      lambda: adj.answer_requests(self.home, self.maya, BUYER, "buyer", self.say)),
                     ("entering the adjudicator's ruling",
                      lambda: flow.enter_rulings(self.home, self.maya, "buyer", buyer.seller_of(self.maya), self.say)),

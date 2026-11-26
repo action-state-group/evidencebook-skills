@@ -530,10 +530,10 @@ def entry_lines(deal_id: str, rows: list[dict], names: dict[str, str]) -> list[s
         elif state == "not_shown":
             out.append(f"  {who}: its book does not show it entered yet "
                        + ("(the ruling has no time-stamp yet to compare with)" if not at else
-                          "(its book's last checkpoint is not after the ruling's time-stamp)"))
+                          "(its book was last sealed before the ruling's time-stamp)"))
         else:  # a state this demo does not know: capsulectl's own words
             out.append(f"  {who}: {r.get('words', state)}")
     for side in ("buyer", "seller"):
         if side not in seen and side in names:
-            out.append(f"  {names[side]}: has not sent its book back yet")
+            out.append(f"  {names[side]}: has not sent their book back yet")
     return out
