@@ -306,8 +306,9 @@ local_witness() {
 
 job_ard_demo() {
   # The tests' directory as a variable, for the same reason as in job_tau2_live.
-  local w=tests.yml eb_ref ce_tag eb ce deal py port t=demo/ard/tests wdir outs url key ca log
+  local w=tests.yml eb_ref ce_tag cli_ref anchor_ref eb ce deal core cpy py port t=demo/ard/tests wdir outs url key ca log
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
+  cli_ref=$(pin $w ard-demo CAPSULE_CLI_REF)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
   eb=$(checkout evidencebook "$eb_ref")
   ce=$(engine "$ce_tag")
@@ -322,6 +323,21 @@ job_ard_demo() {
     fi
     deps_unlock
   fi
+  # capsulectl itself, for the countersign upgrade's `countersign request` (#383).
+  core="$deps/bin/capsulectl@$cli_ref"
+  if [[ ! -x "$core" ]]; then
+    deps_lock
+    if [[ ! -x "$core" ]]; then
+      mkdir -p "$deps/bin"
+      (cd "$(checkout capsule-cli "$cli_ref")" && go build -o "$core.partial" ./cmd/capsulectl)
+      mv "$core.partial" "$core"
+    fi
+    deps_unlock
+  fi
+  # The demo's countersigner (demo/ard/countersigner.py) at its own pin, installed here: the end-to-end step below
+  # reaches no host but this machine, so it cannot install capsule-anchor itself.
+  anchor_ref=$(sed -n 's/^ANCHOR_REF = "\([0-9a-f]*\)"$/\1/p' demo/ard/countersigner.py)
+  cpy=$(venv "countersigner-${anchor_ref:0:12}" "capsule-anchor @ git+https://github.com/action-state-group/capsule-anchor@$anchor_ref")
   py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
     python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
@@ -339,6 +355,7 @@ job_ard_demo() {
   log=$(sed -n 's/^log=//p' <<<"$outs")
   port=$(stage_port)
   ARD_E2E=1 ARD_STAGE_PORT="$port" ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
+    CAPSULECTL="$core" ARD_COUNTERSIGN_PYTHON="$cpy/bin/python" \
     ARD_E2E_WITNESS_URL="$url" ARD_E2E_WITNESS_KEY="$key" SSL_CERT_FILE="$ca" \
     HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 \
     NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 \

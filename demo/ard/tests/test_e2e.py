@@ -247,6 +247,7 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     deal2, shipped2 = _buy(w, "alder", made["alder"][1], answer_after=185)
     assert shipped2 == "200 of 200 badges"
     buyer.close_received(w["home"], w["maya"], deal2)
+    w["deal2"] = deal2
 
     # #242: Maya's receipt page is capsulectl's own (deal report --html), drawn with the hosted witness's directory
     import receipt
@@ -260,6 +261,55 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert checked["verdict"] == "VALID", checked
     carried = json.loads(re.search(r"capsulectlDealPage = Object\.freeze\((.*?)\);\n", html).group(1))
     assert checked["bundle_digest"] == carried["verifier_report"]["bundle_digest"]
+
+
+@pytest.mark.skipif(not os.environ.get("CAPSULECTL"), reason="CAPSULECTL names capsule-cli's capsulectl (countersign request)")
+def test_the_countersign_upgrade_after_deal_2(world, tmp_path):
+    """#383, Sherlock2's what (Buzz f903059c): after deal 2 Maya asks the demo's countersigner, which admits only the
+    demo's parties, to countersign her own records of it; her receipt then says so, from capsulectl's stored
+    countersignature. Someone it does not admit is refused and keeps "Not countersigned yet"."""
+    import countersigner as cs
+    import party as pt
+    import receipt
+    from cast import ADJUDICATOR, BUYER, SELLERS
+
+    w = world
+    deal2 = w.get("deal2")
+    assert deal2 is not None, "deal 2 ran first (test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2)"
+    maya = w["maya"]
+    d = cs.default_dir(w["home"])
+    parties = [pt.Party(w["home"], n) for n in (BUYER, *SELLERS, ADJUDICATOR)]
+    try:
+        env = cs.start(d, parties)
+        before = maya.countersigned(deal2.deal_id)
+        assert receipt.countersign_line(before, "Maya", "Alder Print Co.") == \
+            "Not countersigned yet: no countersigner has signed Maya's records of this deal."
+        stamp = maya.countersign(deal2.deal_id, env)
+        assert stamp["rung"] == "countersigned", stamp
+        assert stamp["signer"] == cs.NAME and stamp["through_step"] == stamp["steps"]
+        text = receipt.receipt_text(maya, "Maya", deal2.deal_id, real=False, seller=False, counterparty="Alder Print Co.")
+        assert "Countersigned by the demo's countersigner at " in text and "not independent of them" in text
+        # a restart keeps its key, so the countersignature still resolves (Codex, plan review)
+        cs.stop(d)
+        env = cs.start(d, parties)  # a new port: the outsider below must reach this one (Codex, round 1)
+        assert maya.countersigned(deal2.deal_id)["rung"] == "countersigned"
+        # someone the countersigner does not admit is refused, and nothing is stored for them
+        outsider = pt.Party(w["home"], "sample-buyer-alder")  # the seed's buyer of Alder's sample deals
+        outsider.core("profile", "update", "--profile", outsider.profile, "--countersign-directory", str(d / "directory.json"))
+        deals = [x["deal_id"] for x in outsider.deals() if x.get("version") == "x-deal-v1"]
+        assert deals
+        log = d / "countersigner.log"
+        seen = len(log.read_text().splitlines())
+        with pytest.raises(pt.Refused):
+            outsider.countersign(deals[0], env)
+        # capsulectl hides the service's words (capsule-cli cli/command.go: "sensitive details suppressed"), so the
+        # countersigner's own access log shows it was the service that refused it (Codex, round 1): its strict
+        # registration policy answers 422 to an issuer it has not enrolled (capsule-anchor countersign/bundle.py)
+        new = log.read_text().splitlines()[seen:]
+        assert any('"POST /countersign/register HTTP/1.1" 422' in x for x in new), new
+        assert outsider.countersigned(deals[0]) == {"finding": "not_countersigned", "directory": str(d / "directory.json")}
+    finally:
+        cs.stop(d)
 
 
 def test_a_declined_or_unanswered_payment_leaves_the_sellers_card_as_it_was(world):

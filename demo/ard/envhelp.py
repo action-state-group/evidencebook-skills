@@ -42,6 +42,8 @@ VARS = (
     Var("ARD_WALLET_SELLER", "the sellers' wallet directory (ln-pay-local init --wallet <dir>)",
         "/path/to/seller-wallet", ("local",), "dir"),
     Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
+    Var("CAPSULECTL", "capsule-cli's own capsulectl, if it is not on the PATH (the set-up installs it there): the "
+        "countersign upgrade after deal 2 sends its request with it", "/path/to/capsulectl", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
     Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); local sends each checkpoint to the "
         "witness ARD_WITNESS_URL and ARD_WITNESS_KEY name (testbed.py starts one on this Mac and sets all three); by "

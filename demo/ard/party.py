@@ -74,6 +74,8 @@ CARD_DERIVATION = "standard_history/3"
 FORUM = "external:ard-demo"
 #: The two rows of every demo deal (the Goose reference's own, ``goose_node.ROW`` and ``DELIVERED``).
 PAID, DELIVERED = gn.ROW, gn.DELIVERED
+#: How long one capsule-cli ``capsulectl`` call may take: a countersign request waits up to 30 s for the service.
+CORE_TIMEOUT_S = 90
 CURRENCY = "BTC"  # capsulectl reads a BTC amount_minor in msat (deal_rules.go msatCurrency)
 
 
@@ -214,6 +216,30 @@ class Party:
     def run(self, *args: str) -> Any:
         with self._lock:
             return self.ctl.run(*args)
+
+    def core(self, *args: str, env: dict[str, str] | None = None) -> Any:
+        """Run capsule-cli's own ``capsulectl`` (``CAPSULECTL``, else ``capsulectl`` on the PATH) on this party's
+        profile, for the verbs the deal plugin does not carry (``countersign request``, ``profile update``), and return
+        the JSON it prints. A refusal raises :class:`Refused` with its own words; ``env`` adds variables."""
+        binary = os.environ.get("CAPSULECTL", "capsulectl")
+        full = {**os.environ, "HOME": str(self.dir), "XDG_CONFIG_HOME": str(self.dir / ".config"), **(env or {})}
+        try:
+            with self._lock:
+                done = subprocess.run([binary, *args], env=full, capture_output=True, timeout=CORE_TIMEOUT_S,
+                                      stdin=subprocess.DEVNULL, check=False)
+        except FileNotFoundError:
+            raise Refused(f"{binary} is not installed: install capsulectl (the RUNBOOK's set-up) or set CAPSULECTL") from None
+        except subprocess.TimeoutExpired:
+            raise Refused(f"capsulectl {args[0]} did not finish in {CORE_TIMEOUT_S}s") from None
+        text = done.stdout.decode("utf-8", "replace").strip()
+        try:
+            out = json.loads(text) if text else {}
+        except ValueError:
+            out = {}
+        if done.returncode != 0:
+            why = out.get("error") if isinstance(out, dict) else None
+            raise Refused(why or done.stderr.decode("utf-8", "replace").strip() or f"capsulectl {args[0]} failed")
+        return out
 
     def close(self) -> None:
         self.node.close()
@@ -424,14 +450,15 @@ class Party:
         """The deal's report as it stands (``deal report --read-only``): each row's status, read from capsulectl."""
         return self.run("report", "--deal", deal_id, "--read-only")
 
-    def bundle(self, deal_id: str, share: str = "keep", to: str = "", wait: float = 0, say=None) -> Path:
+    def bundle(self, deal_id: str, share: str = "keep", to: str = "", wait: float = 0, say=None,
+               withheld: bool = False) -> Path:
         """The deal's report as an Evidence Bundle: the party's own copy (``keep``), or a copy shared with the
         ``adjudicator`` or the ``counterparty`` (put on record first). A report rests on a checkpoint, so with ``wait``
         it waits for the tick that covers the deal."""
         stop = time.monotonic() + wait
         while True:
-            out = self.tmp(f"{share}-copy.json")
-            args = ["report", "--deal", deal_id, "--bundle", out]
+            out = self.tmp("withheld-copy.json" if withheld else f"{share}-copy.json")
+            args = ["report", "--deal", deal_id, "--bundle", out, *(["--withheld"] if withheld else [])]
             if share != "keep":
                 args += ["--share", share, "--to", to or share]
             try:
@@ -447,6 +474,24 @@ class Party:
                 # sent later carries the receipt, adjudicator.send_proof_once_witnessed): the report is tried once more
                 stop = time.monotonic()
             say = None
+
+    def countersign(self, deal_id: str, service: dict[str, str], wait: float = 30, say=None) -> dict:
+        """The countersign upgrade on this party's own book for one deal (capsulectl ``skills/deal/ASSURANCE.md``,
+        "Switch a deal to countersign"): the withheld copy a countersigner is shown (waiting, as :meth:`bundle` does,
+        for a checkpoint that covers the deal), ``capsulectl countersign request`` to the countersigner ``service``
+        names (:func:`countersigner.env`), the only step that sends anything, then ``deal countersign``, which verifies
+        it and keeps it with the deal. Returns the report's ``countersign``: capsulectl's stamp from the stored
+        countersignature, never one computed here."""
+        copy = self.bundle(deal_id, wait=wait, say=say, withheld=True)
+        self.core("--profile", self.profile, "countersign", "request", "--service", service["ARD_COUNTERSIGN_URL"],
+                  "--window", deal_id, "--bundle", str(copy), env={"SSL_CERT_FILE": service["SSL_CERT_FILE"]})
+        self.run("countersign", "--deal", deal_id, "--bundle", str(copy))
+        return self.countersigned(deal_id)
+
+    def countersigned(self, deal_id: str) -> dict:
+        """The deal's countersign stamp as capsulectl's report states it (``deal report --read-only``,
+        ``countersign``: from the stored countersignatures, resolved against the profile's directory)."""
+        return self.report(deal_id).get("countersign") or {}
 
     def proof(self, deal_id: str, copy: Path) -> Path:
         """The file of the stamp proof and witness receipts behind a copy, for the adjudicator's entry check."""
