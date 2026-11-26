@@ -335,15 +335,15 @@ def _flush(s: Session) -> None:
 
 @_tool("maya")
 def ard_find_sellers() -> None:
-    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its signed
-    commitment verified. Call this first."""
+    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its listing
+    checks out. Call this first."""
     s = session()
     s.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
-        print(f"found: {e['name']:18} {price:>10}   commitment {'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
-        # the search's checks stay in Maya's records (ard_show_listing shows them on request), not in her chat (#332)
+        print(f"found: {e['name']:18} {price:>10}   {'listing checks out' if 'commitment' in e else 'listing refused: ' + e['problem']}")
+        # the search's own checks are not shown in her chat (#332, Sherlock2)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
 

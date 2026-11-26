@@ -274,3 +274,19 @@ def test_mayas_card_check_line_is_plain(monkeypatch, tmp_path):
 
 def test_the_assessment_rules_note_is_plain():
     assert screens.PACK_NOTE == "example rules for this demo, not a published set"
+
+
+def test_the_search_lines_in_mayas_chat_are_plain(monkeypatch):
+    """Sherlock2 on #352 (#332): "listing checks out" or "listing refused: <reason>", and no check lines."""
+    import ard
+    import desktop_server as ds
+    s = type("S", (), {})()
+    monkeypatch.setattr(ds, "session", lambda: s)
+    monkeypatch.setattr(ard, "lookup", lambda *a: [
+        {"id": "north", "name": "North Wind Supply", "offer": {"price_msat": 750}, "commitment": {"key_id": "k"},
+         "checks": ["commitment signature verifies"]},
+        {"id": "south", "name": "South Shop", "problem": "the seller's entry names no evidence commitment",
+         "checks": []}])
+    out = ds.ard_find_sellers()
+    assert "listing checks out" in out and "listing refused: the seller's entry names no evidence commitment" in out
+    assert "commitment verified" not in out and "signature verifies" not in out and "REFUSED" not in out
