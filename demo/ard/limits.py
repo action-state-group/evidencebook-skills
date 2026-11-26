@@ -21,7 +21,10 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import party as pt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # annotations only: the limit itself is read without the evidencebook checkout (open-windows.py)
+    import party as pt
 
 #: The action class Everyday Rules 0.3.8 caps a purchase under (capsulectl seals it on a pay check).
 ACTION_CLASS = "money.purchase"

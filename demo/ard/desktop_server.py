@@ -52,6 +52,7 @@ import adjudicator as adj  # noqa: E402
 import ard  # noqa: E402
 import buyer  # noqa: E402
 import flow  # noqa: E402
+import limits  # noqa: E402
 import pack as packs  # noqa: E402
 import party as pt  # noqa: E402
 import pay  # noqa: E402
@@ -374,7 +375,9 @@ def ard_assess() -> None:
         raise RuntimeError("call ard_show_history first")
     s.pack = s.pack or packs.starting()
     p = s.pack
-    print(f"Maya's assessment rules: {screens.PACK_NOTE}")  # its version and digest are in her assessment records
+    limit = limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses here, before any seller is assessed
+    print(f"The assessment rules: {screens.PACK_NOTE}")  # its version and digest are in the buyer's assessment records
+    print(screens.limit_line(limit, _ceilings(p)))
     print(f"({screens.ASSESSMENT_NOTE})")
     print(f"({screens.OPERATOR_NOTE})\n")
     for e in s.entries:
@@ -385,7 +388,12 @@ def ard_assess() -> None:
         a = buyer.assess(s.maya, ev, e["commitment"]["key_id"], e["offer"]["price_msat"], p)
         s.assessed[e["id"]] = a
         ceiling = p.ceiling_msat(a.tier) if a.tier else None
-        print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}")
+        print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}{screens.within_limit(a.price_msat, limit)}")
+
+
+def _ceilings(p: packs.Pack) -> list[int]:
+    """The pack's limit for each history tier (pack.Pack.ceiling_msat), as many as the pack has."""
+    return [p.ceiling_msat(t["id"]) for t in p.tiers()]
 
 
 @_tool("maya")
@@ -697,17 +705,25 @@ def _own() -> tuple[pt.Party, str]:
 
 @_tool("maya", "alder", "kestrel")
 def ard_show_card() -> None:
-    """Show THIS window's own History card (its standard_history derivation) as of a checkpoint taken now: deals counted, held,
-    did not hold, and disputes others raised about it."""
+    """Show THIS window's own History card as of a checkpoint taken now (or its last one, if the witness does not take a
+    new one): deals counted, held, did not hold, and disputes others raised about it; in the buyer's window also the
+    spending limit the person set, or that none is set. The buyer's first turn calls it."""
     p, name = _own()
-    p.stamp()
+    limit = None if ROLE in SELLERS else limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses before anything is shown
+    try:
+        p.stamp()
+    except pt.Refused as exc:  # the card as of its last checkpoint still shows, and the time says which (#331)
+        p.log(f"stamp for the card: {exc!r}")
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
     print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
     if ROLE in SELLERS:
         print("  " + screens.sample_note(ROLE))
         return
-    for d in session().deals:  # a deal ruled for her says what that means, beside the card's "not final yet" count
+    s = session()
+    s.pack = s.pack or packs.starting()
+    print("  " + screens.limit_line(limit, _ceilings(s.pack)))
+    for d in s.deals:  # a deal ruled for her says what that means, beside the card's "not final yet" count
         try:
             rep = p.report(d.deal_id)
         except pt.Refused as exc:

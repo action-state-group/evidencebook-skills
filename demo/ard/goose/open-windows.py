@@ -54,12 +54,15 @@ PARTIES = {
     },
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
-        "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday, under 3,000 msat. "
+        # no amount here: what she will pay comes in her own words, and her spending limit from ARD_LIMIT_MSAT (#331)
+        "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday. "
                  "Your admission pack is demo/ard/pack.",
         # The first message searches nothing: the presenter types the ask, so all four windows can start together and
         # Maya never searches before the sellers have published their entries (Ethan, 2026-11-18).
-        "prompt": "Reply in English only. I am Maya. In one short sentence, say you are my buying agent and ready. Do not "
-                  "search or call any tool until I ask.",
+        # the first turn shows her own card and the limit she set (#331, carrying #335); it searches nothing, so all four
+        # windows can still start together
+        "prompt": "Reply in English only. I am Maya. Call ard_show_card to show me my own History card and my spending "
+                  "limit, then say in one short sentence that you are my buying agent and ready. Do not search until I ask.",
     },
 }
 
@@ -266,6 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.
     if gap := envhelp.message("open-windows.py", "fake" if args.show else args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
+        return 2
+    import limits  # after the variables check: it reads the evidencebook checkout
+    try:  # a bad spending limit stops here, before any window opens (#331), not at the buyer's first turn
+        limits.limit_msat()
+    except limits.LimitError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
     if not args.show and reset.goose_running():
         print(RUNNING.format(root=root), file=sys.stderr)
