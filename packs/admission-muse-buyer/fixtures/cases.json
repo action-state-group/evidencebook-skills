@@ -1,5 +1,5 @@
 {
- "pack": "asg/admission_muse_buyer/1.1.0",
+ "pack": "asg/admission_muse_buyer/1.2.0",
  "source": "evidencebook-skills#154: admission-muse-buyer@1's fixtures. Each case is an evaluator input (admission pack profile v0 \u00a75) and the decision expected, written by hand. The evaluator (capsule-engine) must implement the lift of profile \u00a74.1 before it decides these; until then the cases are checked here for shape and against the pack, and by tests/test_admission_pack.py's reference reading of \u00a74.1.",
  "cases": [
   {
@@ -68,7 +68,7 @@
   },
   {
    "case": "t1-two-settled-deals-do-not-lift",
-   "why": "Below the count of 3 the lift does not apply: the card is asked for.",
+   "why": "Below the count of 3 the lift does not apply: with no card, the card rows limit to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -93,14 +93,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
    "case": "t1-conflicting-deal-limits-despite-settled",
-   "why": "A CONFLICTING deal with the merchant still limits: the lift is off, and a merchant that refused the card ask cannot be asked again.",
+   "why": "A CONFLICTING deal with the merchant still limits: the lift is off, and a merchant that refused its card is limited by the card rows.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -123,9 +123,7 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {
-     "served_summary/1": "refused"
-    },
+    "asks": {},
     "asks_made": 0
    },
    "expected": {
@@ -210,7 +208,7 @@
   },
   {
    "case": "t1-refused-card-is-read-as-none-served",
-   "why": "A merchant that refused the card ask served nothing: its card rows read not_read and the lift applies.",
+   "why": "A merchant that refused to serve its card served nothing: its card rows read not_read and the lift applies.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -233,9 +231,7 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {
-     "served_summary/1": "refused"
-    },
+    "asks": {},
     "asks_made": 0
    },
    "expected": {
@@ -246,7 +242,7 @@
   },
   {
    "case": "t1-stale-card-still-limits",
-   "why": "A stale card was served and speaks for itself: the lift does not apply and the card is asked for again.",
+   "why": "A stale card was served and speaks for itself: the lift does not apply and the card rows limit to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -281,7 +277,7 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
@@ -311,9 +307,7 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {
-     "served_summary/1": "answered"
-    },
+    "asks": {},
     "asks_made": 0
    },
    "expected": {
@@ -511,8 +505,8 @@
    }
   },
   {
-   "case": "t1-unverifiable-card-with-a-tally-asks",
-   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason; the card rows limit, and the card is asked for again (#280).",
+   "case": "t1-unverifiable-card-with-a-tally-limits",
+   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason, and the card rows limit to T0 (#280; the pack asks for no card, #380).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -555,14 +549,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
    "case": "above-t1-the-lift-does-not-apply",
-   "why": "Above T1 the rows stand: three settled deals, no card, a $50 deal asks for the card.",
+   "why": "Above T1 the rows stand: three settled deals and no card hold a $50 deal at T0, and the pack asks for the T2 selection.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "50",
@@ -593,8 +587,8 @@
    }
   },
   {
-   "case": "t1-no-history-no-card-asks",
-   "why": "A merchant never dealt with and serving no card is asked for its card.",
+   "case": "t1-no-history-no-card-limits",
+   "why": "A merchant never dealt with and serving no card is limited to T0. The pack asks for no card (Steven, 2026-11-25, Q6; #380).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -619,7 +613,7 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
@@ -749,7 +743,7 @@
   },
   {
    "case": "above-t1-sat-deal-the-lift-does-not-apply",
-   "why": "20,000 sat is above the pack's T1 bound, which sat 3 holds to about $10: the rows stand, the card is asked for.",
+   "why": "20,000 sat is above the pack's T1 bound, which sat 3 holds to about $10: the rows stand, and with no card they limit to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -774,14 +768,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
    "case": "t1-future-checkpoint-is-not-fresh",
-   "why": "A checkpoint after now is not fresh (profile section 2): the card is asked for again.",
+   "why": "A checkpoint after now is not fresh (profile section 2): the card rows limit to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "5",
@@ -816,7 +810,7 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }

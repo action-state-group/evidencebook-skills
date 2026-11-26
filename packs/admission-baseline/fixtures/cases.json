@@ -1,5 +1,5 @@
 {
- "pack": "asg/admission_baseline/1.1.0",
+ "pack": "asg/admission_baseline/1.2.0",
  "source": "evidencebook-skills#51: admission-baseline@1's fixtures. Each case is an evaluator input (admission pack profile v0 \u00a75) and the decision expected, written by hand. capsule-engine#265's evaluator (Go and Rust) decides every case in its CI; evidencebook#189 reads them for guide Path 4.",
  "cases": [
   {
@@ -519,8 +519,8 @@
    }
   },
   {
-   "case": "t1-unverifiable-card-with-a-tally-asks",
-   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason; the card rows limit, and the card is asked for again (#280).",
+   "case": "t1-unverifiable-card-with-a-tally-limits",
+   "why": "A card that does not verify is not read, its tally included: the disputes-against row reads not_read without the no-tally reason, and the card rows limit to T0 (#280; the pack asks for no card, #380).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -566,14 +566,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
-   "case": "t1-no-card-asks",
-   "why": "The card is required from T1: one served_summary/1 ask answers every card row.",
+   "case": "t1-no-card-limits",
+   "why": "The card is required from T1: with no card, every card row limits to T0. The pack asks for no card (Steven, 2026-11-25, Q6; #380).",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -601,7 +601,7 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
@@ -634,9 +634,7 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {
-     "served_summary/1": "refused"
-    },
+    "asks": {},
     "asks_made": 0
    },
    "expected": {
@@ -646,8 +644,8 @@
    }
   },
   {
-   "case": "t1-stale-card-asks-again",
-   "why": "A stale card is asked for again.",
+   "case": "t1-stale-card-limits",
+   "why": "A stale card limits to T0.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -685,14 +683,14 @@
     "asks_made": 0
    },
    "expected": {
-    "verdict": "ASK",
+    "verdict": "LIMIT",
     "source": "rows",
     "tier": "T0"
    }
   },
   {
    "case": "t1-thin-card-limits",
-   "why": "Too few claims held, already asked: LIMIT to T0, with count and denominator.",
+   "why": "Too few claims held: LIMIT to T0, with count and denominator.",
    "input": {
     "now": "2026-10-30T12:00:00Z",
     "amount": "20000",
@@ -726,9 +724,7 @@
     "vouches": [],
     "subject": "",
     "judged": {},
-    "asks": {
-     "served_summary/1": "answered"
-    },
+    "asks": {},
     "asks_made": 0
    },
    "expected": {

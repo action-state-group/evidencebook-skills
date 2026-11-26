@@ -1,6 +1,6 @@
 {
-  "id": "asg/admission_baseline/1.1.0",
-  "version": "1.1.0",
+  "id": "asg/admission_baseline/1.2.0",
+  "version": "1.2.0",
   "requirements": [
     {
       "id": "attestation",
@@ -70,7 +70,7 @@
       "profile": "outcome",
       "statement": "The counterparty's card verifies under the key that presents it.",
       "tier": "must_have",
-      "evidence_rule": "admission check card.verified, from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "evidence_rule": "admission check card.verified, from tier T1; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },
@@ -79,7 +79,7 @@
       "profile": "outcome",
       "statement": "The card's latest checkpoint is at most 7 days old.",
       "tier": "must_have",
-      "evidence_rule": "admission check card.fresh (max_age_s 604800), from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "evidence_rule": "admission check card.fresh (max_age_s 604800), from tier T1; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },
@@ -97,7 +97,7 @@
       "profile": "outcome",
       "statement": "The card shows at least 10 claims held, with the claims made as the denominator.",
       "tier": "must_have",
-      "evidence_rule": "admission check card.claims_held (min 10), from tier T1; a failure gives LIMIT; asks for served_summary/1",
+      "evidence_rule": "admission check card.claims_held (min 10), from tier T1; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },

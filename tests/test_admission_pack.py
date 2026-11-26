@@ -7,6 +7,7 @@ CI; here they are checked for shape and against the pack.
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -51,7 +52,7 @@ LADDER_ROW = f"""  - id: ladder
 {LADDER_PARAMS}
     from: T1
     on_fail: "LIMIT"
-    ask: {{derivation: served_summary/1}}
+    ask: {{derivation: standard_history/3}}
 """
 
 
@@ -273,9 +274,18 @@ class Baseline(unittest.TestCase):
         own_gates = [r["id"] for r in rows if r["source"] == "own_history" and r.get("on_fail") == "LIMIT"]
         self.assertEqual(own_gates, ["no-conflicting-deal"])
 
+    def test_no_pack_asks_for_a_served_summary(self):
+        # Steven, 2026-11-25, Q6 (buzz 5c625586): served_summary/1's remaining asks go (#380).
+        for source in sorted(REPO_ROOT.glob("packs/*/pack-source.yaml")) + [ARD_DEMO / "pack-source.yaml"]:
+            pack = load(source.read_text())
+            if pack.get("scope", {}).get("kind") != "admission":
+                continue
+            asks = {r["ask"]["derivation"] for r in pack["rows"] if "ask" in r}
+            self.assertNotIn("served_summary/1", asks, source)
+
     def test_compiles_to_a_contract(self):
         contract = ec.from_pack(load(baseline_text()))
-        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.1.0@1.1.0")
+        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.2.0@1.2.0")
         self.assertEqual([r["id"] for r in contract["requirements"]],
                          [r["id"] for r in load(baseline_text())["rows"]])
         judged = [r for r in contract["requirements"] if r["id"] == "adjacent-domain"]
@@ -491,7 +501,7 @@ class MuseBuyer(unittest.TestCase):
             want = {"t1-a-dispute-lost-to-another-party-limits": ("fail", False),
                     "t1-no-dispute-lost-goes": ("pass", False),
                     "t1-disputes-without-decided-are-recorded": ("not_read", True),
-                    "t1-unverifiable-card-with-a-tally-asks": ("not_read", False)}
+                    "t1-unverifiable-card-with-a-tally-limits": ("not_read", False)}
             seen = set()
             for c in doc["cases"]:
                 if c["case"] not in want:
@@ -702,7 +712,7 @@ class Refusals(unittest.TestCase):
 
     def test_ids_with_a_trailing_newline(self):
         self.assertRefused("  - id: attestation\n", "  - id: \"attestation\\n\"\n", "id must be lowercase")
-        self.assertRefused("pack_id: asg/admission_baseline/1.1.0", "pack_id: \"asg/admission_baseline/1.1.0\\n\"",
+        self.assertRefused("pack_id: asg/admission_baseline/1.2.0", "pack_id: \"asg/admission_baseline/1.2.0\\n\"",
                            "must be owner/name/version")
 
     def test_a_rail_pin_with_an_uppercase_digest(self):
@@ -741,7 +751,7 @@ class Refusals(unittest.TestCase):
         text = baseline_text().replace("  - id: attestation\n", "  - id: [attestation]\n") \
             .replace("check: platform.owner_signed", "check: [platform.owner_signed]") \
             .replace('source: "evidencebook-skills#51', 'source_was: "x"\nsource: {by: "evidencebook-skills#51')
-        text = text.replace('#280"\n', '#280"}\n', 1)
+        text = re.sub(r'^(source: \{by: ".*")$', r"\1}", text, count=1, flags=re.M)
         issues = pack_compile.validate_source(load(text))
         self.assertTrue(any("id must be lowercase" in i for i in issues), issues)
         self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
@@ -913,13 +923,11 @@ class ArdDemoBuyer(unittest.TestCase):
         self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "selection", "no-unanswered-dispute"})
         self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
         self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]],
-                         ["card-verified", "card-fresh", "disputes-against"])
+                         ["disputes-against"])
         self.assertEqual({k: v for k, v in base_rows["disputes-against"].items() if k != "on_unread"},
                          demo_rows["disputes-against"])
         self.assertNotIn("on_unread", demo_rows["disputes-against"])
-        # Steven, 2026-11-25, Q6 (buzz 5c625586): the demo's pack asks for no served summary; nothing else differs
-        for row in ("card-verified", "card-fresh"):
-            self.assertEqual({k: v for k, v in base_rows[row].items() if k != "ask"}, demo_rows[row])
+        # Steven, 2026-11-25, Q6 (buzz 5c625586): no pack asks for a served summary (#288, #380)
         self.assertNotIn("served_summary", (ARD_DEMO / "pack-source.yaml").read_text().replace("Q6", ""))
 
     def test_a_lost_dispute_limits_and_the_witness_is_the_hosted_one(self):
