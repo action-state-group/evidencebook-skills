@@ -24,79 +24,11 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
 
 ## What you need
 
-1. A Mac on Apple silicon. The steps use the arm64 build of Goose; an Intel build is on the same release page.
+1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs only what is missing with Homebrew, saying so first, and upgrades nothing you already have: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm, and GNU tar. It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
 
-   ```
-   uname -m
-   ```
+2. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. The set-up script asks which one, once.
 
-   **Expect:** `arm64`.
-
-2. Homebrew. If `brew --version` fails, install it with the line from brew.sh.
-
-   ```
-   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-   ```
-
-3. Python 3.10 or later (3.14 tested by hand at an earlier pin). Check, and install if missing.
-
-   ```
-   python3 --version
-   brew install python
-   ```
-
-4. git. Check, and install if missing.
-
-   ```
-   git --version
-   brew install git
-   ```
-
-5. jq (stock macOS often lacks it). Check, and install if missing.
-
-   ```
-   jq --version
-   brew install jq
-   ```
-
-6. Go. Check, and install if missing. Any recent version works: the build lines set `GOTOOLCHAIN=auto`, so Go fetches the version each module asks for.
-
-   ```
-   go version
-   brew install go
-   ```
-
-7. Node.js and npm. Check, and install if missing.
-
-   ```
-   node --version; npm --version
-   brew install node
-   ```
-
-8. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. With Claude Code ACP only: install the `claude` CLI if missing, sign in, check. With another provider, skip this block; you enter its sign-in or key in set-up step 8.
-
-   ```
-   command -v claude || npm install -g @anthropic-ai/claude-code
-   claude auth login
-   claude auth status
-   ```
-
-   **Expect:** `claude auth status` prints JSON with `"loggedIn": true`.
-
-9. lsof. macOS ships it; check that it is there. `demo.py reset` stops with an error without it.
-
-   ```
-   command -v lsof
-   ```
-
-   **Expect:** a path such as `/usr/sbin/lsof`.
-
-10. [Real] Real rail only: Rust. Check, and install if missing. A real payment also needs a small amount of bitcoin on Lightning.
-
-    ```
-    cargo --version
-    brew install rust
-    ```
+3. [Real] Real rail only: run the set-up script with `--real-rail`, which also installs Rust. A real payment also needs a small amount of bitcoin on Lightning.
 
 ## If you used this guide before 2026-11-19
 
@@ -110,91 +42,39 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
 
 ## Set up, once
 
-Paste each block into the same terminal window, one at a time, and wait for each to finish before the next. Every block can be run again: it leaves what is already right and moves the rest.
+Paste this line into a terminal and press Return:
 
-1. Install the build tools. GNU tar is needed because the plugin build script refuses macOS's own tar.
+```
+f=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/action-state-group/evidencebook-skills/main/demo/ard/setup.sh -o "$f" && /bin/bash "$f"
+```
 
-   ```
-   brew install go gnu-tar
-   ```
+On a Mac that already has `~/ard-demo/evidencebook-skills`, this does the same: `~/ard-demo/evidencebook-skills/demo/ard/setup.sh` (add `--real-rail` for the real rail).
 
-2. Get the code: evidencebook-skills at main, and the other repositories at their pins. This block clones what is missing and moves what is already there, so it is the same on a new Mac and on one that ran an earlier version of this guide.
+It prints one line for each thing it checks or does, and stops once for you (step 8 below). If something fails, it says which step and where the details are; once that is fixed, run it again. Run it again at any time: it skips everything already done, so on a set-up Mac it changes nothing.
 
-   ```
-   mkdir -p $HOME/ard-demo && cd $HOME/ard-demo
-   [ -d evidencebook-skills ] || git clone -q https://github.com/action-state-group/evidencebook-skills evidencebook-skills; git -C evidencebook-skills fetch -q origin; git -C evidencebook-skills checkout -q --detach origin/main
-   [ -d evidencebook ] || git clone -q https://github.com/action-state-group/evidencebook evidencebook; git -C evidencebook fetch -q origin 63f2d610aa8e6b4fff52b847f06afa0493aabb96; git -C evidencebook checkout -q 63f2d610aa8e6b4fff52b847f06afa0493aabb96
-   [ -d capsule-cli ] || git clone -q https://github.com/action-state-group/capsule-cli capsule-cli; git -C capsule-cli fetch -q origin 052a8a6a7de4360a9e18b1269ba558bf71d0fef2; git -C capsule-cli checkout -q 052a8a6a7de4360a9e18b1269ba558bf71d0fef2
-   [ -d capsule-engine ] || git clone -q https://github.com/action-state-group/capsule-engine capsule-engine; git -C capsule-engine fetch -q origin 0263ff119911d91eb54dd3d3debdcc71324042eb; git -C capsule-engine checkout -q 0263ff119911d91eb54dd3d3debdcc71324042eb
-   ```
+**Expect:** it ends with one line naming what it set up (`Set-up is done at evidencebook-skills …, evidencebook 63f2d61, capsule-cli 052a8a6 (capsulectl v0.1.0-main.052a8a6a), capsule-engine 0263ff1, Goose Desktop 1.59.2, provider …`), then `Next: "Before each run" in the RUNBOOK.`
 
-   **Expect:** no output.
+What it does, in order (you do not type these):
 
-3. Build and install capsulectl with its book and deal plugins, all at one version (about 5 minutes). It installs into `~/.local`.
+1. Installs what is missing (What you need, item 1) with Homebrew. GNU tar is needed because the plugin build script refuses macOS's own tar.
 
-   ```
-   cd $HOME/ard-demo && export GOTOOLCHAIN=auto TAR=gtar PATH="$HOME/.local/bin:$PATH"
-   CORE_SHA=052a8a6a7de4360a9e18b1269ba558bf71d0fef2 EB_SHA=63f2d610aa8e6b4fff52b847f06afa0493aabb96 V=v0.1.0-main.052a8a6a P=darwin-arm64 PKG=github.com/action-state-group/capsule-cli/cli
-   mkdir -p $HOME/.local/bin $HOME/.local/lib/capsulectl/plugins
-   (cd capsule-cli && scripts/release-build.sh "$V" "$CORE_SHA" "$HOME/ard-demo/core" > /dev/null)
-   install -m 0755 "$HOME/ard-demo/core/capsulectl-$V-$P" $HOME/.local/bin/capsulectl
-   evidencebook/capsulectl/scripts/release-build.sh "$V" "$EB_SHA" "$HOME/ard-demo/dist" > /dev/null
-   for l in book deal; do (cd evidencebook/capsulectl && CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "-s -w -buildid= -X $PKG.CLIVersion=$V -X $PKG.CLICommit=$CORE_SHA -X $PKG.PluginVersion=$V -X $PKG.PluginCommit=$EB_SHA" -o "$HOME/ard-demo/dist/capsulectl-$l-$V-$P" "./cmd/capsulectl-$l"); done
-   capsulectl plugin install "$HOME/ard-demo/dist/capsulectl-book-$V-$P" > /dev/null && capsulectl plugin install "$HOME/ard-demo/dist/capsulectl-deal-$V-$P" > /dev/null
-   tar -xzf "$HOME/ard-demo/dist/standard-history-$V.tar.gz" -C $HOME/.local/lib/capsulectl/plugins
-   tar -xzf "$HOME/ard-demo/dist/deal-view-$V.tar.gz" -C $HOME/.local/lib/capsulectl/plugins
-   capsulectl --version; capsulectl plugin ls | python3 -c 'import json,sys; d=json.load(sys.stdin); print([(p["name"], p["version"]) for p in d["plugins"]], "refused:", d["refused"])'
-   ```
+2. Gets the code into `~/ard-demo`: evidencebook-skills at main, and evidencebook, capsule-cli and capsule-engine at the pins in this guide's header. It clones what is missing and moves what is already there, so it is the same on a new Mac and on one that ran an earlier version of this guide. A checkout with changes of its own is neither moved nor built from: the script stops and says so.
 
-   **Expect:** `capsulectl v0.1.0-main.052a8a6a (commit 052a8a6a…)`, then `[('book', 'v0.1.0-main.052a8a6a'), ('deal', 'v0.1.0-main.052a8a6a')] refused: []`.
+3. Builds and installs capsulectl with its book and deal plugins, all at one version (about 5 minutes), into `~/.local`.
 
-4. Build capsule-engine, and make the Python environment.
+4. Builds capsule-engine into `~/ard-demo/bin`, and makes the Python environment (`.venv` in evidencebook-skills). A capsule-viewer package an earlier set-up left in `.venv` is no longer used; it can stay.
 
-   ```
-   cd $HOME/ard-demo && mkdir -p bin && (cd capsule-engine/go && GOTOOLCHAIN=auto go build -o $HOME/ard-demo/bin/capsule-engine ./cmd/capsule-engine)
-   cd $HOME/ard-demo/evidencebook-skills && python3 -m venv .venv
-   .venv/bin/pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0"
-   ```
+5. Installs Goose Desktop 1.59.2 (Apple silicon), replacing any other version in Applications. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
 
-   **Expect:** pip ends with no error. A capsule-viewer package an earlier set-up left in `.venv` is no longer used; it can stay.
+6. Claude Code ACP only: installs the demo's own Claude Code adapter (ACP) 0.108.0 under `~/ard-demo/acp`, **never with npm install -g**: a global install replaces the adapter version other tools on your Mac use, and one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made. It also installs the `claude` CLI with Homebrew if it is missing, and when Claude Code is not signed in, opens its sign-in in your browser.
 
-5. Install Goose Desktop 1.59.2 (Apple silicon), replacing any Goose already in Applications.
+7. Starts the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, never on your own Goose's settings**, so a provider, sign-in or key you set up in your own Goose is not there, and steps 8 and 9 never change your own Goose. Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
 
-   ```
-   osascript -e 'quit app "Goose"'
-   curl -fsSL -o /tmp/Goose-darwin-arm64.zip https://github.com/aaif-goose/goose/releases/download/v1.59.2/Goose-darwin-arm64.zip
-   rm -rf /tmp/goose-1.59.2 && ditto -x -k /tmp/Goose-darwin-arm64.zip /tmp/goose-1.59.2 && rm -rf /Applications/Goose.app && mv /tmp/goose-1.59.2/Goose.app /Applications/
-   ```
+8. **Your step.** The script asks which model, then says where to click. In that Goose (maximize the window if it opens small), on the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example ChatGPT Codex, then sign in; or Google or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Type hello in the chat and check that it answers, then press Return in the terminal. The script checks the choice the way open-windows.py does and, if it is not right yet, says why and opens Goose again. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.) A rerun skips this step once a model is chosen.
 
-   **Expect:** `/Applications/Goose.app` exists, and Goose > About Goose shows 1.59.2. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
+9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** quits that Goose and turns off every Goose extension in its settings (Analyze, Apps, Computer Controller, Developer, Extension Manager, Skills, Summon and Top Of Mind), then checks, the way open-windows.py does, that none is still on. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on (`scheduler: enabled: true`).
 
-6. Claude Code ACP only (skip with another provider): install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
-
-   ```
-   npm install --prefix $HOME/ard-demo/acp @agentclientprotocol/claude-agent-acp@0.108.0
-   ```
-
-   **The demo's Goose has its own settings.** It runs on its own folder, `~/.config/ard-commerce-goose`, never on your own Goose's settings. So a provider, sign-in or key you set up in your own Goose is not there: you enter it again in step 8, on the demo Goose's own Connect to a Provider screen (later: Settings, Models).
-
-7. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
-
-   ```
-   osascript -e 'quit app "Goose"'
-   cd $HOME/ard-demo/evidencebook-skills && .venv/bin/python demo/ard/goose/open-windows.py --goose-only
-   ```
-
-   **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
-
-8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example ChatGPT Codex, then sign in; or Google or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
-   **Expect:** a chat opens and answers a short message.
-
-9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Computer Controller, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
-
-10. Quit that Goose.
-
-   ```
-   osascript -e 'quit app "Goose"'
-   ```
+10. Leaves that Goose quit.
 
 ## Real rail, once
 
@@ -509,10 +389,10 @@ To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the window
 
 ## Running this guide with an agent
 
-An agent with a terminal can run the command blocks for you: What you need items 1 and 3 to 7 and 9 to 10, Set up steps 1 to 7 and 10, Real rail, In every terminal, Before each run steps 1 to 5 (reset, seed and its wait, the balances, opening the windows), and the shutdown. It must stop and hand over to you for:
+An agent with a terminal can run the command blocks for you: the set-up script (Set up, once) up to its question in step 8, Real rail, In every terminal, Before each run steps 1 to 5 (reset, seed and its wait, the balances, opening the windows), and the shutdown. It must stop and hand over to you for:
 
-- anything that asks for your password or a sign-in: Homebrew's install (What you need item 2), `claude auth login` (item 8), the provider sign-in or key in Set up step 8, funding a real-rail wallet;
-- the safety steps: turning every extension off (Set up step 9) and checking each window's extensions (Before each run step 8). They are what keeps a window's agent to its own tools, so you do them, not the agent;
+- anything that asks for your password or a sign-in: Homebrew's install, the Claude Code sign-in and the model choice, sign-in or key (all in the set-up script, Set up step 8), funding a real-rail wallet;
+- the safety step: checking each window's extensions (Before each run step 8). It is what keeps a window's agent to its own tools, so you do it, not the agent. (The set-up script turns every extension off itself, Set up step 9, and checks it.);
 - Goose's Trust and Execute prompts, every macOS permission prompt and tiling the windows by hand (Before each run step 6);
 - the run itself: typing in the windows and answering every dialog (Pay, Received, Dispute, Rule). Only your click answers a dialog.
 
