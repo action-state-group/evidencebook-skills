@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a  # main: #935 (deal report --html), #933 (deal tick --now), #951 (the page on capsule-viewer bb8169bb)
+      EVIDENCEBOOK_REF: 47a35cdcf1608a41c9f208f8e106e9d1a57db7ab  # main: #935 (deal report --html), #933 (deal tick --now), #951 (the page on capsule-viewer bb8169bb), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
     steps:
       - uses: actions/checkout@v4
