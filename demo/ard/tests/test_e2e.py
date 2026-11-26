@@ -92,11 +92,27 @@ def world(tmp_path_factory):
         st.close()
 
 
+#: How long a test waits for a seller's published card to carry its witness's receipt. The one hosted witness takes
+#: 13-46 s per stamp under parallel runs (evidencebook-skills#370), longer than an on-demand publish waits
+#: (flow.CARD_STAMP_WAIT_S); the seller's loop publishes the stamped card once the witness has taken it.
+CARD_STAMPED_WAIT_S = 120
+
+
+def _wait_stamped(w, seller: str) -> None:
+    import flow
+
+    card = flow.stage_dir(w["home"]) / "cards" / f"{seller}.json"
+    stop = time.monotonic() + CARD_STAMPED_WAIT_S
+    while not (card.is_file() and flow.stamped(card)) and time.monotonic() < stop:
+        time.sleep(2)
+
+
 def _assess(w, buyer_party):
     import buyer
 
     out = {}
     for e in w["entries"]:
+        _wait_stamped(w, e["id"])
         ev = buyer.gather(w["home"], buyer_party, e)
         # #350: a real verify of each seeded shared card checks its witness's receipt for the card's anchor
         # (reader_witnesses, evidencebook#957), so Maya is told it is time-stamped
