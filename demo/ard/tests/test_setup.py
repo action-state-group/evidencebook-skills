@@ -26,7 +26,7 @@ MAIN = "a" * 40  # where the stand-in origin/main of evidencebook-skills is
 JQ = shutil.which("jq")
 pytestmark = pytest.mark.skipif(not JQ or not Path("/bin/bash").exists(), reason="the script needs jq and /bin/bash")
 
-# Each stand-in logs its arguments to $STUB_LOG, one line per call.
+# Each stand-in logs its arguments to $STUB_LOG, one line per call (brew also logs whether it may upgrade anything).
 STUBS = {
     "uname": 'case "$1" in -s) echo Darwin ;; -m) echo arm64 ;; *) echo Darwin ;; esac',
     "lsof": "exit 0",
@@ -41,6 +41,8 @@ STUBS = {
     "jq": f'exec {JQ} "$@"',
     # brew install <formula> puts that formula's stand-in on PATH
     "brew": r'''echo "brew $*" >>"$STUB_LOG"
+[ "$1" != install ] || [ "$HOMEBREW_NO_INSTALL_UPGRADE$HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK" = 11 ] \
+  || echo "brew may upgrade" >>"$STUB_LOG"
 case "$1" in
   --prefix) echo "$STUB_DIR/brew-prefix" ;;
   install) f=${!#}; for c in $(cat "$STUB_DIR/templates/formula-$f" 2>/dev/null || echo "$f"); do
@@ -58,7 +60,7 @@ if [ "$1" = clone ]; then d=${!#}; mkdir -p "$d/.git"; echo 0000 >"$d/.git/HEAD-
 [ "$1" = -C ] || exit 0
 d=$2; shift 2
 case "$1" in
-  rev-parse) if [ "$2" = HEAD ]; then cat "$d/.git/HEAD-stub"; else echo "$STUB_MAIN"; fi ;;
+  rev-parse) if [ "$2" = HEAD ]; then cat "$d/.git/HEAD-stub"; elif [ "$2" = --short=7 ]; then cut -c1-7 "$d/.git/HEAD-stub"; else echo "$STUB_MAIN"; fi ;;
   status) cat "$d/.git/dirty" 2>/dev/null; true ;;
   checkout) echo "${!#}" >"$d/.git/HEAD-stub" ;;
 esac''',
@@ -175,7 +177,10 @@ def test_a_set_up_mac_is_left_as_it_is(mac):
     assert mac.goose_config.read_bytes() == before
     assert "Installing" not in run.stdout and "Building" not in run.stdout
     assert "already installed (v0.1.0-main." in run.stdout and "Goose extensions: already all off" in run.stdout
-    assert run.stdout.rstrip().endswith('Set-up is done. Next: "Before each run" in the RUNBOOK.')
+    assert (f"Set-up is done at evidencebook-skills {MAIN[:7]}, evidencebook {PIN['EVIDENCEBOOK_PIN'][:7]}, capsule-cli "
+            f"{PIN['CAPSULE_CLI_PIN'][:7]} (capsulectl {CORE_V}), capsule-engine {PIN['CAPSULE_ENGINE_PIN'][:7]}, Goose "
+            f"Desktop {PIN['GOOSE_VERSION']}, model openai.") in run.stdout
+    assert run.stdout.rstrip().endswith('Next: "Before each run" in the RUNBOOK.')
     # the checks of "What you need" are printed once, before the hand-over to the checkout's copy
     assert run.stdout.count("jq: already installed") == 1
 
@@ -186,6 +191,8 @@ def test_a_missing_tool_is_installed_once(mac):
     assert run.returncode == 0, run.stdout + run.stderr
     assert "Installing Go with Homebrew (brew install go) ..." in run.stdout
     assert "brew install go" in mac.calls()
+    assert "upgrades nothing you have" in run.stdout
+    assert "brew may upgrade" not in mac.calls()
     run = mac.run()
     assert run.returncode == 0 and not [c for c in mac.calls() if c.startswith("brew install")]
 

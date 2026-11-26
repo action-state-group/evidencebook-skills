@@ -24,7 +24,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
 
 ## What you need
 
-1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs what is missing with Homebrew, saying so first: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm, and GNU tar. It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
+1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs only what is missing with Homebrew, saying so first, and upgrades nothing you already have: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm, and GNU tar. It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
 
 2. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. The set-up script asks which one, once.
 
@@ -52,7 +52,7 @@ On a Mac that already has `~/ard-demo/evidencebook-skills`, this does the same: 
 
 It prints one line for each thing it checks or does, and stops once for you (step 8 below). If something fails, it says which step and where the details are; once that is fixed, run it again. Run it again at any time: it skips everything already done, so on a set-up Mac it changes nothing.
 
-**Expect:** it ends with `Set-up is done. Next: "Before each run" in the RUNBOOK.`
+**Expect:** it ends with one line naming what it set up (`Set-up is done at evidencebook-skills …, evidencebook 4c07d0f, capsule-cli 16ec5bc (capsulectl v0.1.0-main.16ec5bc9), capsule-engine 0263ff1, Goose Desktop 1.59.2, model …`), then `Next: "Before each run" in the RUNBOOK.`
 
 What it does, in order (you do not type these):
 

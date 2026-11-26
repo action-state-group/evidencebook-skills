@@ -36,6 +36,7 @@ REAL_RAIL=0
 CONTINUED=0
 LOG=""
 DOING=""
+MODEL=""
 
 say() { printf '%s\n' "$*"; }
 # A step that is already done says so once; after the hand-over to the checkout's copy (step 2) the checks of "What
@@ -59,6 +60,12 @@ ask() {  # ask <prompt>: one line from the person; stop if there is none (the in
   read -r REPLY || stop "no answer was typed. Run this again when you are at the keyboard."
 }
 
+# Install one missing formula or cask, without upgrading anything already installed (a dependency it shares, or the
+# formulae that depend on it): Sherlock2 on #364, install only what is missing.
+brew_install() {
+  HOMEBREW_NO_INSTALL_UPGRADE=1 HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 HOMEBREW_NO_AUTO_UPDATE=1 brew install "$@"
+}
+
 # ---- What you need -------------------------------------------------------------------------------------------------
 need() {  # need <command> <brew formula> <what it is>
   if command -v "$1" >/dev/null 2>&1; then
@@ -66,13 +73,13 @@ need() {  # need <command> <brew formula> <what it is>
   else
     say "  Installing $3 with Homebrew (brew install $2) ..."
     DOING="installing $3"
-    run brew install "$2"
+    run brew_install "$2"
   fi
 }
 
 prerequisites() {
   QUIET_STEP=1
-  [ "$CONTINUED" = 1 ] || say "Checking what the demo needs ..."
+  [ "$CONTINUED" = 1 ] || say "Checking what the demo needs (it installs only what is missing and upgrades nothing you have) ..."
   [ "$(uname -s)" = Darwin ] || stop "this demo runs on a Mac."
   [ "$(uname -m)" = arm64 ] || stop "this Mac is not Apple silicon, and the demo uses the Apple silicon build of Goose."
   if ! command -v brew >/dev/null 2>&1 && [ -x /opt/homebrew/bin/brew ]; then
@@ -81,7 +88,7 @@ prerequisites() {
   if command -v brew >/dev/null 2>&1; then
     already "Homebrew: already installed"
   else
-    say "  Installing Homebrew, the Mac's package manager. Its installer asks for this Mac's password."
+    say "  Installing Homebrew, the Mac's package manager. Its installer asks for this Mac's password (it uses sudo)."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
       && [ -x /opt/homebrew/bin/brew ] || stop "Homebrew did not install. Install it from https://brew.sh, then run this again."
     eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -106,7 +113,7 @@ prerequisites() {
   else
     say "  Installing Python 3 with Homebrew (brew install python) ..."
     DOING="installing Python 3"
-    run brew install python
+    run brew_install python
     PY="$(brew --prefix)/bin/python3"
   fi
   QUIET_STEP=0
@@ -310,7 +317,7 @@ claude_code() {  # the claude CLI and its sign-in, for Claude Code ACP
   else
     say "  Installing Claude Code with Homebrew (brew install --cask claude-code) ..."
     DOING="installing Claude Code"
-    run brew install --cask claude-code
+    run brew_install --cask claude-code
   fi
   if claude_signed_in; then already "Claude Code: already signed in"; return 0; fi
   say "  Sign in to Claude Code: a browser page opens; sign in there with your Claude account, then come back here."
@@ -388,6 +395,8 @@ goose_settings_step() {
     || stop "these Goose extensions are still on: $(field "$status" '.on | join(", ")'). One switched on in /etc/goose/config.yaml cannot be switched off here; ask whoever looks after this Mac."
   status=$(goose_status) || stop "the demo Goose's settings could not be read."
   [ "$(field "$status" '.problem // ""')" = "" ] || stop "$(field "$status" .problem)"
+  MODEL=$(field "$status" .provider)
+  [ "$MODEL" != claude-acp ] || MODEL="claude-acp (Claude Code adapter $ACP_VERSION)"
 }
 
 main() {
@@ -424,7 +433,8 @@ main() {
   goose_step
   goose_settings_step
   say ""
-  say "Set-up is done. Next: \"Before each run\" in the RUNBOOK."
+  say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), evidencebook ${EVIDENCEBOOK_PIN:0:7}, capsule-cli ${CAPSULE_CLI_PIN:0:7} (capsulectl $CORE_V), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, model $MODEL."
+  say "Next: \"Before each run\" in the RUNBOOK."
 }
 
 main ${1+"$@"}
