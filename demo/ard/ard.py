@@ -96,11 +96,12 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     its publisher, and the commitment it names is the one served and verifies. A failed check sets ``problem``."""
     if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
         return _refuse(item, DIFFERS)
-    item["checks"].append("registry copy matches the seller's own entry")
+    item["checks"].append("the registry's copy matches the seller's own listing")
     tm = own.get("trustManifest") or {}
     if tm.get("identity") != domain:
         return _refuse(item, WRONG_SITE, f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}")
-    item["checks"].append(f"identity names the publisher {domain} (a local stand-in: nothing proves domain control)")
+    item["checks"].append(f"the listing names the site it was published on, {domain} (a local stand-in here: nothing "
+                          "proves who controls that site)")
     att = next((a for a in tm.get("attestations") or [] if isinstance(a, dict) and a.get("type") == PROFILE), None)
     if att is None:
         return _refuse(item, NO_COMMITMENT, f"no {PROFILE} attestation in the entry's trustManifest")
@@ -110,7 +111,7 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
     if not item["digest_matches"]:  # the entry points at another document than the one served
         return _refuse(item, NOT_NAMED, f"the digest of {att['uri']} differs from the entry's {att['digest']}")
-    item["checks"].append("the commitment served is the one the seller's entry names")
+    item["checks"].append("the seller's signed commitment is the one its listing names")
     try:
         doc_c = json.loads(octets)
         cm.verify(doc_c)
@@ -118,7 +119,7 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
         return _refuse(item, NOT_VERIFIED, repr(exc))
     item["identity"] = doc_c["key_id"]
     item["commitment"] = doc_c
-    item["checks"].append("commitment signature verifies")
+    item["checks"].append("the seller's signed commitment verifies")
 
 
 def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
@@ -131,8 +132,8 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         ident = result.get("identifier", "")
         domain = _publisher_of(ident)
         item: dict[str, Any] = {"identifier": ident, "id": ident.rsplit(":", 1)[-1], "name": result.get("displayName", ident),
-                                "publisher": domain,
-                                "checks": [f"registry result: {ident} (relevance {result.get('score')}, a pointer only)"]}
+                                "publisher": domain, "score": result.get("score"),
+                                "checks": ["the registry found it: a pointer only, so the seller's own listing is checked"]}
         found.append(item)
         origin = origins.get(domain)
         if not origin:
@@ -148,7 +149,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
             _refuse(item, UNREADABLE, f"{origin}{WELL_KNOWN}: {exc!r}")
             continue
         item["entry"], item["registry"] = own, result  # for the listing tool
-        item["checks"].append(f"seller's own entry fetched from {domain} ({origin}{WELL_KNOWN})")
+        item["checks"].append(f"the seller's own listing was fetched from its site, {domain}")
         try:  # any malformed field or fetch fails this seller only; the entry fetched stays for the listing
             _check_entry(item, own, result, domain)
         except Exception as exc:  # noqa: BLE001

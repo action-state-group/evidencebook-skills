@@ -43,7 +43,16 @@ def test_the_registry_answers_search_and_the_buyer_verifies_each_seller(disc):
     assert sorted(f["id"] for f in found) == ["alder", "kestrel"]
     for f in found:
         assert "problem" not in f and f["commitment"]["key_id"] == f"{f['id']}-key"
-        assert any("pointer only" in c for c in f["checks"]) and any("matches the seller's own entry" in c for c in f["checks"])
+        assert any("pointer only" in c for c in f["checks"]) and any("matches the seller's own listing" in c for c in f["checks"])
+
+
+def test_each_check_reads_plainly(disc):
+    """evidencebook-skills#345: the checks a buyer's agent shows in a listing name no identifier, digest, file or score."""
+    for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print"):
+        assert len(f["checks"]) == 6
+        for c in f["checks"]:
+            for jargon in ("urn:", "sha256", "relevance", ".json", "{", "http"):
+                assert jargon not in c, (jargon, c)
 
 
 def test_the_search_carries_only_the_item_query(disc, monkeypatch):
@@ -76,7 +85,7 @@ def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monke
 
     monkeypatch.setattr(ard, "entry", tampered)
     found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
-    assert "commitment" in found["alder"] and "the commitment served is the one the seller's entry names" in found["alder"]["checks"]
+    assert "commitment" in found["alder"] and "the seller's signed commitment is the one its listing names" in found["alder"]["checks"]
     assert found["kestrel"]["problem"] == ard.NOT_NAMED and "commitment" not in found["kestrel"]
     assert "sha256:" + "0" * 64 in found["kestrel"]["detail"]
 

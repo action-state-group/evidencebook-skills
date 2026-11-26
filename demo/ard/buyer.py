@@ -103,7 +103,7 @@ def record_search(maya: pt.Party, registry_url: str, query: str, entries: list[d
     for e in entries:
         own = e.get("entry")
         rec = {"search": search_id, "sellers_found": len(entries), "seller": e.get("id", ""),
-               "identifier": e.get("identifier", ""), "registry": registry_url, "query": query,
+               "identifier": e.get("identifier", ""), "registry": registry_url, "query": query, "score": e.get("score"),
                "fetched_from": e.get("fetched_from", ""), "entry_sha256": card_digest(own) if own is not None else "",
                "offer_stated": own.get("x-demo-offer") if isinstance(own, dict) else None,
                "checks": list(e.get("checks", [])), "passed": "problem" not in e}
