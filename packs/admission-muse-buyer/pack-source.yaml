@@ -107,7 +107,8 @@ rows:
 
   # T1: the card is required, fresh and witnessed, with claims held shown
   # with their denominator and a controller declared. A missing, refused or
-  # stale card limits to T0, except for a merchant the own-settled lift covers
+  # stale card limits to T0 (refused: the merchant refused the buyer's own
+  # request for its card, since the pack asks for none), except for a merchant the own-settled lift covers
   # (own-settled below): that one is not limited by these card rows. 1.2.0: the
   # pack asks for no served summary (Steven, 2026-11-25, Q6; #380). claims-held
   # still needs the claims counts only served_summary/1 carries, until #385
