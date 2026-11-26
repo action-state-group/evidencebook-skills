@@ -132,12 +132,14 @@ def card_line(card: dict) -> str:
     # §11.6; the shared copy carries it too); Sherlock2's words (evidencebook#979). A /4 card has no such member.
     waiting = card.get("not_counted", {}).get("no_witness_time", 0)
     if not o["of"]:  # Sherlock2 on #362: never "0 deals, every one went as agreed", nor "no disputes" over one
-        ds = card.get("disputes", {})
-        if not waiting and not any(ds.get(k, {}).get("of", 0) or any(ds.get(k, {}).get("by_outcome", {}).values())
-                                   for k in ("received", "raised")):
-            return "No deals yet, and no disputes."
+        # Sherlock2 on #394: none counted but some waiting reads "No deals counted yet: N deal(s) waiting for a
+        # time-stamp", ending like #362's sentence when there is no dispute
         counted = (f"No deals counted yet: {plural(waiting, 'deal')} waiting for a time-stamp" if waiting
                    else "No deals yet")
+        ds = card.get("disputes", {})
+        if not any(ds.get(k, {}).get("of", 0) or any(ds.get(k, {}).get("by_outcome", {}).values())
+                   for k in ("received", "raised")):
+            return f"{counted}, and no disputes."
         left = ""
     else:
         counted = f"{plural(o['of'], 'deal')}, {went}"

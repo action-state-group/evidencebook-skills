@@ -108,11 +108,14 @@ def test_the_card_line_says_how_many_deals_wait_for_a_time_stamp():
     four = card()
     four["derivation"] = "standard_history/4"
     assert WAITING not in screens.card_line(four)
-    # none counted yet, every deal waiting (a slow witness, RUNBOOK step 15): never "No deals yet, and no disputes."
+    # none counted yet, every deal waiting (a slow witness, RUNBOOK step 15); Sherlock2's words on #394
     assert screens.card_line(card3(2, of=0, held=0)) == (
+        "No deals counted yet: 2 deals waiting for a time-stamp, and no disputes.")
+    assert screens.card_line(card3(1, of=0, held=0)) == (
+        "No deals counted yet: 1 deal waiting for a time-stamp, and no disputes.")
+    assert screens.card_line(card3(2, of=0, held=0, open_=1)) == (
         "No deals counted yet: 2 deals waiting for a time-stamp. Disputes others raised about it: 0 decided against "
-        "it, of 0 decided; 0 open.")
-    assert screens.card_line(card3(1, of=0, held=0)).startswith("No deals counted yet: 1 deal waiting for a time-stamp. ")
+        "it, of 0 decided; 1 open.")
 
 
 def test_the_shared_copy_a_buyer_fetches_shows_the_deals_waiting(tmp_path):
