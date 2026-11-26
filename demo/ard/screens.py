@@ -128,11 +128,11 @@ def limit_line(limit_msat: int | None, pack_ceilings: list[int]) -> str:
     """The spending limit the person set, or that none is set and what limits apply then (evidencebook-skills#331): the
     pack's own limits, one per history tier, read from the pack. Names no one; the amounts are configuration."""
     if limit_msat is not None:
-        return (f"Your spending limit: {msat(limit_msat)} for one order and over 7 days; each payment is checked "
-                "against it.")
+        return (f"Your spending limit: {msat(limit_msat)} for any one order, and {msat(limit_msat)} in total over 7 days. "
+                "Each payment is checked against it.")  # Sherlock2 on #354 (buzz 7bef2399)
     cs = [msat(c) for c in sorted(pack_ceilings)]
     under = cs[0] if len(cs) == 1 else ", ".join(cs[:-1]) + " or " + cs[-1]
-    return f"No spending limit is set, so only this pack's limits apply: deals under {under}, by the seller's history."
+    return f"No spending limit is set, so only this pack's limits apply: deals under {under}, depending on the seller's history."
 
 
 def within_limit(price_msat: int, limit_msat: int | None) -> str:
