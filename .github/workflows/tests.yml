@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 184fec5bfc47763a6ecc6686f30fdc447c6d9199  # main: #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #971 (the page on capsule-viewer 8fe749b)
+      EVIDENCEBOOK_REF: 4c07d0fd70562423e76e9d57afbff61623b05b43  # main: #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
     steps:
       - uses: actions/checkout@v4
