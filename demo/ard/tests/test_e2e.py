@@ -92,9 +92,8 @@ def world(tmp_path_factory):
         st.close()
 
 
-#: How long a test waits for a seller's published card to carry its witness's receipt. The one hosted witness takes
-#: 13-46 s per stamp under parallel runs (evidencebook-skills#370), longer than an on-demand publish waits
-#: (flow.CARD_STAMP_WAIT_S); the seller's loop publishes the stamped card once the witness has taken it.
+#: How long a test waits for a seller's published card to carry its witness's receipt: longer than an on-demand publish
+#: waits (flow.CARD_STAMP_WAIT_S); the seller's loop publishes the stamped card once the witness has taken it (#350).
 CARD_STAMPED_WAIT_S = 120
 
 
@@ -102,9 +101,8 @@ def _wait_stamped(w, seller: str) -> None:
     import flow
 
     card = flow.stage_dir(w["home"]) / "cards" / f"{seller}.json"
-    stop = time.monotonic() + CARD_STAMPED_WAIT_S
-    while not (card.is_file() and flow.stamped(card)) and time.monotonic() < stop:
-        time.sleep(2)
+    stamp_wait(lambda: card.is_file() and flow.stamped(card), f"{seller}'s published card carrying its receipt",
+               CARD_STAMPED_WAIT_S)
 
 
 def _assess(w, buyer_party):
