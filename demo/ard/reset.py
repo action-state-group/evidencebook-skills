@@ -4,9 +4,9 @@
 In order, and changing nothing until every check passes: refuse a home that is ``/``, your user folder or a folder
 above it, or a symlink; refuse while Goose Desktop runs (its windows hold servers on the home and would trust the
 recipes again); find who holds files under the home or listens on the stage's ports (``lsof``; refuse if that cannot
-be checked). The demo's own processes are Python running ``stage.py`` or ``desktop_server.py`` that either hold one of
-the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a ``stage.py`` holds
-``stage/.stage.lock``, :data:`stage.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
+be checked). The demo's own processes are Python running ``stage.py``, ``desktop_server.py`` or ``watch.py`` that
+either hold one of the home's lock files (a ``desktop_server.py`` holds ``.desktop-<role>.lock``, a ``watch.py``
+``.watch-<role>.lock``, a ``stage.py`` ``stage/.stage.lock``, :data:`stage.STAGE_LOCK`), or, like a stage started before stages held a lock, hold a file
 under the home or listen on the stage's ports and either name this home in their arguments or run from this
 checkout's ``demo/ard``, whatever commit started them. Anything else holding the home or listening on those ports stops
 the reset. Then stop ours (SIGTERM, then SIGKILL, each pid checked again just before each signal), check again, delete
@@ -93,11 +93,11 @@ def _lsof(*args: str) -> list[tuple[int, str, str]]:
 
 
 #: The demo's own scripts: a lock holder is ours only if it is Python running one of these.
-SCRIPTS = ("stage.py", "desktop_server.py")
+SCRIPTS = ("stage.py", "desktop_server.py", "watch.py")
 
 
 def _locks(home: Path) -> list[Path]:
-    found = sorted(home.glob(".desktop-*.lock"))
+    found = sorted([*home.glob(".desktop-*.lock"), *home.glob(".watch-*.lock")])
     if (home / "stage" / STAGE_LOCK).exists() or (home / "stage" / STAGE_LOCK).is_symlink():
         found.append(home / "stage" / STAGE_LOCK)
     for lock in found:

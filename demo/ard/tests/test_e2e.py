@@ -26,15 +26,13 @@ pytestmark = pytest.mark.skipif(os.environ.get("ARD_E2E") != "1" or not all(
 
 
 def _local_witness(mp: pytest.MonkeyPatch) -> None:
-    """Name the witness ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` give, instead of the hosted one, in every
-    place the demo names a witness: scripts/check.sh starts one on this machine (capsule-anchor's ci/local-witness,
-    evidencebook-skills#371), so parallel local checks neither wait on nor load Action State's service. Test-only: a
-    person's run, and CI's on main and nightly, keep the hosted witness. ``deal init`` can name only the hosted witness
-    (evidencebook capsulectl ``deal.go``, ``DealDefaultWitness``), so it runs with ``--no-witness`` and the profile then
-    names this one, as :meth:`party.Party.add_witness` does for a profile made without a witness. The buyer's pack
-    trusts this witness's key in place of the hosted one's, or no card would read as witnessed."""
+    """Name the witness ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` give, instead of the hosted one: scripts/check.sh
+    starts one on this machine (capsule-anchor's ci/local-witness, evidencebook-skills#371), so parallel local checks
+    neither wait on nor load Action State's service. The demo's own code then names it the way ``ARD_WITNESS=local`` does
+    (evidencebook-skills#382): every profile after ``deal init`` (:meth:`party.Party.create`), and the buyer's pack trusts
+    its key (:func:`pack.starting`). Test-only here: a person's run, and CI's on main and nightly, keep the hosted
+    witness, and its name on the screens stays the hosted one's, which the page checks below read."""
     import buyer
-    import pack as packs
     import party as pt
 
     url, key = os.environ.get("ARD_E2E_WITNESS_URL", ""), os.environ.get("ARD_E2E_WITNESS_KEY", "")
@@ -42,25 +40,9 @@ def _local_witness(mp: pytest.MonkeyPatch) -> None:
         raise pytest.UsageError("set both ARD_E2E_WITNESS_URL and ARD_E2E_WITNESS_KEY, or neither")
     if not url:
         return
-    hosted = pt.WITNESS_KEY
     mp.setattr(pt, "WITNESS_URL", url)
     mp.setattr(pt, "WITNESS_KEY", key)
     mp.setitem(buyer.OPERATOR_FACTS, "witness", key)
-
-    def starting():  # the pack's witness trust root is the hosted witness's key (pack-source.yaml trust_roots)
-        text = packs.source_path().read_text()
-        assert text.count(hosted) == 1, "the pack names the hosted witness's key once, in trust_roots"
-        return packs.compile_source(text.replace(hosted, key), packs.version_of(text))
-    mp.setattr(packs, "starting", starting)
-    run = pt.Party.run
-
-    def init_then_name(self, *args):
-        if args[:1] != ("init",) or "--no-witness" in args:
-            return run(self, *args)
-        out = run(self, *args, "--no-witness")
-        self.add_witness()
-        return out
-    mp.setattr(pt.Party, "run", init_then_name)
 
 
 @pytest.fixture(scope="module")

@@ -43,8 +43,10 @@ VARS = (
         "/path/to/seller-wallet", ("local",), "dir"),
     Var("ARD_PAY_LOCAL", "the ln-pay-local binary, if it is not on the PATH", "/path/to/ln-pay-local", (), "program"),
     Var("ARD_HOME", "the demo home (default ~/.config/ard-commerce-demo)", "~/.config/ard-commerce-demo", ()),
-    Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); by default each checkpoint goes to "
-        "Action State's hosted witness, witness.agentactioncapsule.org, which receives hashes only", "off", ()),
+    Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); local sends each checkpoint to the "
+        "witness ARD_WITNESS_URL and ARD_WITNESS_KEY name (testbed.py starts one on this Mac and sets all three); by "
+        "default each checkpoint goes to Action State's hosted witness, witness.agentactioncapsule.org, which receives "
+        "hashes only", "off", ()),
     Var("ARD_NOTIFY", "0 turns off the desktop notification each seller event shows (deal agreed, paid, dispute "
         "received, ruling); by default the seller windows show one", "0", ()),
 )
