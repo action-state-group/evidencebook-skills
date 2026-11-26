@@ -149,7 +149,7 @@ class Script:
         rule("Maya asks her agent")
         print(f"Maya: {ASK}")
         rule("ARD discovery")
-        self.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+        self.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY, stage.CATALOG_ORIGIN)
         buyer.record_search(self.maya, stage.REGISTRY_URL, stage.QUERY, self.entries)
         self.keys = {e["id"]: e["commitment"]["key_id"] for e in self.entries if "commitment" in e}
         for e in self.entries:

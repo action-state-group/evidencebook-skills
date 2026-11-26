@@ -170,6 +170,7 @@ def test_a_seller_offers_only_a_product_the_catalog_lists_for_it(tmp_path, monke
     "products: {alder: {badges-200: {title: '', price_msat: 5}}}\n",
     "products: {alder: {badges-200: {title: t, price_msat: 5, discount: 1}}}\n",
     "products: {alder: {}}\n",
+    "products: {alder: {badges_200: {title: t, price_msat: 5}}}\n",  # not an id the stage's route serves
     "products: {}\nextra: 1\n",
     "just text\n",
 ])

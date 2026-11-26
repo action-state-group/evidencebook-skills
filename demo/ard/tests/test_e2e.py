@@ -64,7 +64,7 @@ def world(tmp_path_factory):
         seed.seed(home, say=lambda *_: None)
         st = stage.Stage(home)
         agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
-        entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+        entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY, stage.CATALOG_ORIGIN)
         w = {"home": home, "stage": st, "agents": agents, "maya": pt.Party(home, "maya"), "adj": adj.Adjudicator(home),
              "pack": packs.starting(), "entries": entries,
              "keys": {e["id"]: e["commitment"]["key_id"] for e in entries}}

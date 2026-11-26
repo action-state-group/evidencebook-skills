@@ -2,6 +2,7 @@
 """Who is in the demo and what they sell: the facts every process reads, in one place."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -18,6 +19,8 @@ SHIPS = {"alder": ("delivered:badges_200_of_200", "200 of 200 badges"),
 DISCLOSES = ("subjects", "derivations", "human_gated", "answers_within")
 
 
+#: A product id: what the stage's catalog route serves (``stage.CATALOG_PATH``).
+PRODUCT_ID = re.compile(r"[a-z0-9-]+")
 #: The catalog stand-in (evidencebook-skills#382): each seller's products, their titles and prices.
 CATALOG = Path(__file__).resolve().parent / "catalog.yaml"
 
@@ -29,14 +32,14 @@ def catalog(path: Path = CATALOG) -> dict[str, dict[str, dict]]:
     try:
         ok = isinstance(c, dict) and set(c) == {"products"} and isinstance(products, dict) and all(
             isinstance(items, dict) and items and all(
-                isinstance(pid, str) and isinstance(p, dict) and set(p) == {"title", "price_msat"}
+                isinstance(pid, str) and PRODUCT_ID.fullmatch(pid) is not None and isinstance(p, dict) and set(p) == {"title", "price_msat"}
                 and isinstance(p["title"], str) and p["title"] and type(p["price_msat"]) is int and p["price_msat"] > 0
                 for pid, p in items.items())
             for items in products.values())
     except TypeError:
         ok = False
     if not ok:
-        raise ValueError(f"{path}: needs products: <seller>: <product id>: title and price_msat > 0, only")
+        raise ValueError(f"{path}: needs products: <seller>: <product id (a-z, 0-9, -)>: title and price_msat > 0, only")
     return products
 
 

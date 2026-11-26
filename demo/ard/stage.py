@@ -41,8 +41,12 @@ POLICY_URI = re.compile(r"policies/[0-9a-f]{64}\.json")
 CATALOG_PATH = re.compile(r"/catalog/([a-z0-9-]+)/([a-z0-9-]+)\.json")
 
 
+#: The catalog stand-in's origin: the stage serves it beside the registry, and the buyer checks offers only there.
+CATALOG_ORIGIN = f"http://127.0.0.1:{HTTP_PORT}"
+
+
 def catalog_url(seller: str, product: str) -> str:
-    return f"http://127.0.0.1:{HTTP_PORT}/catalog/{seller}/{product}.json"
+    return f"{CATALOG_ORIGIN}/catalog/{seller}/{product}.json"
 
 
 #: The file a stage holds open under ``<home>/stage`` for as long as it runs (``demo.py reset`` finds it by it).

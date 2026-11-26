@@ -88,6 +88,7 @@ NOT_VERIFIED = "the seller's signature on its terms does not check out"
 COMMITMENT_UNREADABLE = "the seller's listing or its signed terms could not be read"
 CATALOG_DIFFERS = "the listing's offer is not the one the catalog lists for this seller"
 CATALOG_UNREADABLE = "the catalog could not be read"
+CATALOG_UNLINKED = "the listing links no catalog entry for this seller"
 
 
 def _refuse(item: dict, reason: str, detail: str = "") -> None:
@@ -96,23 +97,32 @@ def _refuse(item: dict, reason: str, detail: str = "") -> None:
         item["detail"] = detail
 
 
-def _catalog_check(item: dict, offer: dict) -> bool:
-    """The listing's offer against the product the catalog stand-in lists at the address the offer links (#382): the
-    same product, title and price. False, with ``problem`` set, when it differs or cannot be read."""
-    try:
-        listed = json.loads(_fetch(offer["catalog"]))
-    except Exception as exc:  # noqa: BLE001
-        _refuse(item, CATALOG_UNREADABLE, f"{offer['catalog']}: {exc!r}")
+def _catalog_check(item: dict, offer: dict, catalog: str) -> bool:
+    """The listing's offer against the catalog stand-in at ``catalog`` (its origin, which the buyer knows as it knows
+    the registry's; #382): the listing must link this seller's product there, and the catalog must list that product for
+    this seller at the same title and price. False, with ``problem`` set, otherwise."""
+    link = offer.get("catalog") if isinstance(offer, dict) else None
+    if not link:
+        _refuse(item, CATALOG_UNLINKED)
         return False
-    if (listed.get("product"), listed.get("title"), listed.get("price_msat")) != (
-            offer.get("product"), offer.get("item"), offer.get("price_msat")):
+    want = f"{catalog}/catalog/{item['id']}/"
+    if not (isinstance(link, str) and link.startswith(want)):
+        _refuse(item, CATALOG_UNLINKED, f"the listing links {link!r}, not this seller's entry under {want}")
+        return False
+    try:
+        listed = json.loads(_fetch(link))
+    except Exception as exc:  # noqa: BLE001
+        _refuse(item, CATALOG_UNREADABLE, f"{link}: {exc!r}")
+        return False
+    if (listed.get("seller"), listed.get("product"), listed.get("title"), listed.get("price_msat")) != (
+            item["id"], offer.get("product"), offer.get("item"), offer.get("price_msat")):
         _refuse(item, CATALOG_DIFFERS, f"the catalog lists {listed!r}")
         return False
     item["checks"].append("the offer is the product the catalog (a stand-in) lists for this seller, at the same price")
     return True
 
 
-def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
+def _check_entry(item: dict, own: dict, result: dict, domain: str, catalog: str | None = None) -> None:
     """The checks on one seller's own entry, recorded on ``item``: its copy matches the registry's, its identity names
     its publisher, and the commitment it names is the one served and verifies. A failed check sets ``problem``."""
     if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
@@ -126,9 +136,8 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     if att is None:
         return _refuse(item, NO_COMMITMENT, f"no {PROFILE} attestation in the entry's trustManifest")
     item["offer"] = own["x-demo-offer"]
-    if isinstance(item["offer"], dict) and item["offer"].get("catalog"):
-        if not _catalog_check(item, item["offer"]):
-            return None
+    if catalog and not _catalog_check(item, item["offer"], catalog):
+        return None
     item["uri"] = att["uri"]
     octets = _fetch(att["uri"])
     item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
@@ -148,8 +157,9 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     item["checks"].append("the seller's signed terms are the ones the listing names, and the signature checks out")
 
 
-def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
-    """Search the registry, then check each result against the seller's own entry and commitment. Each
+def lookup(registry_url: str, origins: dict[str, str], text: str, catalog: str | None = None) -> list[dict]:
+    """Search the registry, then check each result against the seller's own entry and commitment, and, with
+    ``catalog`` (the catalog stand-in's origin), its offer against the catalog (:func:`_catalog_check`). Each
     item says what was checked (``checks``); an item that fails a check has ``problem`` set (a plain reason above),
     ``detail`` when there is more to keep, and no ``commitment``. ``origins`` maps a publisher domain to the address it
     is served at."""
@@ -177,7 +187,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         item["entry"], item["registry"] = own, result  # for the listing tool
         item["checks"].append("found in the registry, then read from the seller's own site")
         try:  # any malformed field or fetch fails this seller only; the entry fetched stays for the listing
-            _check_entry(item, own, result, domain)
+            _check_entry(item, own, result, domain, catalog)
         except Exception as exc:  # noqa: BLE001
             for k in ("offer", "commitment", "identity"):
                 item.pop(k, None)
