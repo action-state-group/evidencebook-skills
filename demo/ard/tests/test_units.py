@@ -694,8 +694,8 @@ def test_the_history_page_is_written(monkeypatch, tmp_path):
             path.write_text(json.dumps(doc))
             return path
 
-        def verify(self, bundle):
-            return {"verdict": "VALID", "witnesses": {"status": "pass"}}
+        def verify(self, bundle, report_on_fail=False):
+            return {"verdict": "VALID", "witnesses": {"status": "withheld"}, "reader_witnesses": {"status": "pass"}}
     page = pages.card_page(P(), "Alder Print Co.", rail="simulated", seller=True)
     assert page.parent == tmp_path / "pages" and page.name.startswith("alder-history-")
     assert "History · Alder Print Co." in page.read_text()

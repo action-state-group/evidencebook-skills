@@ -28,7 +28,6 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 ## What is not there yet
 
 - **The hosted adjudicator.** The adjudicator here is a capsulectl-deal profile the operator runs on this Mac (evidencebook#893). The hosted service, with the adjudicator's own journal record of each request, is evidencebook#861 PR 3.
-- **The card's witness.** No verb gives a buyer the witness receipt for a card's anchor (evidencebook#891), so that input is filled in by the operator and the screen says it is not checked.
 - **The History page's dispute line.** The view has no member for disputes, so the card's tally is one line above it.
 
 ## Without Goose

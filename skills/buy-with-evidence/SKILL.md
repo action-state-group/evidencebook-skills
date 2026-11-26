@@ -128,8 +128,8 @@ before paying is its own approval dialog.
   tool's own words (a dispute decided against it, a ruling you hold against it). Never name a tool to the person (say
   "the payment", never `ard_pay`).
 - The assessment takes some inputs from the operator without checking them (which marketplace the seller is on,
-  the list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's key); the
-  screen says so. Do not present those as checked.
+  the list of sellers this pack accepts, who time-stamps a seller's card whose receipt is not checked, which key
+  belongs to the witness, and who controls the seller's key); the screen says so. Do not present those as checked.
 - Say the card's counts exactly as the card gives them, in the words above; never guess a higher or lower number,
   and never call them failures.
 - Recommend a seller only after you have assessed every seller that passed its checks; before that, say what you

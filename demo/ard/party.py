@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -29,6 +30,7 @@ import _paths
 _paths.setup()
 
 import goose_node as gn  # noqa: E402
+import ctl as ctl_mod  # noqa: E402
 from ctl import Ctl, Refused  # noqa: E402
 
 # The Goose reference's Ctl and engine read their binaries from these; the demo's own variables name them.
@@ -62,6 +64,30 @@ CURRENCY = "BTC"  # capsulectl reads a BTC amount_minor in msat (deal_rules.go m
 class WitnessSlow(Refused):
     """The witness took no stamp of this party's within a wait. Its words are a person's (evidencebook-skills#327): the
     last tick's output goes to the party's own log (:meth:`Party.log`), never into a chat."""
+
+
+#: The card bundle's extension that carries its witness's receipt for its anchor (evidencebook#957).
+CARD_ANCHOR_WITNESS = "x-standard-history-anchor-witness/v0"
+#: Said when the card's time-stamp receipt does not check out under the witness's key.
+STAMP_FAILED = "its time-stamp receipt does not check out"
+
+
+def not_verified(subject: str, verdict: str) -> str:
+    """Said when ``subject`` (``Your History card``, ``Alder Print Co.'s card``) fails verify on a verdict other than
+    its time-stamp receipt (Sherlock2 on #350). INCOMPLETE is not a failed signature: capsulectl also reads it when a
+    member is a refusal (capsule-cli ``composed.go``)."""
+    if verdict == "INCOMPLETE":
+        return (f"{subject} could not be fully checked: capsulectl deal verify reported it INCOMPLETE, because part of "
+                "what it covers is withheld or missing from the file.")
+    return f"{subject} does not verify: capsulectl deal verify reported it {verdict}."
+
+
+def anchor_witness(out: dict) -> str:
+    """The status of a History card's time-stamp, as ``verify --bundle`` reports it (evidencebook#957):
+    ``reader_witnesses`` checks the witness's receipt for the card's anchor (pass; withheld when it could not be checked
+    under the directory given; fail), and is absent when the card carries no receipt (""). The core ``witnesses`` row
+    beside it is about the card bundle's own log, which no witness sees, so it is never read for a card."""
+    return (out.get("reader_witnesses") or {}).get("status", "")
 
 
 def witnessed() -> bool:
@@ -405,16 +431,42 @@ class Party:
     def deals(self) -> list[dict]:
         return self.run("list", "--json")
 
-    def verify(self, bundle: Path, proof: Path | None = None) -> dict:
+    def verify(self, bundle: Path, proof: Path | None = None, report_on_fail: bool = False) -> dict:
         """``capsulectl verify --bundle`` on a file, with the hosted witness's directory so its receipts are checked. With
         ``proof`` (``deal checkpoint proof`` of that same copy), its x-deal-v1 entry also says the book's witness time,
-        ``witnessed: {status, witness, at}``, as ``deal report --html`` draws it (evidencebook ``deal_v1_witnessed.go``)."""
+        ``witnessed: {status, witness, at}``, as ``deal report --html`` draws it (evidencebook ``deal_v1_witnessed.go``).
+        With ``report_on_fail``, a verdict other than VALID returns verify's report (it prints it, then exits non-zero:
+        capsule-cli ``verify_bundle.go``), so the caller can say which check failed (#350); any other failure raises."""
         args = ["verify", "--bundle", str(bundle)]
         if witnessed():
             args += ["--witness-directory", self.write("witnesses.json", witness_directory())]
             if proof is not None:
                 args += ["--stamp-proof", str(proof)]
-        return self.run(*args)
+        if not report_on_fail:
+            return self.run(*args)
+        with self._lock:
+            return verify_report(self.ctl, args)
+
+
+def verify_report(c: Ctl, args: list[str]) -> dict:
+    """``Ctl.run`` for ``verify``, keeping the report verify prints before a non-zero verdict exit (``Ctl.run`` drops it
+    and raises). A failure with no report (no such file, a bundle verify cannot read) raises :class:`Refused`."""
+    env = {**os.environ, "HOME": str(c.home), "XDG_CONFIG_HOME": str(c.home / ".config")}
+    try:
+        done = subprocess.run([c.binary, "--profile", c.profile, *args], env=env, capture_output=True,
+                              timeout=ctl_mod.TIMEOUT, check=False)
+    except FileNotFoundError:
+        raise Refused(f"{c.binary} is not installed") from None
+    except subprocess.TimeoutExpired:
+        raise Refused(f"capsulectl-deal {args[0]} did not finish in {ctl_mod.TIMEOUT}s") from None
+    try:
+        out = json.loads(done.stdout.decode("utf-8", "replace").strip() or "{}")
+    except ValueError:
+        out = {}
+    if done.returncode == 0 or (isinstance(out, dict) and out.get("verdict")):
+        return out
+    why = out.get("error") if isinstance(out, dict) else None
+    raise Refused(why or done.stderr.decode("utf-8", "replace").strip() or f"capsulectl-deal {args[0]} failed")
 
 
 def decide(pack: Path, inputs: dict, admit_refs: dict | None = None) -> dict:
