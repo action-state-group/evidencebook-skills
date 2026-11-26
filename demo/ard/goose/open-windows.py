@@ -270,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     if gap := envhelp.message("open-windows.py", "fake" if args.show else args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
         return 2
-    import limits  # after the variables check: it reads the evidencebook checkout
+    import limits  # the limit's one parser (limits.limit_msat); it needs no evidencebook checkout
     try:  # a bad spending limit stops here, before any window opens (#331), not at the buyer's first turn
         limits.limit_msat()
     except limits.LimitError as exc:

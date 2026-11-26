@@ -130,7 +130,8 @@ def limit_line(limit_msat: int | None, pack_ceilings: list[int]) -> str:
     if limit_msat is not None:
         return (f"Your spending limit: {msat(limit_msat)} for one order and over 7 days; each payment is checked "
                 "against it.")
-    under = ", ".join(msat(c) for c in sorted(pack_ceilings))
+    cs = [msat(c) for c in sorted(pack_ceilings)]
+    under = cs[0] if len(cs) == 1 else ", ".join(cs[:-1]) + " or " + cs[-1]
     return f"No spending limit is set, so only this pack's limits apply: deals under {under}, by the seller's history."
 
 

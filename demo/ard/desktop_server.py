@@ -388,7 +388,9 @@ def ard_assess() -> None:
         a = buyer.assess(s.maya, ev, e["commitment"]["key_id"], e["offer"]["price_msat"], p)
         s.assessed[e["id"]] = a
         ceiling = p.ceiling_msat(a.tier) if a.tier else None
-        print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}{screens.within_limit(a.price_msat, limit)}")
+        # the limit words only for a seller that can be paid: a pick that is not GO pays nothing (ard_pick)
+        fits = screens.within_limit(a.price_msat, limit) if a.verdict == "GO" else ""
+        print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}{'.' if fits else ''}{fits}")
 
 
 def _ceilings(p: packs.Pack) -> list[int]:
@@ -708,8 +710,8 @@ def ard_show_card() -> None:
     """Show THIS window's own History card as of a checkpoint taken now (or its last one, if the witness does not take a
     new one): deals counted, held, did not hold, and disputes others raised about it; in the buyer's window also the
     spending limit the person set, or that none is set. The buyer's first turn calls it."""
+    limit = None if ROLE in SELLERS else limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses before anything is done
     p, name = _own()
-    limit = None if ROLE in SELLERS else limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses before anything is shown
     try:
         p.stamp()
     except pt.Refused as exc:  # the card as of its last checkpoint still shows, and the time says which (#331)
