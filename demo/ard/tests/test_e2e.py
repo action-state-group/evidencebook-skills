@@ -264,8 +264,6 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
 
 
 @pytest.mark.skipif(not os.environ.get("CAPSULECTL"), reason="CAPSULECTL names capsule-cli's capsulectl (countersign request)")
-@pytest.mark.skip(reason="#383: waits for evidencebook's withheld form to carry a payment's settlement member; "
-                         "removed before merge")
 def test_the_countersign_upgrade_after_deal_2(world, tmp_path):
     """#383, Sherlock2's what (Buzz f903059c): after deal 2 Maya asks the demo's countersigner, which admits only the
     demo's parties, to countersign her own records of it; her receipt then says so, from capsulectl's stored
