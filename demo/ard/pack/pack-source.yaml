@@ -11,13 +11,15 @@
 # card that carries the tally is read, and a missing tally limits); the
 # selection rows are gone, since no verb serves a selection/1 answer; the
 # witness trust root is Action State's hosted witness key.
+# 2.1.0 (#401): the band-history row reads from T1, the same row as the
+# baseline and Muse buyer packs (Steven, 2026-11-26), with no ask.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
-pack_id: demo/ard_admission/2.0.0
-pack_version: 2.0.0
+pack_id: demo/ard_admission/2.1.0
+pack_version: 2.1.0
 scope:
   kind: admission
-source: "demo copy of evidencebook-skills admission-baseline@1; placeholder thresholds, for this demo only"
+source: "demo copy of evidencebook-skills admission-baseline@1; placeholder thresholds, for this demo only, except the band row, which is the baseline's"
 
 outcomes: ["GO", "ASK", "LIMIT", "NO"]
 # A missing input limits to T0; it is never a silent GO.
@@ -35,7 +37,7 @@ accept:
 
 # A deal sits in the first tier whose ceiling for its band unit holds the
 # band's decade. Above the highest tier that names its unit nothing is
-# offered: a USD deal above T2, or a sat deal above T1, is LIMIT at that tier
+# offered: a deal above T2, in sat or USD, is LIMIT at that tier
 # with source above_tier, unless a NO row or a missing input decides first or
 # a row lowers the tier.
 tiers:
@@ -106,10 +108,12 @@ rows:
     from: T0
     on_fail: "record"
 
-  # T1: the card is required, fresh and witnessed, with claims held shown
-  # with their denominator and a controller declared. A missing or stale card
-  # limits to T0; the pack asks for no served summary (Steven, 2026-11-25, Q6:
-  # buzz 5c625586).
+  # T1: the card is required, fresh and witnessed, with a track record in the
+  # deal's band or one above it and a controller declared. A missing or stale
+  # card limits to T0; the pack asks for no card (Steven, 2026-11-25, Q6:
+  # buzz 5c625586). The band row is the baseline's and the Muse buyer pack's
+  # (Steven, 2026-11-26, #401), read one decade at a time: bands are not
+  # added across decades.
   - id: card-verified
     statement: The counterparty's card verifies under the key that presents it.
     source: card
@@ -127,6 +131,13 @@ rows:
     statement: A witness in this pack's trust roots receipted the card's latest checkpoint.
     source: card
     check: card.witnessed
+    from: T1
+    on_fail: "LIMIT"
+  - id: band-history
+    statement: In one band at or above the deal's, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.
+    source: card
+    check: card.band_history_or_stake
+    params: {k: 10, step_decades: 0, max_adverse_permille: 100}  # Steven's numbers (#385, #401)
     from: T1
     on_fail: "LIMIT"
   - id: controller-declared
@@ -156,18 +167,11 @@ rows:
     from: T1
     on_fail: "LIMIT"
 
-  # T2: the controller in our trust roots, and the band history.
+  # T2: the controller in our trust roots.
   - id: controller-trusted
     statement: The controller the card declares is in this pack's trust roots.
     source: card
     check: card.controller_trusted
-    from: T2
-    on_fail: "LIMIT"
-  - id: band-history
-    statement: In the deal's band the card shows at least 10 decided deals and at most 100 per thousand did not hold.
-    source: card
-    check: card.band_history_or_stake
-    params: {k: 10, step_decades: 0, max_adverse_permille: 100}  # placeholder, for this demo only
     from: T2
     on_fail: "LIMIT"
   - id: independence

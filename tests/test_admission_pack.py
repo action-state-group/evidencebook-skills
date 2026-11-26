@@ -958,18 +958,16 @@ class ArdDemoBuyer(unittest.TestCase):
         self.assertEqual(set(self.pack), set(self.base))
         base_rows = {r["id"]: r for r in self.base["rows"]}
         demo_rows = {r["id"]: r for r in self.pack["rows"]}
-        # 2.0.0 (#285): no selection rows (no verb serves selection/1). The demo reads the band row at T2
-        # with no ask, where the baseline reads it at T1 and asks for the commerce card for it (#385),
-        # and the demo asks for no card at all.
+        # 2.0.0 (#285): no selection rows (no verb serves selection/1). 2.1.0 (#401, Steven's ruling): the
+        # band row is the baseline's, from T1, except that the demo asks for no card at all.
         self.assertEqual(set(base_rows) - set(demo_rows), {"selection", "no-unanswered-dispute"})
         self.assertEqual(set(demo_rows) - set(base_rows), set())
         self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]],
                          ["card-verified", "card-fresh", "band-history"])
         for i in ("card-verified", "card-fresh"):
             self.assertEqual({k: v for k, v in base_rows[i].items() if k != "ask"}, demo_rows[i])
-        self.assertEqual({k: v for k, v in base_rows["band-history"].items() if k not in ("ask", "from", "statement")},
-                         {k: v for k, v in demo_rows["band-history"].items() if k not in ("from", "statement")})
-        self.assertEqual(demo_rows["band-history"]["from"], "T2")
+        self.assertEqual({k: v for k, v in base_rows["band-history"].items() if k != "ask"}, demo_rows["band-history"])
+        self.assertEqual(demo_rows["band-history"]["from"], "T1")
         self.assertNotIn("on_unread", demo_rows["disputes-against"])
         # Steven, 2026-11-25, Q6 (buzz 5c625586): no pack asks for a served summary (#288, #380)
         self.assertNotIn("served_summary", (ARD_DEMO / "pack-source.yaml").read_text().replace("Q6", ""))

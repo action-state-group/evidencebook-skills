@@ -28,7 +28,7 @@ def card(of=12, held=12, dnh=0, undecided=0, against=0, open_=0, for_=0, split=0
 
 
 def assessment(verdict, reasons=(), rulings=(), cap=None, price=1000):
-    return buyer.Assessment("kestrel", price, verdict, "T0" if verdict == "LIMIT" else "T2", cap, "demo/ard_admission/2.0.0",
+    return buyer.Assessment("kestrel", price, verdict, "T0" if verdict == "LIMIT" else "T2", cap, "demo/ard_admission/2.1.0",
                             "d" * 64, list(reasons), [], "r" * 64, {}, buyer.Own(rulings=list(rulings)))
 
 
@@ -184,7 +184,7 @@ def test_a_history_row_says_capsulectls_statuses_and_derives_no_outcome():
 
 @pytest.mark.skipif(not os.environ.get("CAPSULE_ENGINE"), reason="CAPSULE_ENGINE names the evaluator")
 def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
-    """The demo pack 2.0.0 under capsule-engine: a verified card that carries no dispute tally is not read as clean, and
+    """The demo pack under capsule-engine: a verified card that carries no dispute tally is not read as clean, and
     one lost dispute limits (Steven's #280 rule); never NO from the card."""
     p = packs.starting()
     now = datetime(2026, 11, 25, tzinfo=timezone.utc)
@@ -201,6 +201,37 @@ def test_a_card_with_no_dispute_tally_limits_and_a_lost_dispute_limits():
         assert got["verdict"] == "LIMIT", got
         row = next(r for r in got["rows"] if r["row"] == "disputes-against")
         assert row["result"] in ("fail", "not_read"), row
+
+
+@pytest.mark.skipif(not os.environ.get("CAPSULE_ENGINE"), reason="CAPSULE_ENGINE names the evaluator")
+def test_the_band_row_gates_t1_one_decade_at_a_time():
+    """#401 (Steven's ruling): the band row is the baseline's, from T1. With every other row passing, a deal of 10 msat
+    or more needs one band at or above the deal's with at least 10 decided deals, at most 100 per thousand not held;
+    a deal under 10 msat (T0) needs none. A failing row limits to T0 unless a lower band earns a higher tier."""
+    p = packs.starting()
+    now = datetime(2026, 11, 25, tzinfo=timezone.utc)
+
+    def decide(price, bands):
+        c = card()
+        c["bands"] = [{"currency": "BTC", "decade": dec - 8, "held": of - dnh, "did_not_hold": dnh, "undecided": 0, "of": of}
+                      for dec, of, dnh in bands]  # dec is the sat decade: 1 sat = 10^-8 BTC
+        d = buyer.inputs(buyer.Evidence("alder", card=c), price, buyer.Own(), now)
+        d["card"].update(first_checkpoint_at="2026-11-24T00:00:00Z", latest_checkpoint_at="2026-11-24T23:00:00Z")
+        got = buyer.pt.decide(p.path, d)
+        assert not got.get("asks"), got
+        row = next((r for r in got["rows"] if r["row"] == "band-history"), {})  # a T0 deal does not reach it
+        return got["verdict"], got.get("tier"), row.get("result")
+
+    thin = [(0, 9, 0)]  # nine decided deals in the 1 sat band: one short of k
+    assert decide(9, thin)[:2] == ("GO", "T0")
+    for price in (10, 999, 1000):
+        assert decide(price, thin) == ("LIMIT", "T0", "fail"), price
+    assert decide(500, [(0, 10, 0)]) == ("GO", "T1", "pass")       # a band above the deal's earns it
+    assert decide(500, [(-1, 10, 1)])[::2] == ("GO", "pass")      # 100 per thousand not held still holds
+    assert decide(500, [(-1, 10, 2)]) == ("LIMIT", "T0", "fail")  # 200 per thousand does not
+    assert decide(500, [(-1, 6, 0), (0, 6, 0)]) == ("LIMIT", "T0", "fail")  # bands are not added across decades
+    assert decide(1000, [(0, 10, 0)])[0] == "GO"
+    assert decide(1000, [(-1, 10, 0)])[:2] == ("LIMIT", "T1")      # a lower band earns T1, not the deal's T2
 
 
 def test_the_adjudicators_request_is_the_wire_form(monkeypatch):

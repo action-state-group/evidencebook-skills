@@ -1,6 +1,6 @@
 {
-  "id": "demo/ard_admission/2.0.0",
-  "version": "2.0.0",
+  "id": "demo/ard_admission/2.1.0",
+  "version": "2.1.0",
   "requirements": [
     {
       "id": "attestation",
@@ -93,6 +93,15 @@
       "backward_verdict": "DETERMINISTIC"
     },
     {
+      "id": "band-history",
+      "profile": "outcome",
+      "statement": "In one band at or above the deal's, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.",
+      "tier": "must_have",
+      "evidence_rule": "admission check card.band_history_or_stake (k 10, max_adverse_permille 100, step_decades 0), from tier T1; a failure gives LIMIT",
+      "forward_verdict": "DETERMINISTIC",
+      "backward_verdict": "DETERMINISTIC"
+    },
+    {
       "id": "controller-declared",
       "profile": "outcome",
       "statement": "The card's key declares the controller it is bound to.",
@@ -134,15 +143,6 @@
       "statement": "The controller the card declares is in this pack's trust roots.",
       "tier": "must_have",
       "evidence_rule": "admission check card.controller_trusted, from tier T2; a failure gives LIMIT",
-      "forward_verdict": "DETERMINISTIC",
-      "backward_verdict": "DETERMINISTIC"
-    },
-    {
-      "id": "band-history",
-      "profile": "outcome",
-      "statement": "In the deal's band the card shows at least 10 decided deals and at most 100 per thousand did not hold.",
-      "tier": "must_have",
-      "evidence_rule": "admission check card.band_history_or_stake (k 10, max_adverse_permille 100, step_decades 0), from tier T2; a failure gives LIMIT",
       "forward_verdict": "DETERMINISTIC",
       "backward_verdict": "DETERMINISTIC"
     },
