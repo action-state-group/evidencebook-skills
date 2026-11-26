@@ -73,7 +73,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
    brew install node
    ```
 
-8. The `claude` CLI, signed in to a Claude Code subscription. Install it only if missing, sign in, check. The Goose windows use Claude Code as their model.
+8. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself, such as a Gemini or ChatGPT sign-in or an API key (OpenAI, Anthropic, Google and others). Providers that run their own agent (Claude Code CLI, Codex, Cursor Agent, Gemini CLI and the other ACP agents) are refused: their agent brings its own tools, so it could act outside the demo's. With Claude Code ACP only: install the `claude` CLI if missing, sign in, check. With another provider, skip this block; you enter its sign-in or key in set-up step 8.
 
    ```
    command -v claude || npm install -g @anthropic-ai/claude-code
@@ -168,11 +168,13 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    **Expect:** `/Applications/Goose.app` exists, and Goose > About Goose shows 1.59.2. Other versions were not tried; the recipe links depend on how 1.59.2 opens them.
 
-6. Install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
+6. Claude Code ACP only (skip with another provider): install the demo's own Claude Code adapter (ACP) at a pinned version, under ~/ard-demo. **Never install it with npm install -g.** A global install replaces the adapter version other tools on your Mac use; one ACP client stopped working above 0.94.0. open-windows.py points the demo's Goose at this copy (Goose looks in GOOSE_SEARCH_PATHS first). 0.108.0 is the version Goose 1.59.2 ran with when this guide was made.
 
    ```
    npm install --prefix $HOME/ard-demo/acp @agentclientprotocol/claude-agent-acp@0.108.0
    ```
+
+   **The demo's Goose has its own settings.** It runs on its own folder, `~/.config/ard-commerce-goose`, never on your own Goose's settings. So a provider, sign-in or key you set up in your own Goose is not there: you enter it again in step 8, on the demo Goose's own Connect to a Provider screen (later: Settings, Models).
 
 7. Quit Goose, then start the demo's own Goose. **It runs on its own settings folder, `~/.config/ard-commerce-goose`, so the next two steps never change your own Goose.** Goose 1.59.2 keeps its provider and extension settings under `GOOSE_PATH_ROOT` when it is set; open-windows.py starts Goose with it. Reset never deletes this folder.
 
@@ -183,7 +185,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
 
-8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider, type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
+8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example Gemini, then sign in; or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
    **Expect:** a chat opens and answers a short message.
 
 9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.
@@ -297,7 +299,7 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 7. Click Trust and Execute in all four windows, in any order. Click each window once first: a window behind the others takes the first click only to come forward. Maya's window can open with no Trust prompt and answer at once. After an upgrade from a version before evidencebook-skills#277 that is expected once (Troubleshooting 7); otherwise it was seen on another Mac on 2026-11-25, after a reset that cleared all four recipes' trust, with the cause not known yet (evidencebook-skills#322). On the simulated rail, carry on: step 8 checks that it has only its own `ard_maya` tools. On the real rail, Maya's window is the one that pays and the prompt is your check of what it runs: quit Goose and do "Before each run" again from step 1 (reset, seed and its wait, the balances, the windows). If Maya's window again opens with no Trust prompt, stop: run on the simulated rail instead.
    **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya's window shows her own History card and her spending limit ("Your spending limit: … for one order and over 7 days" with `ARD_LIMIT_MSAT` set, otherwise "No spending limit is set, so only this pack's limits apply: deals under 10 msat, 1,000 msat or 10,000 msat, by the seller's history."), then says it is ready; the adjudicator's assistant only says it is ready.
 
-8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** ToolSearch and that window's own `mcp__ard_…` tools, nothing else: Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
+8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** that window's own `ard_…` tools and nothing else (with Claude Code ACP they show as `mcp__ard_…`, beside ToolSearch, which only loads them; with another provider their names may show without the prefix, and any other tool means an extension is still on): Maya's eleven (`ard_find_sellers`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
 9. Keep the screen awake and unlocked: the payment and ruling dialogs appear on it.
 
@@ -504,6 +506,17 @@ To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the window
    ```
    rm -rf ~/ard-demo ~/.config/ard-commerce-goose
    ```
+
+## Running this guide with an agent
+
+An agent with a terminal can run the command blocks for you: What you need items 1 and 3 to 7 and 9 to 10, Set up steps 1 to 7 and 10, Real rail, In every terminal, Before each run steps 1 to 6 (reset, seed and its wait, the balances, opening the windows), and the shutdown. It must stop and hand over to you for:
+
+- anything that asks for your password or a sign-in: Homebrew's install (What you need item 2), `claude auth login` (item 8), the provider sign-in or key in Set up step 8, funding a real-rail wallet;
+- the safety steps: turning every extension off (Set up step 9) and checking each window's extensions (Before each run step 8). They are what keeps a window's agent to its own tools, so you do them, not the agent;
+- Goose's Trust and Execute prompts and every macOS permission prompt;
+- the run itself: typing in the windows and answering every dialog (Pay, Received, Dispute, Rule). Only your click answers a dialog.
+
+While the demo's windows are open, the agent that drives this guide must not have screen control (computer use): with it, it could answer a dialog itself. Run the run's steps yourself.
 
 ## Troubleshooting
 

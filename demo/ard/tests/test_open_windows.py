@@ -135,6 +135,9 @@ def test_the_default_goose_root_is_outside_the_default_home():
 
 def test_a_missing_demo_adapter_refuses_with_the_pinned_local_install(calls, capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("ARD_ACP_PREFIX", str(tmp_path / "no-acp"))
+    cfg = tmp_path / "goose-root" / "config"  # the demo Goose set to Claude Code ACP (#340: only then is the adapter needed)
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "config.yaml").write_text("active_provider: claude-acp\n")
     assert ow.main(["--goose-only"]) == 1
     assert not any(c[:3] == ["open", "-a", "Goose"] for c in calls)
     err = capsys.readouterr().err

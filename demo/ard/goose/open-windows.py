@@ -212,13 +212,58 @@ def goose_root() -> Path:
     return reset.goose_root()
 
 
-def launch_goose(root: Path, wait_s: float = 30.0) -> str | None:
+#: Goose 1.59.2 providers that run their own agent, with its own tools (a shell among them), outside Goose's extensions:
+#: set-up step 9's switches do not reach them, so a window's agent could operate the payment dialog (#276). Ids from
+#: goose v1.59.2 crates/goose/src/providers/*.rs. Claude Code ACP runs through the demo's locked adapter instead.
+AGENT_PROVIDERS = frozenset({"claude-code", "codex", "cursor-agent", "gemini-cli", "codex-acp", "amp-acp", "copilot-acp",
+                             "pi-acp"})
+LOCKED_PROVIDER = "claude-acp"
+#: Goose's scheduler stays on (set-up step 9, the hand run of 2026-11-24): it schedules recipes, it gives no agent a tool
+#: that acts on the screen or a shell.
+KEPT_ON = frozenset({"scheduler"})
+
+
+def goose_config(root: Path) -> dict:
+    """The demo Goose's own config (``<root>/config/config.yaml``, Goose 1.59.2 ``config/paths.rs``); {} before set-up."""
+    import yaml
+    f = root / "config" / "config.yaml"
+    try:
+        return yaml.safe_load(f.read_text()) or {}
+    except FileNotFoundError:
+        return {}
+
+
+def provider_problem(root: Path, setup: bool = False) -> str | None:
+    """Why the demo's Goose must not open the windows with the provider it is set to, or None (#340). Claude Code ACP
+    needs the demo's pinned, locked adapter; a provider where Goose runs the tools needs every Goose extension off (set-up
+    step 9), so only each window's own extension reaches its agent; a provider that runs its own agent is refused. With
+    ``setup`` (set-up step 7, no provider chosen yet), only the adapter question applies, and only for Claude Code ACP."""
+    cfg = goose_config(root)
+    provider = cfg.get("active_provider") or cfg.get("GOOSE_PROVIDER")
+    if provider == LOCKED_PROVIDER:
+        if not (acp_prefix() / "node_modules" / ".bin" / "claude-agent-acp").exists():
+            return (f"the demo's own Claude Code adapter is not installed: {acp_install()} (pinned, under the demo's "
+                    "folder; never npm install -g, which changes the adapter other tools use)")
+        return None
+    if provider in AGENT_PROVIDERS:
+        return (f"the demo's Goose is set to {provider}, which runs its own agent with its own tools, so the windows' "
+                "agents could act outside the demo's tools: choose Claude Code ACP or a provider Goose runs itself (an API "
+                "key, or a sign-in such as Gemini or ChatGPT) in its Settings, Models")
+    if setup or not provider:
+        return None
+    on = sorted(k for k, v in (cfg.get("extensions") or {}).items()
+                if isinstance(v, dict) and v.get("enabled") and k not in KEPT_ON)
+    if on:
+        return ("with " + str(provider) + ", every Goose extension must be off so each window's agent has only its own "
+                "demo tools (set-up step 9); still on: " + ", ".join(on))
+    return None
+
+
+def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str | None:
     """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
     a running Goose would take the recipe links into its own settings."""
-    bin_dir = acp_prefix() / "node_modules" / ".bin"
-    if not (bin_dir / "claude-agent-acp").exists():
-        return (f"the demo's own Claude Code adapter is not installed: {acp_install()} "
-                "(pinned, under the demo's folder; never npm install -g, which changes the adapter other tools use)")
+    if problem := provider_problem(root, setup=setup):
+        return problem
     root.mkdir(parents=True, exist_ok=True)
     # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
     # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first. It finds the
@@ -263,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
         if reset.goose_running():
             print(RUNNING.format(root=root), file=sys.stderr)
             return 2
-        failed = launch_goose(root)
+        failed = launch_goose(root, setup=True)
         print(failed or f"started the demo's own Goose on {root}", file=sys.stderr if failed else sys.stdout)
         return 1 if failed else 0
     # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.
