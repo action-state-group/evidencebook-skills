@@ -56,6 +56,7 @@ def session(tmp_path, monkeypatch):
     import threading
     s = type("S", (), {})()
     s.home, s.maya, s.deals, s.pay_lock = tmp_path, maya, [DEAL], threading.Lock()  # as Session: never taken twice
+    s.ask = "200 badges by Friday"  # her ask, as ard_find_sellers keeps it
     s.latest = lambda key=None: s.deals[-1]
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: "delivered:badges_200_of_200")

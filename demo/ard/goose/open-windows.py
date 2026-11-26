@@ -54,7 +54,7 @@ PARTIES = {
     },
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
-        # no amount here: what she will pay comes in her own words, and her spending limit from ARD_LIMIT_MSAT (#331)
+        # no amount here: what she will pay comes in her own words, and her spending limit from her yes to it (#361)
         "facts": "You are Maya's buying agent. Maya needs 200 conference badges by Friday. "
                  "Your admission pack is demo/ard/pack.",
         # The first message searches nothing: the presenter types the ask, so all four windows can start together and
@@ -112,8 +112,6 @@ def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS", "ARD_NOTIFY"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
-    if role == "maya" and os.environ.get("ARD_LIMIT_MSAT"):  # the buyer's spending limit (limits.py)
-        env.append(f"ARD_LIMIT_MSAT={os.environ['ARD_LIMIT_MSAT']}")
     if rail == "local" and role == "maya":  # only the buyer's window pays
         for var in ("ARD_WALLET_BUYER", "ARD_WALLET_SELLER", "ARD_PAY_LOCAL"):
             if os.environ.get(var):
@@ -380,9 +378,9 @@ def check_provider(root: Path) -> tuple[str | None, str | None]:
         # Sherlock2 on #340 (ops c0813d7e, amended f5adbf20; #356): the allowed choices by the names Goose shows,
         # and where to switch, in plain words, no provider id
         return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
-                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a ChatGPT sign-in), "
-                "an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the demo's Goose with "
-                "open-windows.py --goose-only and change it in Settings, Models"), provider
+                "the Set limit, Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a "
+                "ChatGPT sign-in), an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the "
+                "demo's Goose with open-windows.py --goose-only and change it in Settings, Models"), provider
     if not provider:
         return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)", None
     on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
@@ -475,12 +473,6 @@ def main(argv: list[str] | None = None) -> int:
     # --print opens nothing and pays nothing, so it needs no wallet: it checks the rest and writes placeholders.
     if gap := envhelp.message("open-windows.py", "fake" if args.show else args.rail, as_command="windows"):
         print(gap + "\n(open-windows.py --help lists every variable.)", file=sys.stderr)
-        return 2
-    import limits  # the limit's one parser (limits.limit_msat); it needs no evidencebook checkout
-    try:  # a bad spending limit stops here, before any window opens (#331), not at the buyer's first turn
-        limits.limit_msat()
-    except limits.LimitError as exc:
-        print(str(exc), file=sys.stderr)
         return 2
     if not args.show and reset.goose_running():
         print(RUNNING.format(root=root), file=sys.stderr)

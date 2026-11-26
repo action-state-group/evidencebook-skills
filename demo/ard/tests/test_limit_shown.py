@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """evidencebook-skills#331 (carrying #335): the buyer's first turn shows her own card and the spending limit she set,
 and the assessment shows that limit and whether each price fits it, or says none is set and names the pack's limits.
-The words are general: the non-demo test uses a buyer, sellers and amounts outside the demo cast. No binary is run."""
+evidencebook-skills#361: that limit is the amount she confirmed when her agent proposed it, sealed with her answer in
+her own records (u550); every tool reads the sealed one. The words are general: the non-demo tests use a buyer,
+sellers and amounts outside the demo cast. No binary is run."""
 from __future__ import annotations
 
 import importlib.util
@@ -19,7 +21,7 @@ def test_a_set_limit_is_shown_as_the_person_set_it():
 
 
 def test_no_limit_names_every_limit_of_the_pack_from_the_pack():
-    assert screens.limit_line(None, [10000, 10, 1000]) == ("No spending limit is set, so only this pack's limits apply: "
+    assert screens.limit_line(None, [10000, 10, 1000]) == ("No spending limit is set yet, so only this pack's limits apply: "
                                                           "deals under 10 msat, 1,000 msat or 10,000 msat, depending on the "
                                                           "seller's history.")
 
@@ -49,10 +51,38 @@ def test_the_pack_limits_come_from_the_pack():
     assert ds._ceilings(p) == [p.ceiling_msat(t["id"]) for t in p.tiers()] and len(ds._ceilings(p)) == len(p.tiers())
 
 
-def test_a_bad_limit_refuses_rather_than_reading_as_none(monkeypatch):
-    monkeypatch.setenv("ARD_LIMIT_MSAT", "2k")
+class Book:
+    """A buyer's own records, as limits.seal and limits.sealed use them (party.Party.note and notes)."""
+    name = "rin"
+
+    def __init__(self):
+        self.records = []
+
+    def note(self, record_type, statement, **kw):
+        self.records.append({"type": record_type, "statement": statement})
+
+    def notes(self, record_type=""):
+        return [n for n in self.records if not record_type or n["type"] == record_type]
+
+    def approve(self, deal_id, check, choice, said):
+        self.records.append({"type": "approval", "statement": {"choice": choice, "said": said}})
+
+
+def test_no_limit_until_the_person_confirms_one():
+    book = Book()
+    assert limits.sealed(book) is None  # a proposal the person has not answered sets nothing
+    for bad in (0, -5, True, "4500", 45.0):
+        with pytest.raises(limits.LimitError):
+            limits.seal(book, bad, "Set your spending limit?\nAnswer: Set limit")
     with pytest.raises(limits.LimitError):
-        limits.limit_msat()
+        limits.seal(book, 4500, "  ")
+    assert book.records == []
+    limits.seal(book, 4500, "Set your spending limit to 4,500 msat?\nAnswer: Set limit")
+    assert limits.sealed(book) == 4500
+    assert book.records[-1]["statement"] == {"limit_msat": 4500,
+                                             "said": "Set your spending limit to 4,500 msat?\nAnswer: Set limit"}
+    limits.seal(book, 750, "Set your spending limit to 750 msat?\nAnswer: Set limit")
+    assert limits.sealed(book) == 750  # a later confirmed limit replaces it
 
 
 def _open_windows():
@@ -67,17 +97,7 @@ def test_the_buyers_first_turn_asks_for_her_card_and_limit_and_her_recipe_names_
     ow = _open_windows()
     maya = ow.PARTIES["maya"]
     assert "ard_show_card" in maya["prompt"] and "spending limit" in maya["prompt"]
-    assert "msat" not in maya["facts"]  # her limit is ARD_LIMIT_MSAT; what she will pay comes in her own words
-
-
-def test_opening_the_windows_refuses_a_bad_limit(monkeypatch, capsys, tmp_path):
-    ow = _open_windows()
-    monkeypatch.setenv("ARD_LIMIT_MSAT", "-5")
-    monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: "")
-    monkeypatch.setattr(ow, "goose_root", lambda: tmp_path / "goose")
-    monkeypatch.setattr(ow.reset, "goose_running", lambda: pytest.fail("refused before Goose is looked at"))
-    assert ow.main(["--print"]) == 2
-    assert "ARD_LIMIT_MSAT must be a whole number" in capsys.readouterr().err
+    assert "msat" not in maya["facts"]  # what she will pay, and so her limit, comes in her own words (#361)
 
 
 def test_only_a_seller_that_can_be_paid_gets_the_limit_words(monkeypatch, capsys):
@@ -85,12 +105,12 @@ def test_only_a_seller_that_can_be_paid_gets_the_limit_words(monkeypatch, capsys
     import desktop_server as ds
     import buyer
     import pack as packs
-    monkeypatch.setenv("ARD_LIMIT_MSAT", "500")
     s = type("S", (), {})()
     s.entries = [{"id": "kestrel", "name": "Seller One", "commitment": {"key_id": "k"}, "offer": {"price_msat": 1000}},
                  {"id": "alder", "name": "Seller Two", "commitment": {"key_id": "k"}, "offer": {"price_msat": 400}}]
     s.evidence = {e["id"]: buyer.Evidence(e["id"], card={"outcomes": {}}) for e in s.entries}
-    s.assessed, s.maya, s.pack = {}, None, packs.starting()
+    s.assessed, s.maya, s.pack = {}, Book(), packs.starting()
+    limits.seal(s.maya, 500, "Set your spending limit to 500 msat?\nAnswer: Set limit")
     verdicts = {1000: "LIMIT", 400: "GO"}
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(buyer, "assess", lambda m, ev, key, price, p: type("A", (), {
@@ -103,18 +123,17 @@ def test_only_a_seller_that_can_be_paid_gets_the_limit_words(monkeypatch, capsys
     assert two.endswith("GO: line. Within your limit of 500 msat for one order; your 7-day total is checked at payment.")
 
 
-@pytest.mark.parametrize("limit,want", [("4500", "Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days"),
-                                        ("", "No spending limit is set, so only this pack's limits apply")])
+@pytest.mark.parametrize("limit,want", [(4500, "Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days"),
+                                        (None, "No spending limit is set yet, so only this pack's limits apply")])
 def test_the_buyers_card_shows_her_limit_even_when_the_witness_takes_no_stamp(monkeypatch, limit, want):
     """Codex's round 1: through the tool itself, with a buyer named outside the demo cast and a stamp that fails."""
     import desktop_server as ds
     import flow
     import pack as packs
     import party as pt
-    monkeypatch.setenv("ARD_LIMIT_MSAT", limit)
     logged = []
 
-    class Buyer:
+    class Buyer(Book):
         def stamp(self):
             raise pt.WitnessSlow("slow")
 
@@ -124,7 +143,10 @@ def test_the_buyers_card_shows_her_limit_even_when_the_witness_takes_no_stamp(mo
         def log(self, line):
             logged.append(line)
     s = type("S", (), {"deals": [], "pack": packs.starting()})()
-    monkeypatch.setattr(ds, "_own", lambda: (Buyer(), "Rin"))
+    rin = Buyer()
+    if limit is not None:
+        limits.seal(rin, limit, f"Set your spending limit to {limit:,} msat?\nAnswer: Set limit")
+    monkeypatch.setattr(ds, "_own", lambda: (rin, "Rin"))
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 0, "held": 0, "did_not_hold": 0}},
                                                       {"anchor_time": "2026-11-25T22:00:00Z"}, "k"))
@@ -133,9 +155,101 @@ def test_the_buyers_card_shows_her_limit_even_when_the_witness_takes_no_stamp(mo
     assert "slow" in logged[0]
 
 
-def test_the_buyers_card_refuses_a_bad_limit_before_showing_anything(monkeypatch):
+def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order_question(monkeypatch):
+    """evidencebook-skills#361: step 2's amount, proposed in chat and confirmed by her click in the limit dialog, is the
+    one her card, the assessment, the payment check, her sealed intent and the held-order question use. A buyer,
+    sellers, an ask and an amount outside the demo cast (4,500 msat, not 3,000), so nothing in code supplies them."""
+    import threading
+    import types
+
+    import buyer
     import desktop_server as ds
-    monkeypatch.setenv("ARD_LIMIT_MSAT", "2k")
-    monkeypatch.setattr(ds, "_own", lambda: (pytest.fail("nothing stamped"), "Rin"))
-    out = ds.ard_show_card()
-    assert out.startswith("REFUSED: ARD_LIMIT_MSAT must be a whole number")
+    import pack as packs
+
+    rin = Book()
+    s = types.SimpleNamespace(maya=rin, pack=packs.starting(), log=[], deals=[], declined={}, picked=set(),
+                              ask="", home=None, pay_lock=threading.Lock(),
+                              entries=[{"id": "alder", "name": "Seller Two", "commitment": {"key_id": "k"},
+                                        "offer": {"price_msat": 5000}}])
+    s.evidence = {"alder": buyer.Evidence("alder", card={"outcomes": {}})}
+    s.assessed, s.keys = {}, {"alder": "k"}
+    s.adjudicator = types.SimpleNamespace(named=lambda: {})
+    s.rail = types.SimpleNamespace(SEALED="simulated", checked_invoice=lambda msat: types.SimpleNamespace(payment_hash="h"))
+    monkeypatch.setattr(ds, "session", lambda: s)
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(ds, "_real", lambda: False)
+    monkeypatch.setattr(ds, "gate_off", lambda: False)
+    a = types.SimpleNamespace(verdict="GO", tier=None, price_msat=5000, reasons=[], cap_msat=None, rulings=[])
+    monkeypatch.setattr(buyer, "assess", lambda *args: a)
+    monkeypatch.setattr(ds.screens, "decision_line", lambda a, ev, ceiling=None: "GO: line")
+    assert not any(c.isdigit() for c in ds.ard_set_limit.__doc__)  # the tool's words carry no amount (#331)
+
+    # her ask, in her own words, and the amount proposed in chat but not yet confirmed: no limit
+    monkeypatch.setattr(ds.ard, "lookup", lambda *args: s.entries)
+    monkeypatch.setattr(buyer, "record_search", lambda *args: None)
+    ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
+    assert "No spending limit is set yet" in ds.ard_assess()
+    dialogs = []
+
+    def answer(how):
+        return lambda title, text, yes, no="Cancel": dialogs.append((title, text, yes)) or how
+    for how, said in ((ds.NO, "Maya chose Cancel"), (ds.NO_ANSWER, "Maya did not answer in time")):
+        monkeypatch.setattr(ds, "dialog_answer", answer(how))
+        out = ds.ard_set_limit(4500)
+        assert out.startswith(f"REFUSED: {said}, so no spending limit was set") and limits.sealed(rin) is None
+    assert dialogs[-1] == ("Set your spending limit", "Set your spending limit to 4,500 msat for any one order, and "
+                           "4,500 msat in total over 7 days? Each payment is then checked against it, and an order "
+                           "over it waits for your OK.", "Set limit")
+    assert ds.ard_set_limit(0).startswith("REFUSED: a spending limit is a whole number")
+
+    # her click: sealed with the words she saw, and every tool reads it; never while a payment holds the lock
+    monkeypatch.setattr(ds, "dialog_answer", answer("yes"))
+    sealing = limits.seal
+    monkeypatch.setattr(limits, "seal", lambda *args: (s.pay_lock.locked() or pytest.fail("sealed outside the lock"))
+                        and sealing(*args))
+    out = ds.ard_set_limit(4500)
+    assert out == ("Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days. "
+                   "Each payment is checked against it.")
+    assert rin.notes(limits.LIMIT_SET)[-1]["statement"]["said"].endswith("waits for your OK.\nAnswer: Set limit")
+    assessed = ds.ard_assess()
+    assert "Your spending limit: 4,500 msat" in assessed
+    assert assessed.splitlines()[-1].endswith("Over your limit of 4,500 msat for one order: the order would wait for "
+                                              "your OK at payment.")
+
+    # the payment: the Everyday Rules pinned with 4,500, her intent sealed with 4,500 and her own ask
+    pinned, intents = [], []
+    monkeypatch.setattr(buyer.limits, "pin", lambda maya, limit: pinned.append(limit))
+    monkeypatch.setattr(buyer.limits, "unpin", lambda maya: pytest.fail("a confirmed limit is never unpinned"))
+
+    def draft(maya, seller, key, chosen, adjudicator, rail="lightning", me="maya", limit=None, request=""):
+        intents.append((limit, request))
+        return buyer.Deal("deal-0123456789abcdef", seller, key, chosen.price_msat, "o", rail, me)
+    monkeypatch.setattr(buyer, "draft_deal", draft)
+    monkeypatch.setattr(buyer, "cancel_draft", lambda *args, **k: None)
+    order = {"id": "r05-spending-limits#per_purchase", "check": "caps/5.1.0", "verdict": "fail", "limit": 4500,
+             "value": 5000}
+    week = {"id": "r05-spending-limits#7d", "check": "caps/5.1.0", "verdict": "fail", "limit": 4500, "value": 5000}
+    monkeypatch.setattr(buyer, "check_payment", lambda *args: {
+        "check_id": "c", "verdict": "pause", "proceed": False,
+        "rules": {"status": "evaluated", "verdict": "escalate", "findings": [order, week]}})
+    s.assessed, s.picked = {"alder": a}, {"alder"}
+    monkeypatch.setattr(ds, "dialog_answer", answer("no"))
+    out = ds.ard_pay("alder")
+    assert pinned == [4500] and intents == [(4500, "Rin here: 30 lanyards by Monday, under 4,500 msat.")]
+    title, text, _ = dialogs[-1]
+    assert title == "The Everyday Rules held this order for your OK"
+    assert "Over your per-order limit: this order 5,000 msat, limit 4,500 msat" in text
+    assert "Over your weekly limit: 5,000 msat with this order, limit 4,500 msat" in text
+    assert "nothing was paid" in out and rin.notes("approval")[-1]["statement"]["choice"] == "hold"
+
+
+def test_a_scripted_payment_reads_the_confirmed_limit_too(monkeypatch):
+    """Codex's plan review: every entry to a payment reads the limit she confirmed, not only the window's tool."""
+    import buyer
+    book = Book()
+    limits.seal(book, 750, "Set your spending limit to 750 msat?\nAnswer: Set limit")
+    pinned = []
+    monkeypatch.setattr(buyer.limits, "pin", lambda maya, limit: pinned.append(limit) or pytest.fail("stop here"))
+    with pytest.raises(BaseException):
+        buyer.open_and_pay(None, book, "alder", "k", None, {}, None, "Pay?", lambda q: "no", print, simulated=True)
+    assert pinned == [750]

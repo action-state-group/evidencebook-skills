@@ -189,14 +189,27 @@ def ruled_for_seller(report: dict, stamped_at: str) -> list[str]:
 
 
 def limit_line(limit_msat: int | None, pack_ceilings: list[int]) -> str:
-    """The spending limit the person set, or that none is set and what limits apply then (evidencebook-skills#331): the
+    """The spending limit the person confirmed, or that none is set and what limits apply then (evidencebook-skills#331): the
     pack's own limits, one per history tier, read from the pack. Names no one; the amounts are configuration."""
     if limit_msat is not None:
         return (f"Your spending limit: {msat(limit_msat)} for any one order, and {msat(limit_msat)} in total over 7 days. "
                 "Each payment is checked against it.")  # Sherlock2 on #354 (buzz 7bef2399)
     cs = [msat(c) for c in sorted(pack_ceilings)]
     under = cs[0] if len(cs) == 1 else ", ".join(cs[:-1]) + " or " + cs[-1]
-    return f"No spending limit is set, so only this pack's limits apply: deals under {under}, depending on the seller's history."
+    return (f"No spending limit is set yet, so only this pack's limits apply: deals under {under}, depending on the "
+            "seller's history.")  # "yet": a limit is set only from the person's yes (Sherlock2 on #361)
+
+
+#: The limit dialog's yes button (ard_set_limit).
+LIMIT_YES = "Set limit"
+
+
+def limit_question(limit_msat: int) -> tuple[str, str]:
+    """The dialog that sets a spending limit the person's agent proposed (evidencebook-skills#361): only their click on
+    :data:`LIMIT_YES` sets it. Its words are sealed with the limit."""
+    return ("Set your spending limit",
+            f"Set your spending limit to {msat(limit_msat)} for any one order, and {msat(limit_msat)} in total over "
+            "7 days? Each payment is then checked against it, and an order over it waits for your OK.")
 
 
 def within_limit(price_msat: int, limit_msat: int | None) -> str:
@@ -314,8 +327,8 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
 
 
 #: The foot of the held-order question, whichever layout (#270 items 2 and 3). It names no place to change the rules:
-#: the demo has none (Steven's feedback of 2026-11-25; Sherlock2 on #321, option a), and the limit is set where the
-#: windows are opened (ARD_LIMIT_MSAT).
+#: the demo has none (Steven's feedback of 2026-11-25; Sherlock2 on #321, option a); the limit is the one the person
+#: confirmed in chat (ard_set_limit, #361).
 HELD_FOOT = "Your answer is saved on the receipt."
 HELD_TITLE = "The Everyday Rules held this order for your OK"  # Sherlock2 on #237
 

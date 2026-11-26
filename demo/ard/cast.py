@@ -8,7 +8,6 @@ import yaml
 
 #: What Maya asks for (her words, sealed as each deal's intent).
 ASK = "I need 200 conference badges by Friday, under 3,000 msat."
-BUDGET_MSAT = 3000
 
 #: Each seller's own file (``sellers/<name>.yaml``, #299): its label, its offer and what it discloses to a buyer.
 SELLERS_DIR = Path(__file__).resolve().parent / "sellers"

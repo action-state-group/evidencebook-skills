@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Maya's spending limit (``ARD_LIMIT_MSAT``) on x-deal-v1 deals: capsule-engine's Everyday Rules
-(``guard check --limits``, capsule-engine go/v0.7.0 and later) pinned as her profile's rules checker, so capsulectl's
-``deal check`` runs them on every payment and seals what they said in the check's verdict (evidencebook#890).
+"""The buyer's spending limit on x-deal-v1 deals: capsule-engine's Everyday Rules (``guard check --limits``,
+capsule-engine go/v0.7.0 and later) pinned as her profile's rules checker, so capsulectl's ``deal check`` runs them on
+every payment and seals what they said in the check's verdict (evidencebook#890).
 
-The limit is the most Maya may spend in a rolling week and on one order, both the same here. Unset, no checker is
-pinned and the demo behaves as before. The limits file is Maya's own configuration, read at each check: the pin hashes
+The limit is the one the person confirmed (evidencebook-skills#361): her agent proposes the most she said she will pay
+as her limit, and only her yes makes it one, sealed in her own book with the words she saw and her answer (:func:`seal`;
+Steven's design, u550: an intent proposes a limit and never applies one). Every tool reads the sealed limit (:func:`sealed`), never the
+agent's reading of her words. It is the most she may spend in a rolling week and on one order, both the same here.
+Until she confirms one, no checker is pinned and the demo behaves as before. The limits file is Maya's own configuration, read at each check: the pin hashes
 the engine alone, and the ruleset's digest is the pack's with or without it. So what shows her limit was applied is each
 caps finding's ``limit``, which :func:`read` holds to her figure, refusing an order whose findings carry another.
 
@@ -37,19 +40,36 @@ DECLARED = "declared, not measured"
 ASK_RULES = frozenset(range(5, 23)) | {26, 27}
 
 
+#: The record a confirmed spending limit is sealed as, in the buyer's own book (:func:`seal`).
+LIMIT_SET = "spending_limit_set"
+
+
 class LimitError(RuntimeError):
-    """The limit could not be applied: a bad ``ARD_LIMIT_MSAT``, no engine, or a check whose caps findings do not carry
+    """The limit could not be applied: no engine, or a check whose caps findings do not carry
     the person's figure. Nothing was paid."""
 
 
-def limit_msat() -> int | None:
-    """The person's spending limit in msat, from ``ARD_LIMIT_MSAT``; ``None`` when none is set."""
-    raw = os.environ.get("ARD_LIMIT_MSAT", "").strip()
-    if not raw:
-        return None
-    if not raw.isdigit() or int(raw) <= 0:
-        raise LimitError(f"ARD_LIMIT_MSAT must be a whole number of msat above 0, not {raw!r}")
-    return int(raw)
+def check_amount(limit: object) -> int:
+    """``limit`` as a spending limit: a whole number of msat above 0."""
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+        raise LimitError(f"a spending limit is a whole number of msat above 0, not {limit!r}")
+    return limit
+
+
+def seal(buyer: pt.Party, limit: int, said: str) -> None:
+    """Seal the spending limit the person confirmed, with ``said``: the question they saw and the answer they chose,
+    as the host showed them (the demo: its dialog and button). From then on it is their limit (:func:`sealed`); a later
+    confirmed limit replaces it."""
+    check_amount(limit)
+    if not said.strip():
+        raise LimitError("a spending limit is set only with the person's answer: nothing was set")
+    buyer.note(LIMIT_SET, {"limit_msat": limit, "said": said})
+
+
+def sealed(buyer: pt.Party) -> int | None:
+    """The person's spending limit in msat: the last one they confirmed (:func:`seal`); ``None`` when none is set."""
+    notes = buyer.notes(LIMIT_SET)
+    return int(notes[-1]["statement"]["limit_msat"]) if notes else None
 
 
 def limits_profile(limit: int) -> dict:
@@ -61,7 +81,7 @@ def limits_profile(limit: int) -> dict:
 def engine() -> str:
     path = os.environ.get("CAPSULE_ENGINE", "")
     if not path or not Path(path).is_file():
-        raise LimitError("set CAPSULE_ENGINE to a capsule-engine binary (go/v0.7.0 or later) to use ARD_LIMIT_MSAT")
+        raise LimitError("set CAPSULE_ENGINE to a capsule-engine binary (go/v0.7.0 or later) to use a spending limit")
     return str(Path(path).resolve())
 
 

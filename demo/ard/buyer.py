@@ -26,7 +26,7 @@ import party as pt
 import pay as rails  # buyer.pay is the function below
 import screens
 import wire
-from cast import ASK, BUDGET_MSAT, BUYER, SELLERS, label
+from cast import ASK, BUYER, SELLERS, label
 from pack import Pack
 
 ASSESSED = "ard_assessment"
@@ -253,7 +253,7 @@ class Deal:
 
 
 def draft_deal(maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
-               rail: str = "lightning", me: str = BUYER) -> Deal:
+               rail: str = "lightning", me: str = BUYER, limit: int | None = None, request: str = ASK) -> Deal:
     """Maya's side of a deal from a GO assessment, before the seller hears of it: the offer (naming the adjudicator and
     the witness), written but not sent, and her intent. Her payment can be checked on it already (``deal check``), so
     the person answers before anything reaches the seller (evidencebook-skills#289, evidencebook#890)."""
@@ -264,7 +264,7 @@ def draft_deal(maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,
     item = SELLERS[seller]["item"]  # the seller's own listing (sellers/<name>.yaml)
     o = maya.offer(seller_key, item, chosen.price_msat, chosen.pack_digest, adjudicator)
     deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me, offer_file=o["file"])
-    deal.intent = maya.intent(deal.deal_id, ASK, "purchase", ["pay"], BUDGET_MSAT, label(seller), rail=rail,
+    deal.intent = maya.intent(deal.deal_id, request, "purchase", ["pay"], limit, label(seller), rail=rail,
                               domain=ard.publisher(seller))
     return deal
 
@@ -368,21 +368,22 @@ def question(deal: Deal, check: dict, held: limits.Held | None, summary: str, ra
 def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
                  rail: Any, summary: str, ask: Callable[[Question], Any], say: Callable[[str], None],
                  simulated: bool, said: Callable[[str], str] = lambda text: text,
-                 rail_words: str = "") -> tuple[Deal, Any] | None:
+                 rail_words: str = "", request: str = ASK) -> tuple[Deal, Any] | None:
     """The payment checked first, then the person's answer, then the deal: nothing reaches the seller until the person
     said yes (evidencebook-skills#289). Maya's offer is drafted, not sent (:func:`draft_deal`), the invoice is made and
-    capsulectl's payment check runs on it (with ``ARD_LIMIT_MSAT`` set, under her spending limit: :mod:`limits`). Then one
+    capsulectl's payment check runs on it (under the spending limit she confirmed, if any: :mod:`limits`;
+    her sealed intent carries the same figure, with ``request``, what she asked for in her own words). Then one
     dialog (:func:`question`) through ``ask``, which returns True or ``"yes"`` for the yes button, ``"no"`` for the
     other, and anything else when nobody answered or no dialog was shown. On yes, a paused check is answered in the words
     the dialog showed and the button (``said`` renders them as the dialog did: the dialog as shown, card included, then the button, never words of the person's own beyond that click), the offer is sent and agreed, and the
     invoice paid. Otherwise the person's no to a paused check is sealed (no answer is never sealed as one), the unsent
     offer is cancelled, and None is returned: nothing was sent and nothing paid."""
-    limit = limits.limit_msat()
+    limit = limits.sealed(maya)  # the one she confirmed, in her own book: every entry to a payment reads it here
     if limit is not None:
         limits.pin(maya, limit)
     else:
         limits.unpin(maya)
-    deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name)
+    deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name, limit=limit, request=request)
     try:  # until the offer is sent, any failure cancels it: the seller never hears of it
         inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
         check = check_payment(maya, deal, inv.payment_hash)
