@@ -684,6 +684,8 @@ def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeyp
     monkeypatch.setattr(ds, "ROLE", role)
     monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
     monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
+    # the buyer's card reads this run's deals (#352); no seeded home is assumed, as on CI (#353)
+    monkeypatch.setattr(ds, "session", lambda: type("S", (), {"deals": []})())
     out = ds.ard_show_card()
     if noted:
         assert screens.sample_note("kestrel") in out, out  # this seller's own count, not the other's
