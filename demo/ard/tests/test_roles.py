@@ -373,3 +373,8 @@ def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_not
             "witness yet. No refund: this deal was agreed as not refundable.") in out
     assert "now: 11 deals, 1 didn't go as agreed." in out
     assert logged and "not ready" in logged[0]
+    # Codex's PR review: a stamp that comes back after the entry shows on the next ask
+    s.party._notes.append((flow.RULING_STAMPED, {"deal_id": "deal-fedcba9876543210", "stamped_at": STAMPED}))
+    assert (f"ruling on deal fedcba98: Ruled against this seller: delivery not met. Time-stamped by Action State's "
+            f"witness at {screens.local_time(STAMPED, date=True)}. No refund: this deal was agreed as not refundable."
+            ) in ds.ard_seller_activity()
