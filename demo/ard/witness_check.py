@@ -14,8 +14,8 @@ witness's receipt:
    ``delivered``: the witness answered it with a receipt capsulectl checked. Each tick gets the time left as its
    ``--deliver-for`` budget (the default 5 s would end a slower witness's request first), and none starts with under
    :data:`MIN_TRY_S` left.
-3. A refusal for good (any answered 4xx but 403, which capsulectl records as "not retried", capsule-cli
-   ``cli/checkpoint.go``) fails at once; a witness not reached, timing out or answering 403 or 5xx fails once the wait
+3. A refusal (any answered 4xx but 403: capsulectl records a 409 as sent once more and others as "not retried",
+   capsule-cli ``cli/checkpoint.go``) fails at once; a witness not reached, timing out or answering 403 or 5xx fails once the wait
    is over. Each failure is one plain line; capsulectl's own output goes to a log file, never to the screen.
 
 What one check writes to the witness: the checkpoints of one new, empty log (hashes, a size and a time, never content).
@@ -69,10 +69,12 @@ def classify(tick: dict) -> Result | None:
     """What one ``deal tick --now`` result says about the witness: taken, refused for good, or ``None`` (not yet: try
     again while the wait lasts)."""
     # A refusal first: a tick can deliver an older checkpoint and have the witness refuse the newer one for good, which
-    # is the failure this check is for (capsulectl keeps each row's result, evidencebook deal_cadence.go).
+    # is the failure this check is for (capsulectl keeps each row's result, evidencebook deal_cadence.go). A 409 counts
+    # at once although capsulectl sends it once more a minute later (capsule-cli 052a8a6 ``cli/checkpoint.go``): the
+    # probe's log is new, so the witness has no earlier checkpoint of it that the stamp could fail to continue.
     for p in tick.get("pending") or []:
         text = p.get("text", "")
-        if p.get("reason") == "witness_error" and "not retried" in text:
+        if p.get("reason") == "witness_error" and ("not retried" in text or "(HTTP 409)" in text):
             code = _status(text)
             return Result(False, f"{WITNESS_NAME} answered but refused a test stamp"
                           + (f" (HTTP {code})" if code else "")

@@ -70,6 +70,12 @@ def test_classify():
     # an older checkpoint taken while the witness refuses the newer one for good is the failure this check is for
     assert not wc.classify({**REFUSED_409, "delivered": [4]}).ok
     assert "(HTTP 409)" in wc.classify(REFUSED_409).line
+    # capsule-cli 052a8a6 sends a refused stamp once more a minute later; on the probe's new log a first 409 already
+    # means the witness refuses stamps
+    first_409 = {"delivered": [], "pending": [{"checkpoint": 1, "reason": "witness_error", "text": "pending: the witness "
+                 "refused it as not continuing the checkpoint it last accepted (HTTP 409); it is sent once more at a "
+                 "later capsulectl run, a minute or more after the refusal."}]}
+    assert wc.classify(first_409) == wc.classify(REFUSED_409)
     assert wc.classify({"delivered": [], "pending": [{"reason": "not_attempted", "text": "pending: not sent yet"}]}) is None
     assert wc.classify({"delivered": [], "pending": [{"reason": "refused", "text": "pending: ... (HTTP 403) ..."}]}) is None
 
