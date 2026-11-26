@@ -361,7 +361,7 @@ def test_the_witness_takes_a_real_stamp_last(mac):
     assert run.returncode == 0, run.stdout + run.stderr
     assert (f"witness-check {mac.demo}/evidencebook {mac.home}/.local/lib/capsulectl/plugins/capsulectl-deal"
             in mac.calls())
-    assert "Action State's witness ...\n  Action State's witness took a test stamp.\n" in run.stdout
+    assert "Action State's witness: one test stamp (it can take up to a minute) ...\n  Action State's witness took a test stamp.\n" in run.stdout
 
 
 def test_a_witness_that_takes_no_stamp_stops_the_set_up(mac):

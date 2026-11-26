@@ -424,7 +424,7 @@ goose_settings_step() {
 # Last: a real stamp on a throwaway log, so a witness whose home page answers but that takes no stamps stops the set-up
 # here and not in the middle of a run (evidencebook-skills#359; demo/ard/witness_check.py).
 witness_step() {
-  say "Action State's witness ..."
+  say "Action State's witness: one test stamp (it can take up to a minute) ..."
   local out
   if out=$(ARD_EVIDENCEBOOK="$DEMO/evidencebook" CAPSULECTL_DEAL="$PLUGINS/capsulectl-deal" \
            "$VPY" "$SKILLS/demo/ard/witness_check.py" 2>&1); then
