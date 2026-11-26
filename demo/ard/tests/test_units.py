@@ -619,7 +619,6 @@ def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
     # it says the witness time capsulectl verified; a deal's newest records wait for the checkpoint that covers them
     import receipt
     monkeypatch.setattr(receipt.pages, "home", lambda: tmp_path)
-    assert receipt.DRAW_V1_PAGE is True
     from pathlib import Path
 
     class P:
@@ -667,22 +666,44 @@ def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):
                              "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
 
 
-def test_the_page_is_off_only_by_its_switch(monkeypatch, tmp_path):
-    # #242: on since evidencebook#935; with the switch off, no deal report --html is asked for
-    import receipt
-    assert receipt.DRAW_V1_PAGE is True
-    monkeypatch.setattr(receipt, "DRAW_V1_PAGE", False)
+def test_the_history_page_is_written(monkeypatch, tmp_path):
+    # PR #325 review: card_page writes its page through pages.write; a party's own card, verified with its witness
+    import json
+    monkeypatch.setattr(pages, "home", lambda: tmp_path)
+    card = {"outcomes": {"of": 1, "held": 1, "did_not_hold": 0, "undecided": 0}}
+    doc = {"records": [{"capsule_id": "c1"}], "disclosures": {"c1": {"agent_input": card}},
+           "extensions": {"x-standard-history/v0": {"as_of": {"anchor_time": "2026-11-25T18:00:00Z"}, "deals": [
+               {"deal": "deal-0123456789abcdef", "role": "provided", "agreed_at": "2026-11-25T17:00:00Z",
+                "amount": {"value": "10.00", "currency": "USD"}, "rows": [], "happened": "stamped_by_both"}]}}}
 
     class P:
-        name = "maya"
+        name = "alder"
 
-        def run(self, *args):
-            raise AssertionError("no deal report --html while the page is off")
+        def stamp(self):
+            pass
 
-        def bundle(self, *a, **k):
-            raise buyer.pt.Refused("stop here")
-    with pytest.raises(receipt.ReceiptError, match="stop here"):
-        receipt.receipt_page(P(), "Maya", "deal-0123456789abcdef", rail="simulated", seller=False)
+        def card_bundle(self, shared):
+            assert shared is False
+            path = tmp_path / "card.json"
+            path.write_text(json.dumps(doc))
+            return path
+
+        def verify(self, bundle):
+            return {"verdict": "VALID", "witnesses": {"status": "pass"}}
+    page = pages.card_page(P(), "Alder Print Co.", rail="simulated", seller=True)
+    assert page.parent == tmp_path / "pages" and page.name.startswith("alder-history-")
+    assert "History · Alder Print Co." in page.read_text()
+
+
+def test_the_demo_imports_no_python_receipt_module():
+    # evidencebook-skills#270 item 1, capsule-viewer#383: the receipt page is capsulectl's, drawn with capsule-viewer's Go
+    # receipt package; no demo file (the windows' scripts and the tests included) names the Python package, so neither a
+    # plain nor a dynamic import of it is left
+    from pathlib import Path
+    here, me = Path(__file__).resolve().parents[1], Path(__file__).resolve()
+    files = [f for f in here.rglob("*.py") if "vendor" not in f.relative_to(here).parts and f != me]
+    assert here / "receipt.py" in files and here / "goose" / "open-windows.py" in files
+    assert [f.name for f in files if "capsule_viewer" in f.read_text()] == []
 
 
 def test_times_show_in_local_time_with_the_zone(monkeypatch):

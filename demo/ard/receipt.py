@@ -7,22 +7,13 @@ the other side's half and the book's witness time as capsulectl verified them, a
 row's status: every line is read from capsulectl's report."""
 from __future__ import annotations
 
-import hashlib
 import json
-import warnings
 from pathlib import Path
 
 import pages
 import party as pt
 import screens
 
-AUDIENCE = "keep"
-#: This demo's plainer words for capsule-viewer's example wording (hand run 2026-11-24).
-PLAIN = {
-    "page.title": "Order receipt",
-    "sides.missing.none": "Only this side's records are in this receipt: the other party keeps its own copy.",
-    "seller.handover.none": "Not tracked here",
-}
 #: How each row status reads (evidencebook ``rowstatus``), in this demo's words.
 STATUS = {
     "agreed": "met, as both sides said", "agreed_so_far": "met so far, as both sides said (still open to dispute)",
@@ -33,22 +24,12 @@ STATUS = {
 }
 ROWS = {pt.PAID: "payment", pt.DELIVERED: "delivery"}
 
-
-#: On since evidencebook#935; the page is drawn by the capsule-viewer evidencebook's go.mod pins (bb8169bb since #951:
-#: local times and one witness line) from the binary's own verify
-#: report: it says the other side's half and the book's witness time as capsulectl verified them (#242). It was off for
-#: the 2026-11-25 run, when capsulectl's first v1 page (64da5152) said "no witness" and "not countersigned" for a
-#: witnessed two-sided deal.
-DRAW_V1_PAGE = True
-
 #: How long the receipt page waits for the witness to take the checkpoint it stamps first.
 PAGE_WAIT_S = 30
 
-NOT_YET = "a receipt page for this kind of deal can't be drawn yet; the receipt in words is complete"
-
 
 class ReceiptError(RuntimeError):
-    """No receipt page: the copy did not verify or render."""
+    """No receipt page: capsulectl refused to draw it."""
 
 
 def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool) -> str:
@@ -190,64 +171,22 @@ def _cbor(b: bytes, i: int, depth: int = 0):
     return None, i  # simple values and floats: not read here
 
 
-def render(bundle: dict, output: dict) -> str:
-    """capsule-viewer's receipt page for the keep copy, from what the verifier reported for it."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)  # the Python receipt modules (capsule-viewer#71)
-        from capsule_viewer.composed import composition_from_capsulectl
-        from capsule_viewer.receipt import example_wording_pack, receipt_page
-        from capsule_viewer.verifier_report import VerifierReportError, context_from_capsulectl
-
-    try:
-        context, assurance = context_from_capsulectl(bundle, output)
-        composition = composition_from_capsulectl(bundle, output)
-    except VerifierReportError as exc:
-        raise ReceiptError(f"the verifier's report does not fit this copy: {exc}") from None
-    wording = json.loads(example_wording_pack())
-    wording["id"] = "evidencebook.receipt-wording.ard/v1"
-    wording["entries"].update(PLAIN)
-    pack = json.dumps(wording, sort_keys=True).encode()
-    page = receipt_page(context, assurance, pack, hashlib.sha256(pack).hexdigest(), audience=AUDIENCE,
-                        composition=composition)
-    if "wording-refused" in page:
-        raise ReceiptError("capsule-viewer refused this demo's receipt wording pack")
-    if 'data-level="L0"' not in page:
-        raise ReceiptError(NOT_YET)
-    return page
-
-
 def receipt_page(p: pt.Party, name: str, deal_id: str, *, rail: str, seller: bool) -> Path:
     """Write the party's receipt page for a deal, and return its path: capsulectl's own page
-    (``capsulectl deal report --html``, evidencebook#935). With :data:`DRAW_V1_PAGE` off, capsule-viewer's page of the
-    party's own copy, which has no x-deal-v1 form, so it says the page can't be drawn (:data:`NOT_YET`)."""
-    if DRAW_V1_PAGE:
-        out = pages.path(p.name, f"receipt-{deal_id}")
-        # with the hosted witness's directory, so the page says the book's witness time capsulectl verified
-        args = ("report", "--deal", deal_id, "--html", str(out),
-                "--witness-directory", p.write("witnesses.json", pt.witness_directory()))
-        # A page rests on a checkpoint, and says the witness time only once the witness has taken it: stamp now and
-        # wait for the witness, as the card page does. If it does not take the stamp in time the page is still drawn,
-        # without the witness line, since capsulectl says only what it verified.
-        try:
-            p.wait_checkpoint(PAGE_WAIT_S)
-        except pt.Refused:
-            pass
-        try:
-            p.run(*args)
-        except pt.Refused as exc:
-            raise ReceiptError(str(exc)) from None
-        return out
+    (``capsulectl deal report --html``, evidencebook#935), drawn with capsule-viewer's Go receipt package."""
+    out = pages.path(p.name, f"receipt-{deal_id}")
+    # with the hosted witness's directory, so the page says the book's witness time capsulectl verified
+    args = ("report", "--deal", deal_id, "--html", str(out),
+            "--witness-directory", p.write("witnesses.json", pt.witness_directory()))
+    # A page rests on a checkpoint, and says the witness time only once the witness has taken it: stamp now and
+    # wait for the witness, as the card page does. If it does not take the stamp in time the page is still drawn,
+    # without the witness line, since capsulectl says only what it verified.
     try:
-        copy = p.bundle(deal_id, "keep", wait=30)
+        p.wait_checkpoint(PAGE_WAIT_S)
+    except pt.Refused:
+        pass
+    try:
+        p.run(*args)
     except pt.Refused as exc:
         raise ReceiptError(str(exc)) from None
-    output = p.verify(copy)
-    if output.get("verdict") != "VALID":
-        raise ReceiptError(f"capsulectl verify --bundle says {output.get('verdict')}")
-    try:
-        page = render(json.loads(copy.read_text()), output)
-    except ReceiptError as exc:
-        # say what the verifier said of this copy, read from its own report
-        raise ReceiptError(f"{exc} (this copy's records were checked: capsulectl verify --bundle says "
-                           f"{output.get('verdict')})") from None
-    return pages.write(p.name, f"receipt-{deal_id}", page)
+    return out

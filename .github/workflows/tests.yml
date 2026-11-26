@@ -28,14 +28,13 @@ jobs:
   ard-demo:
     # The ARD two-seller demo (demo/ard): its tests, against the pins the run sheet names: an evidencebook checkout
     # (the Goose reference's Ctl and Node) and the capsulectl-deal built from it, which every party and the adjudicator
-    # run, a capsule-engine built from a tag, and capsule-viewer for the pages. The end-to-end test runs both
+    # run, and a capsule-engine built from a tag; the receipt page is capsulectl's own. The end-to-end test runs both
     # deals against Action State's hosted witness (network), as a person's run does.
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       EVIDENCEBOOK_REF: 684dd44d02ba1d47ce7afdf3eee3c182317e1f0a  # main: #935 (deal report --html), #933 (deal tick --now), #951 (the page on capsule-viewer bb8169bb)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_VIEWER_REF: 125957929578f651d3ab474c56c87e0ad74b324e  # main; the Python package serves the page only with receipt.DRAW_V1_PAGE off (the receipt page itself is capsulectl's, on the viewer evidencebook's go.mod pins)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,7 +58,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist "capsule-viewer @ git+https://github.com/action-state-group/capsule-viewer@${CAPSULE_VIEWER_REF}"
+      - run: pip install cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist
       - id: bins
         uses: actions/cache@v4
         with:
