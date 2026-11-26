@@ -4,13 +4,20 @@
 # two CI workflows, with the commands and flags CI runs, on this machine.
 #
 #   scripts/check.sh          the pull request set (fast.yml) and the suites
-#                             that run only nightly and on main (tests.yml)
-#   scripts/check.sh --full   the same set: main and nightly run no suite the
-#                             pull request path did not run before #409, so
-#                             there is nothing more to add here
+#                             that run only nightly and on main (tests.yml),
+#                             ard-demo only when the change can affect it
+#   scripts/check.sh --full   every job, ard-demo included whatever changed
+#   scripts/check.sh --plan   print which jobs a run would take, and why, and
+#                             run none (with --full: the full set)
 #
-# Every job runs; the exit status is non-zero when any failed. The pins
-# (commits, tags, release versions) are read from the workflow files, so they
+# ard-demo (its end-to-end test runs both deals on a witness it starts) runs
+# only when a file it reads changed since the merge base with origin/main:
+# committed, staged, unstaged or untracked, a rename counted at both its old
+# and new path (ARD_INPUTS below; evidencebook-skills#374). Without a merge
+# base it runs. Every other job always runs; the exit status is non-zero when
+# any failed. CI's tests.yml still runs ard-demo in full on main and nightly.
+#
+# The pins (commits, tags, release versions) are read from the workflow files, so they
 # stay the one source; the one exception is ard-demo's end-to-end test, which
 # here stamps on a witness started on this machine where CI uses the hosted
 # one (LOCAL_WITNESS_REF below, evidencebook-skills#371). Pinned checkouts,
@@ -35,13 +42,70 @@ fi
 # A failure inside $(...) fails the job too.
 shopt -s inherit_errexit
 
-case "${1:-}" in
-  "" | --full) ;;
-  *) echo "usage: scripts/check.sh [--full]" >&2; exit 2 ;;
-esac
+full=0 plan=0
+for arg in "$@"; do
+  case "$arg" in
+    --full) full=1 ;;
+    --plan) plan=1 ;;
+    *) echo "usage: scripts/check.sh [--full] [--plan]" >&2; exit 2 ;;
+  esac
+done
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+
+jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report ard-demo tau2-live)
+
+# What ard-demo reads in this repository, besides the pinned checkouts and binaries: the demo itself; the
+# skills (demo/ard/goose/open-windows.py and its tests read skills/*/SKILL.md); the pack compiler that
+# demo/ard/pack.py runs (scripts/pack_compile.py and the modules it imports) and this script; the pack, schema,
+# vocabulary, wording and contract data those modules may read; and tests.yml, which holds the job's pins. A
+# directory ends in "/".
+ARD_INPUTS=(demo/ard/ skills/ scripts/ packs/ schemas/ vocab/ wording/ contracts/ .github/workflows/tests.yml)
+
+# select_ard: sets ard_runs (1 or 0) and ard_why, the one line that says why.
+select_ard() {
+  local base f p list
+  local -a changed
+  ard_runs=1
+  if ((full)); then
+    ard_why="ard-demo: runs (--full)"
+    return
+  fi
+  if ! base=$(git merge-base HEAD origin/main 2>/dev/null); then
+    ard_why="ard-demo: runs (no merge base with origin/main, so the change is not known)"
+    return
+  fi
+  # --no-renames: a rename is a deletion and an addition, so a file moved out of the inputs still counts.
+  # Through a file, not a process substitution, so a failing git is seen (and NULs survive, which $(...) drops).
+  list=$(mktemp)
+  if ! { git diff --no-renames --name-only -z "$base" -- >"$list" && git ls-files --others --exclude-standard -z >>"$list"; }; then
+    rm -f "$list"
+    ard_why="ard-demo: runs (git could not list the files changed since the merge base with origin/main)"
+    return
+  fi
+  mapfile -d '' changed <"$list"
+  rm -f "$list"
+  for f in "${changed[@]}"; do
+    for p in "${ARD_INPUTS[@]}"; do
+      if [[ "$f" == "$p" || ( "$p" == */ && "$f" == "$p"* ) ]]; then
+        ard_why="ard-demo: runs ($f changed since the merge base with origin/main, ${base:0:12})"
+        return
+      fi
+    done
+  done
+  ard_runs=0
+  ard_why="ard-demo: skipped (no change since the merge base with origin/main, ${base:0:12}, touches its inputs: ${ARD_INPUTS[*]}; scripts/check.sh --full runs it)"
+}
+
+select_ard
+if ((plan)); then
+  for job in "${jobs[@]}"; do
+    [[ "$job" == ard-demo ]] || printf '%s: runs\n' "$job"
+  done
+  printf '%s\n' "$ard_why"
+  exit 0
+fi
 deps=${CHECK_DEPS:-${XDG_CACHE_HOME:-$HOME/.cache}/evidencebook-skills-check}
 mkdir -p "$deps"
 tmp=$(mktemp -d)
@@ -64,29 +128,65 @@ pin() {
   printf '%s\n' "$v"
 }
 
+# deps_lock / deps_unlock: hold the cache's lock while filling an entry, so two runs at the same time (two lanes'
+# checks under asg-gate's --heavy class, say) never build or delete the same entry at once. Each entry is keyed by
+# what it holds and marked complete last, so a complete entry is never rebuilt and is read without the lock. The
+# lock is an flock held by a python3 child that exits when its stdin closes: when this shell ends, crashed or not,
+# the lock goes with it. Nested calls (engine's checkout) take it once.
+deps_lock_depth=0
+deps_lock() {
+  if ((deps_lock_depth++ == 0)); then
+    coproc DEPS_LOCK { python3 -c 'import fcntl, sys
+f = open(sys.argv[1], "a")
+fcntl.flock(f, fcntl.LOCK_EX)
+print("locked", flush=True)
+sys.stdin.read()' "$deps/.lock"; }
+    local ack
+    read -r ack <&"${DEPS_LOCK[0]}"
+    [[ "$ack" == locked ]] || { echo "check.sh: could not lock $deps" >&2; return 1; }
+  fi
+}
+deps_unlock() {
+  if ((--deps_lock_depth == 0)); then
+    local pid=$DEPS_LOCK_PID
+    exec {DEPS_LOCK[1]}>&-
+    wait "$pid"
+  fi
+}
+
 # checkout REPO REF: a checkout of action-state-group/REPO at REF under .deps; prints its path.
 checkout() {
   local dir="$deps/src/$1@${2//\//_}"
   if [[ "$(cat "$dir/.pinned" 2>/dev/null)" != "$2" ]]; then
-    rm -rf "$dir"
-    git init -q "$dir"
-    git -C "$dir" fetch -q --depth 1 "https://github.com/action-state-group/$1.git" "$2"
-    git -C "$dir" checkout -q --detach FETCH_HEAD
-    printf '%s\n' "$2" >"$dir/.pinned"
+    deps_lock
+    if [[ "$(cat "$dir/.pinned" 2>/dev/null)" != "$2" ]]; then
+      rm -rf "$dir"
+      git init -q "$dir"
+      git -C "$dir" fetch -q --depth 1 "https://github.com/action-state-group/$1.git" "$2"
+      git -C "$dir" checkout -q --detach FETCH_HEAD
+      printf '%s\n' "$2" >"$dir/.pinned"
+    fi
+    deps_unlock
   fi
   printf '%s\n' "$dir"
 }
 
-# venv NAME PIP-ARGS...: a Python 3.12 environment with PIP-ARGS installed; prints its path.
+# venv NAME PIP-ARGS...: a Python 3.12 environment with PIP-ARGS installed; prints its path. Its directory is keyed
+# by PIP-ARGS too, so a branch that changes them builds its own and never replaces one another run is using.
 venv() {
-  local dir="$deps/venv/$1" want
+  local name=$1 dir want
   shift
   want="pip: $*"
+  dir="$deps/venv/$name-$(printf '%s' "$want" | shasum -a 256 | cut -c1-8)"
   if [[ "$(cat "$dir/.installed" 2>/dev/null)" != "$want" ]]; then
-    rm -rf "$dir"
-    uv venv -q --python 3.12 "$dir" >&2
-    (($# == 0)) || uv pip install -q --python "$dir/bin/python" "$@" >&2
-    printf '%s\n' "$want" >"$dir/.installed"
+    deps_lock
+    if [[ "$(cat "$dir/.installed" 2>/dev/null)" != "$want" ]]; then
+      rm -rf "$dir"
+      uv venv -q --python 3.12 "$dir" >&2
+      (($# == 0)) || uv pip install -q --python "$dir/bin/python" "$@" >&2
+      printf '%s\n' "$want" >"$dir/.installed"
+    fi
+    deps_unlock
   fi
   printf '%s\n' "$dir"
 }
@@ -102,9 +202,14 @@ req_venv() {
 engine() {
   local out="$deps/bin/capsule-engine@${1//\//_}" src
   if [[ ! -x "$out" ]]; then
-    src=$(checkout capsule-engine "$1")
-    mkdir -p "$deps/bin"
-    (cd "$src/go" && go build -o "$out" ./cmd/capsule-engine)
+    deps_lock
+    if [[ ! -x "$out" ]]; then
+      src=$(checkout capsule-engine "$1")
+      mkdir -p "$deps/bin"
+      (cd "$src/go" && go build -o "$out.partial" ./cmd/capsule-engine)
+      mv "$out.partial" "$out"
+    fi
+    deps_unlock
   fi
   printf '%s\n' "$out"
 }
@@ -113,10 +218,14 @@ engine() {
 release() {
   local d="$deps/release/$1/${2//\//_}"
   if [[ ! -x "$d/$3" ]]; then
-    mkdir -p "$d"
-    gh release download "$2" -R "action-state-group/$1" -D "$d" --clobber -p SHA256SUMS -p "$3" >&2
-    (cd "$d" && grep " $3\$" SHA256SUMS | shasum -a 256 -c - >&2)
-    chmod 755 "$d/$3"
+    deps_lock
+    if [[ ! -x "$d/$3" ]]; then
+      mkdir -p "$d"
+      gh release download "$2" -R "action-state-group/$1" -D "$d" --clobber -p SHA256SUMS -p "$3" >&2
+      (cd "$d" && grep " $3\$" SHA256SUMS | shasum -a 256 -c - >&2)
+      chmod 755 "$d/$3"
+    fi
+    deps_unlock
   fi
   printf '%s\n' "$d/$3"
 }
@@ -180,6 +289,10 @@ local_witness() {
   local src tools out="$1/outputs"
   src=$(checkout capsule-anchor "$LOCAL_WITNESS_REF")
   tools=$(checkout capsule-anchor "$LOCAL_WITNESS_START_REF")
+  # start.sh pip-installs SRC, and setuptools writes build/ into the source it builds: a copy of this run's own, so two
+  # runs never write into the shared cached checkout at once (evidencebook-skills#372).
+  cp -R "$src" "$1/capsule-anchor"
+  src=$1/capsule-anchor
   : >"$out"
   # BLOCK=false: blocking the hosted witness's names in /etc/hosts needs sudo; the end-to-end step routes every
   # other host to a closed port instead (job_ard_demo).
@@ -201,8 +314,13 @@ job_ard_demo() {
   # capsulectl-deal is built from the pinned evidencebook checkout, as CI builds it.
   deal="$deps/bin/capsulectl-deal@$eb_ref"
   if [[ ! -x "$deal" ]]; then
-    mkdir -p "$deps/bin"
-    (cd "$eb/capsulectl" && go build -o "$deal" ./cmd/capsulectl-deal)
+    deps_lock
+    if [[ ! -x "$deal" ]]; then
+      mkdir -p "$deps/bin"
+      (cd "$eb/capsulectl" && go build -o "$deal.partial" ./cmd/capsulectl-deal)
+      mv "$deal.partial" "$deal"
+    fi
+    deps_unlock
   fi
   py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
@@ -303,7 +421,12 @@ job_tau2_live() {
 
 failed=()
 summary=()
-for job in unit viewer-drift admission-engine live-engine report-grades obligations-report ard-demo tau2-live; do
+printf '%s\n' "$ard_why"
+for job in "${jobs[@]}"; do
+  if [[ "$job" == ard-demo ]] && ((!ard_runs)); then
+    summary+=("$(printf '%-20s %s' "$job" skipped)")
+    continue
+  fi
   printf '\n=== %s\n' "$job"
   start=$SECONDS
   # Not in an `if`: errexit would be off inside the job.
