@@ -159,7 +159,18 @@ esac''')
     goose.mkdir(parents=True)
     (goose / "config.yaml").write_text(_config("openai", on=False))
 
-    env = {"HOME": str(home), "PATH": f"{stubs}:/usr/bin:/bin:/usr/sbin:/sbin", "STUB_LOG": str(log),
+    # The system directories come in as links, without the tools the stand-ins replace: a runner's own go or git in
+    # /usr/bin must not make a "missing" tool look installed (evidencebook-skills#365's main run on Linux).
+    system = tmp_path / "system"
+    system.mkdir()
+    replaced = set(STUBS) | {"git", "jq", "node", "npm", "gtar", "go", "cargo"}
+    for d in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"):
+        for tool in sorted(Path(d).iterdir()) if Path(d).is_dir() else ():
+            link = system / tool.name
+            if tool.name not in replaced and not link.exists() and not link.is_symlink():
+                link.symlink_to(tool)
+
+    env = {"HOME": str(home), "PATH": f"{stubs}:{system}", "STUB_LOG": str(log),
            "STUB_DIR": str(stubs), "STUB_MAIN": MAIN, "TMPDIR": str(tmp_path)}
 
     class Mac:
