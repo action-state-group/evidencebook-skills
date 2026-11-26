@@ -23,8 +23,9 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 - **One or more ARD registry search URLs**, which the person or host sets. If none is given, say
   you cannot search and ask for one. There is no default registry.
 - **Referrals:** follow a registry's referrals only if the person allows it. Off by default.
-- When the person asks to see a seller's listing, show it with the listing tool, as the search fetched and checked it.
-  Never read a seller's entry by other means, and keep its offer as the seller's own unsigned words.
+- When the person asks to see a seller's listing, show it as the search fetched and checked it (on the demo host,
+  `ard_show_listing`; on a capsule host, the entry the ARD search verb checked), and keep its offer as the seller's
+  own unsigned words. Never fetch a seller's entry by other means.
 
 ## The procedure
 

@@ -83,5 +83,44 @@ def test_a_malformed_entry_fails_that_seller_only(monkeypatch):
                                                                        "displayName": "A", "url": "u"}]})
     monkeypatch.setattr(ard, "_fetch", lambda url, body=None: json.dumps(entries).encode())
     [item] = ard.lookup("http://r", {"a.example": "http://a"}, "x")
-    assert item["problem"].startswith("the seller's entry or its commitment could not be read") and "offer" not in item
+    assert item["problem"] == "the seller's entry names no evidence commitment" and "offer" not in item
     assert item["entry"]["displayName"] == "A"  # the fetched entry is kept for the listing
+
+
+def test_an_entry_naming_another_identity_says_both(monkeypatch):
+    """Codex's round 1: the identity line shows the entry's own identity, not the registry's publisher alone."""
+    item = {**CHECKED, "entry": {**ENTRY, "trustManifest": {"identity": "evil.example"}},
+            "problem": "the entry's identity 'evil.example' does not name its publisher shop.example"}
+    lines = screens.listing_lines(item)
+    assert any("from the registry's identifier: shop.example; the entry's own identity names: evil.example" in l
+               for l in lines)
+    assert any("the entry's own identity names: none" in l for l in screens.listing_lines(CHECKED))
+
+
+@pytest.mark.parametrize("bad", [{"trustManifest": None}, {"trustManifest": {"identity": "a.example",
+                                 "attestations": [{"type": "evidence-commitment/1", "uri": "http://c"}]}}])
+def test_a_malformed_entry_never_stops_the_other_sellers(monkeypatch, bad):
+    """Codex's round 1: trustManifest null, or an attestation without a digest, fails that seller only."""
+    import json
+    import ard
+    good = {"identifier": "urn:air:b.example:s:b", "displayName": "B", "url": "ub"}
+    worse = {"identifier": "urn:air:a.example:s:a", "displayName": "A", "url": "ua", **bad}
+    monkeypatch.setattr(ard, "PROFILE", "evidence-commitment/1")
+    monkeypatch.setattr(ard, "search", lambda url, text: {"results": [
+        {"identifier": worse["identifier"], "displayName": "A", "url": "ua"},
+        {"identifier": good["identifier"], "displayName": "B", "url": "ub"}]})
+
+    def fetch(url, body=None):
+        if url.endswith("/.well-known/ard.json"):
+            return json.dumps({"entries": [worse if "a.example" in url else good]}).encode()
+        return b"{}"
+    monkeypatch.setattr(ard, "_fetch", fetch)
+    monkeypatch.setattr(ard, "WELL_KNOWN", "/.well-known/ard.json")
+    a, b = ard.lookup("http://r", {"a.example": "http://a.example", "b.example": "http://b.example"}, "x")
+    assert a["problem"] and "entry" in a and b["identifier"] == good["identifier"]
+
+
+def test_an_offer_of_the_wrong_shape_still_shows_the_listing(searched):
+    searched.entries[0] = {**CHECKED, "entry": {**ENTRY, "x-demo-offer": "unavailable"}, "problem": "x"}
+    out = ds.ard_show_listing("North Wind Supply")
+    assert "offer: not readable in this entry" in out and "REFUSED" not in out

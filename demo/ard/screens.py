@@ -147,8 +147,8 @@ def within_limit(price_msat: int, limit_msat: int | None) -> str:
 
 def listing_lines(item: dict) -> list[str]:
     """A seller's ARD listing as the search fetched and checked it (evidencebook-skills#345): named fields only, never
-    the entry's free text, and the offer marked as the seller's own unsigned words; checked only when every check
-    passed. Names no party."""
+    the entry's description; the name, address and offer are still the seller's own strings, shown as the seller's
+    words. The offer is marked unsigned, and checked only when every check passed. Names no party."""
     name = item.get("name", "the seller")
     entry = item.get("entry")
     out = [f"{name}: its listing, as fetched at the search"]
@@ -156,16 +156,19 @@ def listing_lines(item: dict) -> list[str]:
         return out + [f"  no listing could be read from the seller: {item.get('problem', 'not fetched')}"]
     checked = "problem" not in item
     out.append(f"  fetched from {item.get('fetched_from', '?')}")
-    out.append(f"  publisher its identity names: {item.get('publisher') or '?'} (a local stand-in here: nothing "
-               "proves domain control)")
+    named = (entry.get("trustManifest") or {}).get("identity") if isinstance(entry.get("trustManifest"), dict) else None
+    out.append(f"  publisher, from the registry's identifier: {item.get('publisher') or '?'}; the entry's own identity "
+               f"names: {named or 'none'} (a local stand-in here: nothing proves domain control)")
     reg = item.get("registry") or {}
     if (reg.get("url"), reg.get("displayName")) != (entry.get("url"), entry.get("displayName")):
         out.append(f"  the registry lists it as {reg.get('displayName')} at {reg.get('url')}; the seller's own entry "
                    f"says {entry.get('displayName')} at {entry.get('url')}")
     else:
         out.append(f"  address: {entry.get('url')}")
-    offer = entry.get("x-demo-offer") or {}
-    if offer:
+    offer = entry.get("x-demo-offer")
+    if offer is not None and not isinstance(offer, dict):
+        out.append("  offer: not readable in this entry")
+    elif offer:
         price = offer.get("price_msat")
         stated = msat(price) if isinstance(price, int) else str(price)
         out.append(f"  offer: {offer.get('item')} at {stated}, the seller's own words, not signed"

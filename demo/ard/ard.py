@@ -71,6 +71,41 @@ def _publisher_of(ident: str) -> str:
     return parts[2] if len(parts) >= 4 and parts[:2] == ["urn", "air"] else ""
 
 
+def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
+    """The checks on one seller's own entry, recorded on ``item``: its copy matches the registry's, its identity names
+    its publisher, and the commitment it names is the one served and verifies. A failed check sets ``problem``."""
+    if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
+        item["problem"] = "the registry's copy and the seller's own entry differ"
+        return
+    item["checks"].append("registry copy matches the seller's own entry")
+    tm = own.get("trustManifest") or {}
+    if tm.get("identity") != domain:
+        item["problem"] = f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}"
+        return
+    item["checks"].append(f"identity names the publisher {domain} (a local stand-in: nothing proves domain control)")
+    att = next((a for a in tm.get("attestations") or [] if isinstance(a, dict) and a.get("type") == PROFILE), None)
+    if att is None:
+        item["problem"] = "the seller's entry names no evidence commitment"
+        return
+    item["offer"] = own["x-demo-offer"]
+    item["uri"] = att["uri"]
+    octets = _fetch(att["uri"])
+    item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
+    if not item["digest_matches"]:  # the entry points at another document than the one served
+        item["problem"] = "the served commitment's digest differs from the one the seller's entry names"
+        return
+    item["checks"].append("the commitment served is the one the seller's entry names")
+    try:
+        doc_c = json.loads(octets)
+        cm.verify(doc_c)
+    except Exception as exc:  # noqa: BLE001
+        item["problem"] = f"commitment: {exc}"
+        return
+    item["identity"] = doc_c["key_id"]
+    item["commitment"] = doc_c
+    item["checks"].append("commitment signature verifies")
+
+
 def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
     """Search the registry, then check each result against the seller's own entry and commitment. Each
     item says what was checked (``checks``); an item that fails a check has ``problem`` set and no
@@ -97,39 +132,10 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
             continue
         item["entry"], item["fetched_from"], item["registry"] = own, origin + WELL_KNOWN, result  # for the listing tool
         item["checks"].append(f"seller's own entry fetched from {domain} ({origin}{WELL_KNOWN})")
-        if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
-            item["problem"] = "the registry's copy and the seller's own entry differ"
-            continue
-        item["checks"].append("registry copy matches the seller's own entry")
-        tm = own.get("trustManifest", {})
-        if tm.get("identity") != domain:
-            item["problem"] = f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}"
-            continue
-        item["checks"].append(f"identity names the publisher {domain} (a local stand-in: nothing proves domain control)")
-        try:  # a malformed entry or a commitment that cannot be fetched fails this seller only
-            item["offer"] = own["x-demo-offer"]
-            att = next(a for a in tm.get("attestations", []) if a.get("type") == PROFILE)
-            item["uri"] = att["uri"]
-            octets = _fetch(att["uri"])
-        except StopIteration:
-            item.pop("offer", None)
-            item["problem"] = "the seller's entry names no evidence commitment"
-            continue
-        except Exception as exc:
-            item.pop("offer", None)
+        try:  # any malformed field or fetch fails this seller only; the entry fetched stays for the listing
+            _check_entry(item, own, result, domain)
+        except Exception as exc:  # noqa: BLE001
+            for k in ("offer", "commitment", "identity"):
+                item.pop(k, None)
             item["problem"] = f"the seller's entry or its commitment could not be read: {exc}"
-            continue
-        item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
-        if not item["digest_matches"]:  # the entry points at another document than the one served
-            item["problem"] = "the served commitment's digest differs from the one the seller's entry names"
-            continue
-        item["checks"].append("the commitment served is the one the seller's entry names")
-        try:
-            doc_c = json.loads(octets)
-            cm.verify(doc_c)
-            item["identity"] = doc_c["key_id"]
-            item["commitment"] = doc_c
-            item["checks"].append("commitment signature verifies")
-        except Exception as exc:
-            item["problem"] = f"commitment: {exc}"
     return found
