@@ -289,7 +289,7 @@ def test_the_search_lines_in_mayas_chat_are_plain(monkeypatch):
          "checks": ["the seller's signed terms are the ones the listing names, and the signature checks out"]},
         {"id": "south", "name": "South Shop", "problem": ard.NO_COMMITMENT, "detail": "no evidence-commitment/1",
          "checks": []}])
-    out = ds.ard_find_sellers()
+    out = ds.ard_find_sellers("200 badges by Friday")
     assert "listing checks out" in out and f"listing refused: {ard.NO_COMMITMENT}" in out and len(kept) == 2
     assert "commitment verified" not in out and "signature verifies" not in out and "REFUSED" not in out
 

@@ -31,9 +31,12 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 
 0. **First turn.** Before anything else, show the person their own History card and the spending limit they set,
    or that none is set and what limits apply then, as the card tool gives it. Search nothing yet.
-1. **Take the ask.** What, by when, and the most the person will pay. In the assessment, repeat the spending limit
-   and whether each price fits it, as the assessment tool gives them; a limit the person set is the one each payment
-   is checked against.
+1. **Take the ask.** What, by when, and the most the person will pay. Propose that amount to them as their spending
+   limit in one short question; it becomes their limit only on their yes, which the host asks for again on its own
+   screen and seals with the limit (on the demo host, `ard_set_limit` and its dialog). Never set it on your own
+   reading of their words. In the assessment, repeat the
+   spending limit and whether each price fits it, as the assessment tool gives them; a limit the person confirmed is
+   the one each payment is checked against.
 2. **Search each registry** with `POST /search` and the item only. The person's budget
    stays with you: use it only in the assessment and at the pick; the deadline is theirs to judge. Each result is only a
    pointer. For each result, fetch the seller's own entry from its own `/.well-known/ard.json`,
@@ -91,7 +94,8 @@ step, to the demo host's tool and to the capsule host's existing command.
 
 | Verb | Step | On the demo host (step A): this demo host's tools | On a capsule host |
 |---|---|---|---|
-| ask | 2 Search | `ard_find_sellers` | an ARD search verb (capsule-cli#572) |
+| record | 1 Spending limit | `ard_set_limit`, only after the person's yes to the proposed limit: a dialog asks them, and only their click sets it | the confirmed limit as the profile's rules checker, capsule-engine's `guard check --limits` |
+| ask | 2 Search | `ard_find_sellers`, given the person's ask word for word (kept for each deal's intent; the registry gets the item only) | an ARD search verb (capsule-cli#572) |
 | verify | 2 Check entries and commitments | `ard_find_sellers` checks each one; `ard_show_listing` shows one seller's listing as the search checked it | `capsulectl commitment find`, which checks the commitment's signature, key and staples |
 | ask | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card | `request` / `respond` over the mailbox (capsule-cli#573) |
 | verify | 3 History cards | `ard_show_history` checks each card with `verify --bundle` | `capsulectl verify --bundle` |

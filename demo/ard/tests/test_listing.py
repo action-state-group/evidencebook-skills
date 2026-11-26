@@ -249,7 +249,7 @@ def test_ard_find_sellers_writes_the_records(monkeypatch):
     refused = {**CHECKED, "id": "west", "name": "West", "problem": ard.NOT_VERIFIED, "detail": "ValueError('bad sig')"}
     good = {**CHECKED, "offer": ENTRY["x-demo-offer"], "commitment": {"key_id": "k"}}
     monkeypatch.setattr(ard, "lookup", lambda *a: [good, refused])
-    out = ds.ard_find_sellers()
+    out = ds.ard_find_sellers("200 badges by Friday")
     assert "\nREFUSED" not in out and ard.NOT_VERIFIED in out and "bad sig" not in out  # the tool itself went through
     assert [(k, r["seller"], r["query"]) for k, r, _ in s.maya.kept] == [(buyer.LISTING_CHECKED, "north", stage.QUERY),
                                                                          (buyer.LISTING_CHECKED, "west", stage.QUERY)]
@@ -274,7 +274,7 @@ def test_a_record_that_cannot_be_kept_refuses_the_search_and_keeps_the_last_one(
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ds, "_log", logged.append)
     monkeypatch.setattr(ard, "lookup", lambda *a: [CHECKED, {**CHECKED, "id": "second"}])
-    out = ds.ard_find_sellers()
+    out = ds.ard_find_sellers("200 badges by Friday")
     assert out == "REFUSED: The search could not be saved to your records, so its results are not used. The reason is " \
                   "in agent.log." and "/secret" not in out
     assert s.entries is before and any("disk full" in line for line in logged)

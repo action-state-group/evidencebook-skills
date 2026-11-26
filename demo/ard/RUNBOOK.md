@@ -26,7 +26,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
 
 1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs only what is missing with Homebrew, saying so first, and upgrades nothing you already have: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm, and GNU tar. It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
 
-2. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. The set-up script asks which one, once.
+2. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Set limit, Pay, Received, Dispute and Rule dialogs instead of you. The set-up script asks which one, once.
 
 3. [Real] Real rail only: run the set-up script with `--real-rail`, which also installs Rust. A real payment also needs a small amount of bitcoin on Lightning.
 
@@ -179,9 +179,9 @@ Do a full run on the simulated rail first, then the real rail. This moves real b
 6. If the windows are stacked, tile them by hand: click Maya's window, then Window, Move & Resize, then Quarters under Arrange (the last item of the Arrange group; the Quarters above Top Left is only a heading). The script can print no error while the windows are still stacked (evidencebook-skills#322: hand runs on 2026-11-25 found them stacked), and the menu item works only while a Goose window is in front, which the click makes it.
 
 7. Click Trust and Execute in all four windows, in any order. Click each window once first: a window behind the others takes the first click only to come forward. Maya's window can open with no Trust prompt and answer at once. After an upgrade from a version before evidencebook-skills#277 that is expected once (Troubleshooting 7); otherwise it was seen on another Mac on 2026-11-25, after a reset that cleared all four recipes' trust, with the cause not known yet (evidencebook-skills#322). On the simulated rail, carry on: step 8 checks that it has only its own `ard_maya` tools. On the real rail, Maya's window is the one that pays and the prompt is your check of what it runs: quit Goose and do "Before each run" again from step 1 (reset, seed and its wait, the balances, the windows). If Maya's window again opens with no Trust prompt, stop: run on the simulated rail instead.
-   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya's window shows her own History card ("No deals yet, and no disputes.") and her spending limit ("Your spending limit: … for any one order, and … in total over 7 days. Each payment is checked against it." with `ARD_LIMIT_MSAT` set, otherwise "No spending limit is set, so only this pack's limits apply: deals under 10 msat, 1,000 msat or 10,000 msat, depending on the seller's history."), then says it is ready; the adjudicator's assistant only says it is ready.
+   **Expect:** Alder says 15 deals and Kestrel 10, all held; Maya's window shows her own History card ("No deals yet, and no disputes.") and "No spending limit is set yet, so only this pack's limits apply: deals under 10 msat, 1,000 msat or 10,000 msat, depending on the seller's history." (she sets hers in step 2), then says it is ready; the adjudicator's assistant only says it is ready.
 
-8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. Change no provider or extension while the windows are open; if you do, quit Goose and open the windows again, so open-windows.py checks them again. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** that window's own `ard_…` tools and nothing else (with Claude Code ACP they show as `mcp__ard_…`, beside ToolSearch, which only loads them; with another provider their names may show without the prefix, and any other tool means an extension is still on): Maya's twelve (`ard_find_sellers`, `ard_show_listing`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
+8. **Required:** in each window open Extensions: only its own `ard_maya`, `ard_alder`, `ard_kestrel` or `ard_adjudicator` is on (the extensions icon under the chat box shows 1). Turn anything else off before you type. Change no provider or extension while the windows are open; if you do, quit Goose and open the windows again, so open-windows.py checks them again. To see what an agent has, type `List every tool you have by exact name, including deferred ones.` in any window. **Expect:** that window's own `ard_…` tools and nothing else (with Claude Code ACP they show as `mcp__ard_…`, beside ToolSearch, which only loads them; with another provider their names may show without the prefix, and any other tool means an extension is still on): Maya's thirteen (`ard_find_sellers`, `ard_set_limit`, `ard_show_listing`, `ard_show_history`, `ard_assess`, `ard_pick`, `ard_pay`, `ard_dispute`, `ard_confirm_received`, `ard_show_card`, `ard_open_card_page`, `ard_show_receipt`, `ard_open_receipt_page`), a seller's five (`ard_seller_activity` and the four card and receipt tools), the adjudicator's three (`ard_case`, `ard_rule`, `ard_case_activity`).
 
 9. Keep the screen awake and unlocked: the payment and ruling dialogs appear on it.
 
@@ -201,7 +201,13 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    I am Maya. I need 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.
    ```
 
-   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat.
+   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat. Maya proposes 3,000 msat as your spending limit, in one short question. It is not your limit until you say yes. Type, then answer the dialog (it waits 10 minutes):
+
+   ```
+   Yes.
+   ```
+
+   **Expect:** the dialog "Set your spending limit to 3,000 msat for any one order, and 3,000 msat in total over 7 days? Each payment is then checked against it, and an order over it waits for your OK." (buttons Cancel, the default, and Set limit). Click Set limit. Then "Your spending limit: 3,000 msat for any one order, and 3,000 msat in total over 7 days. Each payment is checked against it." The dialog's words and your click are sealed with the limit in Maya's own records; her card, the assessment and every payment check use it from now on. Cancel sets no limit.
 
 3. Type.
 
@@ -217,7 +223,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Assess both sellers.
    ```
 
-   **Expect:** both "GO: … is within this pack's limit for it", Kestrel at 1,000 msat and Alder at 2,000 msat. Kestrel is half the price with 10 deals on its card; Alder has 15. Both pass Maya's rules.
+   **Expect:** "Your spending limit: 3,000 msat …" first, then both "GO: … is within this pack's limit for it. Within your limit of 3,000 msat for one order; your 7-day total is checked at payment.", Kestrel at 1,000 msat and Alder at 2,000 msat. Kestrel is half the price with 10 deals on its card; Alder has 15. Both pass Maya's rules.
 
 5. Type.
 
@@ -233,7 +239,13 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    Yes, pay it.
    ```
 
-   **Expect:** the dialog "Pay Kestrel Print 1,000 msat on the simulated rail: no money moves.", then "Saved with your answer:" and capsulectl's card, which your answer is sealed with: "PAUSED FOR YOU", "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?", "1,000 msat · by simulated · not refundable · within your 3,000 msat limit" and "Why I'm asking: I picked item 200 conference badges, delivered by Friday, not you." Nothing is sent to Kestrel until you answer it. Click Pay. Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
+   **Expect:** the held-order question, since her spending limit is set: titled "The Everyday Rules held this order for your OK", with the buttons Don't buy (the default) and Buy anyway. Its text, one line each:
+   - "200 conference badges, delivered by Friday from Kestrel Print for 1,000 msat, on the simulated rail: no money moves. Nothing has been paid yet."
+   - "No earlier payment to this merchant from this profile"
+   - "The payment is not refundable"
+   - "Your answer is saved on the receipt."
+
+   Under them, "Saved with your answer:" and capsulectl's card, which your answer is sealed with: "PAUSED FOR YOU", "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?", "1,000 msat · by simulated · not refundable · within your 3,000 msat limit" and "Why I'm asking: I picked item 200 conference badges, delivered by Friday, not you." Nothing is sent to Kestrel until you answer it. The 1,000 msat is within her limit: the order is held because it is her first payment to Kestrel and cannot be refunded. Click Buy anyway: "You approved this held order (…). Paying now." Then "invoice 1,000 msat; the simulated rail paid it (no money moved): succeeded" and "Kestrel Print's delivery record says 150 of 200 badges were shipped." Maya asks whether you want to dispute the delivery.
 
 7. Type, then answer the dialog (it waits 10 minutes).
 
@@ -278,7 +290,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
     **Expect:** Kestrel's card as in step 12; Kestrel "NO: you hold a ruling against this seller (deal …, delivery not met, ruled …). Your rules block a seller you hold a ruling against for 180 days. Its card also counts 1 dispute decided against it, of 1 decided; the card does not say which deal."; Alder "GO".
 
-14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog ("Pay Alder Print Co. 2,000 msat on the simulated rail: no money moves.", with capsulectl's card under it as in step 6, "… 2,000 msat …"): click Pay.
+14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog: the same held-order question as in step 6, for Alder Print Co. at 2,000 msat, with the same two reasons ("No earlier payment to this merchant from this profile", "The payment is not refundable") and capsulectl's card under it ("… 2,000 msat …"). With Kestrel's 1,000 msat, this week's total is 3,000 msat, which is within her limit. Click Buy anyway.
     **Expect:** invoice 2,000 msat succeeded, "Alder Print Co.'s delivery record says 200 of 200 badges were shipped." and "Nothing has been sent in Maya's name. If she received it, she can say so, and Alder Print Co. gets her statement that she received what she paid for." Maya's agent sends nothing in her name on its own.
 
     Then type `I received all 200.` and answer the dialog ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges were shipped. Choosing Received sends Alder Print Co. your statement that you received it."): click Received.
@@ -289,27 +301,19 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
 16. [Real] Wallets after: buyer outbound 1,000 and 2,000 msat succeeded.
 
-## The spending limit: an order is held for your OK
+## The spending limit: an order over it
 
-Run the steps above with a spending limit of 2,000 msat. Every order then waits at Maya's deal check for your OK. The Everyday Rules hold an order over the limit, and also one from a seller she has not paid before, or one that cannot be refunded. Each such order is one question that lists every reason.
+The main run sets a spending limit of 3,000 msat in step 2, so every payment is checked against it, and each order is held for your OK because it is a first payment to its seller and cannot be refunded. To also see an order go over the limit, run the steps above with 2,000 msat.
 
-1. Before you open the windows (step 4 or 5 of "Before each run"), in the terminal that opens them, set the limit, then open them as there:
+1. At step 2, paste the ask with 2,000 msat in place of 3,000:
 
    ```
-   export ARD_LIMIT_MSAT=2000
+   I am Maya. I need 200 conference badges by Friday, under 2,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.
    ```
 
-   **Expect:** nothing different until a payment: the windows open as before. Maya's window is the only one that gets the limit.
+   **Expect:** Maya proposes 2,000 msat as your spending limit. Type `Yes.` and click Set limit in the dialog. **Expect:** "Your spending limit: 2,000 msat for any one order, and 2,000 msat in total over 7 days. Each payment is checked against it."
 
-2. At step 6, the dialog is the held-order question in place of the payment dialog: titled "The Everyday Rules held this order for your OK", with the buttons Don't buy (the default) and Buy anyway. Its text, one line each:
-   - "200 conference badges, delivered by Friday from Kestrel Print for 1,000 msat, on the simulated rail: no money moves. Nothing has been paid yet."
-   - "No earlier payment to this merchant from this profile"
-   - "The payment is not refundable"
-   - "Your answer is saved on the receipt."
-
-   Under them, "Saved with your answer:" and capsulectl's card, which starts "PAUSED FOR YOU" and "Pay 1,000 msat to Kestrel Print (kestrel.ard-demo.test) for the 200 conference badges, delivered by Friday?". Your answer is sealed with every word shown.
-
-   Click Buy anyway. **Expect:** "You approved this held order (…). Paying now.", then the rest of step 6 as written. Say aloud: every rule that asks is in this one question, and nothing reaches the seller or is paid before your answer.
+2. At step 6, the held-order question is as written there.
 
 3. At step 14, type `Pick Alder Print Co.`, then `Yes, pay it.`
 
@@ -332,8 +336,6 @@ Run the steps above with a spending limit of 2,000 msat. Every order then waits 
    **Expect:** the same question as in step 3, and no second question in chat. Click Buy anyway: "You approved this held order (…). Paying now.", and the rest of step 14 as written. The approval is sealed in the deal's own records.
 
 When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and the same last line. This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
-
-To run without the limit again: `unset ARD_LIMIT_MSAT` before opening the windows. Her next payment then runs without the spending limit.
 
 ## Quit and re-entry
 
@@ -396,7 +398,7 @@ An agent with a terminal can run the command blocks for you: the set-up script (
 - anything that asks for your password or a sign-in: Homebrew's install, the Claude Code sign-in and the model choice, sign-in or key (all in the set-up script, Set up step 8), funding a real-rail wallet;
 - the safety step: checking each window's extensions (Before each run step 8). It is what keeps a window's agent to its own tools, so you do it, not the agent. (The set-up script turns every extension off itself, Set up step 9, and checks it.);
 - Goose's Trust and Execute prompts, every macOS permission prompt and tiling the windows by hand (Before each run step 6);
-- the run itself: typing in the windows and answering every dialog (Pay, Received, Dispute, Rule). Only your click answers a dialog.
+- the run itself: typing in the windows and answering every dialog (Set limit, Pay or Buy anyway, Received, Dispute, Rule). Only your click answers a dialog.
 
 While the demo's windows are open, the agent that drives this guide must not have screen control (computer use): with it, it could answer a dialog itself. Run the run's steps yourself.
 

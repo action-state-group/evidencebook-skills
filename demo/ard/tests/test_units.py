@@ -245,7 +245,6 @@ def test_a_case_reads_the_silent_sellers_own_record_from_the_buyers_held_copy(tm
 def _pay_world(monkeypatch, check):
     """open_and_pay with every party and rail step recorded in ``calls``; the check returns ``check``."""
     calls, sealed = [], []
-    monkeypatch.delenv("ARD_LIMIT_MSAT", raising=False)
     monkeypatch.setattr(buyer.limits, "unpin", lambda maya: calls.append("unpin"))
     monkeypatch.setattr(buyer, "draft_deal", lambda *a, **k: calls.append("draft") or buyer.Deal("deal-01", "alder", "k", 1000, "o"))
     monkeypatch.setattr(buyer, "send_deal", lambda *a, **k: calls.append("send"))
@@ -263,6 +262,9 @@ def _pay_world(monkeypatch, check):
 
         def sending(self, deal_id, check_id):
             pass
+
+        def notes(self, record_type=""):  # no spending limit confirmed (limits.sealed)
+            return []
 
         def approve(self, deal_id, check, choice, said):
             sealed.append((choice, said))
@@ -443,16 +445,8 @@ def test_a_reason_reads_amounts_with_commas_and_units():
     assert limits.words({"id": "r27-x", "verdict": "fail", "reason": "r27 in 7 days"}) == "r27 in 7 days"
 
 
-def test_the_limit_comes_from_the_environment(monkeypatch):
+def test_the_limits_profile_carries_the_limit():
     import limits
-    monkeypatch.delenv("ARD_LIMIT_MSAT", raising=False)
-    assert limits.limit_msat() is None
-    monkeypatch.setenv("ARD_LIMIT_MSAT", "2000")
-    assert limits.limit_msat() == 2000
-    for bad in ("0", "-5", "2k"):
-        monkeypatch.setenv("ARD_LIMIT_MSAT", bad)
-        with pytest.raises(limits.LimitError):
-            limits.limit_msat()
     assert limits.limits_profile(2000) == {"format": "policy-profile/v0", "packs": [{"pack": "asg/everyday", "parameters": {
         "caps": {"caps_minor": {"money.purchase": 2000}, "per_action_minor": {"money.purchase": 2000}}}}]}
 

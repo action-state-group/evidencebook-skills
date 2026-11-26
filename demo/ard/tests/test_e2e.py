@@ -440,13 +440,15 @@ def test_a_checkpoint_the_witness_did_not_get_is_delivered_by_a_later_tick_after
 
 
 def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, monkeypatch):
-    """evidencebook#890: with ``ARD_LIMIT_MSAT`` set, Maya's profile pins capsule-engine's Everyday Rules
+    """evidencebook#890: with a spending limit she confirmed, sealed in her own book (evidencebook-skills#361), Maya's
+    profile pins capsule-engine's Everyday Rules
     (``guard check --limits``) as its rules checker, and capsulectl's ``deal check`` runs them on the payment, checked on
     her offer before it is sent. Over her limit, the order is held: one question that lists every reason, with
     capsulectl's card under it. Don't buy seals her no and cancels the unsent
     offer, so Alder's book is as it was; Buy anyway seals her yes on the card she saw, and the order is sent and paid."""
     import buyer
     import flow
+    import limits
     import pay
     import screens
     import wire
@@ -458,19 +460,21 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     a = _assess(w, w["maya"])["alder"][1]
     assert a.verdict == "GO"
     limit = a.price_msat // 2  # this order alone is over it
-    monkeypatch.setenv("ARD_LIMIT_MSAT", str(limit))
+    # her confirmed limit, read back from her own book by the payment path. Last in this module: it stays in her book.
+    limits.seal(w["maya"], limit, f"Set your spending limit to {limit:,} msat?\nAnswer: Set limit")
     deals, offers = len(seller.deals()), wire.pending(w["home"], "alder", "offer")
     asked = []
 
     def answer(how):
         return lambda q: asked.append(q) or how
     assert buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
-                              "Pay (test)", answer("no"), lambda *_: None, simulated=True) is None
+                              "Pay (test)", answer("no"), lambda *_: None, simulated=True, request="200 badges by Friday") is None
     q = asked[-1]
     assert q.held is not None and (q.yes, q.no) == ("Buy anyway", "Don't buy")
     over = f"over your per-order limit: this order {a.price_msat:,} msat, limit {limit:,} msat"
     assert over in q.held.reasons and "per_order" in q.held.limits
     assert f"{screens.CARD_HEAD}\nPAUSED FOR YOU" in q.text  # capsulectl's card, in full, under the question
+    assert f"{limit:,} msat limit" in q.text  # the card reads the limit her sealed intent carries (#361)
     assert len(seller.deals()) == deals and wire.pending(w["home"], "alder", "offer") == offers
 
     made = buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),

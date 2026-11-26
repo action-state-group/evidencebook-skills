@@ -8,6 +8,7 @@ starting ``REFUSED:`` and changes nothing.
 
 ``maya``   the buyer:
     ard_find_sellers  ->  her ask and ARD discovery
+    ard_set_limit     ->  her spending limit, set only from her yes to the amount her agent proposed
     ard_show_listing  ->  a seller's ARD listing, as the search fetched and checked it
     ard_show_history  ->  each seller's History card, fetched and checked
     ard_assess        ->  the assessment of each seller under her pack
@@ -176,6 +177,7 @@ class Session:
         self.evidence: dict[str, buyer.Evidence] = {}
         self.assessed: dict[str, buyer.Assessment] = {}
         self.pack: packs.Pack | None = None
+        self.ask = ""  # what she asked for, in her own words (ard_find_sellers): each deal's intent seals it
         self.picked: set[str] = set()
         self.deals: list[buyer.Deal] = buyer.deals_from_notes(self.maya)  # a reopened window keeps its deals
         #: the sellers whose last payment dialog was declined, each with that dialog's title (a held order's question)
@@ -336,10 +338,14 @@ def _flush(s: Session) -> None:
 # -- Maya ---------------------------------------------------------------------------------------------
 
 @_tool("maya")
-def ard_find_sellers() -> None:
+def ard_find_sellers(ask: str) -> None:
     """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its listing
-    checks out. Call this first."""
+    checks out. Call this first. ``ask`` is what the person asked for, in their own words, word for word: each deal's
+    intent seals it."""
+    if not ask.strip():
+        raise RuntimeError("pass the person's ask, in their own words")
     s = session()
+    s.ask = ask
     found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
     try:  # the checks, kept in her own records before the search's results are used (#345)
         buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
@@ -404,7 +410,7 @@ def ard_assess() -> None:
         raise RuntimeError("call ard_show_history first")
     s.pack = s.pack or packs.starting()
     p = s.pack
-    limit = limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses here, before any seller is assessed
+    limit = limits.sealed(s.maya)  # the limit she confirmed (ard_set_limit), or none
     print(f"The assessment rules: {screens.PACK_NOTE}")  # its version and digest are in the buyer's assessment records
     print(screens.limit_line(limit, _ceilings(p)))
     print(f"({screens.ASSESSMENT_NOTE})")
@@ -421,6 +427,24 @@ def ard_assess() -> None:
         # the limit words only for a seller that can be paid: a pick that is not GO pays nothing (ard_pick)
         fits = screens.within_limit(a.price_msat, limit) if a.verdict == "GO" else ""
         print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}{'.' if fits else ''}{fits}")
+
+
+@_tool("maya")
+def ard_set_limit(limit_msat: int) -> None:
+    """Set the person's spending limit. When the person names the most they will pay, propose it to them as their
+    spending limit in one short question ("<the amount> msat as your spending limit?") and end your turn; never set it
+    on your own reading of their words. Only after they say yes, call this with the amount in msat: it asks them in a
+    dialog on the presenter's screen, and only their click there sets it. You cannot see or answer the dialog. Once
+    set, it is sealed in their records, and their card, the assessment and every payment check use it."""
+    limit = limits.check_amount(limit_msat)
+    s = session()
+    title, text = screens.limit_question(limit)
+    how = "yes" if gate_off() else dialog_answer(title, text, screens.LIMIT_YES)
+    if how != "yes":
+        raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so no spending limit was set. Do not retry on your own; ask Maya.")
+    limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + f"\nAnswer: {screens.LIMIT_YES}")
+    print(screens.limit_line(limits.sealed(s.maya), _ceilings(s.pack or packs.starting())))
+
 
 
 def _ceilings(p: packs.Pack) -> list[int]:
@@ -487,7 +511,7 @@ def ard_pay(seller: str) -> None:
                 answer["how"] = dialog_answer(q.title, q.text, q.yes, q.no)
             return answer["how"]
         made = buyer.open_and_pay(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary, ask,
-                                  print, simulated=not _real(), said=dialog_text, rail_words=words)
+                                  print, simulated=not _real(), said=dialog_text, rail_words=words, request=s.ask)
         held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)
@@ -750,9 +774,9 @@ def _own() -> tuple[pt.Party, str]:
 def ard_show_card() -> None:
     """Show THIS window's own History card as of a checkpoint taken now (or its last one, if the witness does not take a
     new one): deals counted, held, did not hold, and disputes others raised about it; in the buyer's window also the
-    spending limit the person set, or that none is set. The buyer's first turn calls it."""
-    limit = None if ROLE in SELLERS else limits.limit_msat()  # a bad ARD_LIMIT_MSAT refuses before anything is done
+    spending limit the person confirmed (ard_set_limit), or that none is set. The buyer's first turn calls it."""
     p, name = _own()
+    limit = None if ROLE in SELLERS else limits.sealed(p)
     try:
         p.stamp()
     except pt.Refused as exc:  # the card as of its last checkpoint still shows, and the time says which (#331)
