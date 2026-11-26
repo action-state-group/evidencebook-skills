@@ -130,7 +130,9 @@ rows:
   # T1: the card is required, fresh and witnessed, with claims held shown
   # with their denominator and a controller declared. A missing, refused or
   # stale card limits to T0. 1.2.0: the pack asks for no served summary
-  # (Steven, 2026-11-25, Q6; #380).
+  # (Steven, 2026-11-25, Q6; #380). claims-held still needs the claims counts
+  # only served_summary/1 carries, until #385 moves these rows to the one
+  # commerce card.
   - id: card-verified
     statement: The counterparty's card verifies under the key that presents it.
     source: card
