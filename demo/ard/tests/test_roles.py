@@ -176,7 +176,7 @@ def test_a_card_that_fails_its_checks_names_no_key_or_derivation(tmp_path, monke
            "extensions": {"x-standard-history/v0": {"as_of": {"anchor": "a" * 64, "anchor_time": "2026-11-25T22:00:00Z"}}}}
     (tmp_path / "stage" / "cards").mkdir(parents=True)
     (tmp_path / "stage" / "cards" / "kestrel.json").write_text(json.dumps(doc))
-    reader = type("R", (), {"tmp": lambda self, name: str(tmp_path / name), "verify": lambda self, f: {"verdict": "VALID"}})()
+    reader = type("R", (), {"tmp": lambda self, name: str(tmp_path / name), "verify": lambda self, f, report_on_fail=False: {"verdict": "VALID"}})()
     for key in ("e" * 64, "f" * 64):
         with pytest.raises(pt.Refused) as got:
             flow.fetch_card(tmp_path, reader, "kestrel", key)

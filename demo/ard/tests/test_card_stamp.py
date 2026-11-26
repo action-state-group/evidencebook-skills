@@ -35,7 +35,8 @@ class Reader:
     def tmp(self, name: str) -> str:
         return str(self.tmp_path / name)
 
-    def verify(self, bundle):
+    def verify(self, bundle, report_on_fail=False):
+        assert report_on_fail  # the report of a failed verdict says which check failed
         return self.out
 
 
@@ -128,7 +129,8 @@ class OwnCard:
         path.write_text(json.dumps(doc))
         return path
 
-    def verify(self, bundle):
+    def verify(self, bundle, report_on_fail=False):
+        assert report_on_fail  # the report of a failed verdict says which check failed
         return self.out
 
 
@@ -152,16 +154,19 @@ class Seller:
     """A seller's party as publish_card and republish use it: its newest card, stamped or not, and its ticks."""
     name = "alder"
 
-    def __init__(self, tmp_path, stamped: bool, slow: bool = False):
-        self.tmp_path, self.stamped, self.slow, self.calls = tmp_path, stamped, slow, []
+    def __init__(self, tmp_path, stamped: bool, slow: bool = False, deals: int = 1):
+        self.tmp_path, self.stamped, self.slow, self.deals, self.calls = tmp_path, stamped, slow, deals, []
 
     def card_bundle(self, shared):
         assert shared is True
-        ext = {"x-standard-history/v0": {}}
+        n = len(self.calls)
+        ext = {"x-standard-history/v0": {"as_of": {"anchor": f"{n:064x}"}}}
         if self.stamped:
             ext[pt.CARD_ANCHOR_WITNESS] = {"witnesses": [{}]}
+        card = {"anchor": f"{n:064x}", "outcomes": {"of": self.deals, "held": self.deals}}
         path = self.tmp_path / "card-shared.json"
-        path.write_text(json.dumps({"extensions": ext, "n": len(self.calls)}))
+        path.write_text(json.dumps({"records": [{"capsule_id": "c1", "key_id": "k"}],
+                                    "disclosures": {"c1": {"agent_input": card}}, "extensions": ext, "n": n}))
         return path
 
     def tick(self):
@@ -189,6 +194,16 @@ def test_a_due_checkpoint_the_witness_has_not_taken_keeps_the_stamped_card(monke
     taken.calls = ["x", "y"]
     flow.publish_card(tmp_path, taken, keep_stamped=True)
     assert published(tmp_path)["n"] == 2
+
+
+def test_a_card_whose_counts_changed_replaces_the_stamped_card_at_once(monkeypatch, tmp_path):
+    # Codex on #350: a ruling or a deal the witness has not stamped yet still reaches the buyer; only its receipt waits
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=True))
+    newer = Seller(tmp_path, stamped=False, deals=2)
+    newer.calls = ["x"]
+    flow.publish_card(tmp_path, newer, keep_stamped=True)
+    assert published(tmp_path)["n"] == 1 and pt.CARD_ANCHOR_WITNESS not in published(tmp_path)["extensions"]
 
 
 def test_an_unstamped_card_is_published_when_none_stamped_is_there_or_no_witness_is_named(monkeypatch, tmp_path):
@@ -224,3 +239,37 @@ def test_a_due_republish_ticks_and_keeps_the_stamped_card(monkeypatch, tmp_path)
     agent.failed = lambda what, exc: pytest.fail(f"{what}: {exc}")
     agent.republish()
     assert agent.party.calls == ["tick"] and published(tmp_path)["n"] == 0
+
+
+def fake_ctl(tmp_path, stdout: str, code: int):
+    """A ``Ctl`` whose binary prints ``stdout`` and exits ``code``, as capsulectl-deal ``verify`` does."""
+    import stat
+
+    from ctl import Ctl
+
+    binary = tmp_path / "capsulectl-deal"
+    binary.write_text(f"#!/bin/sh\ncat <<'OUT'\n{stdout}\nOUT\necho refused >&2\nexit {code}\n")
+    binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+    return Ctl(tmp_path, "p", str(binary))
+
+
+def test_a_failed_verdict_keeps_verifys_report_so_the_reader_hears_which_check_failed(tmp_path):
+    # Codex on #350: verify prints its report, then exits non-zero; Ctl.run alone drops the report
+    out = json.dumps(report("fail", verdict="INVALID"))
+    assert pt.verify_report(fake_ctl(tmp_path, out, 1), ["verify"]) == json.loads(out)
+    assert pt.verify_report(fake_ctl(tmp_path, json.dumps(report("pass")), 0), ["verify"])["verdict"] == "VALID"
+
+
+def test_a_verify_failure_with_no_report_still_refuses(tmp_path):
+    with pytest.raises(pt.Refused, match="^bad bundle$"):
+        pt.verify_report(fake_ctl(tmp_path, json.dumps({"error": "bad bundle"}), 2), ["verify"])
+    with pytest.raises(pt.Refused, match="^refused$"):
+        pt.verify_report(fake_ctl(tmp_path, "", 2), ["verify"])
+
+
+def test_a_partys_own_card_page_refuses_any_other_failed_verdict(monkeypatch, tmp_path):
+    monkeypatch.setattr(pages, "home", lambda: tmp_path)
+    with pytest.raises(pt.Refused) as exc:
+        pages.card_page(OwnCard(tmp_path, report(None, verdict="INVALID")), "Alder Print Co.", rail="simulated",
+                        seller=True)
+    assert str(exc.value) == "Your History card does not verify: INVALID."

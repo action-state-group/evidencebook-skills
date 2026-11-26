@@ -80,13 +80,20 @@ def stamped(bundle: Path) -> bool:
     return pt.CARD_ANCHOR_WITNESS in json.loads(Path(bundle).read_text()).get("extensions", {})
 
 
+def same_counts(a: dict, b: dict) -> bool:
+    """Whether two cards count the same: everything but the ``anchor`` each checkpoint changes."""
+    return {k: v for k, v in a.items() if k != "anchor"} == {k: v for k, v in b.items() if k != "anchor"}
+
+
 def publish_card(home: Path, p: pt.Party, keep_stamped: bool = False) -> Path:
     """Write the party's shared card (as of its newest checkpoint) where buyers fetch it. With ``keep_stamped``, a card
-    whose newest checkpoint the witness has not taken yet does not replace a published one that carries its receipt
-    (#350): the witness takes checkpoints as it answers, and the next round publishes it once it has."""
+    whose newest checkpoint the witness has not taken yet does not replace a published one that carries its receipt and
+    counts the same (#350): the witness takes checkpoints as it answers, and the next round publishes it once it has. A
+    card whose counts changed (a deal, a dispute, a ruling) is published at once, with or without its receipt."""
     src = p.card_bundle(shared=True)
     dest = stage_dir(home) / "cards" / f"{p.name}.json"
-    if keep_stamped and pt.witnessed() and dest.is_file() and stamped(dest) and not stamped(src):
+    if keep_stamped and pt.witnessed() and dest.is_file() and stamped(dest) and not stamped(src) \
+            and same_counts(read_card(dest)[0], read_card(src)[0]):
         return dest
     wire.write_atomic(dest, src.read_bytes())
     return dest
@@ -100,7 +107,7 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
         raise pt.Refused(f"{label(seller)} has published no History card: its agent is not running")
     local = Path(reader.tmp(f"{seller}-card.json"))
     local.write_bytes(src.read_bytes())
-    out = reader.verify(local)
+    out = reader.verify(local, report_on_fail=True)
     card, as_of, signer = read_card(local)
     stamp = pt.anchor_witness(out)
     if out.get("verdict") != "VALID":

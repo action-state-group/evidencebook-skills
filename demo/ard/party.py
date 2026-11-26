@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -29,6 +30,7 @@ import _paths
 _paths.setup()
 
 import goose_node as gn  # noqa: E402
+import ctl as ctl_mod  # noqa: E402
 from ctl import Ctl, Refused  # noqa: E402
 
 # The Goose reference's Ctl and engine read their binaries from these; the demo's own variables name them.
@@ -419,16 +421,42 @@ class Party:
     def deals(self) -> list[dict]:
         return self.run("list", "--json")
 
-    def verify(self, bundle: Path, proof: Path | None = None) -> dict:
+    def verify(self, bundle: Path, proof: Path | None = None, report_on_fail: bool = False) -> dict:
         """``capsulectl verify --bundle`` on a file, with the hosted witness's directory so its receipts are checked. With
         ``proof`` (``deal checkpoint proof`` of that same copy), its x-deal-v1 entry also says the book's witness time,
-        ``witnessed: {status, witness, at}``, as ``deal report --html`` draws it (evidencebook ``deal_v1_witnessed.go``)."""
+        ``witnessed: {status, witness, at}``, as ``deal report --html`` draws it (evidencebook ``deal_v1_witnessed.go``).
+        With ``report_on_fail``, a verdict other than VALID returns verify's report (it prints it, then exits non-zero:
+        capsule-cli ``verify_bundle.go``), so the caller can say which check failed (#350); any other failure raises."""
         args = ["verify", "--bundle", str(bundle)]
         if witnessed():
             args += ["--witness-directory", self.write("witnesses.json", witness_directory())]
             if proof is not None:
                 args += ["--stamp-proof", str(proof)]
-        return self.run(*args)
+        if not report_on_fail:
+            return self.run(*args)
+        with self._lock:
+            return verify_report(self.ctl, args)
+
+
+def verify_report(c: Ctl, args: list[str]) -> dict:
+    """``Ctl.run`` for ``verify``, keeping the report verify prints before a non-zero verdict exit (``Ctl.run`` drops it
+    and raises). A failure with no report (no such file, a bundle verify cannot read) raises :class:`Refused`."""
+    env = {**os.environ, "HOME": str(c.home), "XDG_CONFIG_HOME": str(c.home / ".config")}
+    try:
+        done = subprocess.run([c.binary, "--profile", c.profile, *args], env=env, capture_output=True,
+                              timeout=ctl_mod.TIMEOUT, check=False)
+    except FileNotFoundError:
+        raise Refused(f"{c.binary} is not installed") from None
+    except subprocess.TimeoutExpired:
+        raise Refused(f"capsulectl-deal {args[0]} did not finish in {ctl_mod.TIMEOUT}s") from None
+    try:
+        out = json.loads(done.stdout.decode("utf-8", "replace").strip() or "{}")
+    except ValueError:
+        out = {}
+    if done.returncode == 0 or (isinstance(out, dict) and out.get("verdict")):
+        return out
+    why = out.get("error") if isinstance(out, dict) else None
+    raise Refused(why or done.stderr.decode("utf-8", "replace").strip() or f"capsulectl-deal {args[0]} failed")
 
 
 def decide(pack: Path, inputs: dict, admit_refs: dict | None = None) -> dict:
