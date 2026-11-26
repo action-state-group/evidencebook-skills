@@ -124,9 +124,16 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
            and w["maya"].notes(flow.BOOK_SENT), 300)
     _until(lambda: w["agents"]["kestrel"].party.notes(flow.BOOK_SENT), 300)
     # the ruling's witnessed time reaches Maya: with the ruling, or on the ruling file sent again once stamped (#307)
-    assert _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
+    def ruling_stamp_line() -> str:
+        later = [t for t in adj.LATER if t.name == f"ruling-stamp-{deal.deal_id[5:13]}"]
+        if not later:
+            return "The adjudicator's stamp was delivered in time, so the ruling's receipt did not reach Maya's records."
+        if later[-1].is_alive():
+            return f"The adjudicator was still waiting for {pt.WITNESS_NAME} to take the ruling's stamp."
+        return "The adjudicator's wait for the ruling's stamp had ended."
+    stamp_wait(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True) and (
         w["maya"].notes(flow.RULING_ENTERED)[0]["statement"]["stamped_at"] or w["maya"].notes(flow.RULING_STAMPED)),
-        adj.LATER_S + 30)
+        "the ruling's witnessed time in Maya's records", adj.LATER_S + 30, detail=ruling_stamp_line)
     # both entries read time-stamped once the witness has taken each side's book: Maya's proof goes on a later round of
     # her entering (flow.enter_rulings), Kestrel's with its agent's; as long as the demo waits for a stamp taken later
     read: list[str] = []
