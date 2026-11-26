@@ -201,7 +201,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    I am Maya. I need 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.
    ```
 
-   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat. Maya proposes 3,000 msat as your spending limit, in one short question. It is not your limit until you say yes. Type, then answer the dialog (it waits 10 minutes):
+   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat. Maya's agent asks, in one short question, whether 3,000 msat should be your spending limit. It is not your limit until you say yes and click Set limit. Type, then answer the dialog (it waits 10 minutes):
 
    ```
    Yes.
@@ -311,7 +311,7 @@ The main run sets a spending limit of 3,000 msat in step 2, so every payment is 
    I am Maya. I need 200 conference badges by Friday, under 2,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.
    ```
 
-   **Expect:** Maya proposes 2,000 msat as your spending limit. Type `Yes.` and click Set limit in the dialog. **Expect:** "Your spending limit: 2,000 msat for any one order, and 2,000 msat in total over 7 days. Each payment is checked against it."
+   **Expect:** Maya's agent asks whether 2,000 msat should be your spending limit. Type `Yes.` and click Set limit in the dialog. **Expect:** "Your spending limit: 2,000 msat for any one order, and 2,000 msat in total over 7 days. Each payment is checked against it."
 
 2. At step 6, the held-order question is as written there.
 

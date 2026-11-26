@@ -32,11 +32,10 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 0. **First turn.** Before anything else, show the person their own History card and the spending limit they set,
    or that none is set and what limits apply then, as the card tool gives it. Search nothing yet.
 1. **Take the ask.** What, by when, and the most the person will pay. Propose that amount to them as their spending
-   limit in one short question; it becomes their limit only on their yes, which the host asks for again on its own
-   screen and seals with the limit (on the demo host, `ard_set_limit` and its dialog). Never set it on your own
-   reading of their words. In the assessment, repeat the
-   spending limit and whether each price fits it, as the assessment tool gives them; a limit the person confirmed is
-   the one each payment is checked against.
+   limit in one short question. It becomes their limit only when they say yes and then confirm it on the host's own
+   screen, which seals it (on the demo host, `ard_set_limit` and its dialog). Never set it on your own reading of
+   their words. In the assessment, repeat the spending limit and whether each price fits it, as the assessment tool
+   gives them; a limit the person confirmed is the one each payment is checked against.
 2. **Search each registry** with `POST /search` and the item only. The person's budget
    stays with you: use it only in the assessment and at the pick; the deadline is theirs to judge. Each result is only a
    pointer. For each result, fetch the seller's own entry from its own `/.well-known/ard.json`,

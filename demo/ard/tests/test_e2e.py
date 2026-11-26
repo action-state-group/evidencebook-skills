@@ -498,6 +498,19 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     assert held is not None and "per_order" not in held.limits and held.limits["weekly"][0] == raised
     assert held.limits["weekly"][1] >= 2 * a.price_msat  # this order and at least the one paid above, kept
 
+    # reaching the limit is within it (Sherlock2 on #361: RUNBOOK step 14, Kestrel's 1,000 and Alder's 2,000 make exactly
+    # a 3,000 msat week): with the limit set to this week's total with this order, earlier paid deals included, no limit
+    # holds the order and capsulectl's card says it is within the limit (capsule-engine fails the window only when the
+    # total is over it)
+    exact = held.limits["weekly"][1]
+    limits.seal(w["maya"], exact, f"Set your spending limit to {exact:,} msat?\nAnswer: Set limit")
+    assert buyer.open_and_pay(w["home"], pt.Party(w["home"], "maya"), "alder", w["keys"]["alder"], a, w["adj"].named(),
+                              pay.FakeRail(), "Pay (test)", answer("no"), lambda *_: None, simulated=True) is None
+    q = asked[-1]
+    assert q.held is not None and not q.held.limits, q.held  # held only for its other reasons (no refund)
+    assert f"within your {exact:,} msat limit" in q.text and "over your" not in q.text
+
+
 def test_the_set_ups_witness_check_takes_a_real_stamp(monkeypatch, tmp_path):
     """The set-up's witness check (evidencebook-skills#359) against Action State's hosted witness: one throwaway log,
     its stamp taken. The local check runs its own witness instead (``ARD_E2E_WITNESS_URL``, #375) and stamps nothing on
