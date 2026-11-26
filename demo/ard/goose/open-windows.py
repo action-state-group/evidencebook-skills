@@ -304,17 +304,18 @@ def check_provider(root: Path) -> tuple[str | None, str | None]:
                     "folder; never npm install -g, which changes the adapter other tools use)"), provider
         return None, provider
     if provider in AGENT_PROVIDERS:
-        # Sherlock2 on #340 (ops c0813d7e): the allowed choices and where to switch, in plain words, no provider id
+        # Sherlock2 on #340 (ops c0813d7e, amended f5adbf20; #356): the allowed choices by the names Goose shows,
+        # and where to switch, in plain words, no provider id
         return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
-                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose a Gemini or ChatGPT sign-in, an API "
-                "key, or Claude Code (ACP): start the demo's Goose with open-windows.py --goose-only and change it in "
-                "Settings, Models"), provider
+                "the Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a ChatGPT sign-in), "
+                "an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the demo's Goose with "
+                "open-windows.py --goose-only and change it in Settings, Models"), provider
     if not provider:
         return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)", None
     on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
                 if isinstance(v, dict) and v.get("enabled") and k not in KEPT_ON)
     if on:
-        return ("with " + str(provider) + ", every Goose extension must be off so each window's agent has only its own "
+        return ("with this provider, every Goose extension must be off so each window's agent has only its own "
                 "demo tools (set-up step 9); still on: " + ", ".join(on)), provider
     return None, provider
 

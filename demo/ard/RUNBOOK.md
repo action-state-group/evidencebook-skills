@@ -73,7 +73,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
    brew install node
    ```
 
-8. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself, such as a Gemini or ChatGPT sign-in or an API key (OpenAI, Anthropic, Google and others). Providers that run their own agent (Claude Code CLI, Codex, Cursor Agent, Gemini CLI and the other ACP agents) are refused: their agent brings its own tools, so it could act outside the demo's. With Claude Code ACP only: install the `claude` CLI if missing, sign in, check. With another provider, skip this block; you enter its sign-in or key in set-up step 8.
+8. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Pay, Received, Dispute and Rule dialogs instead of you. With Claude Code ACP only: install the `claude` CLI if missing, sign in, check. With another provider, skip this block; you enter its sign-in or key in set-up step 8.
 
    ```
    command -v claude || npm install -g @anthropic-ai/claude-code
@@ -185,7 +185,7 @@ Paste each block into the same terminal window, one at a time, and wait for each
 
    **Expect:** "started the demo's own Goose on …/ard-commerce-goose", and Goose opens on its welcome screen.
 
-8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example Gemini, then sign in; or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
+8. In that Goose: the window may open small; maximize it. On the welcome screen click Connect to a Provider. With Claude Code ACP: type `claude` in the search box to find Claude Code ACP, wait for "ACP adapter found", click Continue. With another provider: pick it (for example ChatGPT Codex, then sign in; or Google or OpenAI, then paste the API key) and follow its screens; the key is kept by this Goose only. A privacy screen follows (untick "Share anonymous usage data" if you like), then Get Started. Later this lives in Settings, Models. (Goose 1.59.2, hand run 2026-11-24.)
    **Expect:** a chat opens and answers a short message.
 
 9. **Required, so the payment dialog holds (an agent with screen control could click it itself):** in that Goose, Extensions (in the left sidebar in Goose 1.59.2), turn off every extension: Analyze, Apps, Computer Controller, Developer, Extension Manager, Skills, Summon and Top Of Mind. Each card drops from Default Extensions down to Available as you switch it off, so the next switch slides under the cursor: check each one. The demo's own extensions (ard_maya, ard_alder, ard_kestrel, ard_adjudicator) are not there yet: each window brings its own. Scheduler is a Goose setting, not one of these extensions, and stays on in `config.yaml` (`scheduler: enabled: true`); the hand run left it on.

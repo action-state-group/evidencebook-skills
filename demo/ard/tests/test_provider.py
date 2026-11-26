@@ -63,7 +63,7 @@ def test_claude_code_acp_needs_the_pinned_adapter(tmp_path, monkeypatch):
 def test_a_provider_that_runs_its_own_agent_is_refused(tmp_path, provider):
     msg = _ow().provider_problem(_root(tmp_path, f"active_provider: {provider}\n" + OFF))
     assert msg and "runs its own agent" in msg and provider not in msg  # plain words, no provider id (ops c0813d7e)
-    assert "Gemini or ChatGPT sign-in, an API key, or Claude Code (ACP)" in msg and "Settings, Models" in msg
+    assert "ChatGPT Codex (a ChatGPT sign-in), an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP)" in msg and "Gemini" not in msg and "Settings, Models" in msg
 
 
 @pytest.mark.parametrize("provider", ["gemini_oauth", "openai", "anthropic", "chatgpt_codex"])
@@ -77,6 +77,7 @@ def test_an_extension_left_on_stops_the_windows(tmp_path):
     msg = ow.provider_problem(_root(tmp_path, "GOOSE_PROVIDER: openai\nextensions:\n  computercontroller:\n"
                                               "    enabled: true\n  scheduler:\n    enabled: true\n"))
     assert msg and "still on: computercontroller" in msg and "scheduler" not in msg
+    assert msg.startswith("with this provider,") and "openai" not in msg  # no provider id (#356)
 
 
 def test_the_message_uses_the_name_the_extensions_page_shows(tmp_path):
