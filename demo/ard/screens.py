@@ -124,6 +124,27 @@ def ruled_for_buyer(report: dict, seller: str) -> list[str]:
     return out
 
 
+def limit_line(limit_msat: int | None, pack_ceilings: list[int]) -> str:
+    """The spending limit the person set, or that none is set and what limits apply then (evidencebook-skills#331): the
+    pack's own limits, one per history tier, read from the pack. Names no one; the amounts are configuration."""
+    if limit_msat is not None:
+        return (f"Your spending limit: {msat(limit_msat)} for one order and over 7 days; each payment is checked "
+                "against it.")
+    cs = [msat(c) for c in sorted(pack_ceilings)]
+    under = cs[0] if len(cs) == 1 else ", ".join(cs[:-1]) + " or " + cs[-1]
+    return f"No spending limit is set, so only this pack's limits apply: deals under {under}, by the seller's history."
+
+
+def within_limit(price_msat: int, limit_msat: int | None) -> str:
+    """Whether a price fits the person's limit for one order (the caps finding fails only over it); the 7-day total is
+    checked at payment, against the deals she has paid by then. "" with no limit set."""
+    if limit_msat is None:
+        return ""
+    if price_msat <= limit_msat:
+        return f" Within your limit of {msat(limit_msat)} for one order; your 7-day total is checked at payment."
+    return f" Over your limit of {msat(limit_msat)} for one order: the order would wait for your OK at payment."
+
+
 def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:
