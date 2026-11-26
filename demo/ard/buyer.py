@@ -98,15 +98,17 @@ def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:
         ev.fail("commitment", entry.get("problem", "no commitment"))
         return ev
     key = entry["commitment"]["key_id"]
-    ev.ok("commitment", f"signature verifies under {key[:8]}…, and matches the seller's entry")
+    # the commitment's checks stay in Maya's records (the search's checks), never in her chat (#332, Sherlock2)
     try:
         r = flow.fetch_card(home, maya, entry["id"], key)
     except pt.Refused as exc:
         ev.fail("History card", str(exc))
         return ev
     ev.read, ev.card = r, r.card
-    ev.ok("History card", f"{pt.CARD_DERIVATION}, signed by {r.signer[:8]}… (the key the commitment names), "
-                          f"verify --bundle: {r.verdict}, as of checkpoint {r.anchor[:8]}… at {screens.local_time(r.anchor_time, date=True)}")
+    # no digests, key ids, derivation names or checkpoint hashes in Maya's chat (#332, Sherlock2); they stay in her own
+    # records (the CARD_RECEIVED note below names the seller's key, the card's checkpoint and its digest)
+    name = entry.get("name") or label(entry["id"])
+    ev.ok("History card", f"signed by {name}, and it checks out, as of {screens.local_time(r.anchor_time, date=True)}")
     if r.witness_status == "pass":
         ev.ok("witness", f"time-stamped by {pt.WITNESS_NAME}: its receipt verifies under the witness's key")
     elif r.witness_status in ("withheld", ""):  # none carried, or none reported: no verb hands a buyer one (#891)
@@ -410,6 +412,12 @@ def await_delivery(home: Path, maya: pt.Party, deal: Deal, seconds: float = flow
         time.sleep(0.5)
 
 
+def agreed(home: Path, deal: Deal) -> bool:
+    """Whether the seller agreed to this deal: its agreement reached Maya (:func:`open_deal`). An offer withdrawn
+    unanswered has none."""
+    return wire.path(home, deal.me, deal.deal_id, "agree").is_file()
+
+
 def paid(home: Path, deal: Deal) -> bool:
     """Whether Maya handed the seller her payer leg for this deal."""
     return wire.path(home, deal.seller, deal.deal_id, "paid").is_file()
@@ -520,8 +528,10 @@ def close_received(home: Path, maya: pt.Party, deal: Deal) -> None:
 def dispute(home: Path, maya: pt.Party, deal: Deal, say: Callable[[str], None]) -> dict:
     """Maya disputes the delivery: her statement that it was not met, then ``deal dispute``; the dispute goes to the
     seller and to the adjudicator the agreement names, which then asks each side for its books."""
-    wire.send(home, deal.seller, deal.deal_id, "statement",
-              maya.statement(deal.deal_id, {pt.PAID: "met", pt.DELIVERED: "not_met"}))
+    # the delivery row is what she disputes; she says the payment was met only when her payer leg reached the seller,
+    # never for a deal whose payment did not go through
+    rows = {pt.DELIVERED: "not_met", **({pt.PAID: "met"} if paid(home, deal) else {})}
+    wire.send(home, deal.seller, deal.deal_id, "statement", maya.statement(deal.deal_id, rows))
     d = maya.dispute(deal.deal_id, pt.DELIVERED)
     wire.send(home, deal.seller, deal.deal_id, "dispute", d["file"])
     adj.send_dispute(home, Path(d["file"]), deal.deal_id, buyer=deal.me, seller=deal.seller)

@@ -239,7 +239,46 @@ def seller() -> flow.SellerAgent:
         _seller_lock = _lock(ROLE)
         stage.ensure_stage(_home())
         _seller = flow.SellerAgent(_home(), ROLE)
+        if os.environ.get("ARD_NOTIFY", "1") != "0":
+            _seller.notify = notify
     return _seller
+
+
+def notification_title(seller_label: str) -> str:
+    return f"{seller_label}'s agent (run by the operator)"
+
+
+def _log(line: str) -> None:
+    """A line in this window's party log (``<home>/<role>/agent.log``); never raises."""
+    try:
+        d = _home() / ROLE
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / "agent.log", "a") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  {line}\n")
+    except OSError:
+        pass
+
+
+def notify(seller_label: str, line: str) -> None:
+    """A desktop notification on the presenter's screen for a seller event (evidencebook-skills#336: the host may show
+    one). Its title names the seller's agent and the operator who runs it (u120), so it never reads as the seller
+    itself writing to the presenter. It never waits: the seller's agent goes on whether or not macOS shows it.
+    ``ARD_NOTIFY=0`` turns it off."""
+    title = notification_title(seller_label)
+    script = f'display notification "{dialog_text(line)}" with title "{dialog_text(title)}"'
+    run = subprocess.Popen(["osascript", "-e", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.PIPE, text=True, start_new_session=True)
+
+    def reap() -> None:  # in the background, so the seller's agent never waits; a failure is logged, not shown
+        try:
+            _, err = run.communicate(timeout=30)
+            if run.returncode:
+                _log(f"notification not shown (osascript exit {run.returncode}): {err.strip()}")
+        except subprocess.TimeoutExpired:
+            run.kill()
+            run.communicate()  # reaped, its pipe closed
+            _log("notification not shown: osascript did not finish in 30 s")
+    threading.Thread(target=reap, daemon=True).start()
 
 
 def _tool(*roles: str, description: str | None = None):
@@ -275,13 +314,7 @@ def _refusal(exc: BaseException) -> str:
     did before it was refused."""
     text = str(exc)
     if "{" in text or len(text) > 400:  # whatever wrapped it (ard_rule wraps capsulectl's refusal in a RuntimeError)
-        try:
-            d = _home() / ROLE
-            d.mkdir(parents=True, exist_ok=True)
-            with open(d / "agent.log", "a") as fh:
-                fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  a tool refused: {exc!r}\n")
-        except OSError:
-            pass
+        _log(f"a tool refused: {exc!r}")
         return "this step was refused (the reason is in this party's log, agent.log)"
     return text
 
@@ -302,16 +335,15 @@ def _flush(s: Session) -> None:
 
 @_tool("maya")
 def ard_find_sellers() -> None:
-    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its signed
-    commitment verified. Call this first."""
+    """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its listing
+    checks out. Call this first."""
     s = session()
     s.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
-        print(f"found: {e['name']:18} {price:>10}   commitment {'verified' if 'commitment' in e else 'REFUSED: ' + e['problem']}")
-        for line in e.get("checks", []):
-            print(f"       {line}")
+        print(f"found: {e['name']:18} {price:>10}   {'listing checks out' if 'commitment' in e else 'listing refused: ' + e['problem']}")
+        # the search's own checks are not shown in her chat (#332, Sherlock2)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
 
@@ -342,7 +374,7 @@ def ard_assess() -> None:
         raise RuntimeError("call ard_show_history first")
     s.pack = s.pack or packs.starting()
     p = s.pack
-    print(f"pack {p.version} · digest {p.digest[:12]}… · {screens.PACK_NOTE}")
+    print(f"Maya's assessment rules: {screens.PACK_NOTE}")  # its version and digest are in her assessment records
     print(f"({screens.ASSESSMENT_NOTE})")
     print(f"({screens.OPERATOR_NOTE})\n")
     for e in s.entries:
@@ -491,18 +523,57 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
     print(f"Maya's statement sent to {name}: she received what she paid for.")
 
 
+#: How the dispute dialog ended other than Dispute, in Maya's terms (as RECEIVED_NOT_YES).
+DISPUTE_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in time",
+                   NOT_SHOWN: "the dialog could not be shown"}
+
+
 @_tool("maya")
-def ard_dispute(seller: str) -> None:
-    """Dispute the delivery of Maya's latest deal with ``seller``: her statement that it was not met, and a dispute,
-    sent to the seller and to the adjudicator the agreement names, which then asks each side for its books. It moves no
-    money. Call only when Maya says the delivery was short or did not come."""
+def ard_dispute(seller: str, deal: str = "") -> None:
+    """Dispute the delivery of Maya's deal with ``seller``, only after her yes in a dialog on the presenter's screen
+    (evidencebook-skills#333): her signed statement that it was not met, and a dispute, sent to the seller and to the
+    adjudicator the agreement names, which then asks each side for its books. It moves no money. Call only when Maya
+    says the delivery was short or did not come. This call blocks, for up to 10 minutes, until she clicks Dispute or
+    Cancel: do not call it again while it waits; you cannot see or answer the dialog. With more than one deal with that
+    seller, pass ``deal`` (the deal id, or its first characters)."""
     s = session()
     key = _seller_key(seller)
-    deal = s.latest(key)
-    if deal is None:
-        raise RuntimeError(f"Maya has no deal with {SELLERS[key]['label']} in this run")
-    buyer.dispute(s.home, s.maya, deal, print)
-    print(screens.DISPUTE_RAISED.format(seller=SELLERS[key]["label"]))
+    name = SELLERS[key]["label"]
+    # only deals the seller agreed: an offer withdrawn unanswered (buyer.open_deal) is no deal to dispute. Not "paid":
+    # a payment can move money and still fail to reach the seller's records
+    mine = [d for d in s.deals if d.seller == key and buyer.agreed(s.home, d)]
+    if not mine:
+        raise RuntimeError(f"Maya has no deal with {name} that it agreed to in this run, so there is nothing to dispute")
+    if deal:
+        found = [d for d in mine if d.deal_id.removeprefix("deal-").startswith(deal.removeprefix("deal-"))]
+        if len(found) != 1:
+            raise RuntimeError(f"{'no' if not found else 'more than one'} deal with {name} matches {deal!r}: her deals "
+                               "with it are " + ", ".join(d.deal_id[5:13] for d in mine))
+        target = found[0]
+    elif len(mine) > 1:  # never a guess between two orders that look the same in the dialog
+        raise RuntimeError(f"Maya has {len(mine)} deals with {name} (" + ", ".join(d.deal_id[5:13] for d in mine) +
+                           "): ask her which, then pass it as deal")
+    else:
+        target = mine[0]
+    if buyer.disputed(s.maya, target):
+        print(f"Maya already disputed this delivery: {name} and the adjudicator have it (deal {target.deal_id[5:13]}).")
+        return
+    if buyer.received_said(s.maya, target):
+        raise RuntimeError(f"Maya already said she received what she paid for from {name} (deal "
+                           f"{target.deal_id[5:13]}): nothing was sent")
+    with s.pay_lock:  # not while the payment tool or Maya's agent takes the same delivery
+        observed = buyer.take_delivery(s.home, s.maya, target)
+    record = (f"Its delivery record says {buyer.shipped(observed)} were shipped." if observed is not None
+              else f"{name} has sent no delivery record yet.")
+    which = f" (deal {target.deal_id[5:13]})" if len([d for d in s.deals if d.seller == key]) > 1 else ""
+    text = (f"Dispute your delivery from {name}{which}? {record} Choosing Dispute sends {name} and the adjudicator your signed "
+            "statement that the delivery was not met. It moves no money.")
+    how = "yes" if gate_off() else dialog_answer("Dispute this delivery", text, "Dispute")
+    if how != "yes":
+        raise RuntimeError(f"{DISPUTE_NOT_YES[how]}, so nothing was sent in Maya's name. Do not retry on your own; ask "
+                           "Maya.")
+    buyer.dispute(s.home, s.maya, target, print)
+    print(screens.DISPUTE_RAISED.format(seller=name))
 
 
 # -- the sellers --------------------------------------------------------------------------------------
@@ -635,6 +706,15 @@ def ard_show_card() -> None:
     print("  " + screens.card_line(card))
     if ROLE in SELLERS:
         print("  " + screens.sample_note(ROLE))
+        return
+    for d in session().deals:  # a deal ruled for her says what that means, beside the card's "not final yet" count
+        try:
+            rep = p.report(d.deal_id)
+        except pt.Refused as exc:
+            p.log(f"report of {d.deal_id} for the card: {exc!r}")
+            continue
+        for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
+            print(f"  deal {d.deal_id[5:13]} with {SELLERS[d.seller]['label']}: {line}")
 
 
 def _own_deal() -> tuple[pt.Party, str, str | None]:
@@ -657,7 +737,8 @@ def ard_show_receipt() -> None:
     if deal_id is None:
         print(f"{name}: no deal yet, so no receipt")
         return
-    print(receipt.receipt_text(p, name, deal_id, real=_real(), seller=ROLE in SELLERS))
+    other = "" if ROLE in SELLERS else SELLERS[session().latest().seller]["label"]
+    print(receipt.receipt_text(p, name, deal_id, real=_real(), seller=ROLE in SELLERS, counterparty=other))
 
 
 @_tool("maya", "alder", "kestrel")

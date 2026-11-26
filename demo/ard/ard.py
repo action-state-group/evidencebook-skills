@@ -113,13 +113,13 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         if not item["digest_matches"]:  # the entry points at another document than the one served
             item["problem"] = "the served commitment's digest differs from the one the seller's entry names"
             continue
-        item["checks"].append("commitment digest matches the seller's entry")
+        item["checks"].append("the commitment served is the one the seller's entry names")
         try:
             doc_c = json.loads(octets)
             cm.verify(doc_c)
             item["identity"] = doc_c["key_id"]
             item["commitment"] = doc_c
-            item["checks"].append(f"commitment signature verifies under {doc_c['key_id'][:8]}…")
+            item["checks"].append("commitment signature verifies")
         except Exception as exc:
             item["problem"] = f"commitment: {exc}"
     return found

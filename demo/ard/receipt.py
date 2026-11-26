@@ -32,8 +32,9 @@ class ReceiptError(RuntimeError):
     """No receipt page: capsulectl refused to draw it."""
 
 
-def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool) -> str:
-    """The party's receipt for one deal in words: each row's status as capsulectl reports it now."""
+def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool, counterparty: str = "") -> str:
+    """The party's receipt for one deal in words: each row's status as capsulectl reports it now; on the buyer's, what
+    a ruling for her means (:func:`screens.ruled_for_buyer`, naming ``counterparty``, the seller)."""
     try:
         rep = p.report(deal_id)
     except pt.Refused as exc:
@@ -51,6 +52,8 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
         elif row.get("value"):
             line += f" ({'met' if row['value'] == 'met' else 'not met'})"
         lines.append(line)
+    if not seller:
+        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller")]
     lines += proof_lines(p, deal_id, name)
     if seller and real:
         owed = next((r.get("owed", {}).get("amount_minor") for r in report.get("rows", []) if r["id"] == pt.PAID), None)
@@ -86,7 +89,9 @@ def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str
     if checked.get("verdict") != "VALID":
         lines = [f"  This copy did not verify (capsulectl deal verify: {checked.get('verdict')})."]
     elif half and half.get("status") == "verified":
-        lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
+        # Sherlock2 on #348 (ops 1c418eb7): the page's scope, so it never reads as both signing the outcome
+        lines = [f"  Signed by both sides: the other side's signed agreement checks out on {name}'s own book. It covers "
+                 "their agreement only, not anything after it."]
     else:
         lines = ["  The other side's half is not in this copy."]
     return lines + [witness_line(next((e.get("witnessed") for e in entries if e.get("witnessed")), None), name)]
@@ -102,7 +107,7 @@ def witness_line(witnessed: dict | None, name: str) -> str:
     if status == "verified":
         at = witnessed.get("at", "")
         when = f" at {screens.local_time(at, date=True)}" if at else ""
-        return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as capsulectl verify reported on {name}'s own book."
+        return f"  Time-stamped by {pt.WITNESS_NAME}{when}, as checked on {name}'s own book."
     if status == "failed":
         return (f"  No witness time: capsulectl verify could not check {pt.WITNESS_NAME}'s receipt for {name}'s own "
                 "book.")

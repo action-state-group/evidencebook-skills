@@ -10,13 +10,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import party as pt
-from adjudicator import CHALLENGE_DAYS
 from cast import SAMPLE_DEALS
 
 if TYPE_CHECKING:
     from buyer import Assessment, Evidence
 
-PACK_NOTE = "a copy, not published · placeholder thresholds"
+PACK_NOTE = "example rules for this demo, not a published set"  # Sherlock2 on #332 (buzz 458673a9)
 #: What the demo adapter fills in for the demo operator (buyer.inputs): those rows pass by construction, not by a check.
 OPERATOR_NOTE = ("Some inputs were set by the operator and not checked: which marketplace the seller is on, the "
                  "list of sellers this pack accepts, who time-stamps the seller's card, and who controls the seller's "
@@ -111,6 +110,20 @@ def card_line(card: dict) -> str:
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
+def ruled_for_buyer(report: dict, seller: str) -> list[str]:
+    """What a ruling for the buyer means for her, from capsulectl's report of her deal (evidencebook-skills#334,
+    Sherlock2's words): the outcome, and that no refund follows, since every deal here is agreed as not refundable
+    (``recourse.refundable: false`` in her intent). Only a ruled row the adjudicator found not met against the seller."""
+    out = []
+    for row in report.get("rows", []):
+        r = row.get("ruling") or {}
+        if row.get("status") == "ruled" and r.get("against") == "seller" and r.get("value") == "not_met":
+            what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
+            out.append(f"Ruled for you: {what} not met, against {seller}. No refund: this deal was agreed as not "
+                       "refundable.")
+    return out
+
+
 def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:
@@ -174,15 +187,12 @@ DISPUTE_RAISED = ("Dispute raised on this deal's delivery. Sent to {seller} and 
 
 
 def rule_question(deal_id: str, row: str, seller: str) -> str:
-    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. A challenge is x-deal-v1's
-    ``dispute`` of kind ``challenge`` (PROFILE.md §5; ``deal dispute --challenge``, which "changes no row's status");
-    the window is 7 days (Steven, ops u214, 2026-11-24), a practice-statement constant (evidencebook
-    ``docs/design/861-four-books.md`` §6; :data:`adjudicator.CHALLENGE_DAYS`)."""
+    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. It names no challenge window:
+    the ruling names no deadline, and Sherlock2 dropped the line (evidencebook-skills#336); the window, 7 days (Steven,
+    ops u214), stays in the adjudicator's published rules (:data:`adjudicator.RULES_TEXT`)."""
     return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
             f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
-            f"of the parties. Either side may challenge it within {CHALLENGE_DAYS} days. A challenge is recorded beside the "
-            f"ruling and "
-            f"never replaces it.")
+            f"of the parties.")
 
 
 

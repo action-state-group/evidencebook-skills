@@ -85,7 +85,7 @@ def test_no_line_a_person_reads_names_the_demo():
 def test_the_ruling_question_scopes_the_challenge():
     q = screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
     assert "not met, against Kestrel Print" in q and "not independent of the parties" in q
-    assert "Either side may challenge it within 7 days. A challenge is recorded beside the ruling and never replaces it." in q
+    assert "challenge" not in q  # the ruling names no deadline (#336); the 7 days are in the published rules
 
 
 def test_the_delivery_record_in_words():
@@ -558,9 +558,9 @@ def test_the_sellers_sample_histories_differ_and_neither_falls_below_the_packs_b
     assert SAMPLE_DEALS["alder"] > SAMPLE_DEALS["kestrel"] >= k
 
 
-def test_the_ruling_dialog_takes_the_challenge_window_from_the_adjudicator():
+def test_the_published_rules_keep_the_challenge_window():
     import adjudicator as adj
-    assert f"within {adj.CHALLENGE_DAYS} days" in screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
+    assert f"within {adj.CHALLENGE_DAYS} days" in " ".join(adj.RULES_TEXT.split())
 
 
 def test_the_receipt_page_is_capsulectls_own(monkeypatch, tmp_path):

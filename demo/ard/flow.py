@@ -92,9 +92,9 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
     if out.get("verdict") != "VALID":
         raise pt.Refused(f"{label(seller)}'s card does not verify: {out.get('verdict')}")
     if signer != key_id:
-        raise pt.Refused(f"{label(seller)}'s card is signed by {signer[:8]}…, not the key its commitment names")
+        raise pt.Refused(f"{label(seller)}'s card is not signed by the key its commitment names")
     if card.get("derivation") != pt.CARD_DERIVATION:
-        raise pt.Refused(f"{label(seller)}'s card is {card.get('derivation')}, not {pt.CARD_DERIVATION}")
+        raise pt.Refused(f"{label(seller)}'s card is not the kind of History card this buyer reads")
     return CardRead(card, as_of["anchor"], as_of["anchor_time"], signer, out["verdict"],
                     out.get("witnesses", {}).get("status", ""), local)
 
@@ -139,6 +139,26 @@ class SellerAgent:
             if not screens.once_per_failure(self.__dict__.setdefault("_failing", set()), line):
                 return
             self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
+
+    def event(self, line: str) -> None:
+        """One of the events a seller is told of (evidencebook-skills#336, Sherlock2): deal agreed, paid, dispute
+        received, ruling. One line in its activity, and the host's desktop notification when ``notify`` is set (the
+        window's server sets it; a Goose window shows nothing until its agent is asked)."""
+        self.say(line)
+        notify = getattr(self, "notify", None)
+        if notify is not None:
+            try:
+                notify(self.label, line)
+            except Exception as exc:  # noqa: BLE001: a notification never stops the seller's agent
+                self.party.log(f"notification: {exc!r}")
+
+    def _terms(self, deal_id: str) -> str:
+        """What the deal is for and its price, from the buyer's offer this seller kept."""
+        try:
+            body = json.loads(wire.path(self.home, self.name, deal_id, "offer").read_text())["agent_input"]["body"]
+            return f"{body['terms_rows']['rows'][0]['owed']['amount_minor']:,} msat for {body['terms']['item']}"
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            return "the buyer's order"
 
     def failed(self, what: str, exc: BaseException) -> None:
         """One plain line for a step that failed this round (evidencebook-skills#327), said once while it keeps failing
@@ -256,8 +276,9 @@ class SellerAgent:
             agreed = self._step(deal_id, "agreed", lambda: p.agree(digest_of(offer))["file"])
             wire.send(self.home, self.buyer_of(deal_id), deal_id, "agree", agreed)
             self._mark(deal_id, "offer")
-            self.say(f"a buyer offered {price:,} msat for {body['terms']['item']}: agreed at the listed price, and this "
-                     "seller's agreement sent to the buyer")
+            # its own log only: the event a seller is told is the deal agreed by both (_agreements, #336)
+            self.party.log(f"a buyer offered {price:,} msat for {body['terms']['item']} (deal {deal_id}): agreed at the "
+                           "listed price, and this seller's agreement sent to the buyer")
 
     def _agreements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "agree"):
@@ -265,7 +286,7 @@ class SellerAgent:
                 continue
             self.party.receive(f)
             self._mark(deal_id, "agree")
-            self.say("the buyer's agreement kept: the deal is agreed by both")
+            self.event(f"deal agreed: {self._terms(deal_id)}, signed by both (deal {deal_id[5:13]})")
 
     def _payments(self) -> None:
         p, info = self.party, SELLERS[self.name]
@@ -277,8 +298,11 @@ class SellerAgent:
             if not self._done(deal_id, "paid-kept"):
                 p.receive(f)
                 self._mark(deal_id, "paid-kept")
-                self.say(f"payment of {ref['amount_msat']:,} msat recorded by the buyer"
-                         + (" (simulated rail: no money moved)" if ref.get("simulated") else ""))
+                # what this seller knows: the buyer's word; its own wallet is not read by this process (#337, Sherlock2:
+                # "if the rail can't show that, it says the buyer says paid")
+                self.event(f"paid: the buyer says it paid {ref['amount_msat']:,} msat"
+                         + (" (simulated rail: no money moved)" if ref.get("simulated")
+                            else "; this seller's own wallet is not checked here"))
             leg = self._step(deal_id, "received", lambda: p.received_leg(deal_id, ref["amount_msat"], ref["payment_ref"]))
             wire.send(self.home, to, deal_id, "received", leg)
 
@@ -316,14 +340,18 @@ class SellerAgent:
             if not self._done(deal_id, "dispute"):
                 self.party.receive(f)
                 self._mark(deal_id, "dispute")
-                self.say(f"the buyer disputed the delivery of deal {deal_id[5:13]}: the adjudicator will ask for this "
-                         "seller's books")
+                self.event(f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the "
+                           "adjudicator asks for this seller's books, which this seller answers in full")
 
     def _requests(self) -> None:
-        adj.answer_requests(self.home, self.party, self.name, "seller", self.say)
+        def say(line: str) -> None:  # the books going to the adjudicator is an event (#336)
+            (self.event if line.startswith("the adjudicator asked for this party's books") else self.say)(line)
+        adj.answer_requests(self.home, self.party, self.name, "seller", say)
 
     def _rulings(self) -> None:
-        enter_rulings(self.home, self.party, "seller", self.buyer_of, self.say)
+        def say(line: str) -> None:  # the ruling entered is the event; its book and stamp lines are activity only
+            (self.event if line.startswith("the adjudicator's ruling on deal") else self.say)(line)
+        enter_rulings(self.home, self.party, "seller", self.buyer_of, say)
 
     def _named(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "named"):

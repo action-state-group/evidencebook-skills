@@ -483,13 +483,13 @@ def test_a_tool_refusal_with_raw_output_is_one_plain_line(tmp_path, monkeypatch,
 
 @pytest.mark.parametrize("witnessed,want", [
     ({"status": "verified", "witness": "Action State's witness", "at": "2026-11-25T22:41:33Z"},
-     "  Time-stamped by Action State's witness at {t}, as capsulectl verify reported on Maya's own book."),
+     "  Time-stamped by Action State's witness at {t}, as checked on Maya's own book."),
     ({"status": "withheld", "reason": "no witness receipt is held for this checkpoint yet"},
      "  Not time-stamped yet: Action State's witness has not taken Maya's latest stamp; ask again in a minute."),
     ({"status": "withheld", "reason": "no receipt verifies under the witness directory"},
      "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
     ({"status": "verified", "witness": "Action State's witness"},
-     "  Time-stamped by Action State's witness, as capsulectl verify reported on Maya's own book."),
+     "  Time-stamped by Action State's witness, as checked on Maya's own book."),
     (None, "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
     ({"status": "withheld"}, "  No witness time: capsulectl verify reported none it could check for Maya's own book."),
     ({"status": "failed", "reason": "the stamp proof does not verify"},
@@ -501,7 +501,8 @@ def test_the_chat_receipt_says_the_witness_time_as_verify_reported_it(monkeypatc
 
 
 @pytest.mark.parametrize("verdict,half,expect", [
-    ("VALID", {"status": "verified"}, "  Signed by both sides: the other side's half verifies (capsulectl deal verify)."),
+    ("VALID", {"status": "verified"}, "  Signed by both sides: the other side's signed agreement checks out on Maya's own "
+                                      "book. It covers their agreement only, not anything after it."),
     ("VALID", None, "  The other side's half is not in this copy."),
     ("INVALID", {"status": "verified"}, "  This copy did not verify (capsulectl deal verify: INVALID)."),
 ])

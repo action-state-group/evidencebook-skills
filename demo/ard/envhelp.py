@@ -48,6 +48,8 @@ VARS = (
         "another rule, waits for Buy anyway; unset, no limit", "2000", ()),
     Var("ARD_WITNESS", "off keeps the History cards unwitnessed (no network); by default each checkpoint goes to "
         "Action State's hosted witness, witness.agentactioncapsule.org, which receives hashes only", "off", ()),
+    Var("ARD_NOTIFY", "0 turns off the desktop notification each seller event shows (deal agreed, paid, dispute "
+        "received, ruling); by default the seller windows show one", "0", ()),
 )
 
 
