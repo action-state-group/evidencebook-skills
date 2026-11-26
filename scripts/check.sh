@@ -10,15 +10,14 @@
 #   scripts/check.sh --plan   print which jobs a run would take, and why, and
 #                             run none (with --full: the full set)
 #
-# ard-demo (its end-to-end test runs both deals against a hosted witness) runs
+# ard-demo (its end-to-end test runs both deals on a witness it starts) runs
 # only when a file it reads changed since the merge base with origin/main:
 # committed, staged, unstaged or untracked, a rename counted at both its old
 # and new path (ARD_INPUTS below; evidencebook-skills#374). Without a merge
 # base it runs. Every other job always runs; the exit status is non-zero when
 # any failed. CI's tests.yml still runs ard-demo in full on main and nightly.
 #
-# The pins
-# (commits, tags, release versions) are read from the workflow files, so they
+# The pins (commits, tags, release versions) are read from the workflow files, so they
 # stay the one source; the one exception is ard-demo's end-to-end test, which
 # here stamps on a witness started on this machine where CI uses the hosted
 # one (LOCAL_WITNESS_REF below, evidencebook-skills#371). Pinned checkouts,
@@ -290,6 +289,10 @@ local_witness() {
   local src tools out="$1/outputs"
   src=$(checkout capsule-anchor "$LOCAL_WITNESS_REF")
   tools=$(checkout capsule-anchor "$LOCAL_WITNESS_START_REF")
+  # start.sh pip-installs SRC, and setuptools writes build/ into the source it builds: a copy of this run's own, so two
+  # runs never write into the shared cached checkout at once (evidencebook-skills#372).
+  cp -R "$src" "$1/capsule-anchor"
+  src=$1/capsule-anchor
   : >"$out"
   # BLOCK=false: blocking the hosted witness's names in /etc/hosts needs sudo; the end-to-end step routes every
   # other host to a closed port instead (job_ard_demo).
