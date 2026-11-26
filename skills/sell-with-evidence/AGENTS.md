@@ -5,8 +5,8 @@ description: Sell for a person to buyers who ask for evidence. Publishes one sig
 # Sell with evidence
 
 > **Demo host, step A.** This skill runs today only on the ARD two-seller demo's host, whose steps
-> are that demo's own tools and its seller process (the host table at the end). On a capsule host
-> the same steps are `capsulectl` verbs, some of which do not exist yet (design note
+> are that demo's own tools and its seller process (the five verbs' table at the end). On a capsule host
+> the same steps are `capsulectl` commands, some of which do not exist yet (design note
 > `docs/design/ard-buyer-seller-skills.md`, §3.6). Do not copy the demo host's tools into another host.
 
 A seller wants buyers' agents to find them and check their record. You publish what they say
@@ -50,17 +50,29 @@ sale in those records.
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent
   listing, no tool search except to load your own tools.
 
-## Host table
+## The five verbs
 
-| Step | On the demo host (step A) | On a capsule host |
-|---|---|---|
-| 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (capsule-cli#571) |
-| 2 Share the History card | done by the demo's seller process: its shared `standard_history/3` card, as of each checkpoint | `deal standard-history card --shared`, or `respond` over the mailbox (capsule-cli#573) |
-| 3 Take and record the sale | done by the demo's seller process | `deal receive`, `deal admit`, `deal agree`, `deal check` with `"action":"commit"`, `deal perform` |
-| 4 Answer a dispute and enter a ruling | done by the demo's seller process: its full answer to the adjudicator's request, the ruling entered in its own records | `deal respond` to the adjudicator's request, `deal receive` the ruling |
-| Show what happened | `ard_seller_activity` | `deal` and `book` views |
-| Show the History card | `ard_show_card`, `ard_open_card_page` (as a page) | `book` card |
-| Show the receipt | `ard_show_receipt`, `ard_open_receipt_page` (as a page) | `deal` receipt |
+This skill teaches five verbs and nothing else: **check** before you act, **record** what was done, **ask** the
+other side for evidence, **verify** what you get, and **show** a card or a receipt. Each row maps a verb, at one
+step, to the demo host's tool and to the capsule host's existing command.
+
+| Verb | Step | On the demo host (step A) | On a capsule host |
+|---|---|---|---|
+| record | 1 Commitment and listing | done by the demo operator in advance, served from the seller's own origin | a publish verb (capsule-cli#571) |
+| show | 2 Share the History card | done by the demo's seller process: its shared `standard_history/3` card, as of each checkpoint | `deal standard-history card --shared` |
+| ask | 2 Answer evidence requests | done by the demo's seller process | `respond` over the mailbox (capsule-cli#573) |
+| check | 3 Take the sale | done by the demo's seller process | `deal admit`, `deal check` with `"action":"commit"` |
+| record | 3 Record the sale | done by the demo's seller process | `deal receive`, `deal agree`, `deal perform` |
+| ask | 4 Answer a dispute | done by the demo's seller process: its full answer to the adjudicator's request | `deal respond` to the adjudicator's request |
+| record | 4 Enter a ruling | done by the demo's seller process: the ruling entered in its own records | `deal receive` the ruling |
+| show | What happened | `ard_seller_activity` | `deal` and `deal list` |
+| show | The History card | `ard_show_card`, `ard_open_card_page` (as a page) | `deal standard-history card` |
+| show | The receipt | `ard_show_receipt`, `ard_open_receipt_page` (as a page) | `deal` receipt |
+
+Setting up a store or a profile and running the machinery are operator commands, not taught here.
+
+The History card is the one commerce card, `standard_history`. A Mesh inference node's service card and its
+liar-catch checks are Mesh's own exception, not a second commerce card: this skill never serves one.
 
 ## On the demo host
 

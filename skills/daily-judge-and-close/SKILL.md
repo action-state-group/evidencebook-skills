@@ -4,6 +4,10 @@ description: Cron-run, once per day. Judge the day's cases against a compiled co
 ---
 # Daily judge-and-close
 
+> **Pack-author skill.** For whoever writes and runs a Terms Pack (an Evidence Contract), not for an agent
+> buying, selling, adjudicating or reporting; those agent skills teach only five verbs (check, record, ask,
+> verify, show). This skill keeps its authoring commands.
+
 Compiled per contract by `evidence-contract-compile`; this file is the template the
 compiler specialises, not something a customer edits by hand. Runs unattended, nightly.
 There is no approval point in this loop by design — every judgment is pinned and every

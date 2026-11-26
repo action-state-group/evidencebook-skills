@@ -5,8 +5,8 @@ description: Buy something for a person from sellers who answer evidence request
 # Buy with evidence
 
 > **Demo host, step A.** This skill runs today only on the ARD two-seller demo's host, whose steps
-> are that demo's own tools (the host table at the end). On a capsule host the same steps are
-> `capsulectl` verbs, some of which do not exist yet (design note
+> are that demo's own tools (the five verbs' table at the end). On a capsule host the same steps are
+> `capsulectl` commands, some of which do not exist yet (design note
 > `docs/design/ard-buyer-seller-skills.md`, §3.6). Do not copy the demo host's tools into another host.
 
 A person asks you to buy something. You find sellers, check what each says about itself, read
@@ -83,21 +83,31 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent
   listing, no tool search except to load your own tools.
 
-## Host table
+## The five verbs
 
-| Step | On the demo host (step A): this demo host's tools | On a capsule host |
-|---|---|---|
-| 2 Search, check entries and commitments | `ard_find_sellers`; `ard_show_listing` shows one seller's listing as the search checked it | an ARD search verb (capsule-cli#572), `capsulectl commitment find` |
-| 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card, checked with `verify --bundle` | `request` / `respond` over the mailbox (capsule-cli#573) |
-| 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
-| 5 Record the pick | `ard_pick` | `deal note --kind intent` |
-| 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
-| 6a Confirm receipt | `ard_confirm_received`: a dialog asks the person; only their yes sends their statement that they received what they paid for | `deal statement` with both rows met |
-| 6b Dispute a delivery | `ard_dispute`: a dispute on the delivery row, sent to the seller and the deal's adjudicator | `deal statement`, `deal dispute`; `deal respond` when the adjudicator asks for the books |
-| 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `book` card |
+This skill teaches five verbs and nothing else: **check** before you act, **record** what was done, **ask** the
+other side for evidence, **verify** what you get, and **show** a card or a receipt. Each row maps a verb, at one
+step, to the demo host's tool and to the capsule host's existing command.
+
+| Verb | Step | On the demo host (step A): this demo host's tools | On a capsule host |
+|---|---|---|---|
+| ask | 2 Search | `ard_find_sellers` | an ARD search verb (capsule-cli#572) |
+| verify | 2 Check entries and commitments | `ard_find_sellers` checks each one; `ard_show_listing` shows one seller's listing as the search checked it | `capsulectl commitment find`, which checks the commitment's signature, key and staples |
+| ask | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card | `request` / `respond` over the mailbox (capsule-cli#573) |
+| verify | 3 History cards | `ard_show_history` checks each card with `verify --bundle` | `capsulectl verify --bundle` |
+| check | 4 Assess | `ard_assess` | `capsule-engine admission evaluate`, sealed with `deal admit` |
+| record | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
+| check | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
+| record | 6a Confirm receipt | `ard_confirm_received`: a dialog asks the person; only their yes sends their statement that they received what they paid for | `deal statement` with both rows met |
+| record | 6b Dispute a delivery | `ard_dispute`: a dispute on the delivery row, sent to the seller and the deal's adjudicator | `deal statement`, `deal dispute`; `deal respond` when the adjudicator asks for the books |
+| show | 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `deal standard-history card` |
 
 `deal check` and `approval_text` belong to the capsule-host column only: the demo host's check
-before paying is its own approval dialog.
+before paying is its own approval dialog. Setting up a store or a profile and running the machinery are
+operator commands, not taught here.
+
+The History card is the one commerce card, `standard_history`. A Mesh inference node's service card and its
+liar-catch checks are Mesh's own exception, not a second commerce card: this skill never asks for one.
 
 ## On the demo host
 

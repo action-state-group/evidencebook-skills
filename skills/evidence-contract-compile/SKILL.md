@@ -4,6 +4,10 @@ description: Compile a validated Evidence Contract into two runnable skills — 
 ---
 # Evidence Contract compile
 
+> **Pack-author skill.** For whoever writes and runs a Terms Pack (an Evidence Contract), not for an agent
+> buying, selling, adjudicating or reporting; those agent skills teach only five verbs (check, record, ask,
+> verify, show). This skill keeps its authoring commands.
+
 **This is `evaluation-compiler`, evolved.** Where that skill turned a free-form value
 proposition into axes and a scenario bundle, this one turns a validated **Evidence
 Contract** into the same axes/judgment machinery plus two cron-run skills, wired to a

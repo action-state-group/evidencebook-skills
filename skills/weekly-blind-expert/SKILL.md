@@ -4,6 +4,10 @@ description: Cron-run, once per week. Draw a stratified sample of the week's jud
 ---
 # Weekly blind-expert audit
 
+> **Pack-author skill.** For whoever writes and runs a Terms Pack (an Evidence Contract), not for an agent
+> buying, selling, adjudicating or reporting; those agent skills teach only five verbs (check, record, ask,
+> verify, show). This skill keeps its authoring commands.
+
 Compiled per contract by `evidence-contract-compile`; this file is the template the
 compiler specialises, not something a customer edits by hand. Runs weekly, and
 **pauses for a human** — it is the one point in the whole cron contract with a human in

@@ -19,10 +19,29 @@ skills that evolution compiles. The two cron skills run (see "Running the two cr
 | 3 | `weekly-blind-expert` | [`weekly-blind-expert/SKILL.md`](weekly-blind-expert/SKILL.md) | runnable: `scripts/run_weekly.py` |
 | 5 | `evidencebook-report` | [`evidencebook-report/SKILL.md`](evidencebook-report/SKILL.md) | drafted: the three grades (narrated, sealed and checked, stamped) over `capsulectl book result build`, `report build --seal`, `report check`; `scripts/report.sh --seal`, `scripts/packs.py`, `scripts/narration_check.py` |
 | 6 | `terms-pack-author` | [`terms-pack-author/SKILL.md`](terms-pack-author/SKILL.md) | runnable: `scripts/studio/terms` (lint, test, run, verify, compare, publish) over a deal terms pack |
-| 7 | `buy-with-evidence` | [`buy-with-evidence/SKILL.md`](buy-with-evidence/SKILL.md) | demo host, step A: the ARD demo's tools; verbs later (`docs/design/ard-buyer-seller-skills.md`) |
-| 8 | `sell-with-evidence` | [`sell-with-evidence/SKILL.md`](sell-with-evidence/SKILL.md) | demo host, step A: the ARD demo's seller process; verbs later |
-| 9 | `adjudicate-deal` | [`adjudicate-deal/SKILL.md`](adjudicate-deal/SKILL.md) | demo host, step A: the ARD demo's adjudicator window (its own capsulectl-deal profile) |
+| 7 | `buy-with-evidence` | [`buy-with-evidence/SKILL.md`](buy-with-evidence/SKILL.md) | agent skill; demo host, step A: the ARD demo's tools (`docs/design/ard-buyer-seller-skills.md`) |
+| 8 | `sell-with-evidence` | [`sell-with-evidence/SKILL.md`](sell-with-evidence/SKILL.md) | agent skill; demo host, step A: the ARD demo's seller process |
+| 9 | `adjudicate-deal` | [`adjudicate-deal/SKILL.md`](adjudicate-deal/SKILL.md) | agent skill; demo host, step A: the ARD demo's adjudicator window (its own capsulectl-deal profile) |
 | 4 | `capsulectl` (thin verb skill) | **not here** | ships with `capsule-cli` at `skills/capsulectl/`, generated from `spec.yaml` |
+
+## Two kinds of skill: agent skills and pack-author skills
+
+**Agent skills** teach five verbs and nothing else (Steven's ruling, ops u632): **check** before an act,
+**record** what was done, **ask** the other side for evidence, **verify** what comes back, and **show** a card
+or a receipt. Each agent skill has one table, "The five verbs", that maps each verb to the existing command,
+host tool or library call; no command is renamed or added. Commands outside the five (setting up a store or a
+profile, plugins, windows, judges, contracts, `x-deal-v0` sales) are expert commands: an agent skill names none
+of them in its own text, and keeps any it still needs in its `references/`. `tests/test_five_verbs.py` holds
+this. The agent skills here are `buy-with-evidence`, `sell-with-evidence`, `adjudicate-deal` and
+`evidencebook-report`.
+
+**Pack-author skills** are for whoever writes and runs a Terms Pack, and keep their authoring commands:
+`evaluation-compiler`, `evidence-contract-compile`, `daily-judge-and-close`, `weekly-blind-expert` and
+`terms-pack-author`. No agent buying, selling, adjudicating or reporting loads them.
+
+In commerce there is one card, `standard_history` (the History card), with `history_card/2` as its continuity
+proof. A Mesh inference node's service card and its liar-catch checks are Mesh's own exception, not a second
+commerce card.
 
 Skill 4 is consumed, not vendored. Nothing in this repo copies its `SKILL.md`/`AGENTS.md` or
 `spec.yaml` — a customer installs `capsulectl` and gets that skill with it. Duplicating the
