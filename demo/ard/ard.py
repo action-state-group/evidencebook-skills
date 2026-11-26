@@ -72,17 +72,17 @@ def _publisher_of(ident: str) -> str:
 
 
 #: Why a seller's listing was refused, one plain sentence each for the person (evidencebook-skills#345, Sherlock2 on
-#: #352): no file names, digests or error text. The technical detail goes to the item's ``detail`` and the buyer's own
+#: #352 and in buzz 9a59de7c): no file names, digests or error text, and "signed terms", not "commitment" (#332). The technical detail goes to the item's ``detail`` and the buyer's own
 #: records, never to her chat.
 UNREACHABLE = "the seller's site could not be reached"
-NOT_LISTED = "the seller's own site does not list the seller the registry points to"
+NOT_LISTED = "the seller's site does not list this seller"
 UNREADABLE = "the seller's own listing could not be read"
 DIFFERS = "the registry's copy of the listing differs from the seller's own"
 WRONG_SITE = "the listing does not name the site it was published on"
 NO_COMMITMENT = "the listing does not say how to ask this seller for evidence"
-NOT_NAMED = "the seller's signed commitment is not the one its listing names"
-NOT_VERIFIED = "the seller's signed commitment does not verify"
-COMMITMENT_UNREADABLE = "the seller's listing or its signed commitment could not be read"
+NOT_NAMED = "the seller's signed terms are not the ones its listing names"
+NOT_VERIFIED = "the seller's signature on its terms does not check out"
+COMMITMENT_UNREADABLE = "the seller's listing or its signed terms could not be read"
 
 
 def _refuse(item: dict, reason: str, detail: str = "") -> None:
@@ -96,12 +96,11 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     its publisher, and the commitment it names is the one served and verifies. A failed check sets ``problem``."""
     if own.get("url") != result.get("url") or own.get("displayName") != result.get("displayName"):
         return _refuse(item, DIFFERS)
-    item["checks"].append("the registry's copy matches the seller's own listing")
+    item["checks"].append("the registry's copy matches the seller's own")
     tm = own.get("trustManifest") or {}
     if tm.get("identity") != domain:
         return _refuse(item, WRONG_SITE, f"the entry's identity {tm.get('identity')!r} does not name its publisher {domain}")
-    item["checks"].append(f"the listing names the site it was published on, {domain} (a local stand-in here: nothing "
-                          "proves who controls that site)")
+    item["checks"].append("the listing names the site it was published on")
     att = next((a for a in tm.get("attestations") or [] if isinstance(a, dict) and a.get("type") == PROFILE), None)
     if att is None:
         return _refuse(item, NO_COMMITMENT, f"no {PROFILE} attestation in the entry's trustManifest")
@@ -111,7 +110,7 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
     item["digest_matches"] = att["digest"] == "sha256:" + hashlib.sha256(octets).hexdigest()
     if not item["digest_matches"]:  # the entry points at another document than the one served
         return _refuse(item, NOT_NAMED, f"the digest of {att['uri']} differs from the entry's {att['digest']}")
-    item["checks"].append("the seller's signed commitment is the one its listing names")
+    # the next check line says both: the terms are the ones named, and the signature checks out
     try:
         doc_c = json.loads(octets)
         cm.verify(doc_c)
@@ -119,7 +118,7 @@ def _check_entry(item: dict, own: dict, result: dict, domain: str) -> None:
         return _refuse(item, NOT_VERIFIED, repr(exc))
     item["identity"] = doc_c["key_id"]
     item["commitment"] = doc_c
-    item["checks"].append("the seller's signed commitment verifies")
+    item["checks"].append("the seller's signed terms are the ones the listing names, and the signature checks out")
 
 
 def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
@@ -133,7 +132,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
         domain = _publisher_of(ident)
         item: dict[str, Any] = {"identifier": ident, "id": ident.rsplit(":", 1)[-1], "name": result.get("displayName", ident),
                                 "publisher": domain, "score": result.get("score"),
-                                "checks": ["the registry found it: a pointer only, so the seller's own listing is checked"]}
+                                "checks": []}
         found.append(item)
         origin = origins.get(domain)
         if not origin:
@@ -149,7 +148,7 @@ def lookup(registry_url: str, origins: dict[str, str], text: str) -> list[dict]:
             _refuse(item, UNREADABLE, f"{origin}{WELL_KNOWN}: {exc!r}")
             continue
         item["entry"], item["registry"] = own, result  # for the listing tool
-        item["checks"].append(f"the seller's own listing was fetched from its site, {domain}")
+        item["checks"].append("found in the registry, then read from the seller's own site")
         try:  # any malformed field or fetch fails this seller only; the entry fetched stays for the listing
             _check_entry(item, own, result, domain)
         except Exception as exc:  # noqa: BLE001

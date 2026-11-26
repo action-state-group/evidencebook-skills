@@ -345,8 +345,8 @@ def ard_find_sellers() -> None:
         buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
     except Exception as exc:  # noqa: BLE001
         _log(f"keeping the search's checks: {exc!r}")
-        raise RuntimeError("the search's checks could not be kept in your records, so its results are not used; "
-                           "the reason is in this party's log, agent.log") from None
+        raise RuntimeError("The search could not be saved to your records, so its results are not used. The reason "
+                           "is in agent.log.") from None
     s.entries = found
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
@@ -360,8 +360,8 @@ def ard_find_sellers() -> None:
 @_tool("maya")
 def ard_show_listing(seller: str) -> None:
     """Show a seller's ARD listing, as the last search fetched and checked it from the seller's own
-    /.well-known/ard.json: where it came from, its address, its stated offer (unsigned) and which checks it passed. It
-    fetches nothing new. ``seller`` is a name or identifier from the search. Call after ard_find_sellers, when the
+    /.well-known/ard.json: whether it checks out, the seller's site, its stated offer (unsigned) and which checks it
+    passed. It fetches nothing new. ``seller`` is a name or identifier from the search. Call after ard_find_sellers, when the
     person asks to see a seller's listing."""
     s = session()
     if not s.entries:

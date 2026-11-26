@@ -146,33 +146,31 @@ def within_limit(price_msat: int, limit_msat: int | None) -> str:
 
 
 def listing_lines(item: dict) -> list[str]:
-    """A seller's ARD listing as the search fetched and checked it (evidencebook-skills#345): named fields only, never
-    the entry's description; the name, address and offer are still the seller's own strings, shown as the seller's
-    words. The offer is marked unsigned, and checked only when every check passed. Names no party."""
+    """A seller's ARD listing as the search fetched and checked it (evidencebook-skills#345), in Sherlock2's shape
+    (buzz 9a59de7c): the verdict in the header, the site name once with its caveat, the offer as the seller's own
+    unsigned words, then the checks. Named fields only, never the entry's description or a URL (those stay in the
+    buyer's ``ard_listing_checked`` record). Names no party."""
     name = item.get("name", "the seller")
     entry = item.get("entry")
-    out = [f"{name}: its listing, as fetched at the search"]
     if entry is None:
-        return out + [f"  no listing could be read from the seller: {item.get('problem', 'not fetched')}"]
+        return [f"{name}: no listing could be read at the search: {item.get('problem', 'not fetched')}."]
     checked = "problem" not in item
-    out.append(f"  fetched from {item.get('fetched_from', '?')}")
-    named = (entry.get("trustManifest") or {}).get("identity") if isinstance(entry.get("trustManifest"), dict) else None
-    out.append(f"  site, as the registry names it: {item.get('publisher') or '?'}; as the listing itself names it: "
-               f"{named or 'none'} (a local stand-in here: nothing proves who controls that site)")
+    out = [f"{name}: its listing at the search. " + ("It checks out." if checked else f"It did not pass: {item['problem']}.")]
+    tm = entry.get("trustManifest")
+    named = tm.get("identity") if isinstance(tm, dict) else None
+    listed = item.get("publisher") or "none"
+    site = listed if named == listed else f"{named or 'none named in the listing'}, though the registry names {listed}"
+    out.append(f"  site: {site} (a demo site: nothing proves who runs it)")
     reg = item.get("registry") or {}
-    if (reg.get("url"), reg.get("displayName")) != (entry.get("url"), entry.get("displayName")):
-        out.append(f"  the registry lists it as {reg.get('displayName')} at {reg.get('url')}; the seller's own entry "
-                   f"says {entry.get('displayName')} at {entry.get('url')}")
-    else:
-        out.append(f"  address: {entry.get('url')}")
+    if reg.get("displayName") != entry.get("displayName"):
+        out.append(f"  name: {entry.get('displayName')}, though the registry names it {reg.get('displayName')}")
     offer = entry.get("x-demo-offer")
     if offer is not None and not isinstance(offer, dict):
-        out.append("  offer: not readable in this entry")
+        out.append("  offer: not readable in this listing")
     elif offer:
         price = offer.get("price_msat")
         stated = msat(price) if isinstance(price, int) else str(price)
-        out.append(f"  offer: {offer.get('item')} at {stated}, the seller's own words, not signed"
-                   + ("" if checked else ", and this listing did not pass its checks"))
+        out.append(f"  offer: {offer.get('item')} at {stated} (the seller's own words, not signed)")
     out += [f"  checked: {c}" for c in item.get("checks", [])]
     if not checked:
         out.append(f"  not passed: {item['problem']}")

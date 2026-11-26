@@ -43,15 +43,15 @@ def test_the_registry_answers_search_and_the_buyer_verifies_each_seller(disc):
     assert sorted(f["id"] for f in found) == ["alder", "kestrel"]
     for f in found:
         assert "problem" not in f and f["commitment"]["key_id"] == f"{f['id']}-key"
-        assert any("pointer only" in c for c in f["checks"]) and any("matches the seller's own listing" in c for c in f["checks"])
+        assert "the registry's copy matches the seller's own" in f["checks"]
 
 
 def test_each_check_reads_plainly(disc):
     """evidencebook-skills#345: the checks a buyer's agent shows in a listing name no identifier, digest, file or score."""
     for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print"):
-        assert len(f["checks"]) == 6
+        assert len(f["checks"]) == 4  # Sherlock2's four lines (buzz 9a59de7c)
         for c in f["checks"]:
-            for jargon in ("urn:", "sha256", "relevance", ".json", "{", "http"):
+            for jargon in ("urn:", "sha256", "relevance", ".json", "{", "http", "commitment", "digest"):
                 assert jargon not in c, (jargon, c)
 
 
@@ -85,7 +85,7 @@ def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monke
 
     monkeypatch.setattr(ard, "entry", tampered)
     found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
-    assert "commitment" in found["alder"] and "the seller's signed commitment is the one its listing names" in found["alder"]["checks"]
+    assert "commitment" in found["alder"] and "the seller's signed terms are the ones the listing names, and the signature checks out" in found["alder"]["checks"]
     assert found["kestrel"]["problem"] == ard.NOT_NAMED and "commitment" not in found["kestrel"]
     assert "sha256:" + "0" * 64 in found["kestrel"]["detail"]
 
