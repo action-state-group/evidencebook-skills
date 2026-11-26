@@ -230,6 +230,12 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
         return c if c["disputes"]["received"]["by_outcome"]["against"] and c["outcomes"]["did_not_hold"] else None
     card = stamp_wait(kestrel_card, "Kestrel's card counting the ruling", adj.LATER_S, tick=lambda: ticks[0])
     assert card["outcomes"]["did_not_hold"] == 1 and flow.decided(card)["decided"] == {"against": 1, "of": 1}
+    # the shared copy Maya fetches keeps the card's not_counted tally (SH §11.6; only the deal entries are left out),
+    # and the line says a deal waits for a time-stamp exactly when that tally counts one (evidencebook#979)
+    import screens
+    shared = json.loads((w["home"] / "stage" / "cards" / "kestrel.json").read_text())
+    assert "deals" not in shared["extensions"]["x-standard-history/v0"] and "no_witness_time" in card["not_counted"]
+    assert ("waiting for a time-stamp" in screens.card_line(card)) == (card["not_counted"]["no_witness_time"] > 0)
 
     # deal 2: Maya's own ruling makes Kestrel NO, and the card's count shows with it
     made = _assess(w, w["maya"])

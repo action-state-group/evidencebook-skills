@@ -81,6 +81,54 @@ def test_a_name_ending_in_a_period_gets_no_second_one():
         assert ".." not in line, line
 
 
+def card3(waiting, **kw):
+    """A /3 card whose ``not_counted`` tally (AAC SH §11.6) holds ``waiting`` deals left out for want of a witness
+    time, on top of :func:`card`'s counted ones."""
+    c = card(**kw)
+    c["not_counted"] = {"of": waiting, "shop_preauth": 0, "no_witness_time": waiting}
+    c["in_window"] = {"of": c["outcomes"]["of"] + waiting, "counted": c["outcomes"]["of"], "not_counted": waiting}
+    return c
+
+
+WAITING = "not counted yet: waiting for a time-stamp"
+
+
+def test_the_card_line_says_how_many_deals_wait_for_a_time_stamp():
+    # Sherlock2's words (evidencebook#979): the note sits beside the deal count it qualifies, before the disputes
+    assert screens.card_line(card3(1, of=1, held=0, undecided=1)) == (
+        "1 deal, 0 didn't go as agreed, 1 not final yet. 1 more deal not counted yet: waiting for a time-stamp. "
+        "Disputes others raised about it: 0 decided against it, of 0 decided; 0 open.")
+    assert "12 deals, every one went as agreed. 3 more deals not counted yet: waiting for a time-stamp. Disputes" in (
+        screens.card_line(card3(3)))
+    # none left out, a shop purchase left out (not this note), and a /4 card, which has no not_counted member (SH §12)
+    shop = card3(0)
+    shop["not_counted"] = {"of": 1, "shop_preauth": 1, "no_witness_time": 0}
+    for c in (card3(0), shop, card()):
+        assert WAITING not in screens.card_line(c) and screens.card_line(c) == screens.card_line(card())
+    four = card()
+    four["derivation"] = "standard_history/4"
+    assert WAITING not in screens.card_line(four)
+    # none counted yet, every deal waiting (a slow witness, RUNBOOK step 15): never "No deals yet, and no disputes."
+    assert screens.card_line(card3(2, of=0, held=0)) == (
+        "No deals counted yet: 2 deals waiting for a time-stamp. Disputes others raised about it: 0 decided against "
+        "it, of 0 decided; 0 open.")
+    assert screens.card_line(card3(1, of=0, held=0)).startswith("No deals counted yet: 1 deal waiting for a time-stamp. ")
+
+
+def test_the_shared_copy_a_buyer_fetches_shows_the_deals_waiting(tmp_path):
+    """The shared copy leaves out only the deal entries, so its card keeps not_counted, and the line a buyer sees
+    from it (through flow.read_card, as flow.fetch_card reads it) says the deal is waiting."""
+    import json
+    bundle = tmp_path / "card-shared.json"
+    bundle.write_text(json.dumps({
+        "records": [{"capsule_id": "c1", "key_id": "k1"}],
+        "disclosures": {"c1": {"agent_input": card3(1, of=1, held=0, undecided=1)}},
+        "extensions": {"x-standard-history/v0": {"policy": "p" * 64, "as_of": {"anchor": "a" * 64}}}}))
+    got, _, _ = flow.read_card(bundle)
+    assert "1 more deal not counted yet: waiting for a time-stamp." in screens.card_line(got)
+    assert pages.labels(got, witnessed=False) == [screens.card_line(got)]
+
+
 def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
     ev = buyer.Evidence("kestrel", card=card(of=13, dnh=1, against=1))
     ruled = {"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z", "adverse": True}
