@@ -9,11 +9,11 @@
 
 The roles and their choices are in ``testbed.yaml``. The four agents (Alder and Kestrel, the sellers; Maya, the buyer;
 the adjudicator) each get a Goose window (``goose/open-windows.py``); the witness and the payment rail, which run no
-agent, each get a Terminal window showing what that role saw (``watch.py``). ``up`` runs, in this order: quit nothing
-(it stops if Goose runs, after asking whether to quit it), stop the witness an earlier ``up`` started, ``demo.py reset``
-(which also stops the screens of an earlier run), start the witness (``witness: local``), ``demo.py seed``, open the two
+agent, each get a Terminal window showing what the parties sent that role and got back (``watch.py``). ``up`` runs,
+in this order: if Goose is running, ask before quitting it; ``demo.py reset`` (which also stops the screens of an
+earlier run); stop the witness an earlier ``up`` started; start the witness (``witness: local``), ``demo.py seed``, open the two
 Terminal screens, open the Goose windows. A failure or Ctrl-C before the windows open stops the witness this run
-started. ``testbed.sh`` runs the set-up script first and then this, so one command does all of it.
+started, and so does a window that does not open. ``testbed.sh`` runs the set-up script first and then this, so one command does all of it.
 
 ``witness: local`` starts capsule-anchor at the release Action State's hosted witness runs, with capsule-anchor's own
 ``ci/local-witness/start.sh`` (its own venv, an in-memory store, a throwaway key, ``https://localhost:<port>`` with a
@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -145,6 +146,19 @@ def _checkout() -> Path:
     return src
 
 
+def witness_python() -> str:
+    """A Python 3.11 or later for the local witness's own venv (capsule-anchor needs it; the set-up accepts 3.10): this
+    one, else the newest ``python3.N`` on the PATH. Refused before anything changes when there is none."""
+    if sys.version_info >= (3, 11):
+        return sys.executable
+    for name in ("python3.14", "python3.13", "python3.12", "python3.11", "python3"):
+        exe = shutil.which(name)
+        if exe and subprocess.run([exe, "-c", "import sys; sys.exit(sys.version_info < (3, 11))"],
+                                  capture_output=True, stdin=subprocess.DEVNULL).returncode == 0:
+            return exe
+    raise Stop("the local witness needs Python 3.11 or later (brew install python); nothing was changed")
+
+
 def start_witness(say=print) -> dict[str, str]:
     """Start the local witness with capsule-anchor's own start script; return the variables naming it."""
     src = _checkout()
@@ -157,8 +171,7 @@ def start_witness(say=print) -> dict[str, str]:
     out.write_text("")
     env = {k: v for k, v in os.environ.items() if not k.upper().endswith("_PROXY")}  # its own localhost checks
     env.update(RUNNER_TEMP=str(d), SRC=str(src), GITHUB_OUTPUT=str(out), BLOCK="false")
-    if sys.version_info >= (3, 11):
-        env.setdefault("PYTHON", sys.executable)
+    env["PYTHON"] = witness_python()
     say("starting the testbed's local witness (capsule-anchor at the hosted witness's release; about a minute)")
     log = d / "start.log"
     with open(log, "w") as fh:
@@ -219,14 +232,17 @@ def _goose_check(ask=input) -> None:
 
 def up(c: dict, say=print, ask=input) -> int:
     _goose_check(ask)
-    stop_witness(say)
+    if c["witness"] == "local":
+        witness_python()  # refused here, before the reset, rather than after it
     if subprocess.run([_python(), str(HERE / "demo.py"), "reset"], env=os.environ).returncode != 0:
         raise Stop("reset refused (it says why above); nothing else was done")
+    stop_witness(say)  # only once the reset went through: a refused reset leaves the earlier run as it was
     witness: dict[str, str] = {}
     started = False
     try:
         if c["witness"] == "local":
-            witness, started = start_witness(say), True
+            started = True  # from here: start.sh may leave its witness running even when it fails
+            witness = start_witness(say)
         elif c["witness"] == "off":
             witness = {"ARD_WITNESS": "off"}
             write_env(witness_env_file(), witness)
@@ -237,7 +253,10 @@ def up(c: dict, say=print, ask=input) -> int:
             if role in c["roles"]:
                 open_screen(role, env)
         rc = open_windows(env, c["rail"])
-        started = False  # the windows are open: the witness now belongs to them, until `down`
+        if rc == 0:
+            started = False  # the windows are open: the witness now belongs to them, until `down`
+        else:
+            say("the windows did not all open; stopping this run's witness. Run testbed.py down, then up again")
         return rc
     except KeyboardInterrupt:
         say("\ninterrupted")
@@ -264,8 +283,10 @@ def reopen(c: dict) -> int:
 def down(say=print, ask=input) -> int:
     _goose_check(ask)
     rc = subprocess.run([_python(), str(HERE / "demo.py"), "reset"], env=os.environ).returncode
+    if rc != 0:  # the home and its windows' records stay, so the witness they name stays too
+        raise Stop("reset refused (it says why above); the witness was left running")
     stop_witness(say)
-    return rc
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

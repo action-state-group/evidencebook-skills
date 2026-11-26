@@ -80,7 +80,7 @@ def _up(witness="local", ask=lambda q: "n"):
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
     steps, _ = world
     assert _up() == 0
-    assert steps == ["witness down", "reset", "witness up", "seed", "screen witness", "screen rail", "windows"]
+    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "windows"]
 
 
 def test_a_failed_seed_stops_the_witness_this_run_started(world):
@@ -98,12 +98,50 @@ def test_ctrl_c_stops_the_witness_this_run_started(world):
     assert steps[-1] == "witness down" and "windows" not in steps
 
 
-def test_a_refused_reset_starts_nothing(world):
+def test_a_refused_reset_starts_nothing_and_stops_nothing(world):
+    # the earlier run's records stay, so the witness they name stays too
     steps, fail = world
     fail.add("reset")
     with pytest.raises(testbed.Stop, match="reset refused"):
         _up()
-    assert "witness up" not in steps and "seed" not in steps
+    assert steps == ["reset"]
+
+
+def test_down_leaves_the_witness_when_reset_refuses(world):
+    steps, fail = world
+    fail.add("reset")
+    with pytest.raises(testbed.Stop, match="witness was left running"):
+        testbed.down(say=lambda *_: None, ask=lambda q: "n")
+    assert "witness down" not in steps
+
+
+def test_a_witness_that_fails_to_start_is_stopped(world, monkeypatch):
+    # start.sh starts the witness before its health check, so a failed start can leave it running
+    steps, _ = world
+
+    def failing(say=print):
+        steps.append("witness up")
+        raise testbed.Stop("the local witness did not start")
+    monkeypatch.setattr(testbed, "start_witness", failing)
+    with pytest.raises(testbed.Stop):
+        _up()
+    assert steps[-2:] == ["witness up", "witness down"] and "seed" not in steps
+
+
+def test_windows_that_do_not_open_stop_the_witness_this_run_started(world):
+    steps, fail = world
+    fail.add("windows")
+    assert _up() == 1
+    assert steps[-2:] == ["windows", "witness down"]
+
+
+def test_a_local_witness_without_python_311_is_refused_before_anything_changes(world, monkeypatch):
+    steps, _ = world
+    monkeypatch.setattr(testbed.sys, "version_info", (3, 10, 0))
+    monkeypatch.setattr(testbed.shutil, "which", lambda name: None)
+    with pytest.raises(testbed.Stop, match="Python 3.11"):
+        _up()
+    assert steps == []
 
 
 def test_with_goose_running_it_asks_first_and_a_no_changes_nothing(world):
@@ -178,7 +216,7 @@ def _party_with(env: dict) -> subprocess.CompletedProcess:
 def test_a_local_witness_is_named_with_its_url_and_key():
     run = _party_with({"ARD_WITNESS": "local", "ARD_WITNESS_URL": "https://localhost:5", "ARD_WITNESS_KEY": "ab" * 32})
     assert run.returncode == 0, run.stderr
-    assert run.stdout.strip() == f"https://localhost:5|{'ab' * 32}|Action State's test witness"
+    assert run.stdout.strip() == f"https://localhost:5|{'ab' * 32}|the local test witness"
 
 
 @pytest.mark.parametrize("env", [{"ARD_WITNESS": "local"}, {"ARD_WITNESS": "local", "ARD_WITNESS_URL": "https://x"},
@@ -259,7 +297,7 @@ def test_the_witness_screen_says_what_it_received_and_never_a_record(tmp_path):
     assert set(event) == {"at", "party", "witness", "stamp", "covers", "taken", "waiting"}
     from cast import label
     said = feeds.words("witness", event, label)
-    assert "Kestrel Print's book sent stamp 4 (a hash over its first 27 entries)" in said
+    assert "Kestrel Print's book sent its hash no. 4;" in said and "27" not in said  # an MMR size, not a count
     assert "Action State's witness took 2 of Kestrel Print's stamps" in said
 
 

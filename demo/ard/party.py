@@ -50,14 +50,14 @@ HOSTED_WITNESS_KEY = "39bb654c9dc0afe1c0edef0deffaa69099b8518836c9ba26e049153584
 
 def _witness() -> tuple[str, str, str]:
     """The witness this run names: the hosted one, or with ``ARD_WITNESS=local`` the one ``ARD_WITNESS_URL`` and
-    ``ARD_WITNESS_KEY`` give (a capsule-anchor witness the testbed starts on this Mac, ``testbed.py``). Also run by
-    Action State, so no more independent of the parties than the hosted one."""
+    ``ARD_WITNESS_KEY`` give (a capsule-anchor witness the testbed starts on this Mac, ``testbed.py``). Only the hosted
+    one is Action State's; this one is run by the operator, who runs every party here."""
     if os.environ.get("ARD_WITNESS") != "local":
         return HOSTED_WITNESS_URL, HOSTED_WITNESS_KEY, "Action State's witness"
     url, key = os.environ.get("ARD_WITNESS_URL", ""), os.environ.get("ARD_WITNESS_KEY", "")
     if not (url and key):
         raise SystemExit("ARD_WITNESS=local needs both ARD_WITNESS_URL and ARD_WITNESS_KEY (testbed.py sets them)")
-    return url, key, "Action State's test witness"
+    return url, key, "the local test witness"
 
 
 WITNESS_URL, WITNESS_KEY, WITNESS_NAME = _witness()

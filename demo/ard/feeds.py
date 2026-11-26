@@ -59,7 +59,7 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
         who, witness_name = label(event["party"]), event["witness"]
         parts = []
         if event.get("stamp") is not None:
-            parts.append(f"{who}'s book sent stamp {event['stamp']} (a hash over its first {event['covers']} entries)")
+            parts.append(f"{who}'s book sent its hash no. {event['stamp']}")
         if event.get("taken"):
             parts.append(f"{witness_name} took {event['taken']} of {who}'s stamps and signed a receipt for each")
         if event.get("waiting"):
@@ -79,9 +79,10 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
 
 
 HEADINGS = {
-    "witness": "The witness: what it receives. Each party sends it a hash over its own book (never a record), and it "
-               "signs back the time it saw that hash.",
-    "rail": "The payment rail: each invoice and payment, as the rail sees them.",
+    "witness": "The witness, as each party's book reports it: each party sends it a hash over its own book (never a "
+               "record), and it signs back the time it saw that hash. The names are this demo's labels: the witness "
+               "sees only each book's key and log id.",
+    "rail": "The payment rail, as the buyer's agent reports each invoice and payment.",
 }
 
 
