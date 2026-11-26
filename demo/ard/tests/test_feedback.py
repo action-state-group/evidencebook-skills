@@ -501,7 +501,8 @@ def test_the_chat_receipt_says_the_witness_time_as_verify_reported_it(monkeypatc
 
 
 @pytest.mark.parametrize("verdict,half,expect", [
-    ("VALID", {"status": "verified"}, "  Signed by both sides: the other side's half verifies (capsulectl deal verify)."),
+    ("VALID", {"status": "verified"}, "  Signed by both sides: the other side's signed agreement checks out on Maya's own "
+                                      "book. It covers their agreement only, not anything after it."),
     ("VALID", None, "  The other side's half is not in this copy."),
     ("INVALID", {"status": "verified"}, "  This copy did not verify (capsulectl deal verify: INVALID)."),
 ])

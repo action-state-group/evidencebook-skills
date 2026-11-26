@@ -89,7 +89,9 @@ def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str
     if checked.get("verdict") != "VALID":
         lines = [f"  This copy did not verify (capsulectl deal verify: {checked.get('verdict')})."]
     elif half and half.get("status") == "verified":
-        lines = ["  Signed by both sides: the other side's half verifies (capsulectl deal verify)."]
+        # Sherlock2 on #348 (ops 1c418eb7): the page's scope, so it never reads as both signing the outcome
+        lines = [f"  Signed by both sides: the other side's signed agreement checks out on {name}'s own book. It covers "
+                 "their agreement only, not anything after it."]
     else:
         lines = ["  The other side's half is not in this copy."]
     return lines + [witness_line(next((e.get("witnessed") for e in entries if e.get("witnessed")), None), name)]
