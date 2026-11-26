@@ -35,7 +35,7 @@ def test_a_listing_that_failed_a_check_says_so_and_never_reads_as_checked():
     lines = screens.listing_lines(failed)
     assert any("the registry lists it as North Wind at http://127.0.0.1:1/other; the seller's own entry says North Wind "
                "Supply at http://127.0.0.1:1/north" in l for l in lines)
-    assert "  offer: 40 lanyards at 750 msat, the seller's own words, not signed, and this entry did not pass its checks" in lines
+    assert "  offer: 40 lanyards at 750 msat, the seller's own words, not signed, and this listing did not pass its checks" in lines
     assert lines[-1] == "  not passed: the registry's copy and the seller's own entry differ"
 
 
@@ -94,9 +94,9 @@ def test_an_entry_naming_another_identity_says_both(monkeypatch):
     item = {**CHECKED, "entry": {**ENTRY, "trustManifest": {"identity": "evil.example"}},
             "problem": "the entry's identity 'evil.example' does not name its publisher shop.example"}
     lines = screens.listing_lines(item)
-    assert any("from the registry's identifier: shop.example; the entry's own identity names: evil.example" in l
+    assert any("as the registry names it: shop.example; as the listing itself names it: evil.example" in l
                for l in lines)
-    assert any("the entry's own identity names: none" in l for l in screens.listing_lines(CHECKED))
+    assert any("as the listing itself names it: none" in l for l in screens.listing_lines(CHECKED))
 
 
 @pytest.mark.parametrize("bad,why", [

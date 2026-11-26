@@ -157,8 +157,8 @@ def listing_lines(item: dict) -> list[str]:
     checked = "problem" not in item
     out.append(f"  fetched from {item.get('fetched_from', '?')}")
     named = (entry.get("trustManifest") or {}).get("identity") if isinstance(entry.get("trustManifest"), dict) else None
-    out.append(f"  publisher, from the registry's identifier: {item.get('publisher') or '?'}; the entry's own identity "
-               f"names: {named or 'none'} (a local stand-in here: nothing proves domain control)")
+    out.append(f"  site, as the registry names it: {item.get('publisher') or '?'}; as the listing itself names it: "
+               f"{named or 'none'} (a local stand-in here: nothing proves who controls that site)")
     reg = item.get("registry") or {}
     if (reg.get("url"), reg.get("displayName")) != (entry.get("url"), entry.get("displayName")):
         out.append(f"  the registry lists it as {reg.get('displayName')} at {reg.get('url')}; the seller's own entry "
@@ -172,7 +172,7 @@ def listing_lines(item: dict) -> list[str]:
         price = offer.get("price_msat")
         stated = msat(price) if isinstance(price, int) else str(price)
         out.append(f"  offer: {offer.get('item')} at {stated}, the seller's own words, not signed"
-                   + ("" if checked else ", and this entry did not pass its checks"))
+                   + ("" if checked else ", and this listing did not pass its checks"))
     out += [f"  checked: {c}" for c in item.get("checks", [])]
     if not checked:
         out.append(f"  not passed: {item['problem']}")
