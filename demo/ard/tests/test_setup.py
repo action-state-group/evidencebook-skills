@@ -193,7 +193,7 @@ def test_a_set_up_mac_is_left_as_it_is(mac):
     assert "already installed (v0.1.0-main." in run.stdout and "Goose extensions: already all off" in run.stdout
     assert (f"Set-up is done at evidencebook-skills {MAIN[:7]}, evidencebook {PIN['EVIDENCEBOOK_PIN'][:7]}, capsule-cli "
             f"{PIN['CAPSULE_CLI_PIN'][:7]} (capsulectl {CORE_V}), capsule-engine {PIN['CAPSULE_ENGINE_PIN'][:7]}, Goose "
-            f"Desktop {PIN['GOOSE_VERSION']}, model openai.") in run.stdout
+            f"Desktop {PIN['GOOSE_VERSION']}, provider OpenAI.") in run.stdout
     assert run.stdout.rstrip().endswith('Next: "Before each run" in the RUNBOOK.')
     # the checks of "What you need" are printed once, before the hand-over to the checkout's copy
     assert run.stdout.count("jq: already installed") == 1
@@ -216,7 +216,7 @@ def test_a_repository_off_its_pin_is_moved(mac):
     head.write_text("b" * 40 + "\n")
     run = mac.run()
     assert run.returncode == 0, run.stdout + run.stderr
-    assert f"Moving capsule-cli to {PIN['CAPSULE_CLI_PIN'][:7]} ..." in run.stdout
+    assert f"Setting capsule-cli to {PIN['CAPSULE_CLI_PIN'][:7]} ..." in run.stdout
     assert head.read_text().strip() == PIN["CAPSULE_CLI_PIN"]
 
 
@@ -274,7 +274,7 @@ def test_another_provider_is_chosen_in_goose_with_a_second_try(mac):
     run = mac.run(stdin="3\n2\n\n\n")
     assert run.returncode == 0, run.stdout + run.stderr
     assert "Pick your provider and follow its screens" in run.stdout
-    assert "  Not yet: no model is chosen in the demo's Goose yet." in run.stdout and "open-windows" not in run.stdout
+    assert "  Not yet: no model is chosen in the demo's Goose." in run.stdout and "open-windows" not in run.stdout
     # the choice's own check turned the extensions off, and the run says so rather than "already all off"
     assert "Turned off every Goose extension in the demo's Goose." in run.stdout and "already all off" not in run.stdout
     # Goose is quit before its settings are read or written, every time
@@ -284,7 +284,7 @@ def test_another_provider_is_chosen_in_goose_with_a_second_try(mac):
     import yaml
     doc = yaml.safe_load(mac.goose_config.read_text())
     assert doc["active_provider"] == "google" and not any(doc["extensions"][e]["enabled"] for e in EXTENSIONS)
-    assert "model google." in run.stdout
+    assert "provider Google." in run.stdout
     after = mac.goose_config.read_bytes()
     run = mac.run()  # and a second run leaves it as it is
     assert run.returncode == 0 and mac.goose_config.read_bytes() == after

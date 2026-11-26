@@ -52,7 +52,7 @@ On a Mac that already has `~/ard-demo/evidencebook-skills`, this does the same: 
 
 It prints one line for each thing it checks or does, and stops once for you (step 8 below). If something fails, it says which step and where the details are; once that is fixed, run it again. Run it again at any time: it skips everything already done, so on a set-up Mac it changes nothing.
 
-**Expect:** it ends with one line naming what it set up (`Set-up is done at evidencebook-skills …, evidencebook 4c07d0f, capsule-cli 16ec5bc (capsulectl v0.1.0-main.16ec5bc9), capsule-engine 0263ff1, Goose Desktop 1.59.2, model …`), then `Next: "Before each run" in the RUNBOOK.`
+**Expect:** it ends with one line naming what it set up (`Set-up is done at evidencebook-skills …, evidencebook 4c07d0f, capsule-cli 16ec5bc (capsulectl v0.1.0-main.16ec5bc9), capsule-engine 0263ff1, Goose Desktop 1.59.2, provider …`), then `Next: "Before each run" in the RUNBOOK.`
 
 What it does, in order (you do not type these):
 

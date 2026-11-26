@@ -36,7 +36,7 @@ REAL_RAIL=0
 CONTINUED=0
 LOG=""
 DOING=""
-MODEL=""
+PROVIDER=""
 EXTENSIONS_TURNED_OFF=0
 
 say() { printf '%s\n' "$*"; }
@@ -134,7 +134,7 @@ at_commit() {  # at_commit <repository> <commit, or origin/<branch>>: clone it i
     target=$want
     # the demo is built from these checkouts, so one with changes of its own is never built from, at the pin or not
     [ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] \
-      || stop "$dir has changes of its own, and the demo is built only from ${target:0:7} as it is. Keep them elsewhere (git -C \"$dir\" stash), then run this again."
+      || stop "$dir has changes of its own, and the demo is built only from ${target:0:7}, unchanged. Keep them elsewhere (git -C \"$dir\" stash), then run this again."
     if [ "$head" = "$target" ]; then already "$name: already at ${target:0:7}"; return 0; fi
     DOING="getting $name ${target:0:7}"
     run git -C "$dir" fetch -q origin "$target"
@@ -146,7 +146,7 @@ at_commit() {  # at_commit <repository> <commit, or origin/<branch>>: clone it i
   fi
   [ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] \
     || stop "$dir has changes of its own, so it was not moved. Keep them elsewhere (git -C \"$dir\" stash), then run this again."
-  say "  Moving $name to ${target:0:7} ..."
+  say "  Setting $name to ${target:0:7} ..."
   DOING="moving $name to ${target:0:7}"
   run git -C "$dir" checkout -q --detach "$target"
 }
@@ -377,7 +377,7 @@ choose_model() {
     if [ "$(field "$status" .needs_choice)" = false ]; then break; fi
     say ""
     # with no model chosen yet, open-windows.py's message points at a command; this step is where the person is
-    if [ "$(field "$status" '.provider // ""')" = "" ]; then say "  Not yet: no model is chosen in the demo's Goose yet."
+    if [ "$(field "$status" '.provider // ""')" = "" ]; then say "  Not yet: no model is chosen in the demo's Goose."
     else say "  Not yet: $(field "$status" .problem)."; fi
     say "  Starting the demo's Goose again: choose the model as above."
     start_demo_goose
@@ -411,8 +411,14 @@ goose_settings_step() {
     || stop "these Goose extensions are still on: $(field "$status" '.on | join(", ")'). One switched on in /etc/goose/config.yaml cannot be switched off here; ask whoever looks after this Mac."
   status=$(goose_status) || stop "the demo Goose's settings could not be read."
   [ "$(field "$status" '.problem // ""')" = "" ] || stop "$(field "$status" .problem)"
-  MODEL=$(field "$status" .provider)
-  [ "$MODEL" != claude-acp ] || MODEL="claude-acp (Claude Code adapter $ACP_VERSION)"
+  PROVIDER=$(field "$status" .provider)
+  case "$PROVIDER" in  # Sherlock2 on #365: the summary names the provider, by the name its screen shows
+    claude-acp) PROVIDER="Claude Code (adapter $ACP_VERSION)" ;;
+    chatgpt_codex) PROVIDER="ChatGPT Codex" ;;
+    google) PROVIDER=Google ;;
+    openai) PROVIDER=OpenAI ;;
+    anthropic) PROVIDER=Anthropic ;;
+  esac
 }
 
 main() {
@@ -449,7 +455,7 @@ main() {
   goose_step
   goose_settings_step
   say ""
-  say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), evidencebook ${EVIDENCEBOOK_PIN:0:7}, capsule-cli ${CAPSULE_CLI_PIN:0:7} (capsulectl $CORE_V), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, model $MODEL."
+  say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), evidencebook ${EVIDENCEBOOK_PIN:0:7}, capsule-cli ${CAPSULE_CLI_PIN:0:7} (capsulectl $CORE_V), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, provider $PROVIDER."
   say "Next: \"Before each run\" in the RUNBOOK."
 }
 
