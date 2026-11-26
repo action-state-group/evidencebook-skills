@@ -890,9 +890,6 @@ class TextIssues(unittest.TestCase):
         self.assertTrue(any("quote '0x3'" in i for i in json.loads(run.stdout)["issues"]), run.stdout)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 ARD_DEMO = REPO_ROOT / "demo/ard/pack"
 
@@ -939,3 +936,7 @@ class ArdDemoBuyer(unittest.TestCase):
     def test_it_ships_at_100_per_1000(self):
         params = next(r["params"] for r in self.pack["rows"] if r["id"] == "band-history")
         self.assertEqual(params["max_adverse_permille"], 100)
+
+
+if __name__ == "__main__":
+    unittest.main()
