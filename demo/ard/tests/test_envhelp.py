@@ -150,3 +150,11 @@ def test_the_ln_pay_local_pin_is_the_runbooks():
     runbook = (Path(__file__).resolve().parent.parent / "RUNBOOK.md").read_text()
     assert f"git -C $HOME/ard-demo/ln-pay-local checkout -q {envhelp.LN_PAY_LOCAL_COMMIT}" in runbook
     assert envhelp.LN_PAY_LOCAL_INSTALL.startswith("([ -d $HOME/ard-demo/ln-pay-local ] ||")
+
+
+def test_the_help_names_capsulectl_for_the_countersign_upgrade():
+    """Hand run of #396: the run's countersign step uses capsule-cli's capsulectl, so the help names it (optional:
+    set-up puts it on the PATH)."""
+    text = envhelp.help_text({"run": "the two deals"})
+    line = next(x for x in text.splitlines() if x.strip().startswith("CAPSULECTL "))
+    assert "countersign" in line and "optional" in text.split("CAPSULECTL ", 1)[1].split("\n  ARD_", 1)[0]
