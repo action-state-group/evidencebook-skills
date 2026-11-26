@@ -60,7 +60,8 @@ def test_an_entry_whose_identity_names_another_domain_is_refused(disc, monkeypat
         **real(n, s, d, o)["trustManifest"], "identity": "evil.example"}} if n == "kestrel" else real(n, s, d, o))
     found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
     assert "commitment" in found["alder"]
-    assert "does not name its publisher" in found["kestrel"]["problem"] and "commitment" not in found["kestrel"]
+    assert found["kestrel"]["problem"] == ard.WRONG_SITE and "commitment" not in found["kestrel"]
+    assert "'evil.example' does not name its publisher kestrel.ard-demo.test" in found["kestrel"]["detail"]
 
 
 def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monkeypatch):
@@ -76,13 +77,15 @@ def test_a_commitment_whose_digest_differs_from_the_entry_is_refused(disc, monke
     monkeypatch.setattr(ard, "entry", tampered)
     found = {f["id"]: f for f in ard.lookup(disc.registry.url, disc.origins, "conference badges print")}
     assert "commitment" in found["alder"] and "the commitment served is the one the seller's entry names" in found["alder"]["checks"]
-    assert "digest differs" in found["kestrel"]["problem"] and "commitment" not in found["kestrel"]
+    assert found["kestrel"]["problem"] == ard.NOT_NAMED and "commitment" not in found["kestrel"]
+    assert "sha256:" + "0" * 64 in found["kestrel"]["detail"]
 
 
 def test_an_unreachable_publisher_is_refused(disc):
     found = ard.lookup(disc.registry.url, {"alder.ard-demo.test": disc.origins["alder.ard-demo.test"]}, "badges print")
     by = {f["id"]: f for f in found}
-    assert "not one the buyer can reach" in by["kestrel"]["problem"]
+    assert by["kestrel"]["problem"] == ard.UNREACHABLE
+    assert by["kestrel"]["detail"] == "publisher kestrel.ard-demo.test is not one the buyer can reach"
 
 
 def test_a_search_without_text_gets_an_error(disc):

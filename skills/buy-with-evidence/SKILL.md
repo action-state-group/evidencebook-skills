@@ -38,8 +38,9 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
    stays with you: use it only in the assessment and at the pick; the deadline is theirs to judge. Each result is only a
    pointer. For each result, fetch the seller's own entry from its own `/.well-known/ard.json`,
    compare it with the registry's copy, check that the entry's identity names its publisher, then
-   fetch and verify the seller's signed commitment. A seller that fails any check is shown as
-   failed and is never assessed. Keep two things apart when you tell the person: the entry's offer
+   fetch and verify the seller's signed commitment. Keep what each check found in the person's own
+   records. A seller that fails any check is shown as failed, with its reason in plain words, and is
+   never assessed. Keep two things apart when you tell the person: the entry's offer
    (item and price) is not signed; the signed commitment says how to ask the seller for evidence
    and under which key. A commitment with no witness is "unwitnessed": say so, and pin its first
    checkpoint on first contact.

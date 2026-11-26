@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -32,6 +33,7 @@ ASSESSED = "ard_assessment"
 PICKED = "ard_pick"
 CARD_RECEIVED = "ard_card_received"
 DEAL_OPENED = "ard_deal_opened"
+LISTING_CHECKED = "ard_listing_checked"  # one per seller a search found: what was fetched and checked (#345)
 #: What the operator fills in for the rows the card cannot answer: the controller the pack's trust roots name, and the
 #: witness of the card's checkpoint. At the pinned evidencebook neither the card bundle nor the history_card/2 staple
 #: carries the anchor's witness receipt (evidencebook#891), so ``gather`` finds none to check and the screen says the
@@ -88,6 +90,28 @@ class Assessment:
     record_id: str
     decision: dict
     own: Own
+
+
+def record_search(maya: pt.Party, registry_url: str, query: str, entries: list[dict]) -> list[str]:
+    """Keep the search's checks in Maya's own records, one ``ard_listing_checked`` note per seller found
+    (evidencebook-skills#345, Sherlock2 on #352): its identifier, the address its entry was fetched (or tried) from,
+    the sha256 of that entry's canonical JSON (:func:`card_digest`'s form), the offer the entry stated (the seller's
+    own words), each check it passed and, when one failed, the plain reason and its detail. Each search adds its own
+    notes under one ``search`` id with the number of sellers it found, so an incomplete batch shows; none is rewritten.
+    Returns the record ids."""
+    search_id, ids = uuid.uuid4().hex, []
+    for e in entries:
+        own = e.get("entry")
+        rec = {"search": search_id, "sellers_found": len(entries), "seller": e.get("id", ""),
+               "identifier": e.get("identifier", ""), "registry": registry_url, "query": query,
+               "fetched_from": e.get("fetched_from", ""), "entry_sha256": card_digest(own) if own is not None else "",
+               "offer_stated": own.get("x-demo-offer") if isinstance(own, dict) else None,
+               "checks": list(e.get("checks", [])), "passed": "problem" not in e}
+        if "problem" in e:
+            rec["problem"] = e["problem"]
+            rec["detail"] = e.get("detail", "")
+        ids.append(maya.note(LISTING_CHECKED, rec, subject_ref=e.get("id", ""))["record_id"])
+    return ids
 
 
 def gather(home: Path, maya: pt.Party, entry: dict) -> Evidence:

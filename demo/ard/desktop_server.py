@@ -340,7 +340,14 @@ def ard_find_sellers() -> None:
     """Step 1-2: Maya's ask and ARD discovery. Lists the sellers found, each with its price and whether its listing
     checks out. Call this first."""
     s = session()
-    s.entries = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    found = ard.lookup(stage.REGISTRY_URL, stage.ORIGINS, stage.QUERY)
+    try:  # the checks, kept in her own records before the search's results are used (#345)
+        buyer.record_search(s.maya, stage.REGISTRY_URL, stage.QUERY, found)
+    except Exception as exc:  # noqa: BLE001
+        _log(f"keeping the search's checks: {exc!r}")
+        raise RuntimeError("the search's checks could not be kept in your records, so its results are not used; "
+                           "the reason is in this party's log, agent.log") from None
+    s.entries = found
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
