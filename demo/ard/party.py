@@ -72,6 +72,16 @@ CARD_ANCHOR_WITNESS = "x-standard-history-anchor-witness/v0"
 STAMP_FAILED = "its time-stamp receipt does not check out"
 
 
+def not_verified(subject: str, verdict: str) -> str:
+    """Said when ``subject`` (``Your History card``, ``Alder Print Co.'s card``) fails verify on a verdict other than
+    its time-stamp receipt (Sherlock2 on #350). INCOMPLETE is not a failed signature: capsulectl also reads it when a
+    member is a refusal (capsule-cli ``composed.go``)."""
+    if verdict == "INCOMPLETE":
+        return (f"{subject} could not be fully checked: capsulectl deal verify reported it INCOMPLETE, because part of "
+                "what it covers is withheld or missing from the file.")
+    return f"{subject} does not verify: capsulectl deal verify reported it {verdict}."
+
+
 def anchor_witness(out: dict) -> str:
     """The status of a History card's time-stamp, as ``verify --bundle`` reports it (evidencebook#957):
     ``reader_witnesses`` checks the witness's receipt for the card's anchor (pass; withheld when it could not be checked

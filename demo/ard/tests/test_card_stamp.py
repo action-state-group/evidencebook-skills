@@ -62,9 +62,14 @@ def test_a_stamp_receipt_that_does_not_check_out_refuses_the_card_in_words(tmp_p
     with pytest.raises(pt.Refused) as exc:
         flow.fetch_card(tmp_path, Reader(tmp_path, report("fail", verdict="INVALID")), "alder", "k")
     assert str(exc.value) == "Alder Print Co.'s card does not verify: its time-stamp receipt does not check out"
-    # any other INVALID still names the verdict
-    with pytest.raises(pt.Refused, match="does not verify: INVALID$"):
+    # any other failed verdict says capsulectl reported it (Sherlock2 on #350)
+    with pytest.raises(pt.Refused) as exc:
         flow.fetch_card(tmp_path, Reader(tmp_path, report(None, verdict="INVALID")), "alder", "k")
+    assert str(exc.value) == "Alder Print Co.'s card does not verify: capsulectl deal verify reported it INVALID."
+    with pytest.raises(pt.Refused) as exc:
+        flow.fetch_card(tmp_path, Reader(tmp_path, report(None, verdict="INCOMPLETE")), "alder", "k")
+    assert str(exc.value) == ("Alder Print Co.'s card could not be fully checked: capsulectl deal verify reported it "
+                              "INCOMPLETE, because part of what it covers is withheld or missing from the file.")
 
 
 def test_a_failed_card_with_no_disclosed_card_is_refused_not_read(tmp_path):
@@ -276,9 +281,13 @@ def test_a_verify_failure_with_no_report_still_refuses(tmp_path):
         pt.verify_report(fake_ctl(tmp_path, "", 2), ["verify"])
 
 
-def test_a_partys_own_card_page_refuses_any_other_failed_verdict(monkeypatch, tmp_path):
+@pytest.mark.parametrize("verdict, said", [
+    ("INVALID", "Your History card does not verify: capsulectl deal verify reported it INVALID."),
+    ("INCOMPLETE", "Your History card could not be fully checked: capsulectl deal verify reported it INCOMPLETE, "
+                   "because part of what it covers is withheld or missing from the file.")])
+def test_a_partys_own_card_page_refuses_any_other_failed_verdict(monkeypatch, tmp_path, verdict, said):
     monkeypatch.setattr(pages, "home", lambda: tmp_path)
     with pytest.raises(pt.Refused) as exc:
-        pages.card_page(OwnCard(tmp_path, report(None, verdict="INVALID")), "Alder Print Co.", rail="simulated",
+        pages.card_page(OwnCard(tmp_path, report(None, verdict=verdict)), "Alder Print Co.", rail="simulated",
                         seller=True)
-    assert str(exc.value) == "Your History card does not verify: INVALID."
+    assert str(exc.value) == said

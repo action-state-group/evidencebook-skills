@@ -112,7 +112,7 @@ def fetch_card(home: Path, reader: pt.Party, seller: str, key_id: str) -> CardRe
     if out.get("verdict") != "VALID":  # before the card is read: a failed card may not carry one
         if stamp == "fail":  # a receipt that does not check makes the verdict INVALID (evidencebook#957)
             raise pt.Refused(f"{label(seller)}'s card does not verify: {pt.STAMP_FAILED}")
-        raise pt.Refused(f"{label(seller)}'s card does not verify: {out.get('verdict')}")
+        raise pt.Refused(pt.not_verified(f"{label(seller)}'s card", out.get("verdict")))
     card, as_of, signer = read_card(local)
     if signer != key_id:
         raise pt.Refused(f"{label(seller)}'s card is not signed by the key its commitment names")
