@@ -639,3 +639,11 @@ def test_a_new_copy_is_made_once_not_every_round(tmp_path, monkeypatch):
         assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", lambda *_: None) is None
         clock[0] += adj.PROOF_EVERY_S
     assert len(made) == 1 and proved == ["old.json", "new0.json", "new0.json", "new0.json", "new0.json"]
+
+
+def test_an_unknown_entry_state_shows_capsulectls_words_and_never_raw_output():
+    """Sherlock2's acceptance nit on #347: the fallback line for a state this demo does not know carries no raw output."""
+    lines = flow.entry_lines(DEAL, [{"party": "seller", "state": "something_new", "words": "entered, as read"},
+                                    {"party": "buyer", "state": "other_new"}], NAMES)
+    assert "  Kestrel Print: entered, as read" in lines and "  Maya: other_new" in lines
+    assert not any("{" in line or "}" in line for line in lines)
