@@ -97,15 +97,26 @@ def test_an_entry_naming_another_identity_says_both(monkeypatch):
     assert any("the entry's own identity names: none" in l for l in screens.listing_lines(CHECKED))
 
 
-@pytest.mark.parametrize("bad", [{"trustManifest": None}, {"trustManifest": {"identity": "a.example",
-                                 "attestations": [{"type": "evidence-commitment/1", "uri": "http://c"}]}}])
-def test_a_malformed_entry_never_stops_the_other_sellers(monkeypatch, bad):
-    """Codex's round 1: trustManifest null, or an attestation without a digest, fails that seller only."""
+@pytest.mark.parametrize("bad,why", [
+    ({"trustManifest": None}, "identity None"),
+    ({"x-demo-offer": {"item": "x", "price_msat": 1}, "trustManifest": {"identity": "a.example", "attestations": [
+        {"type": "evidence-commitment/1", "uri": "http://c/a"}]}}, "'digest'"),
+])
+def test_a_malformed_entry_never_stops_the_other_sellers(monkeypatch, bad, why):
+    """Codex's rounds 1 and 2: a null trustManifest, or an attestation without a digest, fails that seller only, and a
+    complete second seller still passes every check."""
+    import hashlib
     import json
     import ard
-    good = {"identifier": "urn:air:b.example:s:b", "displayName": "B", "url": "ub"}
+    commitment = json.dumps({"key_id": "b" * 64}).encode()
+    good = {"identifier": "urn:air:b.example:s:b", "displayName": "B", "url": "ub",
+            "x-demo-offer": {"item": "y", "price_msat": 2},
+            "trustManifest": {"identity": "b.example", "attestations": [
+                {"type": "evidence-commitment/1", "uri": "http://c/b",
+                 "digest": "sha256:" + hashlib.sha256(commitment).hexdigest()}]}}
     worse = {"identifier": "urn:air:a.example:s:a", "displayName": "A", "url": "ua", **bad}
     monkeypatch.setattr(ard, "PROFILE", "evidence-commitment/1")
+    monkeypatch.setattr(ard.cm, "verify", lambda doc: None)
     monkeypatch.setattr(ard, "search", lambda url, text: {"results": [
         {"identifier": worse["identifier"], "displayName": "A", "url": "ua"},
         {"identifier": good["identifier"], "displayName": "B", "url": "ub"}]})
@@ -113,11 +124,12 @@ def test_a_malformed_entry_never_stops_the_other_sellers(monkeypatch, bad):
     def fetch(url, body=None):
         if url.endswith("/.well-known/ard.json"):
             return json.dumps({"entries": [worse if "a.example" in url else good]}).encode()
-        return b"{}"
+        return commitment
     monkeypatch.setattr(ard, "_fetch", fetch)
     monkeypatch.setattr(ard, "WELL_KNOWN", "/.well-known/ard.json")
     a, b = ard.lookup("http://r", {"a.example": "http://a.example", "b.example": "http://b.example"}, "x")
-    assert a["problem"] and "entry" in a and b["identifier"] == good["identifier"]
+    assert why in a["problem"] and "entry" in a and "offer" not in a
+    assert "problem" not in b and b["commitment"] == {"key_id": "b" * 64}
 
 
 def test_an_offer_of_the_wrong_shape_still_shows_the_listing(searched):
