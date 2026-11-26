@@ -442,7 +442,8 @@ def ard_pick(seller: str) -> None:
         print(screens.limit_outcome(a))
         return
     s.picked.add(key)
-    print(f"{SELLERS[key]['label']} is within its limit. Call ard_pay to open the deal and pay it.")
+    # no tool name: the agent repeated "Call ard_pay" to the person (evidencebook-skills#362; Sherlock2's words)
+    print(f"{SELLERS[key]['label']} is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes.")
 
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
@@ -698,7 +699,7 @@ def ard_rule(seller: str) -> None:
             r = raw["ruling"] or a.rule(raw, c.row, "not_met", "seller")
         except adj.AdjudicatorError as exc:
             raise RuntimeError(f"capsulectl refused the ruling: {exc}") from None
-        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {seller_name}.")
+        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {screens.stop(seller_name)}")
         if a.stamp({**raw, "ruling": r}):
             print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
         elif pt.witnessed():

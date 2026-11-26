@@ -58,6 +58,29 @@ def test_the_card_line_says_the_tally_in_words():
     assert "did not hold" not in screens.card_line(card(of=13, dnh=1)) and "failed" not in screens.card_line(card(dnh=1))
 
 
+def test_a_card_with_no_deals_has_its_own_sentence():
+    # Steven's 2fa6abe run (#362): never "0 deals, every one went as agreed"
+    line = screens.card_line(card(of=0, held=0))
+    assert line == "No deals yet, and no disputes."
+    # Sherlock2's guard: never "no disputes" when the record holds one
+    assert screens.card_line(card(of=0, held=0, open_=1)) == ("No deals yet. Disputes others raised about it: 0 decided "
+                                                             "against it, of 0 decided; 1 open.")
+    assert "every one went as agreed" not in screens.card_line(card(of=0, held=0, open_=1))
+    raised = card(of=0, held=0)
+    raised["disputes"]["raised"] = {"by_outcome": {"open": 1}, "of": 1}  # one the holder raised, none about it
+    assert screens.card_line(raised) == ("No deals yet. Disputes others raised about it: 0 decided against it, of 0 "
+                                         "decided; 0 open.")
+
+
+def test_a_name_ending_in_a_period_gets_no_second_one():
+    # Steven's 2fa6abe run (#362): "Signed by Alder Print Co.." had a double period
+    assert screens.stop("Alder Print Co.") == "Alder Print Co." and screens.stop("Kestrel Print") == "Kestrel Print."
+    assert screens.signed_line("Alder Print Co.", "alder").startswith("Signed by Alder Print Co. These")
+    for line in (screens.rule_question("deal-0123456789abcdef", "delivered", "Alder Print Co."),
+                 screens.signed_line("Alder Print Co.", "alder", witness_checked=True)):
+        assert ".." not in line, line
+
+
 def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
     ev = buyer.Evidence("kestrel", card=card(of=13, dnh=1, against=1))
     ruled = {"deal_id": "deal-0123456789abcdef", "at": "2026-11-25T10:00:00Z", "adverse": True}

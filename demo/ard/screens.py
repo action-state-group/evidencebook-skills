@@ -95,6 +95,12 @@ def plural(n: int, one: str, many: str = "") -> str:
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def stop(name: str) -> str:
+    """``name`` ending a sentence: a name that already ends in a period ("Alder Print Co.") gets no second one
+    (evidencebook-skills#362)."""
+    return name if name.endswith(".") else name + "."
+
+
 def card_line(card: dict) -> str:
     """A card's counts in words: deals counted, how many did not hold, any still open, and the disputes others raised
     about the holder (decided against it, of those decided; open)."""
@@ -106,7 +112,12 @@ def card_line(card: dict) -> str:
     still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
     went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
             else f"{o['did_not_hold']} didn't go as agreed{still}")
-    return (f"{plural(o['of'], 'deal')}, {went}. Disputes others raised about it: "
+    if not o["of"]:  # Sherlock2 on #362: never "0 deals, every one went as agreed", nor "no disputes" over one
+        ds = card.get("disputes", {})
+        if not any(ds.get(k, {}).get("of", 0) or any(ds.get(k, {}).get("by_outcome", {}).values()) for k in ("received", "raised")):
+            return "No deals yet, and no disputes."
+    counted = f"{plural(o['of'], 'deal')}, {went}" if o["of"] else "No deals yet"
+    return (f"{counted}. Disputes others raised about it: "
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
@@ -119,7 +130,7 @@ def ruled_for_buyer(report: dict, seller: str) -> list[str]:
         r = row.get("ruling") or {}
         if row.get("status") == "ruled" and r.get("against") == "seller" and r.get("value") == "not_met":
             what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
-            out.append(f"Ruled for you: {what} not met, against {seller}. No refund: this deal was agreed as not "
+            out.append(f"Ruled for you: {what} not met, against {stop(seller)} No refund: this deal was agreed as not "
                        "refundable.")
     return out
 
@@ -181,7 +192,7 @@ def signed_line(name: str, seller: str, witness_checked: bool = False) -> str:
     """Who signed the card, and its time-stamp when Maya could check it (no verb gives her the receipt today)."""
     if witness_checked:
         return f"Signed by {name} and {WITNESS_LINE} These are the seller's own counts. {sample_note(seller)}"
-    return f"Signed by {name}. These are the seller's own counts. {sample_note(seller)}"
+    return f"Signed by {stop(name)} These are the seller's own counts. {sample_note(seller)}"
 
 
 def own_ruling(a: Assessment) -> dict | None:
@@ -243,7 +254,7 @@ def rule_question(deal_id: str, row: str, seller: str) -> str:
     """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. It names no challenge window:
     the ruling names no deadline, and Sherlock2 dropped the line (evidencebook-skills#336); the window, 7 days (Steven,
     ops u214), stays in the adjudicator's published rules (:data:`adjudicator.RULES_TEXT`)."""
-    return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {seller}. "
+    return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {stop(seller)} "
             f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
             f"of the parties.")
 
