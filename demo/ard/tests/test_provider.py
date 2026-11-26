@@ -142,3 +142,8 @@ def test_extensions_merge_field_by_field_as_goose_does(tmp_path, monkeypatch, ow
     (root / "config").mkdir(parents=True)
     (root / "config" / "config.yaml").write_text("active_provider: openai\nextensions:\n" + own)
     assert bool(ow.provider_problem(root)) is refused
+
+
+def test_an_extension_that_is_not_a_mapping_is_named_not_a_traceback(tmp_path):
+    msg = _ow().provider_problem(_root(tmp_path, "active_provider: openai\nextensions:\n  developer: on\n"))
+    assert "extensions entry that is not a mapping" in msg

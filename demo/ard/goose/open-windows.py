@@ -257,6 +257,9 @@ def goose_config(root: Path) -> dict:
     # field by field, as Goose merges its layers (config/base.rs): an own entry that sets only display_name keeps the
     # system file's enabled
     sys_ext, own_ext = system.get("extensions") or {}, own.get("extensions") or {}
+    for f, ext in ((SYSTEM_CONFIG, sys_ext), (root / "config" / "config.yaml", own_ext)):
+        if not isinstance(ext, dict) or any(v and not isinstance(v, dict) for v in ext.values()):
+            raise ConfigError(f"{f} has an extensions entry that is not a mapping")
     cfg["extensions"] = {k: {**(sys_ext.get(k) or {}), **(own_ext.get(k) or {})}
                          for k in {*sys_ext, *own_ext}}
     return cfg
