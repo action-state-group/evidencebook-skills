@@ -280,13 +280,15 @@ def test_the_search_lines_in_mayas_chat_are_plain(monkeypatch):
     """Sherlock2 on #352 (#332): "listing checks out" or "listing refused: <reason>", and no check lines."""
     import ard
     import desktop_server as ds
-    s = type("S", (), {})()
+    kept = []
+    maya = type("M", (), {"note": lambda self, *a, **k: (kept.append(a), {"record_id": f"r{len(kept)}"})[1]})()
+    s = type("S", (), {"maya": maya})()
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ard, "lookup", lambda *a: [
         {"id": "north", "name": "North Wind Supply", "offer": {"price_msat": 750}, "commitment": {"key_id": "k"},
-         "checks": ["commitment signature verifies"]},
-        {"id": "south", "name": "South Shop", "problem": "the seller's entry names no evidence commitment",
+         "checks": ["the seller's signed terms are the ones the listing names, and the signature checks out"]},
+        {"id": "south", "name": "South Shop", "problem": ard.NO_COMMITMENT, "detail": "no evidence-commitment/1",
          "checks": []}])
     out = ds.ard_find_sellers()
-    assert "listing checks out" in out and "listing refused: the seller's entry names no evidence commitment" in out
+    assert "listing checks out" in out and f"listing refused: {ard.NO_COMMITMENT}" in out and len(kept) == 2
     assert "commitment verified" not in out and "signature verifies" not in out and "REFUSED" not in out
