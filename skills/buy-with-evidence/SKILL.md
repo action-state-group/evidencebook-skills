@@ -95,9 +95,9 @@ step, to the demo host's tool and to the capsule host's existing command.
 | verify | 2 Check entries and commitments | `ard_find_sellers` checks each one; `ard_show_listing` shows one seller's listing as the search checked it | `capsulectl commitment find`, which checks the commitment's signature, key and staples |
 | ask | 3 History cards | `ard_show_history`: each seller's shared `standard_history/3` card | `request` / `respond` over the mailbox (capsule-cli#573) |
 | verify | 3 History cards | `ard_show_history` checks each card with `verify --bundle` | `capsulectl verify --bundle` |
-| check | 4 Assess | `ard_assess` | `capsule-engine admission evaluate`, sealed with `deal admit` |
+| check | 4 Assess | `ard_assess` | `capsule-engine admission evaluate` |
 | record | 5 Record the pick | `ard_pick` | `deal note --kind intent` |
-| check | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
+| check | 6 Pay | `ard_pay`: the presenter's approval dialog, then the demo rail | `deal admit` with the picked seller's `admission evaluate --admit` output, once its offer is received; then `deal check` with `"action":"pay"` and its `approval_text`, then the payment |
 | record | 6a Confirm receipt | `ard_confirm_received`: a dialog asks the person; only their yes sends their statement that they received what they paid for | `deal statement` with both rows met |
 | record | 6b Dispute a delivery | `ard_dispute`: a dispute on the delivery row, sent to the seller and the deal's adjudicator | `deal statement`, `deal dispute`; `deal respond` when the adjudicator asks for the books |
 | show | 7 Receipt and card | `ard_show_receipt`, `ard_open_receipt_page` (the receipt as a page), `ard_show_card`, `ard_open_card_page` (the card as a page) | `deal` receipt, `deal standard-history card` |

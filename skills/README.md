@@ -37,7 +37,8 @@ this. The agent skills here are `buy-with-evidence`, `sell-with-evidence`, `adju
 
 **Pack-author skills** are for whoever writes and runs a Terms Pack, and keep their authoring commands:
 `evaluation-compiler`, `evidence-contract-compile`, `daily-judge-and-close`, `weekly-blind-expert` and
-`terms-pack-author`. No agent buying, selling, adjudicating or reporting loads them.
+`terms-pack-author`. No agent buying, selling or adjudicating loads them; `evidencebook-report` runs
+`daily-judge-and-close`'s judge step only to judge a pack's cases for a sealed report.
 
 In commerce there is one card, `standard_history` (the History card), with `history_card/2` as its continuity
 proof. A Mesh inference node's service card and its liar-catch checks are Mesh's own exception, not a second

@@ -30,14 +30,17 @@ EXPERT = (
 )
 _CODE_SPAN = re.compile(r"(`+)(?!`)([^\n]*?)(?<!`)\1(?!`)")
 _PATHS = "|".join(re.escape(e) for e in EXPERT)
-# A path after `capsulectl`, or bare with arguments after it: a bare one-word span such as `settlement` is also
-# the name of a pack's card (evidencebook-report), not the command.
-_EXPERT = re.compile(r"^(?:capsulectl(?:-book|-deal)?\s+(" + _PATHS + r")(?:\s|$)|(" + _PATHS + r")\s)")
+_ONE_WORD = "|".join(re.escape(e) for e in EXPERT if " " not in e)
+_MULTI = "|".join(re.escape(e) for e in EXPERT if " " in e)
+# A path after `capsulectl`, a bare multi-word path, or a bare one-word path with arguments after it: a bare
+# one-word span such as `settlement` is also the name of a pack's card (evidencebook-report), not the command.
+_EXPERT = re.compile(r"^(?:capsulectl(?:-book|-deal)?\s+(" + _PATHS + r")(?:\s|$)|(" + _MULTI + r")(?:\s|$)|("
+                     + _ONE_WORD + r")\s)")
 
 
 def expert_commands_named(text):
     """The expert command paths text names in its code spans."""
-    return sorted({m.group(1) or m.group(2) for _, span in _CODE_SPAN.findall(text) if (m := _EXPERT.match(span.strip()))} - {None})
+    return sorted({m.group(1) or m.group(2) or m.group(3) for _, span in _CODE_SPAN.findall(text) if (m := _EXPERT.match(span.strip()))})
 
 
 def verb_table_rows(text):
@@ -80,7 +83,9 @@ class FiveVerbs(unittest.TestCase):
     def test_the_check_sees_an_expert_command(self):
         self.assertEqual(expert_commands_named("run `capsulectl judge pin FILE` and `deal sale new`"),
                          ["deal sale", "judge"])
-        self.assertEqual(expert_commands_named("`deal standard-history card` and `book report check`"), [])
+        self.assertEqual(expert_commands_named("`store init`, `plugin ls` and `deal tick`"),
+                         ["deal tick", "plugin ls", "store init"])
+        self.assertEqual(expert_commands_named("`deal standard-history card`, `book report check`, `settlement`"), [])
 
 
 if __name__ == "__main__":
