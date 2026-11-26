@@ -298,8 +298,15 @@ def test_the_countersign_upgrade_after_deal_2(world, tmp_path):
         outsider.core("profile", "update", "--profile", outsider.profile, "--countersign-directory", str(d / "directory.json"))
         deals = [x["deal_id"] for x in outsider.deals() if x.get("version") == "x-deal-v1"]
         assert deals
-        with pytest.raises(pt.Refused, match="is not enrolled"):  # capsule-anchor's strict refusal, not a lost connection
+        log = d / "countersigner.log"
+        seen = len(log.read_text().splitlines())
+        with pytest.raises(pt.Refused):
             outsider.countersign(deals[0], env)
+        # capsulectl hides the service's words (capsule-cli cli/command.go: "sensitive details suppressed"), so the
+        # countersigner's own access log shows it was the service that refused it (Codex, round 1): its strict
+        # registration policy answers 422 to an issuer it has not enrolled (capsule-anchor countersign/bundle.py)
+        new = log.read_text().splitlines()[seen:]
+        assert any('"POST /countersign/register HTTP/1.1" 422' in x for x in new), new
         assert outsider.countersigned(deals[0]) == {"finding": "not_countersigned", "directory": str(d / "directory.json")}
     finally:
         cs.stop(d)

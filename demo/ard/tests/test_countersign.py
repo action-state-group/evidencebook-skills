@@ -78,11 +78,17 @@ def test_before_the_step():
     assert line == "Not countersigned yet: no countersigner has signed Maya's records of this deal."
 
 
-@pytest.mark.parametrize("finding", ["unchecked", "unverified", "unresolved_signer", "self_countersigned"])
-def test_a_countersignature_that_does_not_count_is_never_a_rung_nor_nothing(finding):
+@pytest.mark.parametrize("finding,why", [
+    ("unchecked", "capsulectl could not check it: it has no usable countersigner directory, could not read the one it "
+                  "has, or the countersigned copy it stores does not verify"),
+    ("unverified", "it does not verify, or it is of a type capsulectl does not check"),
+    ("unresolved_signer", "its signer is not listed in the countersigner directory, so who signed is unknown"),
+    ("self_countersigned", "it is by Maya's own key, and a self-countersignature is not a check by anyone else")])
+def test_a_countersignature_that_does_not_count_is_never_a_rung_nor_nothing(finding, why):
     line = receipt.countersign_line({"finding": finding}, "Maya", "Alder Print Co.")
-    assert line.startswith("Not countersigned: capsulectl holds a countersignature") and finding.replace("_", " ") in line
-    assert "Countersigned by" not in line
+    assert line == ("Not countersigned: capsulectl holds a countersignature for Maya's records of this deal, but it does "
+                    f"not count: {why}.")
+    assert "Countersigned by" not in line and "_" not in line
 
 
 def test_no_report_yet():

@@ -128,9 +128,16 @@ def countersign_line(cs: dict | None, name: str, counterparty: str) -> str:
     finding = cs.get("finding", "not_countersigned")
     if finding == "not_countersigned":
         return f"Not countersigned yet: no countersigner has signed {name}'s records of this deal."
-    # a countersignature is held but does not count (unchecked, unverified, unresolved_signer, self_countersigned)
-    return (f"Not countersigned: capsulectl holds a countersignature for {name}'s records of this deal that does not "
-            f"count ({finding.replace('_', ' ')}).")
+    # a countersignature is held but does not count: the reason in the words capsule-viewer's receipt uses for the same
+    # findings (go/receipt/wording-en.json countersign.reported.*); capsulectl deal_grade.go storedCountersignOf maps a
+    # signature that fails to verify to unverified; why one is unchecked: dealStoredCountersignature there
+    why = {"self_countersigned": f"it is by {name}'s own key, and a self-countersignature is not a check by anyone else",
+           "unresolved_signer": "its signer is not listed in the countersigner directory, so who signed is unknown",
+           "unverified": "it does not verify, or it is of a type capsulectl does not check",
+           }.get(finding, "capsulectl could not check it: it has no usable countersigner directory, could not read the "
+                          "one it has, or the countersigned copy it stores does not verify")
+    return (f"Not countersigned: capsulectl holds a countersignature for {name}'s records of this deal, but it does not "
+            f"count: {why}.")
 
 
 def witness_line(witnessed: dict | None, name: str) -> str:
