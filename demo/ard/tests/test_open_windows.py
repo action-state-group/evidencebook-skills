@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""``goose/open-windows.py`` opens the sellers first and Maya last, then tiles the windows with the Move & Resize menu;
-a failed tile prints one line with the permission to grant and the manual fallback, and never fails the open.
+"""``goose/open-windows.py`` opens the sellers first and Maya last, then tiles the windows with the enabled Quarters of
+the Move & Resize menu and reads their frames back; a tile that fails, or that the frames show did not happen, prints
+one line with what it read, the permission to grant and the manual fallback, and never fails the open.
 No Goose and no osascript run: ``subprocess.run`` is recorded."""
 from __future__ import annotations
 
@@ -18,6 +19,13 @@ ow = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ow)
 
 
+#: The four windows in the quarters of a 1352x848 screen, front to back: what the enabled Quarters gave on Goose 1.59.2
+#: (2026-11-26).
+TILED = "0 30 676 409\n676 30 676 409\n0 439 676 409\n676 439 676 409\n"
+#: What the disabled Quarters heading left: every window at one frame.
+STACKED = "676 439 676 409\n" * 4
+
+
 @pytest.fixture
 def calls(monkeypatch, tmp_path):
     """Every subprocess.run the script makes, with a link per role and no waiting; osascript answers as ``result``."""
@@ -25,14 +33,15 @@ def calls(monkeypatch, tmp_path):
         result: dict
 
     made = Made()
-    result = {"code": 0, "stderr": "", "raise": None}
+    result = {"code": 0, "stderr": "", "raise": None, "layout": TILED}
 
     def run(cmd, **kw):
         made.append(list(cmd))
         if cmd[0] == "osascript":
             if result["raise"]:
                 raise result["raise"]
-            return types.SimpleNamespace(returncode=result["code"], stdout="", stderr=result["stderr"])
+            stdout = result["layout"] if list(cmd) == ow.LAYOUT else ""
+            return types.SimpleNamespace(returncode=result["code"], stdout=stdout, stderr=result["stderr"])
         return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(ow.subprocess, "run", run)
@@ -41,6 +50,7 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
     monkeypatch.setattr(ow, "recipe", lambda role, rail, placeholders=False: {"title": role})
     monkeypatch.setattr(ow, "to_link", lambda r: f"goose://recipe?config={r['title']}")
+    monkeypatch.setattr(ow.reset, "_hashes", lambda user=None: tmp_path / "recipe_hashes")  # nothing trusted yet
     monkeypatch.setattr(ow.reset, "note_trust", lambda recipes, root: made.append(["note", [r["title"] for r in recipes], str(root)]))
     # Goose is not running until the script starts it with `open -a Goose`
     monkeypatch.setattr(ow.reset, "goose_running", lambda: any(c[:3] == ["open", "-a", "Goose"] for c in made))
@@ -69,11 +79,16 @@ def test_the_sellers_open_first_maya_last_then_the_windows_are_tiled(calls, caps
     assert calls[1][5] == "--env" and calls[1][6].startswith("GOOSE_SEARCH_PATHS=")
     assert _json.loads(calls[1][6].split("=", 1)[1]) == [str(ow.LOCKED_DIR)]  # the demo's locked adapter (#276)
     assert calls[1][7:11] == ["--env", f"ARD_ACP_PREFIX={ow.acp_prefix()}", "--env", f"ARD_PYTHON={ow.sys.executable}"]
-    assert [c[1] for c in calls[2:6]] == [f"goose://recipe?config={r}" for r in ("alder", "kestrel", "adjudicator", "maya")]
-    assert calls[6] == ow.TILE and len(calls) == 7
-    assert 'click menu item "Quarters" of menu "Move & Resize"' in ow.TILE[-1]
+    # Goose starts on Alder's link, so it opens no window of its own (#322); then the other three, Maya last
+    assert calls[1][-1] == "goose://recipe?config=alder"
+    assert [c[1] for c in calls[2:5]] == [f"goose://recipe?config={r}" for r in ("kestrel", "adjudicator", "maya")]
+    assert calls[5] == ow.TILE and calls[6] == ow.LAYOUT and len(calls) == 7  # the click, then the frames read back
+    # the enabled Quarters under Arrange: the first item of that name is a disabled heading, and clicking it did nothing
+    assert 'whose name is "Quarters" and enabled is true' in ow.TILE[-1]
     assert all('tell application "System Events"' in line for line in ow.TILE[2::2])  # one permission: System Events only
-    assert capsys.readouterr().err == ""
+    assert ow.LAYOUT[2].startswith('tell application "System Events"')
+    out = capsys.readouterr()
+    assert out.err == "" and out.out.endswith("tiled the four windows in quarters (read back from the screen)\n")
 
 
 @pytest.mark.parametrize("code,stderr,exc,why,grant", [
@@ -92,7 +107,7 @@ def test_a_failed_tile_prints_one_line_with_the_manual_fallback_and_the_open_sti
     assert len(err) == 5 and all("trying again in 10 s" in line for line in err[:2])
     assert why in err[2]  # the message on one line even when osascript printed two
     assert ("System Settings, Privacy & Security, Accessibility" in err[2]) is grant  # the grant only for a permission
-    assert err[2].endswith("tile by hand: Window, Move & Resize, Quarters.")
+    assert err[2].endswith("Window, Move & Resize, then Quarters under Arrange (the Quarters above Top Left is only a heading).")
     assert err[3] == "" and shlex.split(err[4]) == ow.TILE  # a blank line, then the exact command to paste
 
 
@@ -123,6 +138,7 @@ def test_a_running_goose_is_refused_and_nothing_opens(calls, capsys, monkeypatch
 def test_goose_only_starts_the_demo_goose_and_opens_no_window(calls, capsys):
     assert ow.main(["--goose-only"]) == 0
     assert [c[:4] for c in calls] == [["open", "-a", "Goose", "--env"]]
+    assert not any(a.startswith("goose://") for a in calls[0])  # the settings only: Goose opens its own window
     assert "started the demo's own Goose on" in capsys.readouterr().out
 
 
@@ -183,3 +199,96 @@ def test_only_mayas_window_carries_the_spending_limit(monkeypatch):
     assert all("ARD_LIMIT_MSAT=2000" not in a for role, a in args.items() if role != "maya")
     monkeypatch.delenv("ARD_LIMIT_MSAT")
     assert not any(a.startswith("ARD_LIMIT_MSAT=") for a in ow.recipe("maya", "fake")["extensions"][0]["args"])
+
+
+def test_stacked_windows_are_reported_as_read_not_as_tiled(calls, capsys):
+    # #322: osascript exits 0 whatever the click did; the frames read back decide
+    calls.result["layout"] = STACKED
+    assert ow.main(["--rail", "fake"]) == 0
+    # the first try and two retries, each reading the frames while the windows may still move
+    assert [c for c in calls if c[0] == "osascript"] == ([ow.TILE] + [ow.LAYOUT] * ow.SETTLE_READS) * 3
+    out = capsys.readouterr()
+    assert "tiled the four windows" not in out.out
+    err = out.err.splitlines()
+    assert len(err) == 5 and all("trying again in 10 s." in line for line in err[:2])
+    assert err[2].startswith("could not tile the windows (the four windows are not in quarters, at 676,439 676x409; "
+                             "676,439 676x409; 676,439 676x409; 676,439 676x409).")
+    assert "System Settings" not in err[2]  # not a permission
+    assert shlex.split(err[4]) == ow.TILE
+
+
+def test_a_read_back_without_permission_asks_for_it(calls, capsys, monkeypatch):
+    def run(cmd, **kw):
+        calls.append(list(cmd))
+        if list(cmd) == ow.LAYOUT:
+            return types.SimpleNamespace(returncode=1, stdout="", stderr="osascript is not allowed assistive access. (-1719)")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(ow.subprocess, "run", run)
+    assert ow.tile(say=lambda line: None).startswith(
+        "could not tile the windows (could not read the windows back: osascript is not allowed assistive access. (-1719)). "
+        "Turn on your terminal app in System Settings")
+
+
+Q = [(0, 30, 676, 409), (676, 30, 676, 409), (0, 439, 676, 409), (676, 439, 676, 409)]
+
+
+@pytest.mark.parametrize("seen,problem", [
+    (Q, None),
+    ([Q[3], Q[0], Q[2], Q[1]], None),  # any order: Maya's in front wherever Quarters put her
+    # a display left of the main one, and quarters that share an edge point or two (an odd-sized screen)
+    ([(-1512, 25, 757, 450), (-757, 25, 757, 450), (-1512, 474, 757, 450), (-757, 474, 757, 450)], None),
+    # macOS's margins between tiled windows
+    ([(8, 38, 660, 393), (684, 38, 660, 393), (8, 447, 660, 393), (684, 447, 660, 393)], None),
+    ([(676, 439, 676, 409)] * 4, "the four windows are not in quarters"),
+    # side by side but not quarters: a row of four, and four small windows in the corners of the screen
+    ([(0, 30, 338, 818), (338, 30, 338, 818), (676, 30, 338, 818), (1014, 30, 338, 818)], "the four windows are not in quarters"),
+    ([(0, 30, 200, 150), (1152, 30, 200, 150), (0, 698, 200, 150), (1152, 698, 200, 150)], "the four windows are not in quarters"),
+    ([*Q[:3], (100, 100, 676, 409)], "the four windows are not in quarters"),
+    ([*Q[:3], (676, 439, 0, 0)], "a window has no size"),
+    # Goose's own launch window (or one the person opened) is not one of the four: the tile cannot be judged
+    ([*Q, (676, 439, 676, 409)], "Goose shows 5 windows, not four"),
+    (Q[:3], "Goose shows 3 windows, not four"),
+    ([], "Goose shows 0 windows, not four"),
+])
+def test_layout_problem(seen, problem):
+    got = ow.layout_problem(seen)
+    assert got is None if problem is None else got.startswith(problem)
+
+
+def test_frames_reads_the_layout_lines():
+    assert ow.frames("0 30 676 409\n676 30 676 409\n\n") == [(0, 30, 676, 409), (676, 30, 676, 409)]
+    assert ow.frames("-1352 25 676 409\n") == [(-1352, 25, 676, 409)]  # a display left of the main one
+
+
+def test_an_unreadable_read_back_is_reported_not_raised(calls, capsys):
+    calls.result["layout"] = "missing value\n"
+    assert ow.main(["--rail", "fake"]) == 0
+    assert "could not tile the windows (could not read the windows back: missing value)" in capsys.readouterr().err
+
+
+def test_a_recipe_goose_already_trusts_is_named_before_its_window_opens(calls, capsys, tmp_path):
+    # #322: Goose 1.59.2 skips the Trust prompt only for a recipe whose trust file exists
+    (tmp_path / "recipe_hashes").mkdir()
+    (tmp_path / "recipe_hashes" / f"{ow.reset.trust_hash({'title': 'maya'})}.hash").write_text("2026-11-26T19:40:00Z")
+    assert ow.main(["--rail", "fake"]) == 0
+    err = capsys.readouterr().err
+    assert err.startswith("Goose already trusts these recipes, so their windows open with no Trust and Execute prompt: "
+                          "maya. To be asked again, quit Goose and do the RUNBOOK's \"Before each run\" again from step 1 "
+                          "(reset, seed and its wait, the balances, the windows).")
+    assert [c[1] for c in calls if c[0] == "open" and c[1].startswith("goose://")][-1].endswith("maya")  # still opens
+
+
+def test_frames_still_moving_are_read_again_before_the_click_is_repeated(calls, capsys, monkeypatch):
+    reads = iter([STACKED, "0 30 900 600\n500 30 676 409\n0 439 676 409\n676 439 676 409\n", TILED])
+    monkeypatch.setattr(ow, "_osascript", lambda cmd: ((next(reads) if cmd == ow.LAYOUT else ""), "", False))
+    assert ow.tile(say=lambda line: pytest.fail(line)) is None  # tiled on the third read of one click
+
+
+def test_a_read_back_that_times_out_asks_for_the_permission(calls, monkeypatch):
+    def run(cmd, **kw):
+        if list(cmd) == ow.LAYOUT:
+            raise subprocess.TimeoutExpired("osascript", 30)
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(ow.subprocess, "run", run)
+    msg = ow.tile(say=lambda line: None)
+    assert msg.startswith("could not tile the windows (could not read the windows back: ") and "Accessibility" in msg
