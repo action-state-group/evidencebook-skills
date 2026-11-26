@@ -43,8 +43,8 @@ def seller_file(name: str) -> dict:
 
 SELLERS = {n: {**seller_file(n), "observed": observed, "shipped": shipped} for n, (observed, shipped) in SHIPS.items()}
 #: Each seller's sample history, made by ``demo.py seed`` (evidencebook-skills#317, Steven's ruling via Sherlock2):
-#: different depths, so the cards give a choice. Kestrel keeps 10, the demo pack's band-history minimum (k=10 at tier
-#: T2: pack-source.yaml ``band-history``); fewer would make it LIMIT before deal 1. Alder's count is the most that keeps
+#: different depths, so the cards give a choice. Kestrel keeps 10, the demo pack's band-history minimum (k=10 from
+#: tier T1: pack-source.yaml ``band-history``); fewer would make it LIMIT before deal 1. Alder's count is the most that keeps
 #: the seed near a minute.
 SAMPLE_DEALS = {"alder": 15, "kestrel": 10}
 BUYER = "maya"
