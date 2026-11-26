@@ -85,3 +85,31 @@ def test_ard_countersign_dir_names_another_folder(maya, monkeypatch, tmp_path):
     monkeypatch.setenv("ARD_COUNTERSIGN_DIR", str(tmp_path / "elsewhere"))
     ds.ard_countersign("alder")
     assert maya.looked == [tmp_path / "elsewhere"]
+
+
+def _script(tmp_path):
+    import demo
+
+    s = demo.Script.__new__(demo.Script)
+    s.home, s.maya = tmp_path, FakeMaya()
+    return s
+
+
+def test_the_terminal_run_countersigns_deal_2_and_says_the_receipts_line(tmp_path, monkeypatch, capsys):
+    """The RUNBOOK's run without Goose (Fallbacks 2) has the same upgrade step as Maya's tool."""
+    monkeypatch.delenv("ARD_COUNTERSIGN_DIR", raising=False)
+    monkeypatch.setattr(cs, "env", lambda d: SERVICE)
+    s = _script(tmp_path)
+    s.countersign(_deal("aaaa3333aaaa3333"))
+    assert s.maya.asked == [("deal-aaaa3333aaaa3333", SERVICE)]
+    assert capsys.readouterr().out.strip() == ("Maya's deal aaaa3333 with Alder Print Co.: "
+                                               + receipt.countersign_line(STAMP, "Maya", "Alder Print Co."))
+
+
+def test_the_terminal_run_without_a_countersigner_says_how_to_start_it(tmp_path, monkeypatch, capsys):
+    def none(d):
+        raise cs.CountersignerError("no countersigner runs; start it with `python demo/ard/countersigner.py up`")
+    monkeypatch.setattr(cs, "env", none)
+    s = _script(tmp_path)
+    s.countersign(_deal("aaaa3333aaaa3333"))
+    assert s.maya.asked == [] and capsys.readouterr().out.startswith("REFUSED: no countersigner runs")

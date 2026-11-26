@@ -125,6 +125,22 @@ class Script:
         typed = input(f"[{q.yes}: y / {q.no}: N] ").strip().lower()
         return "yes" if typed in ("y", "yes") else "no"
 
+    def countersign(self, deal: buyer.Deal) -> None:
+        """The countersign upgrade after deal 2, as Maya's ``ard_countersign`` does it in Goose (RUNBOOK step 16): the
+        demo's countersigner (``countersigner.py up``) countersigns Maya's own records of the deal, and the line is her
+        receipt's, from capsulectl's report. A refusal says why and changes nothing, as the tool's does."""
+        import countersigner as cs
+        import receipt
+
+        name = SELLERS[deal.seller]["label"]
+        try:
+            service = cs.env(Path(os.environ.get("ARD_COUNTERSIGN_DIR") or cs.default_dir(self.home)))
+            stamp = self.maya.countersign(deal.deal_id, service)
+        except (cs.CountersignerError, pt.Refused) as exc:
+            print(f"REFUSED: {exc}")
+            return
+        print(f"Maya's deal {deal.deal_id[5:13]} with {name}: " + receipt.countersign_line(stamp, "Maya", name))
+
     def pause(self, prompt: str) -> None:
         if not self.auto:
             input(f"\n[{prompt}] ")
@@ -258,6 +274,8 @@ def cmd_run(args) -> int:
             if d2 is not None:
                 print(buyer.after_delivery(d2.seller, "200 of 200 badges"))
                 buyer.confirm_by_question(home, s.maya, d2, SELLERS[d2.seller]["label"], s.ask, print)
+                s.pause("Enter: Maya asks for deal 2 to be countersigned")
+                s.countersign(d2)
         return 0
     except KeyboardInterrupt:
         interrupted = True

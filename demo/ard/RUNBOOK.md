@@ -405,7 +405,7 @@ When the weekly limit is the only reason, the question is Steven's limit questio
    .venv/bin/python demo/ard/goose/open-windows.py --rail fake
    ```
 
-2. Without Goose: the same two deals in one terminal. Enter moves on; each dialog is a yes or no at the prompt; Ctrl-C ends it.
+2. Without Goose: the same two deals and the countersign upgrade after deal 2 in one terminal (start the countersigner first, Before each run step 2). Enter moves on; each dialog is a yes or no at the prompt; Ctrl-C ends it.
 
    ```
    (cd demo/ard && ../../.venv/bin/python demo.py run --rail fake)
