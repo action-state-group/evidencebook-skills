@@ -470,6 +470,15 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
     return done
 
 
+def rulings_entered(p: pt.Party) -> dict[str, str]:
+    """Each deal whose ruling this party entered, with the time Action State's witness stamped the ruling as this party
+    noted it: at entry, or once the ruling came back with its stamp (:func:`enter_rulings`); "" while it has none."""
+    out = {n["statement"]["deal_id"]: n["statement"].get("stamped_at", "") for n in p.notes(RULING_ENTERED)}
+    for n in p.notes(RULING_STAMPED):
+        out[n["statement"]["deal_id"]] = out.get(n["statement"]["deal_id"]) or n["statement"].get("stamped_at", "")
+    return out
+
+
 def _stamped(received: dict) -> str:
     """The ruling's witnessed time as ``deal receive`` reports it, or "" while no receipt is held."""
     when = received.get("stamped_at", "")

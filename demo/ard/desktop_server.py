@@ -622,11 +622,21 @@ def ard_dispute(seller: str, deal: str = "") -> None:
 @_tool("alder", "kestrel")
 def ard_seller_activity() -> None:
     """What this seller's agent did on its own: its commitment, the deal asked of it, the payment, its delivery, a
-    dispute and a ruling, and its own History card now."""
+    dispute and a ruling, then each ruling it entered as its records hold it now (the outcome, when Action State's
+    witness stamped it, and any refund), and its own History card now."""
     sel = seller()
     print(f"{sel.label}: its own profile, keys and records (this window only)")
     for line in list(sel.log):
         print("  " + line)
+    for deal_id, stamped_at in flow.rulings_entered(sel.party).items():  # read now, so a stamp that came late shows
+        try:
+            rep = sel.party.report(deal_id)
+        except pt.Refused as exc:  # one deal's report never hides the others or the card
+            sel.party.log(f"report of {deal_id} for the ruling line: {exc!r}")
+            print(f"  ruling on deal {deal_id[5:13]}: its report is not ready yet; ask again in a minute.")
+            continue
+        for line in screens.ruled_for_seller(rep.get("report", rep), stamped_at):
+            print(f"  ruling on deal {deal_id[5:13]}: {line}")
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
     print("  " + screens.sample_note(sel.name))

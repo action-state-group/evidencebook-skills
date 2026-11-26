@@ -137,6 +137,11 @@ def card_line(card: dict) -> str:
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
+#: The remedy a ruling against the seller carries here: none, since every deal is agreed as not refundable (each side's
+#: own sealed intent says ``recourse.refundable: false``: the buyer's in ``buyer.py``, the seller's in ``flow.py``).
+NO_REFUND = "No refund: this deal was agreed as not refundable."
+
+
 def ruled_for_buyer(report: dict, seller: str) -> list[str]:
     """What a ruling for the buyer means for her, from capsulectl's report of her deal (evidencebook-skills#334,
     Sherlock2's words): the outcome, and that no refund follows, since every deal here is agreed as not refundable
@@ -146,8 +151,29 @@ def ruled_for_buyer(report: dict, seller: str) -> list[str]:
         r = row.get("ruling") or {}
         if row.get("status") == "ruled" and r.get("against") == "seller" and r.get("value") == "not_met":
             what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
-            out.append(f"Ruled for you: {what} not met, against {stop(seller)} No refund: this deal was agreed as not "
-                       "refundable.")
+            out.append(f"Ruled for you: {what} not met, against {stop(seller)} {NO_REFUND}")
+    return out
+
+
+def ruled_for_seller(report: dict, stamped_at: str) -> list[str]:
+    """What a ruling the seller entered says, from its own records (evidencebook-skills#360, Steven's run at 2fa6abe:
+    "the seller should see that line too"): the outcome from its ``deal report`` row, the time Action State's witness
+    stamped the ruling as the seller's agent noted it when it took the ruling (``stamped_at``, "" while it holds no
+    receipt), and, for a ruling against it, the remedy Maya's card shows (:data:`NO_REFUND`)."""
+    out = []
+    for row in report.get("rows", []):
+        r = row.get("ruling") or {}
+        if row.get("status") != "ruled" or not r:
+            continue
+        what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
+        found = "not met" if r.get("value") == "not_met" else "met"
+        who = {"seller": "Ruled against this seller", "buyer": "Ruled for this seller"}.get(r.get("against"), "Ruled")
+        when = (f"Time-stamped by {pt.WITNESS_NAME} at {local_time(stamped_at, date=True)}." if stamped_at
+                else f"Not time-stamped by {pt.WITNESS_NAME} yet.")
+        line = f"{who}: {what} {found}. {when}"
+        if r.get("against") == "seller" and r.get("value") == "not_met":
+            line += f" {NO_REFUND}"
+        out.append(line)
     return out
 
 
