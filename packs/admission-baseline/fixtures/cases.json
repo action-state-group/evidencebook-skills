@@ -1079,6 +1079,191 @@
    }
   },
   {
+   "case": "t1-bands-are-not-added-across-decades",
+   "why": "6 decided deals in the deal's band and 6 one band above: a band qualifies on its own, so no band earns the deal's, already asked: LIMIT to T0 (profile \u00a73.1).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 6,
+       "adverse": 0
+      },
+      {
+       "currency": "BTC",
+       "decade": -3,
+       "subjects": 6,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {
+     "standard_history/3": "answered"
+    },
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "LIMIT",
+    "source": "rows",
+    "tier": "T0"
+   }
+  },
+  {
+   "case": "t1-a-clean-band-above-earns-despite-the-deals-own",
+   "why": "The deal's own band shows 6 of 12 not held, the band above 12 clean: the highest qualifying band earns the deal's band, so the row passes: GO at T1 (profile \u00a73.1).",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "20000",
+    "currency": "sat",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 6
+      },
+      {
+       "currency": "BTC",
+       "decade": -3,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
+   "case": "t1-a-btc-priced-deal-tiers-as-sat",
+   "why": "0.0002 BTC is 20,000 sat: the same deal, read in the same tier as the sat amount, reaches T1 on the same card.",
+   "input": {
+    "now": "2026-10-30T12:00:00Z",
+    "amount": "0.0002",
+    "currency": "BTC",
+    "platform": {
+     "release_attestation": "valid",
+     "owner_signed": true
+    },
+    "card": {
+     "state": "verified",
+     "first_checkpoint_at": "2026-06-01T00:00:00Z",
+     "latest_checkpoint_at": "2026-10-28T00:00:00Z",
+     "witness": "placeholder-witness",
+     "controller": "placeholder-controller",
+     "bands": [
+      {
+       "currency": "BTC",
+       "decade": -4,
+       "subjects": 12,
+       "adverse": 0
+      }
+     ],
+     "disputes": {
+      "open": 0,
+      "of": 0,
+      "decided": {
+       "against": 0,
+       "of": 0
+      }
+     }
+    },
+    "selection": {},
+    "own": {
+     "exchanges": 0,
+     "settled": 0,
+     "held_halves": 0,
+     "conflicting": 0,
+     "verdicts": []
+    },
+    "operator": {
+     "deny_listed": false
+    },
+    "vouches": [],
+    "subject": "",
+    "judged": {},
+    "asks": {},
+    "asks_made": 0
+   },
+   "expected": {
+    "verdict": "GO",
+    "source": "rows",
+    "tier": "T1"
+   }
+  },
+  {
    "case": "t1-card-without-a-tally-limits",
    "why": "A verified card that carries no dispute tally limits to T0 (#385 ends #281's interim).",
    "input": {

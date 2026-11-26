@@ -107,7 +107,8 @@ rows:
     on_fail: "record"
 
   # T1: the commerce card (standard_history/3) is required, fresh and
-  # witnessed, with a track record in the deal's band or above and a controller
+  # witnessed, with a track record in the deal's band or one above it and a
+  # controller
   # declared. A missing or stale card is asked for (one ask answers every row
   # that needs it); a refused or unanswered ask limits to T0, except for a
   # merchant the own-settled lift covers (own-settled below): that one is not
@@ -136,7 +137,7 @@ rows:
     from: T1
     on_fail: "LIMIT"
   - id: band-history
-    statement: In the deal's band or a higher one, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.
+    statement: In one band at or above the deal's, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.
     source: card
     check: card.band_history_or_stake
     params: {k: 10, step_decades: 0, max_adverse_permille: 100}  # Steven's numbers (#385)

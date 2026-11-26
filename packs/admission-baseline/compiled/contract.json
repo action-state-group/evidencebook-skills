@@ -95,7 +95,7 @@
     {
       "id": "band-history",
       "profile": "outcome",
-      "statement": "In the deal's band or a higher one, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.",
+      "statement": "In one band at or above the deal's, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.",
       "tier": "must_have",
       "evidence_rule": "admission check card.band_history_or_stake (k 10, max_adverse_permille 100, step_decades 0), from tier T1; a failure gives LIMIT; asks for standard_history/3",
       "forward_verdict": "DETERMINISTIC",

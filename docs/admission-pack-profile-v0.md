@@ -293,9 +293,11 @@ it against the counterparty can only lower an earned band, never raise one.
 It is the track record the baseline and Muse packs read at T1 (Steven's ruling
 on #385): their `band-history` row asks for a `standard_history/3` card and
 reads its bands this way, with `k` 10, `max_adverse_permille` 100 and
-`step_decades` 0. The earned band is the highest decade that qualifies, so
-history in a band above the deal's earns the deal's band too, and history only
-in bands below it does not. The row replaces `claims-held` there.
+`step_decades` 0. The earned band is the highest decade that qualifies. A
+band qualifies on its own; bands are not added across decades. So a qualifying
+band above the deal's earns the deal's band even when the deal's own band
+shows more not held, and history only in bands below it does not. The row
+replaces `claims-held` there.
 
 ### 3.2 Rails
 
@@ -520,8 +522,8 @@ step 4 for that deal, and only when all of these hold:
   was served (the pack must read `card.verified` there, so a served card that fails
   verification reads `fail`, never `not_read`). A card that was served and verifies, fails or is stale speaks for
   itself, and the lift does not apply. The cost is named: a merchant that serves a
-  valid card that earns no band at or above the deal's (too few decided deals, or too many
-  not held), or one with no witness, is limited by the
+  valid card with no band at or above the deal's that qualifies, or one with no
+  witness, is limited by the
   rows as written, while one that serves none is lifted. A card that was refused is
   read as served none (a refusal and silence both read `not_read`; Sherlock2,
   buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=84a0b5acffe67d368b869be55470d61a1b070c260112871373d77efbf57e362f).
