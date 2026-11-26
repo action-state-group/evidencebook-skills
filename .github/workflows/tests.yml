@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      EVIDENCEBOOK_REF: 625e344447fff6ee3ab9c0ccd263f90d19b5c4f9  # main: #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61)
+      EVIDENCEBOOK_REF: 63f2d610aa8e6b4fff52b847f06afa0493aabb96  # main: #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61), #991 and #992 (capsule-cli 052a8a6a: a continuity 409 is sent once more, then re-anchored)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
     steps:
       - uses: actions/checkout@v4
