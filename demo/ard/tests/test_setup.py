@@ -30,14 +30,21 @@ pytestmark = pytest.mark.skipif(not JQ or not Path("/bin/bash").exists(), reason
 STUBS = {
     "uname": 'case "$1" in -s) echo Darwin ;; -m) echo arm64 ;; *) echo Darwin ;; esac',
     "lsof": "exit 0",
-    "pgrep": "exit 1",  # Goose is not running
-    "osascript": 'echo "osascript $*" >>"$STUB_LOG"',
+    # Goose runs while $STUB_DIR/running is there: open -a starts it, a quit through osascript ends it
+    "pgrep": '[ -f "$STUB_DIR/running" ]',
+    "osascript": 'echo "osascript $*" >>"$STUB_LOG"; rm -f "$STUB_DIR/running"',
+    # the person's step 8: the demo Goose starts, and the provider is chosen in it on the try $STUB_DIR/choose-on names
+    "open": r'''echo "open $1 $2" >>"$STUB_LOG"; touch "$STUB_DIR/running"
+n=$(( $(cat "$STUB_DIR/opened" 2>/dev/null || echo 0) + 1 )); echo $n >"$STUB_DIR/opened"
+[ "$n" != "$(cat "$STUB_DIR/choose-on" 2>/dev/null)" ] \
+  || echo "active_provider: google" >>"$HOME/.config/ard-commerce-goose/config/config.yaml"''',
     "ditto": 'echo "ditto $*" >>"$STUB_LOG"; exit 1',
     "curl": 'echo "curl $*" >>"$STUB_LOG"; echo "curl: (6) Could not resolve host" >&2; exit 6',
     "npm": 'echo "npm $*" >>"$STUB_LOG"',
     "plutil": 'cat "$STUB_DIR/goose-version" 2>/dev/null || exit 1',
     "claude": 'echo "claude $*" >>"$STUB_LOG"; [ "$1 $2" = "auth status" ] && echo \'{"loggedIn": true}\'',
-    "python3": f'exec {sys.executable} "$@"',
+    "python3": f'''[ "$1 $2" != "-m venv" ] || {{ echo "python3 $*" >>"$STUB_LOG"; exit 0; }}
+exec {sys.executable} "$@"''',
     "jq": f'exec {JQ} "$@"',
     # brew install <formula> puts that formula's stand-in on PATH
     "brew": r'''echo "brew $*" >>"$STUB_LOG"
@@ -109,7 +116,14 @@ def mac(tmp_path):
     (skills / ".git" / "HEAD-stub").write_text(MAIN + "\n")
     (skills / "demo").symlink_to(HERE.parent)  # the checkout's copy of the script is the one under test
     (skills / ".venv" / "bin").mkdir(parents=True)
-    _exe(skills / ".venv" / "bin" / "python", f'exec {sys.executable} "$@"')
+    # with $STUB_DIR/venv-cut the venv was cut short: no pip and no packages, until pip installs them
+    _exe(skills / ".venv" / "bin" / "python", f'''if [ -f "$STUB_DIR/venv-cut" ]; then
+  case "$1 ${{2:-}}" in
+    "-m pip") echo "venv pip $3" >>"$STUB_LOG"; [ "$3" != --version ] || exit 1; rm -f "$STUB_DIR/venv-cut"; exit 0 ;;
+    "- ") exit 1 ;;
+  esac
+fi
+exec {sys.executable} "$@"''')
     for repo, pin in (("evidencebook", "EVIDENCEBOOK_PIN"), ("capsule-cli", "CAPSULE_CLI_PIN"),
                       ("capsule-engine", "CAPSULE_ENGINE_PIN")):
         (demo / repo / ".git").mkdir(parents=True)
@@ -211,8 +225,68 @@ def test_a_checkout_with_changes_of_its_own_is_not_moved(mac):
     (mac.demo / "evidencebook" / ".git" / "dirty").write_text(" M README.md\n")
     run = mac.run()
     assert run.returncode == 1
-    assert "has changes of its own, so it was not moved" in run.stderr
+    assert "evidencebook has changes of its own" in run.stderr
     assert not [c for c in mac.calls() if " checkout" in c]
+    # evidencebook-skills follows main: one with changes of its own is used where it is, not moved
+    (mac.demo / "evidencebook" / ".git" / "dirty").unlink()
+    (mac.demo / "evidencebook-skills" / ".git" / "HEAD-stub").write_text("b" * 40 + "\n")
+    (mac.demo / "evidencebook-skills" / ".git" / "dirty").write_text(" M README.md\n")
+    run = mac.run()
+    assert run.returncode == 1 and "has changes of its own, so it was not moved" in run.stderr
+    assert not [c for c in mac.calls() if " checkout" in c]
+
+
+def test_a_checkout_at_its_pin_with_changes_of_its_own_is_not_built_from(mac):
+    (mac.demo / "evidencebook" / ".git" / "dirty").write_text(" M capsulectl/main.go\n")
+    (mac.home / ".local" / "lib" / "capsulectl" / "plugins" / "capsulectl-book").unlink()  # so it would rebuild
+    run = mac.run()
+    assert run.returncode == 1
+    assert "has changes of its own, and the demo is built only from" in run.stderr
+    assert not [c for c in mac.calls() if CHANGES.match(c)]
+
+
+def test_a_python_environment_cut_short_is_made_again(mac):
+    (mac.stubs / "venv-cut").touch()
+    run = mac.run()
+    assert run.returncode == 0, run.stdout + run.stderr
+    calls = mac.calls()
+    assert calls.index(f"python3 -m venv --clear {mac.demo}/evidencebook-skills/.venv") < calls.index("venv pip install")
+    run = mac.run()
+    assert run.returncode == 0 and not [c for c in mac.calls() if c.startswith(("python3 -m venv", "venv pip"))]
+
+
+def test_settings_that_cannot_be_written_stop_plainly(mac):
+    mac.goose_config.write_text(_config("openai", on=True))
+    mac.goose_config.parent.chmod(0o555)
+    try:
+        run = mac.run()
+    finally:
+        mac.goose_config.parent.chmod(0o755)
+    assert run.returncode == 1
+    assert f"Set-up stopped: {mac.goose_config} could not be written (Permission denied)" in run.stderr
+    assert "Traceback" not in run.stderr
+    assert [p.name for p in mac.goose_config.parent.iterdir()] == ["config.yaml"]
+
+
+def test_another_provider_is_chosen_in_goose_with_a_second_try(mac):
+    mac.goose_config.write_text(_config(None, on=True))
+    (mac.stubs / "choose-on").write_text("2")  # the first time, the person presses Return before choosing
+    run = mac.run(stdin="3\n2\n\n\n")
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert "Pick your provider and follow its screens" in run.stdout
+    assert "Not yet: the demo's Goose has no provider yet" in run.stdout
+    # Goose is quit before its settings are read or written, every time
+    assert [c.split()[0] for c in mac.calls() if c.startswith(("open", "osascript"))] == \
+        ["open", "osascript", "open", "osascript"]
+    assert "Claude Code" not in "".join(c for c in mac.calls() if c.startswith(("npm", "claude", "brew")))
+    import yaml
+    doc = yaml.safe_load(mac.goose_config.read_text())
+    assert doc["active_provider"] == "google" and not any(doc["extensions"][e]["enabled"] for e in EXTENSIONS)
+    assert "model google." in run.stdout
+    after = mac.goose_config.read_bytes()
+    run = mac.run()  # and a second run leaves it as it is
+    assert run.returncode == 0 and mac.goose_config.read_bytes() == after
+    assert not [c for c in mac.calls() if CHANGES.match(c) or c.startswith("open")]
 
 
 def test_extensions_still_on_are_turned_off_once(mac):

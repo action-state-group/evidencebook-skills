@@ -58,7 +58,7 @@ What it does, in order (you do not type these):
 
 1. Installs what is missing (What you need, item 1) with Homebrew. GNU tar is needed because the plugin build script refuses macOS's own tar.
 
-2. Gets the code into `~/ard-demo`: evidencebook-skills at main, and evidencebook, capsule-cli and capsule-engine at the pins in this guide's header. It clones what is missing and moves what is already there, so it is the same on a new Mac and on one that ran an earlier version of this guide. A checkout with changes of its own is not moved: the script stops and says so.
+2. Gets the code into `~/ard-demo`: evidencebook-skills at main, and evidencebook, capsule-cli and capsule-engine at the pins in this guide's header. It clones what is missing and moves what is already there, so it is the same on a new Mac and on one that ran an earlier version of this guide. A checkout with changes of its own is neither moved nor built from: the script stops and says so.
 
 3. Builds and installs capsulectl with its book and deal plugins, all at one version (about 5 minutes), into `~/.local`.
 

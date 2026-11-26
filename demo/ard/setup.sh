@@ -131,6 +131,9 @@ at_commit() {  # at_commit <repository> <commit, or origin/<branch>>: clone it i
   head=$(git -C "$dir" rev-parse HEAD)
   if [ "$want" = "${want#origin/}" ]; then  # a commit: no network when it is there already
     target=$want
+    # the demo is built from these checkouts, so one with changes of its own is never built from, at the pin or not
+    [ -z "$(git -C "$dir" status --porcelain --untracked-files=no)" ] \
+      || stop "$dir has changes of its own, and the demo is built only from ${target:0:7} as it is. Keep them elsewhere (git -C \"$dir\" stash), then run this again."
     if [ "$head" = "$target" ]; then already "$name: already at ${target:0:7}"; return 0; fi
     DOING="getting $name ${target:0:7}"
     run git -C "$dir" fetch -q origin "$target"
@@ -218,7 +221,8 @@ engine_and_venv_step() {
   if venv_ready; then already "already made"; return 0; fi
   say "  Making it ..."
   DOING="making the Python environment"
-  [ -x "$VPY" ] || run "$PY" -m venv "$SKILLS/.venv"
+  # a venv cut short (python there, pip not) is made again
+  "$VPY" -m pip --version >/dev/null 2>&1 || run "$PY" -m venv --clear "$SKILLS/.venv"
   run "$VPY" -m pip install -q cryptography pyyaml rfc8785 "mcp==2.3.0"
   run venv_ready
 }
@@ -277,11 +281,17 @@ try:
             doc["extensions"] = ext
             for k in on:
                 ext[k] = {**(ext.get(k) or {}), "enabled": False}
-            f.parent.mkdir(parents=True, exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=".config.yaml.")
-            with os.fdopen(fd, "w") as fh:
-                fh.write(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
-            os.replace(tmp, f)
+            tmp = None
+            try:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=".config.yaml.")
+                with os.fdopen(fd, "w") as fh:
+                    fh.write(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True))
+                os.replace(tmp, f)
+            except OSError as exc:
+                if tmp and os.path.exists(tmp):
+                    os.unlink(tmp)
+                raise ow.ConfigError(f"{f} could not be written ({exc.strerror or exc})") from exc
             out["changed"] = True
     cfg = ow.goose_config(root)
     out["on"] = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
@@ -361,6 +371,7 @@ choose_model() {
     ask "When it has answered, press Return here: "
     quit_goose
     status=$(goose_status off) || stop "the demo Goose's settings could not be read."
+    [ "$(field "$status" '.error // ""')" = "" ] || stop "$(field "$status" .error)"
     if [ "$(field "$status" .needs_choice)" = false ]; then break; fi
     say ""
     say "  Not yet: $(field "$status" '.problem // "no model is chosen in the demo'"'"'s Goose yet"')."
@@ -387,6 +398,7 @@ goose_settings_step() {
   if [ "$(field "$status" '.on | length')" != 0 ]; then
     quit_goose
     status=$(goose_status off) || stop "the demo Goose's settings could not be read."
+    [ "$(field "$status" '.error // ""')" = "" ] || stop "$(field "$status" .error)"
     say "  Turned off every Goose extension in the demo's Goose."
   else
     already "Goose extensions: already all off"
