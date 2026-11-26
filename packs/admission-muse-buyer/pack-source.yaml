@@ -107,7 +107,7 @@ rows:
     on_fail: "record"
 
   # T1: the commerce card (standard_history/3) is required, fresh and
-  # witnessed, with a track record in the deal's band and a controller
+  # witnessed, with a track record in the deal's band or above and a controller
   # declared. A missing or stale card is asked for (one ask answers every row
   # that needs it); a refused or unanswered ask limits to T0, except for a
   # merchant the own-settled lift covers (own-settled below): that one is not
