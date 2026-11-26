@@ -128,12 +128,23 @@ def card_line(card: dict) -> str:
     still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
     went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
             else f"{o['did_not_hold']} didn't go as agreed{still}")
+    # A /3 card leaves out a deal no named witness has timed and tallies it in not_counted.no_witness_time (AAC SH
+    # §11.6; the shared copy carries it too); Sherlock2's words (evidencebook#979). A /4 card has no such member.
+    waiting = card.get("not_counted", {}).get("no_witness_time", 0)
     if not o["of"]:  # Sherlock2 on #362: never "0 deals, every one went as agreed", nor "no disputes" over one
+        # Sherlock2 on #394: none counted but some waiting reads "No deals counted yet: N deal(s) waiting for a
+        # time-stamp", ending like #362's sentence when there is no dispute
+        counted = (f"No deals counted yet: {plural(waiting, 'deal')} waiting for a time-stamp" if waiting
+                   else "No deals yet")
         ds = card.get("disputes", {})
-        if not any(ds.get(k, {}).get("of", 0) or any(ds.get(k, {}).get("by_outcome", {}).values()) for k in ("received", "raised")):
-            return "No deals yet, and no disputes."
-    counted = f"{plural(o['of'], 'deal')}, {went}" if o["of"] else "No deals yet"
-    return (f"{counted}. Disputes others raised about it: "
+        if not any(ds.get(k, {}).get("of", 0) or any(ds.get(k, {}).get("by_outcome", {}).values())
+                   for k in ("received", "raised")):
+            return f"{counted}, and no disputes."
+        left = ""
+    else:
+        counted = f"{plural(o['of'], 'deal')}, {went}"
+        left = f" {plural(waiting, 'more deal')} not counted yet: waiting for a time-stamp." if waiting else ""
+    return (f"{counted}.{left} Disputes others raised about it: "
             f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
 
 
