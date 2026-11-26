@@ -109,3 +109,36 @@ def test_launchd_layers_are_refused_or_read(tmp_path, monkeypatch):
 def test_a_config_that_is_not_yaml_is_named_not_a_traceback(tmp_path):
     msg = _ow().provider_problem(_root(tmp_path, "- a list\n- not a mapping\n"))
     assert "is not a Goose config" in msg
+
+
+def test_goose_gets_exactly_the_provider_that_was_checked(tmp_path, monkeypatch):
+    """Codex's and Claude's round 2: launchd's provider wins in the check, so it is the one Goose gets."""
+    ow = _ow()
+    root = _root(tmp_path, "active_provider: cursor-agent\n" + OFF)
+    monkeypatch.setattr(ow, "launchd_env", lambda name: "openai" if name == "GOOSE_PROVIDER" else "")
+    ran = []
+    monkeypatch.setattr(ow.subprocess, "run", lambda args, **k: ran.append(args) or (_ for _ in ()).throw(OSError("x")))
+    ow.launch_goose(root)
+    assert "GOOSE_PROVIDER=openai" in ran[0] and not any("cursor-agent" in a for a in ran[0])
+
+
+def test_set_up_pins_no_provider(tmp_path, monkeypatch):
+    ow = _ow()
+    root = _root(tmp_path, "active_provider: openai\n" + OFF)
+    ran = []
+    monkeypatch.setattr(ow.subprocess, "run", lambda args, **k: ran.append(args) or (_ for _ in ()).throw(OSError("x")))
+    ow.launch_goose(root, setup=True)
+    assert not any(a.startswith("GOOSE_PROVIDER=") for a in ran[0])  # a provider switched in Settings takes effect
+
+
+@pytest.mark.parametrize("own,refused", [("  developer:\n    display_name: Developer\n", True),
+                                         ("  developer:\n    enabled: false\n", False)])
+def test_extensions_merge_field_by_field_as_goose_does(tmp_path, monkeypatch, own, refused):
+    ow = _ow()
+    system = tmp_path / "etc.yaml"
+    system.write_text("extensions:\n  developer:\n    enabled: true\n")
+    monkeypatch.setattr(ow, "SYSTEM_CONFIG", system)
+    root = tmp_path / "r"
+    (root / "config").mkdir(parents=True)
+    (root / "config" / "config.yaml").write_text("active_provider: openai\nextensions:\n" + own)
+    assert bool(ow.provider_problem(root)) is refused

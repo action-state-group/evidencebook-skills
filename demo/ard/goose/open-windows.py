@@ -254,7 +254,11 @@ def goose_config(root: Path) -> dict:
     extensions merged by name; {} before set-up."""
     system, own = _yaml(SYSTEM_CONFIG), _yaml(root / "config" / "config.yaml")
     cfg = {**system, **own}
-    cfg["extensions"] = {**(system.get("extensions") or {}), **(own.get("extensions") or {})}
+    # field by field, as Goose merges its layers (config/base.rs): an own entry that sets only display_name keeps the
+    # system file's enabled
+    sys_ext, own_ext = system.get("extensions") or {}, own.get("extensions") or {}
+    cfg["extensions"] = {k: {**(sys_ext.get(k) or {}), **(own_ext.get(k) or {})}
+                         for k in {*sys_ext, *own_ext}}
     return cfg
 
 
@@ -275,49 +279,55 @@ def provider_of(cfg: dict) -> str | None:
 
 
 def provider_problem(root: Path) -> str | None:
-    """Why the demo's Goose must not open the windows with the provider it is set to, or None (#340). Claude Code ACP
-    needs the demo's pinned, locked adapter; a provider where Goose runs the tools needs every Goose extension off (set-up
-    step 9), so only each window's own extension reaches its agent; a provider that runs its own agent is refused."""
+    return check_provider(root)[0]
+
+
+def check_provider(root: Path) -> tuple[str | None, str | None]:
+    """Why the demo's Goose must not open the windows with the provider it is set to (or None), and the provider that
+    check read, which launch_goose hands Goose as is (#340). Claude Code ACP needs the demo's pinned, locked adapter; a
+    provider where Goose runs the tools needs every Goose extension off (set-up step 9), so only each window's own
+    extension reaches its agent; a provider that runs its own agent is refused."""
     if extra := launchd_env("GOOSE_ADDITIONAL_CONFIG_FILES"):
-        return (f"launchd hands Goose more config files ({extra}), which this check does not read: "
-                "launchctl unsetenv GOOSE_ADDITIONAL_CONFIG_FILES, then run this again")
+        return (f"launchd hands Goose more config files ({extra}), which this check does not read: launchctl unsetenv "
+                "GOOSE_ADDITIONAL_CONFIG_FILES, then run this again"), None
     try:
         cfg = goose_config(root)
     except ConfigError as exc:
-        return str(exc)
+        return str(exc), None
     provider = launchd_env("GOOSE_PROVIDER") or provider_of(cfg)
     if provider == LOCKED_PROVIDER:
         if not (acp_prefix() / "node_modules" / ".bin" / "claude-agent-acp").exists():
             return (f"the demo's own Claude Code adapter is not installed: {acp_install()} (pinned, under the demo's "
-                    "folder; never npm install -g, which changes the adapter other tools use)")
-        return None
+                    "folder; never npm install -g, which changes the adapter other tools use)"), provider
+        return None, provider
     if provider in AGENT_PROVIDERS:
         # Sherlock2 on #340 (ops c0813d7e): the allowed choices and where to switch, in plain words, no provider id
         return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
                 "the Pay, Received, Dispute and Rule dialogs instead of you. Choose a Gemini or ChatGPT sign-in, an API "
                 "key, or Claude Code (ACP): start the demo's Goose with open-windows.py --goose-only and change it in "
-                "Settings, Models")
+                "Settings, Models"), provider
     if not provider:
-        return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)"
+        return "the demo's Goose has no provider yet: choose one in set-up step 8 (open-windows.py --goose-only)", None
     on = sorted(str(v.get("display_name") or k) for k, v in cfg["extensions"].items()
                 if isinstance(v, dict) and v.get("enabled") and k not in KEPT_ON)
     if on:
         return ("with " + str(provider) + ", every Goose extension must be off so each window's agent has only its own "
-                "demo tools (set-up step 9); still on: " + ", ".join(on))
-    return None
+                "demo tools (set-up step 9); still on: " + ", ".join(on)), provider
+    return None, provider
 
 
 def launch_goose(root: Path, wait_s: float = 30.0, setup: bool = False) -> str | None:
     """Start Goose Desktop on ``root``; None once it runs, else why not. The caller has checked Goose is not running:
     a running Goose would take the recipe links into its own settings. For the windows the provider must pass
-    :func:`provider_problem`; with ``setup`` (the settings only, no window, no dialog) Goose opens whatever it is set to,
-    so a person can change the provider, and the problem is printed as a note."""
-    problem = provider_problem(root)
+    :func:`check_provider`, and Goose gets exactly the provider it checked; with ``setup`` (the settings only, no
+    window, no dialog) Goose opens on whatever it is set to, with no provider pinned, so a person can change it, and the
+    problem is printed as a note."""
+    problem, checked = check_provider(root)
     if problem and not setup:
         return problem
     if problem:
         print(f"note: {problem}; change it in this Goose's Settings, Models before opening the windows")
-    provider = None if problem else provider_of(goose_config(root))
+    provider = None if setup else checked
     root.mkdir(parents=True, exist_ok=True)
     # Goose resolves claude-agent-acp from GOOSE_SEARCH_PATHS before /opt/homebrew/bin and PATH
     # (crates/goose/src/config/search_path.rs), and reads that config value from the environment first. It finds the
