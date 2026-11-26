@@ -12,6 +12,7 @@ import io
 import json
 import os
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -615,6 +616,28 @@ class RealAdmissionEngine(unittest.TestCase):
             self.assertRegex(r["decided_by"]["commit"], "^[0-9a-f]{40}$")
             if ref:
                 self.assertEqual(r["decided_by"]["commit"], ref)
+
+    @unittest.skipUnless(os.environ.get("CAPSULE_ENGINE"), "CAPSULE_ENGINE names no capsule-engine build")
+    def test_the_real_engine_decides_every_admission_pack_fixture(self):
+        # The fixtures' verdict, source and tier are written by hand; the engine decides each the same
+        # (#385: the band row and the dispute tally on the commerce card).
+        for name in ("admission-baseline", "admission-muse-buyer"):
+            pack = ROOT / "packs" / name
+            for c in json.loads((pack / "fixtures/cases.json").read_text())["cases"]:
+                with self.subTest(pack=name, case=c["case"]), tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+                    json.dump(c["input"], f)
+                    f.flush()
+                    run = subprocess.run([os.environ["CAPSULE_ENGINE"], "admission", "evaluate",
+                                          "--pack", str(pack / "compiled/pack-definition.json"), "--input", f.name],
+                                         capture_output=True, text=True)
+                    self.assertEqual(run.returncode, 0, run.stderr)
+                    d = json.loads(run.stdout)
+                    e = c["expected"]
+                    self.assertEqual((d["verdict"], d["source"], d.get("tier") or None),
+                                     (e["verdict"], e["source"], e["tier"]))
+                    # One ask answers every card row that needs the commerce card.
+                    asks = [a["derivation"] for a in d.get("asks") or []]
+                    self.assertEqual(len(asks), len(set(asks)), asks)
 
 
 GIT = {"url": "https://example/capsule-engine", "vcs_info": {"vcs": "git", "commit_id": "05185b02f121227d1e0cd30274396f7e826ec2d4"}}

@@ -7,6 +7,7 @@ CI; here they are checked for shape and against the pack.
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -51,7 +52,7 @@ LADDER_ROW = f"""  - id: ladder
 {LADDER_PARAMS}
     from: T1
     on_fail: "LIMIT"
-    ask: {{derivation: served_summary/1}}
+    ask: {{derivation: standard_history/3}}
 """
 
 
@@ -233,11 +234,24 @@ class Ladder(unittest.TestCase):
             issues = pack_compile.validate_source(load(text.replace(old, new, 1)))
             self.assertTrue(any(want in i for i in issues), (new, issues))
 
-    def test_the_baseline_has_no_ladder_yet(self):
-        # No served card carries per-band counts of corroborated, net-settled
-        # subjects yet (profile §6).
-        checks = {r["check"] for r in load(baseline_text())["rows"]}
-        self.assertNotIn("card.band_history_or_stake", checks)
+    def test_the_t1_track_record_is_the_commerce_cards_band_row(self):
+        # Steven's ruling on #385 (buzz 26fc82b6): claims-held is replaced by
+        # card.band_history_or_stake on the commerce card, at least 10 decided
+        # deals with at most 100 per thousand not held, and the dispute rows
+        # read that card's tally with no on_unread interim (#281).
+        for text in (baseline_text(), muse_text()):
+            rows = {r["id"]: r for r in load(text)["rows"]}
+            self.assertNotIn("card.claims_held", {r["check"] for r in rows.values()})
+            band = rows["band-history"]
+            self.assertEqual((band["check"], band["params"], band["from"], band["on_fail"], band["ask"]),
+                             ("card.band_history_or_stake", {"k": 10, "step_decades": 0, "max_adverse_permille": 100},
+                              "T1", "LIMIT", {"derivation": "standard_history/3"}))
+            # One commerce card answers every T1 card row that asks.
+            asks = {r["ask"]["derivation"] for r in rows.values() if r["source"] == "card" and "ask" in r}
+            self.assertEqual(asks, {"standard_history/3"})
+            self.assertNotIn("on_unread", rows["disputes-against"])
+            # A card's bands are in its SR assetCode: BTC for a Lightning deal (profile §3.1).
+            self.assertEqual(load(text)["accept"]["BTC"], {"band": "sat", "scale": 8})
 
 
 class Baseline(unittest.TestCase):
@@ -248,7 +262,8 @@ class Baseline(unittest.TestCase):
         # #51's added acceptance: every amount is marked as a placeholder.
         for line in baseline_text().splitlines():
             if any(k in line for k in ("max_decade:", "max_asks:", "deadline_s:", "params:")):
-                self.assertIn("placeholder", line, line)
+                # The band row's numbers are Steven's (#385), not placeholders.
+                self.assertTrue("placeholder" in line or "Steven's numbers" in line, line)
 
     def test_stake_is_a_recorded_source_only(self):
         rows = [r for r in load(baseline_text())["rows"] if r["source"] == "stake"]
@@ -273,9 +288,18 @@ class Baseline(unittest.TestCase):
         own_gates = [r["id"] for r in rows if r["source"] == "own_history" and r.get("on_fail") == "LIMIT"]
         self.assertEqual(own_gates, ["no-conflicting-deal"])
 
+    def test_no_pack_asks_for_a_served_summary(self):
+        # Steven, 2026-11-25, Q6 (buzz 5c625586): served_summary/1's remaining asks go (#380).
+        for source in sorted(REPO_ROOT.glob("packs/*/pack-source.yaml")) + [ARD_DEMO / "pack-source.yaml"]:
+            pack = load(source.read_text())
+            if pack.get("scope", {}).get("kind") != "admission":
+                continue
+            asks = {r["ask"]["derivation"] for r in pack["rows"] if "ask" in r}
+            self.assertNotIn("served_summary/1", asks, source)
+
     def test_compiles_to_a_contract(self):
         contract = ec.from_pack(load(baseline_text()))
-        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.1.0@1.1.0")
+        self.assertEqual(ec.contract_ref(contract), "asg/admission_baseline/1.2.0@1.2.0")
         self.assertEqual([r["id"] for r in contract["requirements"]],
                          [r["id"] for r in load(baseline_text())["rows"]])
         judged = [r for r in contract["requirements"] if r["id"] == "adjacent-domain"]
@@ -352,6 +376,14 @@ def reference_decide(pack, inp, rows=None):
     # Rows that read not_read because a verified card carries no dispute
     # tally (profile section 3.3, reason no_dispute_tally).
     no_tally = set()
+    # A band row's earned limit (profile section 3.1, Effect).
+    earned = {}
+
+    def earned_tier(limit):
+        for i, t in enumerate(pack["tiers"][:min(deal, top) + 1]):
+            if t["max_decade"].get(unit["band"], limit) > limit:
+                return i - 1
+        return min(deal, top)
 
     def read(r):
         p = r.get("params") or {}
@@ -385,8 +417,25 @@ def reference_decide(pack, inp, rows=None):
                 return "pass" if 0 <= age <= p["max_age_s"] else "fail"  # not after now (profile section 2)
             if c == "card.witnessed":
                 return "pass" if card.get("witness") in roots["witnesses"] else "fail"
-            if c == "card.claims_held":
-                return "pass" if card["claims"]["held"] >= p["min"] else "fail"
+            if c == "card.band_history_or_stake":
+                # Profile section 3.1, with no rail pinned (no stake road): the
+                # highest decade of the deal's band unit with at least k decided
+                # deals, at most max_adverse_permille of them not held.
+                if card.get("bands") is None:
+                    return "not_read"
+                sums = {}
+                for b in card["bands"]:
+                    u = pack["accept"].get(b["currency"])
+                    if u is None or u["band"] != unit["band"]:
+                        continue
+                    s = sums.setdefault(b["decade"] + u["scale"], [0, 0])
+                    s[0] += b["subjects"]
+                    s[1] += b["adverse"]
+                good = [d for d, (n, bad) in sums.items() if n >= p["k"] and bad * 1000 <= p["max_adverse_permille"] * n]
+                if not good:
+                    return "fail"
+                earned[r["id"]] = max(good) + p["step_decades"]
+                return "pass" if decade <= earned[r["id"]] else "fail"
             if c == "card.controller_declared":
                 return "pass" if card.get("controller") else "fail"
             if c == "card.open_disputes":
@@ -428,7 +477,10 @@ def reference_decide(pack, inp, rows=None):
         if r.get("on_unread") == "record" and r["id"] in no_tally:
             continue  # section 4, step 4: recorded, lowering nothing
         if r["on_fail"] == "LIMIT" and res[r["id"]] != "pass" and r["id"] not in lifted:
-            admitted = min(admitted, tiers.index(r["from"]) - 1)
+            to = tiers.index(r["from"]) - 1
+            if r["id"] in earned:
+                to = max(to, earned_tier(earned[r["id"]]))
+            admitted = min(admitted, to)
             unmet.append(r)
     if admitted >= deal:
         return "GO", "rows", tiers[admitted]
@@ -490,7 +542,7 @@ class MuseBuyer(unittest.TestCase):
             doc = json.loads((path / "fixtures/cases.json").read_text())
             want = {"t1-a-dispute-lost-to-another-party-limits": ("fail", False),
                     "t1-no-dispute-lost-goes": ("pass", False),
-                    "t1-disputes-without-decided-are-recorded": ("not_read", True),
+                    "t1-disputes-without-decided-limit": ("not_read", True),
                     "t1-unverifiable-card-with-a-tally-asks": ("not_read", False)}
             seen = set()
             for c in doc["cases"]:
@@ -702,7 +754,7 @@ class Refusals(unittest.TestCase):
 
     def test_ids_with_a_trailing_newline(self):
         self.assertRefused("  - id: attestation\n", "  - id: \"attestation\\n\"\n", "id must be lowercase")
-        self.assertRefused("pack_id: asg/admission_baseline/1.1.0", "pack_id: \"asg/admission_baseline/1.1.0\\n\"",
+        self.assertRefused("pack_id: asg/admission_baseline/1.2.0", "pack_id: \"asg/admission_baseline/1.2.0\\n\"",
                            "must be owner/name/version")
 
     def test_a_rail_pin_with_an_uppercase_digest(self):
@@ -741,7 +793,7 @@ class Refusals(unittest.TestCase):
         text = baseline_text().replace("  - id: attestation\n", "  - id: [attestation]\n") \
             .replace("check: platform.owner_signed", "check: [platform.owner_signed]") \
             .replace('source: "evidencebook-skills#51', 'source_was: "x"\nsource: {by: "evidencebook-skills#51')
-        text = text.replace('#280"\n', '#280"}\n', 1)
+        text = re.sub(r'^(source: \{by: ".*")$', r"\1}", text, count=1, flags=re.M)
         issues = pack_compile.validate_source(load(text))
         self.assertTrue(any("id must be lowercase" in i for i in issues), issues)
         self.assertTrue(any("is not an admission predicate" in i for i in issues), issues)
@@ -765,7 +817,7 @@ class Refusals(unittest.TestCase):
                            "band unit EUR is named by no tier")
 
     def test_a_negative_threshold(self):
-        self.assertRefused("params: {min: 10}", "params: {min: -1}", "params.min -1 must be from 0")
+        self.assertRefused("params: {min: 3}", "params: {min: -1}", "params.min -1 must be from 0")
 
     def test_a_threshold_whose_duration_wraps(self):
         self.assertRefused("params: {max_age_s: 604800}", "params: {max_age_s: 99999999999}",
@@ -880,9 +932,6 @@ class TextIssues(unittest.TestCase):
         self.assertTrue(any("quote '0x3'" in i for i in json.loads(run.stdout)["issues"]), run.stdout)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 ARD_DEMO = REPO_ROOT / "demo/ard/pack"
 
@@ -904,22 +953,25 @@ class ArdDemoBuyer(unittest.TestCase):
 
     def test_only_the_documented_demo_fields_differ_from_the_baseline(self):
         changed = {k for k in self.base if self.pack.get(k) != self.base[k]}
-        self.assertEqual(changed, {"pack_id", "pack_version", "source", "accept", "tiers", "trust_roots", "rows"})
+        # accept is the baseline's since #385 gave the baseline BTC for a commerce card's bands.
+        self.assertEqual(changed, {"pack_id", "pack_version", "source", "tiers", "trust_roots", "rows"})
         self.assertEqual(set(self.pack), set(self.base))
         base_rows = {r["id"]: r for r in self.base["rows"]}
         demo_rows = {r["id"]: r for r in self.pack["rows"]}
-        # 2.0.0 (#285): no selection rows (no verb serves selection/1), and the dispute tally is read with no
-        # on_unread interim, since the demo's /3 card carries it (profile section 3.3).
-        self.assertEqual(set(base_rows) - set(demo_rows), {"claims-held", "selection", "no-unanswered-dispute"})
-        self.assertEqual(set(demo_rows) - set(base_rows), {"band-history"})
+        # 2.0.0 (#285): no selection rows (no verb serves selection/1). The demo reads the band row at T2
+        # with no ask, where the baseline reads it at T1 and asks for the commerce card for it (#385),
+        # and the demo asks for no card at all.
+        self.assertEqual(set(base_rows) - set(demo_rows), {"selection", "no-unanswered-dispute"})
+        self.assertEqual(set(demo_rows) - set(base_rows), set())
         self.assertEqual([i for i in base_rows if i in demo_rows and base_rows[i] != demo_rows[i]],
-                         ["card-verified", "card-fresh", "disputes-against"])
-        self.assertEqual({k: v for k, v in base_rows["disputes-against"].items() if k != "on_unread"},
-                         demo_rows["disputes-against"])
+                         ["card-verified", "card-fresh", "band-history"])
+        for i in ("card-verified", "card-fresh"):
+            self.assertEqual({k: v for k, v in base_rows[i].items() if k != "ask"}, demo_rows[i])
+        self.assertEqual({k: v for k, v in base_rows["band-history"].items() if k not in ("ask", "from", "statement")},
+                         {k: v for k, v in demo_rows["band-history"].items() if k not in ("from", "statement")})
+        self.assertEqual(demo_rows["band-history"]["from"], "T2")
         self.assertNotIn("on_unread", demo_rows["disputes-against"])
-        # Steven, 2026-11-25, Q6 (buzz 5c625586): the demo's pack asks for no served summary; nothing else differs
-        for row in ("card-verified", "card-fresh"):
-            self.assertEqual({k: v for k, v in base_rows[row].items() if k != "ask"}, demo_rows[row])
+        # Steven, 2026-11-25, Q6 (buzz 5c625586): no pack asks for a served summary (#288, #380)
         self.assertNotIn("served_summary", (ARD_DEMO / "pack-source.yaml").read_text().replace("Q6", ""))
 
     def test_a_lost_dispute_limits_and_the_witness_is_the_hosted_one(self):
@@ -931,3 +983,7 @@ class ArdDemoBuyer(unittest.TestCase):
     def test_it_ships_at_100_per_1000(self):
         params = next(r["params"] for r in self.pack["rows"] if r["id"] == "band-history")
         self.assertEqual(params["max_adverse_permille"], 100)
+
+
+if __name__ == "__main__":
+    unittest.main()

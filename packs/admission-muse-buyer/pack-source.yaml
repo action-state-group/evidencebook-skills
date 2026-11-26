@@ -1,8 +1,8 @@
-# admission-muse-buyer@1.1 -- the Muse buyer admission pack (evidencebook-skills#154),
+# admission-muse-buyer@1.2 -- the Muse buyer admission pack (evidencebook-skills#154),
 # in admission pack profile v0 (docs/admission-pack-profile-v0.md).
 #
 # A person's agent runs it in Muse before buying from a merchant. It is
-# admission-baseline@1.1 with two changes, and nothing else:
+# admission-baseline@1.2 with two changes, and nothing else:
 #
 #   1. No platform rows. Muse is no release platform, so it holds no release
 #      attestation to read; the baseline's `attestation` row would read
@@ -19,15 +19,15 @@
 # The count of 3 and the 180-day window are Steven's; the other numbers are the
 # baseline's placeholders, except the sat ceilings below, which keep the lift under
 # $10 for a Lightning deal as for a USD one (Sherlock2, on #168).
-# A merchant that refuses the card ask is read as serving no card (its card
+# A merchant that refuses to serve its card is read as serving none (its card
 # rows read not_read), so the lift applies to it as to one that never answered.
 #
 # Outcomes are quoted: YAML 1.1 reads a plain NO as false.
-pack_id: asg/admission_muse_buyer/1.1.0
-pack_version: 1.1.0
+pack_id: asg/admission_muse_buyer/1.2.0
+pack_version: 1.2.0
 scope:
   kind: admission
-source: "evidencebook-skills#154; evidencebook-skills#51; Steven's ruling 2026-11-17 (muse#314, What 1); evidencebook-skills#280"
+source: "evidencebook-skills#154; evidencebook-skills#51; Steven's ruling 2026-11-17 (muse#314, What 1); evidencebook-skills#280; evidencebook-skills#380, Steven's ruling 2026-11-25 (Q6: the pack asks for no served summary); evidencebook-skills#385, Steven's ruling 2026-11-26 (the T1 rows read the commerce card's band track record and dispute tally)"
 
 outcomes: ["GO", "ASK", "LIMIT", "NO"]
 # A missing input limits to T0; it is never a silent GO.
@@ -41,6 +41,7 @@ accept:
   USD: {band: USD, scale: 0}
   USDC: {band: USD, scale: 0}
   USDT: {band: USD, scale: 0}
+  BTC: {band: sat, scale: 8}     # a commerce card's bands are in the SR assetCode (profile §3.1)
 
 # A deal sits in the first tier whose ceiling for its band unit holds the
 # band's decade. Above the highest tier that names its unit nothing is
@@ -105,18 +106,22 @@ rows:
     from: T0
     on_fail: "record"
 
-  # T1: the card is required, fresh and witnessed, with claims held shown
-  # with their denominator and a controller declared. A missing or stale card
-  # is asked for (one ask answers every row that needs it); a refused or
-  # unanswered ask limits to T0, except for a merchant the own-settled lift covers
-  # (own-settled below): that one is not limited by these card rows.
+  # T1: the commerce card (standard_history/3) is required, fresh and
+  # witnessed, with a track record in the deal's band or one above it and a
+  # controller
+  # declared. A missing or stale card is asked for (one ask answers every row
+  # that needs it); a refused or unanswered ask limits to T0, except for a
+  # merchant the own-settled lift covers (own-settled below): that one is not
+  # limited by these card rows. 1.2.0: the pack asks for no served summary
+  # (Steven, 2026-11-25, Q6; #380), and the band row replaces claims-held
+  # (Steven, 2026-11-26; #385).
   - id: card-verified
     statement: The counterparty's card verifies under the key that presents it.
     source: card
     check: card.verified
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: served_summary/1}
+    ask: {derivation: standard_history/3}
   - id: card-fresh
     statement: The card's latest checkpoint is at most 7 days old.
     source: card
@@ -124,21 +129,21 @@ rows:
     params: {max_age_s: 604800}  # placeholder
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: served_summary/1}
+    ask: {derivation: standard_history/3}
   - id: card-witnessed
     statement: A witness in this pack's trust roots receipted the card's latest checkpoint.
     source: card
     check: card.witnessed
     from: T1
     on_fail: "LIMIT"
-  - id: claims-held
-    statement: The card shows at least 10 claims held, with the claims made as the denominator.
+  - id: band-history
+    statement: In one band at or above the deal's, the card shows at least 10 decided deals, of which at most 100 per thousand did not hold.
     source: card
-    check: card.claims_held
-    params: {min: 10}           # placeholder
+    check: card.band_history_or_stake
+    params: {k: 10, step_decades: 0, max_adverse_permille: 100}  # Steven's numbers (#385)
     from: T1
     on_fail: "LIMIT"
-    ask: {derivation: served_summary/1}
+    ask: {derivation: standard_history/3}
   - id: controller-declared
     statement: The card's key declares the controller it is bound to.
     source: card
@@ -153,10 +158,10 @@ rows:
     on_fail: "LIMIT"
 
   # Disputes about the counterparty with anyone, as its card shows (#280,
-  # Steven's ruling; profile section 3.3). A dispute decided against it limits;
-  # a verified card with no dispute tally is recorded and does not limit,
-  # Sherlock2's interim until the card asked for at T1 carries the tally
-  # (#281). Open disputes are recorded only: anyone can open one.
+  # Steven's ruling; profile section 3.3). A dispute decided against it
+  # limits, and so does a verified card with no dispute tally: the commerce
+  # card read at T1 carries the tally, which ends #281's interim (#385).
+  # Open disputes are recorded only: anyone can open one.
   - id: disputes-against
     statement: The counterparty's card shows no dispute about it decided against it, out of the disputes decided.
     source: card
@@ -164,7 +169,6 @@ rows:
     params: {max: 0}              # placeholder; LIMIT on any loss is Sherlock2's default
     from: T1
     on_fail: "LIMIT"
-    on_unread: "record"
   - id: open-disputes
     statement: The counterparty's card shows how many disputes about it are still open, out of all it received.
     source: card
