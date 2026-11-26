@@ -71,10 +71,23 @@ def read_card(bundle: Path) -> tuple[dict, dict, str]:
     return card, doc["extensions"]["x-standard-history/v0"]["as_of"], rec["key_id"]
 
 
-def publish_card(home: Path, p: pt.Party) -> Path:
-    """Write the party's shared card (as of its newest checkpoint) where buyers fetch it."""
+#: How long an on-demand publish waits for the witness to take its stamp, so the card carries its receipt (#350).
+CARD_STAMP_WAIT_S = 12
+
+
+def stamped(bundle: Path) -> bool:
+    """Whether a card bundle carries its witness's receipt for its anchor (evidencebook#957)."""
+    return pt.CARD_ANCHOR_WITNESS in json.loads(Path(bundle).read_text()).get("extensions", {})
+
+
+def publish_card(home: Path, p: pt.Party, keep_stamped: bool = False) -> Path:
+    """Write the party's shared card (as of its newest checkpoint) where buyers fetch it. With ``keep_stamped``, a card
+    whose newest checkpoint the witness has not taken yet does not replace a published one that carries its receipt
+    (#350): the witness takes checkpoints as it answers, and the next round publishes it once it has."""
     src = p.card_bundle(shared=True)
     dest = stage_dir(home) / "cards" / f"{p.name}.json"
+    if keep_stamped and pt.witnessed() and dest.is_file() and stamped(dest) and not stamped(src):
+        return dest
     wire.write_atomic(dest, src.read_bytes())
     return dest
 
@@ -209,10 +222,19 @@ class SellerAgent:
             time.sleep(left + 0.5)
 
     def republish(self, now: bool = False) -> None:
-        """Take a checkpoint (``now``: at once; otherwise if one is due) and publish the card as of the newest one."""
+        """Take a checkpoint (``now``: at once, waiting up to :data:`CARD_STAMP_WAIT_S` for the witness to take it;
+        otherwise if one is due) and publish the card as of the newest one. A due checkpoint the witness has not taken
+        yet leaves the published card in place until it has (:func:`publish_card`), so a buyer reads a card whose
+        time-stamp she can check; an on-demand one is published either way, since it is asked for its new counts."""
         try:
-            self.party.stamp() if now else self.party.tick()
-            publish_card(self.home, self.party)
+            if now:
+                try:
+                    self.party.wait_checkpoint(CARD_STAMP_WAIT_S)
+                except pt.WitnessSlow:
+                    pass  # published without its receipt; a later round publishes it once the witness takes it
+            else:
+                self.party.tick()
+            publish_card(self.home, self.party, keep_stamped=not now)
         except pt.Refused as exc:
             self.failed("publishing this seller's History card", exc)
 

@@ -64,6 +64,8 @@ class WitnessSlow(Refused):
     last tick's output goes to the party's own log (:meth:`Party.log`), never into a chat."""
 
 
+#: The card bundle's extension that carries its witness's receipt for its anchor (evidencebook#957).
+CARD_ANCHOR_WITNESS = "x-standard-history-anchor-witness/v0"
 #: Said when the card's time-stamp receipt does not check out under the witness's key.
 STAMP_FAILED = "its time-stamp receipt does not check out"
 

@@ -146,3 +146,81 @@ def test_a_partys_own_card_page_never_draws_a_failed_receipt_as_not_run(monkeypa
         pages.card_page(OwnCard(tmp_path, report("fail", verdict="INVALID")), "Alder Print Co.", rail="simulated",
                         seller=True)
     assert str(exc.value) == "Your History card does not verify: its time-stamp receipt does not check out."
+
+
+class Seller:
+    """A seller's party as publish_card and republish use it: its newest card, stamped or not, and its ticks."""
+    name = "alder"
+
+    def __init__(self, tmp_path, stamped: bool, slow: bool = False):
+        self.tmp_path, self.stamped, self.slow, self.calls = tmp_path, stamped, slow, []
+
+    def card_bundle(self, shared):
+        assert shared is True
+        ext = {"x-standard-history/v0": {}}
+        if self.stamped:
+            ext[pt.CARD_ANCHOR_WITNESS] = {"witnesses": [{}]}
+        path = self.tmp_path / "card-shared.json"
+        path.write_text(json.dumps({"extensions": ext, "n": len(self.calls)}))
+        return path
+
+    def tick(self):
+        self.calls.append("tick")
+
+    def wait_checkpoint(self, seconds, say=None):
+        self.calls.append(("wait", seconds))
+        if self.slow:
+            raise pt.WitnessSlow("slow")
+
+
+def published(home) -> dict:
+    return json.loads((flow.stage_dir(home) / "cards" / "alder.json").read_text())
+
+
+def test_a_due_checkpoint_the_witness_has_not_taken_keeps_the_stamped_card(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=True))
+    newer = Seller(tmp_path, stamped=False)
+    newer.calls = ["x"]
+    flow.publish_card(tmp_path, newer, keep_stamped=True)
+    assert pt.CARD_ANCHOR_WITNESS in published(tmp_path)["extensions"] and published(tmp_path)["n"] == 0
+    # once the witness has taken it, the next round publishes it
+    taken = Seller(tmp_path, stamped=True)
+    taken.calls = ["x", "y"]
+    flow.publish_card(tmp_path, taken, keep_stamped=True)
+    assert published(tmp_path)["n"] == 2
+
+
+def test_an_unstamped_card_is_published_when_none_stamped_is_there_or_no_witness_is_named(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=False), keep_stamped=True)
+    assert pt.CARD_ANCHOR_WITNESS not in published(tmp_path)["extensions"]
+    monkeypatch.setenv("ARD_WITNESS", "off")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=True))
+    newer = Seller(tmp_path, stamped=False)
+    newer.calls = ["x"]
+    flow.publish_card(tmp_path, newer, keep_stamped=True)
+    assert published(tmp_path)["n"] == 1
+
+
+@pytest.mark.parametrize("slow", [False, True])
+def test_an_on_demand_publish_waits_for_the_witness_then_publishes_its_new_counts(monkeypatch, tmp_path, slow):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=True))
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent.home, agent.party = tmp_path, Seller(tmp_path, stamped=False, slow=slow)
+    agent.party.calls = ["x"]
+    agent.failed = lambda what, exc: pytest.fail(f"{what}: {exc}")
+    agent.republish(now=True)
+    assert agent.party.calls == ["x", ("wait", flow.CARD_STAMP_WAIT_S)]
+    assert published(tmp_path)["n"] == 2  # asked for its new counts: published even without its receipt
+
+
+def test_a_due_republish_ticks_and_keeps_the_stamped_card(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARD_WITNESS", "public")
+    flow.publish_card(tmp_path, Seller(tmp_path, stamped=True))
+    agent = flow.SellerAgent.__new__(flow.SellerAgent)
+    agent.home, agent.party = tmp_path, Seller(tmp_path, stamped=False)
+    agent.failed = lambda what, exc: pytest.fail(f"{what}: {exc}")
+    agent.republish()
+    assert agent.party.calls == ["tick"] and published(tmp_path)["n"] == 0
