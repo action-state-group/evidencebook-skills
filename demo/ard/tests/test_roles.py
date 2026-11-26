@@ -292,3 +292,89 @@ def test_the_search_lines_in_mayas_chat_are_plain(monkeypatch):
     out = ds.ard_find_sellers()
     assert "listing checks out" in out and f"listing refused: {ard.NO_COMMITMENT}" in out and len(kept) == 2
     assert "commitment verified" not in out and "signature verifies" not in out and "REFUSED" not in out
+
+
+# -- the seller's ruling line (evidencebook-skills#360) -------------------------------------------------
+
+AGAINST_SELLER = RULED  # the adjudicator found the delivery not met, against the seller
+FOR_SELLER = {"rows": [{"id": "paid_as_agreed", "status": "agreed"},
+                       {"id": "delivered", "status": "ruled", "ruling": {"value": "met", "against": "buyer"}}]}
+
+
+STAMPED = "2026-11-26T05:49:28Z"
+
+
+def test_a_ruling_against_the_seller_says_the_witness_time_and_no_refund():
+    at = screens.local_time(STAMPED, date=True)  # this Mac's zone, as every time the windows show
+    assert screens.ruled_for_seller(AGAINST_SELLER, STAMPED) == [
+        f"Ruled against you: delivery not met. Time-stamped by Action State's witness at {at}. No refund: this "
+        "deal was agreed as not refundable."]
+    # the remedy is the one Maya's card shows for the same ruling
+    assert screens.ruled_for_buyer(AGAINST_SELLER, "Kestrel Print")[0].endswith(screens.NO_REFUND)
+
+
+def test_a_ruling_not_stamped_yet_says_so_and_never_a_time():
+    assert screens.ruled_for_seller(AGAINST_SELLER, "") == [
+        "Ruled against you: delivery not met. Not time-stamped by Action State's witness yet. No refund: this "
+        "deal was agreed as not refundable."]
+
+
+def test_a_ruling_for_the_seller_says_so_with_no_refund_line():
+    assert screens.ruled_for_seller(FOR_SELLER, STAMPED) == [
+        f"Ruled for you: delivery met. Time-stamped by Action State's witness at "
+        f"{screens.local_time(STAMPED, date=True)}."]
+    assert screens.ruled_for_seller({"rows": [{"id": "delivered", "status": "agreed"}]}, "") == []
+    neither = {"rows": [{"id": "delivered", "status": "ruled", "ruling": {"value": "met", "against": "no one"}}]}
+    assert screens.ruled_for_seller(neither, "") == [
+        "Ruled: delivery met. Not time-stamped by Action State's witness yet."]  # never "for" or "against" it then
+
+
+class Notes:
+    def __init__(self, notes):
+        self._notes = notes
+
+    def notes(self, kind):
+        return [{"statement": s} for k, s in self._notes if k == kind]
+
+
+def test_a_stamp_that_came_after_the_entry_is_the_rulings_time():
+    p = Notes([(flow.RULING_ENTERED, {"deal_id": "deal-a", "stamped_at": ""}),
+               (flow.RULING_ENTERED, {"deal_id": "deal-b", "stamped_at": "2026-11-26T05:49:28Z"}),
+               (flow.RULING_STAMPED, {"deal_id": "deal-a", "stamped_at": "2026-11-26T05:50:31Z"})])
+    assert flow.rulings_entered(p) == {"deal-a": "2026-11-26T05:50:31Z", "deal-b": "2026-11-26T05:49:28Z"}
+    assert flow.rulings_entered(Notes([(flow.RULING_ENTERED, {"deal_id": "deal-c", "stamped_at": ""})])) == {"deal-c": ""}
+
+
+def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_nothing(tmp_path, monkeypatch):
+    """Codex's plan review: a report that fails for one deal still shows the other ruling and the card."""
+    import party as pt
+    logged = []
+
+    class Party(Notes):
+        def report(self, deal_id):
+            if deal_id == "deal-1111111111111111":
+                raise pt.Refused("not ready")
+            return {"report": AGAINST_SELLER}
+
+        def log(self, line):
+            logged.append(line)
+
+        def card_bundle(self, shared):
+            return "card.json"
+    s = Seller(tmp_path).agent
+    s.party = Party([(flow.RULING_ENTERED, {"deal_id": "deal-1111111111111111", "stamped_at": ""}),
+                     (flow.RULING_ENTERED, {"deal_id": "deal-fedcba9876543210", "stamped_at": ""})])
+    s.say("the adjudicator's ruling on deal fedcba98 entered in this party's records")
+    monkeypatch.setattr(ds, "seller", lambda: s)
+    monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 11, "did_not_hold": 1}}, None, None))
+    out = ds.ard_seller_activity()
+    assert "ruling on deal 11111111: its report is not ready yet; ask again in a minute." in out
+    assert ("ruling on deal fedcba98: Ruled against you: delivery not met. Not time-stamped by Action State's "
+            "witness yet. No refund: this deal was agreed as not refundable.") in out
+    assert "now: 11 deals, 1 didn't go as agreed." in out
+    assert logged and "not ready" in logged[0]
+    # Codex's PR review: a stamp that comes back after the entry shows on the next ask
+    s.party._notes.append((flow.RULING_STAMPED, {"deal_id": "deal-fedcba9876543210", "stamped_at": STAMPED}))
+    assert (f"ruling on deal fedcba98: Ruled against you: delivery not met. Time-stamped by Action State's "
+            f"witness at {screens.local_time(STAMPED, date=True)}. No refund: this deal was agreed as not refundable."
+            ) in ds.ard_seller_activity()

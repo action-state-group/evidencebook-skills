@@ -215,10 +215,17 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert b.seller_of(w["maya"])(deal.deal_id) == "kestrel"
     assert _fresh(w, deal.deal_id)["ruling"]["against"] == "seller"
 
+    # Kestrel's ruling line, from its own report and the stamp time its agent noted (#360): the remedy Maya's card shows
+    kestrel, ticks = w["agents"]["kestrel"].party, [None]
+    entered = flow.rulings_entered(kestrel)
+    assert list(entered) == [deal.deal_id]
+    rep = kestrel.report(deal.deal_id)
+    seller_line = screens.ruled_for_seller(rep.get("report", rep), entered[deal.deal_id])
+    assert len(seller_line) == 1 and seller_line[0].startswith("Ruled against you: delivery not met. ")
+    assert seller_line[0].endswith(screens.NO_REFUND)
+
     # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence), as its agent's
     # republish(now=True) does; the tick is kept to say whether the witness had taken the stamp
-    kestrel, ticks = w["agents"]["kestrel"].party, [None]
-
     def kestrel_card():
         ticks[0] = try_tick(kestrel.stamp)  # a refusal is tried again next round, as the agent's republish does
         published = try_tick(lambda: {"card": flow.publish_card(w["home"], kestrel)})
