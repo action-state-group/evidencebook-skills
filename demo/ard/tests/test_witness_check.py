@@ -166,7 +166,7 @@ def test_no_answer(witness_on, monkeypatch, cert, tmp_path):
         hang.set()
         srv.shutdown()
     assert posts
-    assert r == wc.Result(False, "Action State's witness did not answer a test stamp in time.")
+    assert r == wc.Result(False, "Action State's witness did not answer a test stamp within 3 seconds.")
 
 
 def test_main_says_one_line(witness_on, monkeypatch, capsys):

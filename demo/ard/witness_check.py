@@ -75,13 +75,13 @@ def classify(tick: dict) -> Result | None:
     return None
 
 
-def last_reason(tick: dict) -> str:
+def last_reason(tick: dict, wait_s: float = WAIT_S) -> str:
     """The plain line for a wait that ended without a stamp taken, from the last tick's pending rows."""
     reasons = {p.get("reason"): p.get("text", "") for p in tick.get("pending") or []}
     if "network_consent_needed" in reasons:
         return f"{WITNESS_NAME} could not be reached: check this Mac's network."
     if "witness_timeout" in reasons:
-        return f"{WITNESS_NAME} did not answer a test stamp in time."
+        return f"{WITNESS_NAME} did not answer a test stamp within {round(wait_s)} seconds."
     for reason, text in reasons.items():
         if reason in ("witness_error", "refused") and (code := _status(text)):
             return f"{WITNESS_NAME} answered a test stamp with an error (HTTP {code})."
@@ -113,8 +113,7 @@ def check(say: Callable[[str], None] = print, log: Path | None = None, endpoint:
                 prof.write_text(re.sub(r"(?m)^(\s*endpoint:).*$", rf"\1 {endpoint}", prof.read_text()))
         except Refused as exc:
             note(f"deal init: {exc}")
-            return Result(False, "The witness check could not make its test log: capsulectl-deal refused "
-                                 "(is the set-up done?).")
+            return Result(False, "The witness check could not make its test log: capsulectl-deal refused it.")
         stop, tick = time.monotonic() + wait_s, {}
         while True:
             try:
@@ -127,7 +126,7 @@ def check(say: Callable[[str], None] = print, log: Path | None = None, endpoint:
             if (r := classify(tick)) is not None:
                 return r
             if time.monotonic() >= stop:
-                return Result(False, last_reason(tick))
+                return Result(False, last_reason(tick, wait_s))
             time.sleep(min(2.0, max(0.0, stop - time.monotonic())))
     finally:
         shutil.rmtree(home, ignore_errors=True)
