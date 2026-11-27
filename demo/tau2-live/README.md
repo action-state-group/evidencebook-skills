@@ -43,27 +43,25 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
 
 ## What you need
 
-- macOS or Linux, [uv](https://docs.astral.sh/uv/), Go 1.24+ (only to build capsule-engine).
+- macOS or Linux, [uv](https://docs.astral.sh/uv/), Go 1.27+ (to build capsulectl, its plugins and capsule-engine).
 - [Goose](https://block.github.io/goose/) 1.59 or later, with a working provider. The demo was
   run with the `claude-acp` provider (`goose configure`). The `goose` command must be on
   `PATH`, or Goose Desktop must be installed at `/Applications/Goose.app`.
 - capsulectl, its deal and book plugins, and capsule-engine (the admission decision a deal
-  opens under). The commands below put them in this directory's `.tools`, so nothing outside
-  it changes; the `export` line is needed in every shell you run the demo from. Use the
-  `linux-amd64` or `linux-arm64` assets on Linux.
+  opens under). The commands below build them into this directory's `.tools`, so nothing
+  outside it changes; the `export` line is needed in every shell you run the demo from. They
+  are built at the commits the demo is tested at: the report asks the store for a stamp
+  (`deal tick --now`), which no capsulectl release has yet. `go install` checks each module
+  against Go's checksum database (sum.golang.org), as the release downloads were checked
+  against their SHA256SUMS.
 
   ```sh
   cd demo/tau2-live
-  V=v0.1.0-rc53; P=darwin-arm64
-  mkdir -p .tools/bin .tools/plugins .tools/dl
-  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-$P" -p SHA256SUMS -D .tools/dl
-  gh release download capsulectl/$V -R action-state-group/evidencebook -p "capsulectl-deal-$V-$P" -p "capsulectl-book-$V-$P" -p SHA256SUMS -D .tools/dl/eb
-  (cd .tools/dl && grep " capsulectl-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
-  (cd .tools/dl/eb && grep -E " capsulectl-(deal|book)-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
-  install -m 755 .tools/dl/capsulectl-$V-$P .tools/bin/capsulectl
-  install -m 755 .tools/dl/eb/capsulectl-deal-$V-$P .tools/plugins/capsulectl-deal
-  install -m 755 .tools/dl/eb/capsulectl-book-$V-$P .tools/plugins/capsulectl-book
+  EB=fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f; CLI=052a8a6a7de4360a9e18b1269ba558bf71d0fef2
+  mkdir -p .tools/bin .tools/plugins
   chmod 755 .tools/plugins
+  GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-cli/cmd/capsulectl@$CLI
+  GOBIN=$PWD/.tools/plugins go install github.com/action-state-group/evidencebook/capsulectl/cmd/capsulectl-deal@$EB github.com/action-state-group/evidencebook/capsulectl/cmd/capsulectl-book@$EB
   GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@v0.6.0
   export PATH=$PWD/.tools/bin:$PATH CAPSULECTL_PLUGIN_ROOTS=$PWD/.tools/plugins
   capsulectl plugin ls | grep -o '"name":"[a-z]*"'    # "book" and "deal"
@@ -81,7 +79,7 @@ uv sync
 uv run python roleplay.py --task 40          # one live case; prints the case directory
 CASE=$(ls -dt state/cases/* | head -1)
 uv run python evaluate.py "$CASE"            # the evaluator's signed verdict
-uv run python report.py "$CASE"              # waits for the store's checkpoint (up to about 6 minutes)
+uv run python report.py "$CASE"              # stamps the store, then seals and verifies the report
 capsulectl deal verify --bundle "$CASE/report/bundle-keep.json"          # verdict VALID
 capsulectl deal verify --bundle "$CASE/report/bundle-adjudicator.json"   # verdict VALID
 open "$CASE/report/report.html"
@@ -92,8 +90,8 @@ uv run python export_walkthrough.py "$CASE"  # then open walkthrough/index.html
 one confirmed write, so it shows the gate, the act and the span join. A live run differs each
 time: the agents are models.
 
-`report.py` waits for the store's next checkpoint, because a report rests on one. The cadence
-ticks about every five minutes. Ctrl-C during `roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
+`report.py` stamps the store first, because a report rests on a checkpoint that covers the
+whole case; the store is made with `--no-witness`, so the stamp is a local checkpoint only and no outside party sees it. Ctrl-C during `roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
 marked `stopped` or `error` in its `case.json`, and the next run opens a new case. `evaluate.py`
 and `report.py` refuse a case that did not complete unless given `--allow-incomplete`. Goose
 keeps each run's two sessions (`<case>-airline`, `<case>-customer`) in its own session store;
@@ -115,7 +113,7 @@ instead runs on a fixture store with two ended months and one deal placed in eac
 (`range/fixture`, copied unchanged from evidencebook#853: `git archive
 3d55909f860e166f065ae854eb4cf2ec57627a3a capsulectl/internal/deal/testdata/deal/window-store`;
 its `PROVENANCE.md` says how it was made). It follows evidencebook's
-`capsulectl/cmd/window_store_cli_test.go` with the released rc53 binaries only, on a copy of the
+`capsulectl/cmd/window_store_cli_test.go` with the binaries installed above only, on a copy of the
 store. From `demo/tau2-live`, in a shell with the `export` line above:
 
 ```sh
@@ -177,7 +175,7 @@ checks both. What it does not show:
 - **Core verify does not run the deal rule.** `capsulectl deal verify --bundle` runs core's checks
   (signatures, record identity, the checkpoint, the disclosures) and the x-deal-v1 report rule;
   that is the check this demo reports. Core `capsulectl verify --bundle` alone does not run
-  that rule: on rc53 it answers VALID for the generic checks only (signatures, record identity, the checkpoint, the disclosures), with a "Not checked here" note naming
+  that rule: at the pinned capsulectl it answers VALID for the generic checks only (signatures, record identity, the checkpoint, the disclosures), with a "Not checked here" note naming
   x-deal-v1; `report.py` keeps its result too.
 - **The judge is not the rubric's pinned judge.** `evaluate.py` defaults to `goose_judge.py`:
   the model your Goose provider runs reads the conversation and the policy and answers each of

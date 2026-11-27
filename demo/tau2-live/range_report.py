@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A report over a range of ended windows, with its coverage check, on released capsulectl.
+"""A report over a range of ended windows, with its coverage check, on capsulectl.
 
     uv run python range_report.py WORK_DIR [--without-deal-answers]
 
@@ -7,7 +7,7 @@ The airline's windowed deal store is `deal init --window month`; a report over a
 windows asks the holder (the airline) one answer per window and one per deal placed in it, then
 checks the range is covered. capsulectl has no external clock, so a store made in real time has
 only its open window. This runs on the committed fixture (range/fixture, from evidencebook#853:
-two ended months, one deal placed in each), on a copy, with the released binaries only:
+two ended months, one deal placed in each), on a copy, with the capsulectl binaries only:
 
   deal window chain          the chain of the ended windows, each placed deal proved to extend
                              its tree at the window's close
