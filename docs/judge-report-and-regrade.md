@@ -4,8 +4,9 @@ The custody and record-kind profile v0 (the
 [evidencebook#116 design note](https://github.com/action-state-group/evidencebook/issues/116#issuecomment-7202305315),
 section 3) reserves two record kinds and names this repository as their producer:
 `judge_report` and `regrade`. This page gives their contents. It follows Steven's
-answer to the note's Q3 (ops DECISION u647, 2026-11-26): a re-grade sits beside the
-judged row and never replaces it, so both grades stay visible.
+answer to the note's Q3 (ops DECISION u647, 2026-11-26): "re-grade sits beside the
+judged row, never replaces". So both grades stay readable: `scripts/regrade.py rows`
+shows them side by side.
 
 ## `judge_report`: the judged clause report
 
@@ -68,8 +69,10 @@ and reason. `scripts/regrade.py seal` seals it.
   compiled contract: its `contract_ref`, and its `pack_source_digest` when the row
   has one, must match the row's, its switch `out_of_scope_verdict` must be on, and
   the clause must not be `never_out_of_scope`.
-- **Refused:** a row that is not a `judge_report`, a regrade of a regrade, a row that
-  does not verify, an empty reason and a missing rater. A refusal seals nothing.
+- **Refused:** a row that is not a `judge_report`, a regrade of a regrade, an empty
+  reason and a missing rater. A refusal seals nothing. A row that does not verify, or
+  whose signer is not trusted, also seals nothing: `seal` stops with
+  `evidence unavailable`.
 - **Re-runs.** `--at` fixes the capsule's timestamp, so the same regrade sealed again
   is the same capsule.
 - **The reason is sealed for good.** Before sealing, `seal` tells the rater that the

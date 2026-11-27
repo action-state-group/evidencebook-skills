@@ -2,8 +2,8 @@
 
 The custody and record-kind profile v0 (evidencebook#116 design note, section 3)
 reserves two names with this repository as producer: `judge_report` and `regrade`.
-Steven's ruling Q3 (ops DECISION u647): "A `regrade` sits beside the judged row and
-never replaces it, so both grades stay visible."
+Steven's ruling Q3 (ops DECISION u647, 2026-11-26): "re-grade sits beside the judged
+row, never replaces".
 
 - `judge_report` is the clause report daily-judge-and-close already seals
   (`clause-report/v1`, and `evaluation-report/v1` before 2026-11-03, read by shape:
@@ -46,9 +46,8 @@ REGRADE = "regrade"
 URN = "urn:evidencebook-skills:regrade"
 DEVELOPER = "evidencebook-skills/regrade"
 GRADES = ("met", "not_met", "not_evaluable")
-# Told to the rater before anything is sealed (Sherlock2's door confirmation,
-# buzz://message?channel=0d760ea3-529d-4dec-b309-24184967f8e0&id=fd7ee7db172b40b20d32a67e85c487f06ba17694147d691db5dbd4ed0a00e2ba):
-# the reason is a person's own words, and they stay for good.
+# Told to the rater before anything is sealed (Sherlock2's door confirmation for
+# evidencebook#116 PR 9): the reason is a person's own words, and they stay for good.
 REASON_NOTICE = ("Your reason is sealed with this regrade. Once sealed it cannot be edited or removed, "
                  "and it travels with the judged row.")
 OUT_OF_SCOPE = "out_of_scope"
@@ -220,7 +219,7 @@ def main(argv):
     s = sub.add_parser("seal", help="seal one regrade of a judged row")
     s.add_argument("--profile", required=True)
     s.add_argument("--row", required=True, help="the judged row's capsule id")
-    s.add_argument("--grade", required=True)
+    s.add_argument("--grade", required=True, help="met, not_met or not_evaluable; out_of_scope only with --spec")
     s.add_argument("--reason", required=True)
     s.add_argument("--rater-ref", required=True, help="an opaque principal reference, never a name")
     s.add_argument("--at", required=True, help="the regrade's time, fixed into the capsule (RFC 3339, UTC)")
