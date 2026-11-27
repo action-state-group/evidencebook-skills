@@ -351,8 +351,12 @@ def test_without_a_form_the_tool_returns_the_question_and_the_exact_reply(monkey
     no_form(monkeypatch)
     out = call_typed(monkeypatch, {"agent-session-id": "chat-1"})
     assert out.startswith("before the question")
-    assert "Approve this payment. Pay Kestrel Print 1,000 msat." in out
-    assert "type exactly: Buy anyway" in out and "means Don't buy" in out and "call ard_confirm" in out
+    # Sherlock2 on #433: the words to show are fenced, and the agent's own instructions stay outside the fence
+    fence = "-" * 40
+    shown = out.split(fence)[1]
+    assert "Approve this payment\nPay Kestrel Print 1,000 msat." in shown
+    assert "type exactly: Buy anyway" in shown and "means Don't buy" in shown
+    assert "ard_confirm" not in shown and "call ard_confirm" in out.split(fence)[2]
 
 
 @pytest.mark.parametrize("reply,expected", [

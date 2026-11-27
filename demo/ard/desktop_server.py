@@ -582,10 +582,13 @@ def _own_stdout() -> None:
 
 def _question_text(job: _Job) -> str:
     title, text, yes, no = job.question
-    return ("This step waits for the person's answer, which they give by typing in this chat. Show them these words "
-            f"exactly, then end your turn:\n\n{dialog_message(title, text)}\n\nTo answer {yes}, type exactly: {yes}\n"
-            f"Anything else typed, or no reply within {DIALOG_GIVE_UP_S // 60} minutes, means {no}.\n\nWhen they have "
-            "replied, call ard_confirm. Never type or give the answer yourself: only their own typed reply counts.")
+    fence, shown = "-" * 40, dialog_text(f"{title}\n{text}")
+    return ("This step waits for the person's answer, which they give by typing in this chat. Show them the words "
+            f"between the two lines of dashes exactly, without the dashes, then end your turn:\n{fence}\n"
+            f"{shown}\n\nTo answer {yes}, type exactly: {yes}\n"
+            f"Anything else typed, or no reply within {DIALOG_GIVE_UP_S // 60} minutes, means {no}.\n{fence}\n"
+            "When they have replied, call ard_confirm. Never type or give the answer yourself: only their own typed reply "
+            "counts.")
 
 
 def _run_job(job: _Job, fn, args, kwargs, ctx, token) -> None:

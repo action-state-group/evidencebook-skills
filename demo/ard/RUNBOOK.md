@@ -141,7 +141,7 @@ The testbed (evidencebook-skills#382) brings up every role of the deal, each on 
    (cd ~/ard-demo/evidencebook-skills && .venv/bin/python demo/ard/testbed.py down)
    ```
 
-   **Expect:** "removed …" and, with the local witness, "stopped the testbed's local witness (pid …)". Its tmux session `ard-testbed` is closed with them.
+   **Expect:** "removed …" and, with the local witness, "stopped the testbed's local witness (pid …)". The tmux session `ard-testbed` and its four screens close too.
 
 ## In every terminal
 
@@ -233,9 +233,9 @@ The testbed (evidencebook-skills#382) brings up every role of the deal, each on 
 
 Type in Maya's window unless a step names another; each step takes 30 to 60 s. Cmd+` moves between windows.
 
-**The dialogs.** Each dialog (Set limit, Pay or Buy anyway, Dispute, Received, Rule) appears inside that party's own Goose window, under its chat: the dialog's words, then "Your answer", preset to the safe choice (Cancel, or Don't buy), and a Submit button. To answer, choose the answer under "Your answer" and click Submit; Submit with nothing changed sends the safe choice. Answer within 5 minutes: Goose ends a form nobody submitted after 5 minutes ("This request has expired. The extension will need to ask again."), the step then does nothing (the safe choice), and Maya's agent says the request timed out; ask for the step again to see the dialog again. Only an answer submitted in the window counts. The window's agent cannot see or answer a dialog: none of its tools gives an answer, and the answer goes from the window straight to the party's own records.
+**The dialogs.** Each dialog (Set limit, Pay or Buy anyway, Dispute, Received, Rule) appears inside that party's own Goose window, under its chat: the dialog's words, then "Your answer", preset to the safe choice (Cancel, or Don't buy), and a Submit button. To answer, choose the answer under "Your answer" and click Submit; Submit with nothing changed sends the safe choice. Answer within 5 minutes: Goose ends a form nobody submitted after 5 minutes and fails the step's call (in the hand run of #433 the call answered "request timeout after PT300S"); the step then does nothing (the safe choice), and Maya's agent says the request timed out. Ask for the step again to see the dialog again. Only an answer submitted in the window counts. The window's agent cannot see or answer a dialog: none of its tools gives an answer, and the answer goes from the window straight to the party's own records.
 
-**With Claude Code ACP, a typed reply instead.** Goose cannot show the form to a Claude Code window, so Maya's agent shows the dialog's words in the chat, word for word, with the exact reply that says yes (for example "To answer Buy anyway, type exactly: Buy anyway"), and stops. Type that reply as your next message to say yes; anything else you type, or no reply within 10 minutes, is the safe choice (Cancel, or Don't buy). The demo reads your reply from Goose's own record of the chat, which only typing in the window writes, never from the agent, and seals it with your answer ("Answered by a typed reply in the chat: …"). After your reply Maya's agent calls `ard_confirm`, which carries on the step. So in the steps below, "choose X and click Submit" means typing X with Claude Code ACP.
+**With Claude Code ACP, a typed reply instead.** Goose cannot show the form to a Claude Code window, so Maya's agent shows the dialog's words in the chat, word for word, with the exact reply that says yes (for example "To answer Buy anyway, type exactly: Buy anyway"), and stops. Type that reply as your next message to say yes; anything else you type, or no reply within 10 minutes, is the safe choice (Cancel, or Don't buy). The demo reads your reply from Goose's own record of the chat, which only typing in the window writes, never from the agent, and seals it with your answer ("Answered by a typed reply in the chat: …"). After your reply Maya's agent calls `ard_confirm`, which carries on the step. So in the steps below, for Maya's dialogs, "choose X and click Submit" means typing X with Claude Code ACP. The adjudicator's Rule dialog has no typed reply: with Claude Code ACP it ends "the dialog could not be shown", and no ruling is recorded; run the Rule step with a provider Goose runs itself.
 
 1. Say the opening line (simulated rail; on the real rail say the payments are real and small).
 
@@ -446,7 +446,7 @@ An agent with a terminal can run the command blocks for you: the set-up script (
 - Goose's Trust and Execute prompts, every macOS permission prompt and tiling the windows by hand (Before each run step 6);
 - the run itself: typing in the windows and answering every dialog (Set limit, Pay or Buy anyway, Received, Dispute, Rule). Only an answer submitted in a party's window, or typed there as Maya's reply, answers its dialog.
 
-While the demo's windows are open, an agent that drives this guide with screen control (computer use) can submit the windows' dialogs and type the replies. Let it answer only in a run on the simulated rail, where it stands in for you as the tester; on the real rail, or in any run for an audience, the agent that drives this guide has no screen control, and you answer every dialog yourself.
+While the demo's windows are open, the agent that drives this guide must not have screen control (computer use): with it, it could answer a dialog itself. Run the run's steps yourself.
 
 ## Troubleshooting
 
