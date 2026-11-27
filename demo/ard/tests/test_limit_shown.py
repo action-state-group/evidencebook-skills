@@ -320,8 +320,10 @@ def test_a_held_order_nobody_answered_is_never_called_a_decline(monkeypatch):
     assert not ds.session().declined
 
 
-def test_a_refusal_the_demo_writes_stays_whole_and_raw_output_still_does_not():
+def test_a_refusal_the_demo_writes_stays_whole_and_raw_output_still_does_not(tmp_path, monkeypatch):
     import desktop_server as ds
+
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))  # the raw refusals go to this home's agent.log, not a real demo's
 
     long = "The Everyday Rules held this order for your OK, and nothing was paid: " + "a reason; " * 60
     assert ds._refusal(ds.Said(long)) == long

@@ -36,9 +36,12 @@ def test_the_limit_question_comes_after_the_search_and_one_yes_sets_only_the_lim
     assert "your yes sets the limit and nothing more" in step
 
 
-def test_dont_buy_quotes_the_holds_sentence_and_the_order_again_question():
-    """#412 and #414: the spending-limit section quotes what Maya says after Don't buy, from the code's own words."""
+def test_dont_buy_quotes_the_holds_sentence_and_the_order_again_question(monkeypatch):
+    """#412 and #414: the spending-limit section quotes what Maya says after Don't buy, from the code's own words, on
+    the simulated rail the RUNBOOK's run uses (Codex on #415: not the caller's ARD_RAIL)."""
     import desktop_server as ds
+
+    monkeypatch.setenv("ARD_RAIL", "fake")
 
     reasons = ["over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
                "no earlier payment to this merchant from this profile", "the payment is not refundable"]
@@ -48,3 +51,10 @@ def test_dont_buy_quotes_the_holds_sentence_and_the_order_again_question():
     assert f'"{question}"' in step
     assert "does not offer to change your spending limit" in step
     assert _step(4, "## The spending limit: an order over it").startswith("Answer her question:")
+
+
+def test_the_order_again_question_says_real_money_on_a_real_rail(monkeypatch):
+    import desktop_server as ds
+
+    monkeypatch.setenv("ARD_RAIL", "lightning")
+    assert "for 2,000 msat, over Lightning, which moves real money?" in ds.held_declined("Alder Print Co.", 2000)

@@ -245,7 +245,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
    I am Maya. I need 200 conference badges by Friday, under 3,000 msat (a msat is a thousandth of a satoshi: a token amount). Find sellers for me.
    ```
 
-   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat. Maya's agent then asks, in one short question, whether 3,000 msat should be your spending limit, and stops there: no History card and no assessment yet. Until you set it, she calls it the most you said you'd pay, never your limit. It is not your limit until you say yes and click Set limit. Type, then answer the dialog (it waits 10 minutes):
+   **Expect:** the search, then both sellers' entries and signatures checked: Alder 2,000 msat, Kestrel 1,000 msat. Maya's agent then asks, in one short question, whether 3,000 msat should be your spending limit, and stops there: no History card and no assessment yet. Until you set it, she calls it the most you said you'll pay, never your limit. It is not your limit until you say yes and click Set limit. Type, then answer the dialog (it waits 10 minutes):
 
    ```
    Yes.
