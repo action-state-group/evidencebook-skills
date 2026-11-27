@@ -190,7 +190,8 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     found = ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
     # #413: the search ends on the limit question, before any card or assessment (Steven's hand runs, 2026-11-26)
     assert found.endswith("\n\n" + ds.LIMIT_FIRST)
-    assert "No spending limit is set yet" in ds.ard_assess()
+    unset = ds.ard_assess()
+    assert "No spending limit is set yet" in unset and ds.NO_SUMS not in unset
     dialogs = []
 
     def answer(how):
@@ -216,6 +217,7 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     assert rin.notes(limits.LIMIT_SET)[-1]["statement"]["said"].endswith("waits for your OK.\nAnswer: Set limit")
     assessed = ds.ard_assess()
     assert "Your spending limit: 4,500 msat" in assessed
+    assert ds.NO_SUMS in assessed  # the 7-day total is the payment check's to say (#415's hand run)
     assert assessed.splitlines()[-1].endswith("Over your limit of 4,500 msat for one order: the order would wait for "
                                               "your OK at payment.")
 
@@ -338,3 +340,26 @@ def test_the_limit_tool_never_offers_a_limit_on_its_own():
 
     doc = " ".join(ds.ard_set_limit.__doc__.split())
     assert "Never propose a new or higher limit yourself, after a held order included" in doc
+
+
+def test_maya_s_receipt_page_answer_says_the_ruling_the_page_shows(tmp_path, monkeypatch):
+    """#411's hand run: after "Open your receipt as a page." on her ruled Kestrel deal, Maya said the update did not say
+    how the adjudicator ruled. The answer now carries the ruling, as her card does (screens.ruled_for_buyer)."""
+    import types
+
+    import buyer
+    import desktop_server as ds
+    import pages
+    import receipt
+
+    deal = buyer.Deal("deal-0123456789abcdef", "kestrel", "k", 1000, "o", "fake", "maya")
+    ruled = {"rows": [{"id": "delivered", "status": "ruled", "ruling": {"value": "not_met", "against": "seller"}}]}
+    p = types.SimpleNamespace(report=lambda deal_id: {"report": ruled}, log=lambda line: None)
+    monkeypatch.setattr(ds, "ROLE", "maya")
+    monkeypatch.setattr(ds, "_own_deal", lambda: (p, "Maya", deal.deal_id))
+    monkeypatch.setattr(ds, "session", lambda: types.SimpleNamespace(latest=lambda: deal, log=[]))
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "page.html")
+    monkeypatch.setattr(pages, "open_page", lambda path: True)
+    out = ds.ard_open_receipt_page()
+    assert out.endswith("deal 01234567 with Kestrel Print: " + screens.ruled_for_buyer(ruled, "Kestrel Print")[0])

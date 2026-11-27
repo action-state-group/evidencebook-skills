@@ -327,7 +327,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
     **Expect:** "11 deals, 1 didn't go as agreed. Disputes others raised about it: 1 decided against it, of 1 decided; 0 open.", then "Its first 10 deals are sample history the operator made before this run." The card is stamped when you ask, so it counts at once; if the deal's outcome still shows 0 that didn't go as agreed, ask again: it can follow the dispute's count by one stamp.
 
 13. Cmd+` back to Maya's window, type `Open your receipt as a page.`
-    **Expect:** a browser page "Deal report" for her deal with Kestrel Print, with the seal "Didn't go as agreed" and the top line "Ruled: Delivery not met": the adjudicator's ruling is final, so the receipt shows it. (The page at step 15, Alder's deal, is still open to dispute, so it has no seal.) If it says the receipt page is not ready yet, ask again in a minute. Then type:
+    **Expect:** a browser page "Deal report" for her deal with Kestrel Print, with the seal "Didn't go as agreed" and the top line "Ruled: Delivery not met": the adjudicator's ruling is final, so the receipt shows it. Maya says the same: "Ruled for you: delivery not met, against Kestrel Print. No refund: this deal was agreed as not refundable." (The page at step 15, Alder's deal, is still open to dispute, so it has no seal.) If it says the receipt page is not ready yet, ask again in a minute. Then type:
 
     ```
     Order 200 more badges. Show me each seller's History card again, then assess both.

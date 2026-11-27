@@ -377,6 +377,10 @@ def ard_find_sellers(ask: str) -> None:
 LIMIT_FIRST = ("No spending limit is set yet. Before anything else, ask Maya in one short question whether the most she "
                "said she will pay should be her spending limit, and end your turn: show no History card and assess "
                "nothing until she answers. Until she sets it, it is not her limit: never call it her limit.")
+#: For Maya's agent beside the assessment: the 7-day total is the payment check's to say (evidencebook-skills#415's
+#: hand run: "Your 7-day total only allows one of these", of 1,000 and 2,000 msat under a 3,000 msat limit).
+NO_SUMS = ("Never add up prices or payments against the limit yourself: say only what these lines and the payment check "
+           "say.")
 #: After the limit dialog: one yes sets the limit and nothing more (#413).
 LIMIT_SET_THEN = "Tell Maya what the limit is now, and end your turn: wait for her next request."
 
@@ -432,6 +436,8 @@ def ard_assess() -> None:
     print(f"The assessment rules: {screens.PACK_NOTE}")  # its version and digest are in the buyer's assessment records
     print(screens.limit_line(limit, _ceilings(p)))
     print(f"({screens.ASSESSMENT_NOTE})")
+    if limit is not None:  # the hand run of #415: Maya added up the two prices herself, and got the 7-day limit wrong
+        print(NO_SUMS)
     cards = [ev for ev in s.evidence.values() if ev.read is not None]
     print(f"({screens.operator_note(sum(ev.read.witness_status == 'pass' for ev in cards), len(cards))})\n")
     for e in s.entries:
@@ -922,6 +928,15 @@ def ard_open_receipt_page() -> None:
     opened = pages.open_page(path)
     print(f"{name}: its receipt page " + ("opened in the browser on the presenter's screen; nothing else is needed "
                                           "(do not copy or link the file)" if opened else "written (not opened)") + f": {path}")
+    if ROLE not in SELLERS:  # what a ruled deal's page shows at its top, said here too (#411's hand run)
+        d = session().latest()
+        try:
+            rep = p.report(deal_id)
+        except pt.Refused as exc:
+            p.log(f"report of {deal_id} for the receipt page: {exc!r}")
+        else:
+            for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
+                print(f"deal {deal_id[5:13]} with {SELLERS[d.seller]['label']}: {line}")
 
 
 @_tool("maya", "alder", "kestrel")
