@@ -55,7 +55,9 @@ way.
   judged with `scripts/judge_bundle.py`, not the skills. Beside each Result it
   writes a judge sidecar, `<result>.judge.json` (format `judge-sidecar/v1`,
   described in [`docs/jev-judge.md`](docs/jev-judge.md)), recording which rows
-  the judge was sent.
+  the judge was sent. A person may re-grade a judged row with
+  `scripts/regrade.py`; the regrade sits beside the row and never replaces it
+  ([`docs/judge-report-and-regrade.md`](docs/judge-report-and-regrade.md)).
   `inference-deals` (a Mesh node's come-through terms, card `settlement`) is a
   deterministic pack: it names an `evaluator` instead of a judge, compiles to
   `compiled.json` alone under `packs/inference-deals/compiled/`, and
