@@ -61,6 +61,10 @@ class Store:
     window: str = "month"
     capsulectl: str = "capsulectl"
     capsule_engine: str = "capsule-engine"
+    # The store's checkpoint interval (a Go duration, at least 1m), written into its profile when
+    # the store is created, with no jitter. None keeps capsulectl's cadence: a tick every 5m, give
+    # or take 1m. The scripted test sets 1m so its report waits a minute, not five (#427).
+    cadence: str | None = None
 
     def env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -90,6 +94,10 @@ class Store:
             self.run("deal", "init", "--dir", str(directory), "--no-witness", "--window", self.window,
                      "--materiality", "builtin:neutral", profile=self.holder)
             self.run("deal", "set-version", "x-deal-v1", "--migrate", profile=self.holder)
+            if self.cadence:
+                # capsulectl has no flag for the cadence; it reads the profile's cadence block.
+                with open(self.state / "config" / "capsule" / "profiles" / f"{self.holder}.yaml", "a") as f:
+                    f.write(f"cadence:\n    interval: {self.cadence}\n    jitter: 0s\n")
         have = self.run("deal", "window", "list", profile=self.holder)["window"]
         if have != self.window:
             raise RecordError(f"the store in {self.state / 'books' / self.holder} has window {have!r}, fixed when it was "
