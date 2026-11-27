@@ -51,7 +51,9 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
   opens under). The commands below build them into this directory's `.tools`, so nothing
   outside it changes; the `export` line is needed in every shell you run the demo from. They
   are built at the commits the demo is tested at: the report asks the store for a stamp
-  (`deal tick --now`), which no capsulectl release has yet.
+  (`deal tick --now`), which no capsulectl release has yet. `go install` checks each module
+  against Go's checksum database (sum.golang.org), as the release downloads were checked
+  against their SHA256SUMS.
 
   ```sh
   cd demo/tau2-live
@@ -89,7 +91,7 @@ one confirmed write, so it shows the gate, the act and the span join. A live run
 time: the agents are models.
 
 `report.py` stamps the store first, because a report rests on a checkpoint that covers the
-whole case; the store keeps no witness, so the stamp shows no one anything. Ctrl-C during `roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
+whole case; the store is made with `--no-witness`, so the stamp is a local checkpoint only and no outside party sees it. Ctrl-C during `roleplay.py` (or a Goose error) stops the case: the turns said so far stay sealed, the case is
 marked `stopped` or `error` in its `case.json`, and the next run opens a new case. `evaluate.py`
 and `report.py` refuse a case that did not complete unless given `--allow-incomplete`. Goose
 keeps each run's two sessions (`<case>-airline`, `<case>-customer`) in its own session store;

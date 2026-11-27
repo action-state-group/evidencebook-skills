@@ -34,8 +34,8 @@ HERE = Path(__file__).resolve().parent
 def checkpoint_now(store: records.Store, book: str) -> dict:
     """Stamp the deal store at once (``deal tick --now``, evidencebook#933), whatever its cadence.
 
-    A stamp checkpoints every book at its current size, which ``deal report`` needs. The store has
-    no witness (``deal init --no-witness``), so a stamp off the cadence shows no one anything."""
+    A stamp checkpoints every book at its current size, which ``deal report`` needs. The store is
+    made with ``--no-witness``, so the stamp is a local checkpoint only and no outside party sees it."""
     return store.run("deal", "tick", "--now", profile=book)
 
 
