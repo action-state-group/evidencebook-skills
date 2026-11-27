@@ -486,7 +486,9 @@ class Party:
         self.core("--profile", self.profile, "countersign", "request", "--service", service["ARD_COUNTERSIGN_URL"],
                   "--window", deal_id, "--bundle", str(copy), env={"SSL_CERT_FILE": service["SSL_CERT_FILE"]})
         self.run("countersign", "--deal", deal_id, "--bundle", str(copy))
-        return self.countersigned(deal_id)
+        stamp = self.countersigned(deal_id)
+        feeds.countersigned(self.dir.parent, self.name, deal_id, stamp)  # the countersigner's testbed screen
+        return stamp
 
     def countersigned(self, deal_id: str) -> dict:
         """The deal's countersign stamp as capsulectl's report states it (``deal report --read-only``,

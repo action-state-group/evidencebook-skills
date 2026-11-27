@@ -56,7 +56,8 @@ def world(tmp_path, monkeypatch):
 
     def run(argv, **kw):
         name = Path(argv[1]).name if len(argv) > 1 else argv[0]
-        step = {"demo.py": argv[2] if len(argv) > 2 else "", "open-windows.py": "windows"}.get(name, name)
+        step = {"demo.py": argv[2] if len(argv) > 2 else "", "open-windows.py": "windows",
+                "countersigner.py": f"countersigner {argv[2] if len(argv) > 2 else ''}"}.get(name, name)
         steps.append(step)
         if step == "seed" and "seed^C" in fail:
             raise KeyboardInterrupt
@@ -81,8 +82,8 @@ def _up(witness="local", ask=lambda q: "n"):
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
     steps, _ = world
     assert _up() == 0
-    assert steps == ["reset", "witness down", "witness up", "seed", "screen witness", "screen rail", "screen catalog",
-                     "windows"]
+    assert steps == ["reset", "witness down", "witness up", "seed", "countersigner up", "screen witness", "screen rail",
+                     "screen catalog", "screen countersigner", "windows"]
 
 
 def test_a_failed_seed_stops_the_witness_this_run_started(world):
@@ -134,7 +135,7 @@ def test_windows_that_do_not_open_stop_the_witness_this_run_started(world):
     steps, fail = world
     fail.add("windows")
     assert _up() == 1
-    assert steps[-3:] == ["windows", "screens down", "witness down"]  # the screens it opened, too
+    assert steps[-4:] == ["windows", "screens down", "countersigner down", "witness down"]  # all it started, too
 
 
 def test_a_local_witness_without_python_311_is_refused_before_anything_changes(world, monkeypatch):
@@ -425,3 +426,38 @@ def test_the_catalog_screen_lists_what_the_catalog_holds(tmp_path):
     assert run.returncode == 0, run.stderr
     assert "not a real store" in run.stdout
     assert "Kestrel Print: product badges-200, 200 conference badges, delivered by Friday, 1,000 msat" in run.stdout
+
+
+def test_a_countersigner_that_does_not_start_stops_the_run(world):
+    steps, fail = world
+    fail.add("countersigner up")
+    with pytest.raises(testbed.Stop, match="countersigner did not start"):
+        _up()
+    assert "windows" not in steps and steps[-3:] == ["screens down", "countersigner down", "witness down"]
+
+
+def test_the_countersigner_needs_python_311_even_with_the_hosted_witness(world, monkeypatch):
+    # it runs capsule-anchor as the local witness does: refused before the reset, not after the seed
+    steps, _ = world
+    monkeypatch.setattr(testbed.sys, "version_info", (3, 10, 0))
+    monkeypatch.setattr(testbed.shutil, "which", lambda name: None)
+    with pytest.raises(testbed.Stop, match="Python 3.11"):
+        _up(witness="public")
+    assert steps == []
+
+
+def test_the_countersigner_screen_says_what_it_signed_and_that_it_is_not_independent(tmp_path):
+    from cast import label
+    feeds.countersigned(tmp_path, "maya", "deal-0123456789abcdef", {"rung": "countersigned", "through_step": 7,
+                                                                    "steps": 7, "signer": "x"})
+    feeds.countersigned(tmp_path, "maya", "deal-0123456789abcdef", {"finding": "not_countersigned"})
+    a, b = [feeds.words("countersigner", json.loads(x), label)
+            for x in feeds.path(tmp_path, "countersigner").read_text().splitlines()]
+    assert ("Maya's book sent its own records of deal 01234567 (digests and seal times, and its own payments' amounts, "
+            "fees, references and status; never the other side's records); the demo's countersigner signed records 1 to "
+            "7 of 7, as capsulectl reports.") in a
+    assert "no countersignature counts yet (capsulectl's finding: not_countersigned)" in b
+    # u640: the countersigner sees the party's own payment legs, never a preimage or the counterparty's legs
+    assert "seal times" in feeds.HEADINGS["countersigner"] and "payment reference" in feeds.HEADINGS["countersigner"] and "never a payment's secret" in feeds.HEADINGS[
+        "countersigner"] and "not independent" in feeds.HEADINGS["countersigner"]
+    assert "not independent" in testbed.TITLES["countersigner"]

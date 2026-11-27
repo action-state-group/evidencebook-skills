@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""The screen of a testbed role that runs no agent: the witness, the payment rail or the catalog stand-in (evidencebook-skills#382).
+"""The screen of a testbed role that runs no agent: the witness, the payment rail, the catalog stand-in or the
+countersigner (evidencebook-skills#382).
 
-    python watch.py witness|rail|catalog [--home DIR] [--once]
+    python watch.py witness|rail|catalog|countersigner [--home DIR] [--once]
 
 Prints what that role saw so far, then each new event as it comes (:mod:`feeds`), until Ctrl-C or ``demo.py reset``,
 which stops it like the demo's other processes (it holds ``<home>/.watch-<role>.lock``). ``--once`` prints what is
