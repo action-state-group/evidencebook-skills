@@ -3,19 +3,22 @@
 # The local check before a push (asg-agent-team-ethan#409): every job of the
 # two CI workflows, with the commands and flags CI runs, on this machine.
 #
-#   scripts/check.sh          the pull request set (fast.yml) and the suites
-#                             that run only nightly and on main (tests.yml),
-#                             ard-demo only when the change can affect it
-#   scripts/check.sh --full   every job, ard-demo included whatever changed
-#   scripts/check.sh --plan   print which jobs a run would take, and why, and
-#                             run none (with --full: the full set)
+#   scripts/check.sh          every job but the two end-to-end ones: the pull
+#                             request set (fast.yml), the checks of
+#                             contracts.yml and neutrality.yml, and the unit
+#                             tests tests.yml's ard-demo and tau2-live jobs run
+#                             (ard-demo-unit, tau2-live-unit)
+#   scripts/check.sh --full   every job, ard-demo and tau2-live (tests.yml)
+#                             included
+#   scripts/check.sh --plan   print which jobs a run would take and run none
+#                             (with --full: the full set)
 #
-# ard-demo (its end-to-end test runs both deals on a witness it starts) runs
-# only when a file it reads changed since the merge base with origin/main:
-# committed, staged, unstaged or untracked, a rename counted at both its old
-# and new path (ARD_INPUTS below; evidencebook-skills#374). Without a merge
-# base it runs. Every other job always runs; the exit status is non-zero when
-# any failed. CI's tests.yml still runs ard-demo in full on main and nightly.
+# ard-demo and tau2-live, the end-to-end runs of tests.yml's two jobs, run
+# only with --full: each takes minutes on its own (ard-demo about 8, tau2-live
+# about 6), and the check before every push stays well under 10
+# (evidencebook-skills#425). CI's tests.yml runs both nightly and on every push
+# to main that changes their inputs. The exit status is non-zero when any job
+# that ran failed.
 #
 # The pins (commits, tags, release versions) are read from the workflow files, so they
 # stay the one source. ard-demo's end-to-end test stamps on a witness started on
@@ -54,56 +57,21 @@ done
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report contracts neutrality ard-demo tau2-live)
+jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report contracts neutrality ard-demo-unit
+  tau2-live-unit ard-demo tau2-live)
 
-# What ard-demo reads in this repository, besides the pinned checkouts and binaries: the demo itself; the
-# skills (demo/ard/goose/open-windows.py and its tests read skills/*/SKILL.md); the pack compiler that
-# demo/ard/pack.py runs (scripts/pack_compile.py and the modules it imports) and this script; the pack, schema,
-# vocabulary, wording and contract data those modules may read; and tests.yml, which holds the job's pins. A
-# directory ends in "/".
-ARD_INPUTS=(demo/ard/ skills/ scripts/ packs/ schemas/ vocab/ wording/ contracts/ .github/workflows/tests.yml)
+# The end-to-end jobs, run only with --full.
+e2e=(ard-demo tau2-live)
 
-# select_ard: sets ard_runs (1 or 0) and ard_why, the one line that says why.
-select_ard() {
-  local base f p list
-  local -a changed
-  ard_runs=1
-  if ((full)); then
-    ard_why="ard-demo: runs (--full)"
-    return
-  fi
-  if ! base=$(git merge-base HEAD origin/main 2>/dev/null); then
-    ard_why="ard-demo: runs (no merge base with origin/main, so the change is not known)"
-    return
-  fi
-  # --no-renames: a rename is a deletion and an addition, so a file moved out of the inputs still counts.
-  # Through a file, not a process substitution, so a failing git is seen (and NULs survive, which $(...) drops).
-  list=$(mktemp)
-  if ! { git diff --no-renames --name-only -z "$base" -- >"$list" && git ls-files --others --exclude-standard -z >>"$list"; }; then
-    rm -f "$list"
-    ard_why="ard-demo: runs (git could not list the files changed since the merge base with origin/main)"
-    return
-  fi
-  mapfile -d '' changed <"$list"
-  rm -f "$list"
-  for f in "${changed[@]}"; do
-    for p in "${ARD_INPUTS[@]}"; do
-      if [[ "$f" == "$p" || ( "$p" == */ && "$f" == "$p"* ) ]]; then
-        ard_why="ard-demo: runs ($f changed since the merge base with origin/main, ${base:0:12})"
-        return
-      fi
-    done
-  done
-  ard_runs=0
-  ard_why="ard-demo: skipped (no change since the merge base with origin/main, ${base:0:12}, touches its inputs: ${ARD_INPUTS[*]}; scripts/check.sh --full runs it)"
+# runs JOB: whether this run takes JOB.
+runs() {
+  ((full)) || [[ " ${e2e[*]} " != *" $1 "* ]]
 }
 
-select_ard
 if ((plan)); then
   for job in "${jobs[@]}"; do
-    [[ "$job" == ard-demo ]] || printf '%s: runs\n' "$job"
+    if runs "$job"; then printf '%s: runs\n' "$job"; else printf '%s: skipped (scripts/check.sh --full runs it)\n' "$job"; fi
   done
-  printf '%s\n' "$ard_why"
   exit 0
 fi
 deps=${CHECK_DEPS:-${XDG_CACHE_HOME:-$HOME/.cache}/evidencebook-skills-check}
@@ -306,9 +274,10 @@ local_witness() {
   cat "$out"
 }
 
-job_ard_demo() {
-  # The tests' directory as a variable, for the same reason as in job_tau2_live.
-  local w=tests.yml eb_ref ce_tag cli_ref anchor_ref eb ce deal core cpy py port t=demo/ard/tests wdir outs url key ca log
+# ard_setup: the pinned evidencebook checkout and the binaries and Python environments ard-demo's two jobs use, in
+# the caller's locals eb, ce, deal, core, cpy and py (each is built once and kept in the cache).
+ard_setup() {
+  local w=tests.yml eb_ref ce_tag cli_ref anchor_ref
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
   cli_ref=$(pin $w ard-demo CAPSULE_CLI_REF)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
@@ -323,8 +292,20 @@ job_ard_demo() {
   anchor_ref=$(sed -n 's/^ANCHOR_REF = "\([0-9a-f]*\)"$/\1/p' demo/ard/countersigner.py)
   cpy=$(venv "countersigner-${anchor_ref:0:12}" "capsule-anchor @ git+https://github.com/action-state-group/capsule-anchor@$anchor_ref")
   py=$(venv ard cryptography pyyaml rfc8785 "mcp==2.3.0" pytest pytest-xdist)
+}
+
+# ard-demo's tests but the end-to-end one, as tests.yml's ard-demo job runs them first.
+job_ard_demo_unit() {
+  # The tests' directory as a variable, for the same reason as in job_tau2_live.
+  local eb ce deal core cpy py t=demo/ard/tests
+  ard_setup
   ARD_EVIDENCEBOOK="$eb" CAPSULE_ENGINE="$ce" CAPSULECTL_DEAL="$deal" PATH="$py/bin:$PATH" \
     python -m pytest -q --durations=20 -n 4 --dist loadfile "$t" --ignore "$t/test_e2e.py"
+}
+
+job_ard_demo() {
+  local eb ce deal core cpy py port t=demo/ard/tests wdir outs url key ca log
+  ard_setup
   # Both deals end to end, on a witness this run starts (local_witness), as CI's local leg does. Every
   # host but this machine goes through a proxy on a closed port, so a call that still reaches for the hosted
   # witness fails the run instead of loading it.
@@ -431,10 +412,10 @@ job_obligations_report() {
   CAPSULECTL="$ctl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_obligations.sh
 }
 
-job_tau2_live() {
-  # The tests' directory as a variable: tests/test_scripts.py takes a literal
-  # path under tests/ in scripts/ for a citation of this repository's tests/.
-  local v ref ce ctl deal book roots bin="$tmp/tau2-bin" t=demo/tau2-live/tests
+# tau2_setup: the released binaries tau2-live's two jobs use, on PATH (capsulectl, capsule-engine), and the plugin
+# root in the caller's local roots.
+tau2_setup() {
+  local v ref ce ctl deal book bin
   v=$(pin tests.yml tau2-live CAPSULECTL_VERSION)
   ref=$(pin tests.yml tau2-live CAPSULE_ENGINE_REF)
   ce=$(engine "$ref")
@@ -442,13 +423,26 @@ job_tau2_live() {
   deal=$(release evidencebook "capsulectl/$v" "capsulectl-deal-$v-$plat")
   book=$(release evidencebook "capsulectl/$v" "capsulectl-book-$v-$plat")
   roots=$(plugins "capsulectl-deal=$deal" "capsulectl-book=$book")
-  mkdir -p "$bin"
+  bin=$(mktemp -d "$tmp/tau2-bin.XXXX")
   ln -sf "$ctl" "$bin/capsulectl"
   ln -sf "$ce" "$bin/capsule-engine"
+  PATH="$bin:$PATH"
+}
+
+# tau2-live's unit tests, as tests.yml's tau2-live job runs them first.
+job_tau2_live_unit() {
+  local roots
+  tau2_setup
+  (cd demo/tau2-live && uv run --group dev pytest -q tests)
+}
+
+job_tau2_live() {
+  # The tests' directory as a variable: tests/test_scripts.py takes a literal
+  # path under tests/ in scripts/ for a citation of this repository's tests/.
+  local roots t=demo/tau2-live/tests
+  tau2_setup
   (
     cd demo/tau2-live
-    export PATH="$bin:$PATH"
-    uv run --group dev pytest -q tests
     CAPSULECTL_PLUGIN_ROOTS="$roots" uv run python "$root/$t/e2e_scripted.py" "$tmp/tau2-live"
     CAPSULECTL_PLUGIN_ROOTS="$roots" python3 "$root/$t/e2e_range.py" "$tmp/tau2-range"
   )
@@ -477,11 +471,10 @@ stop_jobs() {
 trap 'stop_jobs; rm -rf "$tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-printf '%s\n' "$ard_why"
 set -m
 for job in "${jobs[@]}"; do
-  if [[ "$job" == ard-demo ]] && ((!ard_runs)); then
-    result[$job]=skipped
+  if ! runs "$job"; then
+    result[$job]="skipped (scripts/check.sh --full runs it)"
     continue
   fi
   start_of[$job]=$SECONDS
