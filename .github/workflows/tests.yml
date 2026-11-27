@@ -57,9 +57,11 @@ jobs:
       group: ${{ matrix.witness == 'hosted' && 'ard-demo-hosted-witness' || format('ard-demo-{0}', github.run_id) }}
       cancel-in-progress: false
     env:
-      EVIDENCEBOOK_REF: fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f  # main: #1022 (the receipt page carries the countersigned copy and checks it, capsule-viewer#457), #1004 (the withheld bundle keeps a payment's settlement leg, #998: the countersign upgrade, #383), #994 (capsule-viewer bebf078), #989 and #990 (standing intents), #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61), #991 and #992 (capsule-cli 052a8a6a: a continuity 409 is sent once more, then re-anchored)
+      # capsulectl and capsulectl-deal: the release the RUNBOOK installs (#435), capsule-cli v0.1.1 and evidencebook
+      # capsulectl/v0.1.1. EVIDENCEBOOK_REF is that release's commit: the demo's code reads the checkout.
+      CAPSULECTL_VERSION: v0.1.1
+      EVIDENCEBOOK_REF: 2ca6e8aafe5d36f12c036e8834b00eee776d9a12  # capsulectl/v0.1.1; contains fdd97dd, main with #1022 (the receipt page carries the countersigned copy and checks it, capsule-viewer#457), #1004 (the withheld bundle keeps a payment's settlement leg, #998: the countersign upgrade, #383), #994 (capsule-viewer bebf078), #989 and #990 (standing intents), #935 (deal report --html), #933 (deal tick --now), #954 (an x-deal-v1 payment counts as an earlier payment to its merchant), #957 (the card's anchor receipt), #965 (witness_timeout: a slow witness, never a consent ask), #972 (Everyday Rules 0.3.10; capsule-cli 16ec5bc9), #974 (the page on capsule-viewer 2aa43cf, wording pack en/v1), #987 (the receipt page in Steven's design, capsule-viewer 1b91f61), #991 and #992 (capsule-cli 052a8a6a: a continuity 409 is sent once more, then re-anchored)
       CAPSULE_ENGINE_TAG: go/v0.8.0  # the dispute rows (card.disputes_against, #280)
-      CAPSULE_CLI_REF: 052a8a6a7de4360a9e18b1269ba558bf71d0fef2  # capsulectl itself, the RUNBOOK's pin: countersign request (#383)
       # The local leg's witness (#371, #378): capsule-anchor at the release Action State's hosted witness runs, v0.1.4
       # (Cloud Run capsule-witness, revision capsule-witness-00014-b6h, label git-sha=78a69853bc83, read on 2026-11-26):
       # move it with the hosted witness. It is started by ci/local-witness/start.sh (capsule-anchor#118) from main.
@@ -81,12 +83,6 @@ jobs:
           ref: ${{ env.CAPSULE_ENGINE_TAG }}
           path: .deps/capsule-engine
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/capsule-cli
-          ref: ${{ env.CAPSULE_CLI_REF }}
-          path: .deps/capsule-cli
-          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: .deps/evidencebook/capsulectl/go.mod
@@ -99,13 +95,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bin
-          key: ard-bins-v4-${{ runner.os }}-${{ env.EVIDENCEBOOK_REF }}-${{ env.CAPSULE_ENGINE_TAG }}-${{ env.CAPSULE_CLI_REF }}
-      - name: build capsulectl, capsulectl-deal and capsule-engine
+          key: ard-bins-v5-${{ runner.os }}-${{ env.CAPSULECTL_VERSION }}-${{ env.CAPSULE_ENGINE_TAG }}
+      - name: capsulectl and capsulectl-deal (released, checked against SHA256SUMS), and capsule-engine (built)
         if: steps.bins.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
-          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/bin/capsulectl-deal" ./cmd/capsulectl-deal)
+          bash .github/scripts/capsulectl-release.sh "$CAPSULECTL_VERSION" linux-amd64 "$RUNNER_TEMP/bin" capsulectl capsulectl-deal
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
       - name: the demo's tests
         if: matrix.witness == 'local'  # the same in both legs: run once
@@ -197,30 +194,17 @@ jobs:
   tau2-live:
     # The live tau2 airline demo (demo/tau2-live): its unit tests, and a scripted case (no Goose,
     # no model: a canned two-party script and the mock judge) through the real records, tool
-    # server, evaluator and report, ending in two bundles capsulectl verifies. Built at the
-    # commits the demo's README installs, ard-demo's pins: the report stamps the store with
-    # `deal tick --now` (evidencebook#933), which no release carries yet (#431).
+    # server, evaluator and report, ending in two bundles capsulectl verifies. capsulectl and its
+    # deal and book plugins are the release the demo's README installs, ard-demo's (#435): the
+    # report stamps the store with `deal tick --now` (evidencebook#933), which v0.1.1 carries.
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      EVIDENCEBOOK_REF: fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f  # ard-demo's pin; #933 (deal tick --now)
-      CAPSULE_CLI_REF: 052a8a6a7de4360a9e18b1269ba558bf71d0fef2  # ard-demo's pin
+      CAPSULECTL_VERSION: v0.1.1  # ard-demo's; #933 (deal tick --now)
       CAPSULE_ENGINE_REF: c9e72572a020d2b22a44d20f0aad7345033598da  # go/v0.6.0
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/evidencebook
-          ref: ${{ env.EVIDENCEBOOK_REF }}
-          path: .deps/evidencebook
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: action-state-group/capsule-cli
-          ref: ${{ env.CAPSULE_CLI_REF }}
-          path: .deps/capsule-cli
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
@@ -230,16 +214,17 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
-          go-version-file: .deps/evidencebook/capsulectl/go.mod
+          go-version-file: .deps/capsule-engine/go/go.mod
           cache: false
       - uses: astral-sh/setup-uv@v6
-      - name: build capsulectl, its deal and book plugins, and capsule-engine
+      - name: capsulectl and its deal and book plugins (released, checked against SHA256SUMS), and capsule-engine (built)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/plugins"
           chmod 755 "$RUNNER_TEMP/plugins"
-          (cd .deps/capsule-cli && go build -o "$RUNNER_TEMP/bin/capsulectl" ./cmd/capsulectl)
-          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-deal" ./cmd/capsulectl-deal)
-          (cd .deps/evidencebook/capsulectl && go build -o "$RUNNER_TEMP/plugins/capsulectl-book" ./cmd/capsulectl-book)
+          bash .github/scripts/capsulectl-release.sh "$CAPSULECTL_VERSION" linux-amd64 "$RUNNER_TEMP/bin" capsulectl
+          bash .github/scripts/capsulectl-release.sh "$CAPSULECTL_VERSION" linux-amd64 "$RUNNER_TEMP/plugins" capsulectl-deal capsulectl-book
           (cd .deps/capsule-engine/go && go build -o "$RUNNER_TEMP/bin/capsule-engine" ./cmd/capsule-engine)
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: unit tests

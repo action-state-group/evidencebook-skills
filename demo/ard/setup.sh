@@ -7,7 +7,7 @@
 #   f=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/action-state-group/evidencebook-skills/main/demo/ard/setup.sh -o "$f" && /bin/bash "$f"
 #   ~/ard-demo/evidencebook-skills/demo/ard/setup.sh [--real-rail]
 #
-# It checks what the demo needs and installs what is missing, builds the pinned tools, and stops once for the one
+# It checks what the demo needs and installs what is missing, installs the pinned tools, and stops once for the one
 # step only a person can do: choosing the demo Goose's model and signing in. Run it again at any time: it skips
 # everything already done, so on a set-up Mac it changes nothing.
 #
@@ -17,8 +17,12 @@
 
 # The pins. The RUNBOOK's header line is the one place for them: demo/ard/tests/test_pins.py checks that these agree
 # with it, so a pin changes there and here in the same commit.
-EVIDENCEBOOK_PIN=fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f
-CAPSULE_CLI_PIN=052a8a6a7de4360a9e18b1269ba558bf71d0fef2
+# capsulectl and its book and deal plugins come from the capsulectl release: capsule-cli's release and evidencebook's
+# capsulectl/ release of the same version, each built from the commit below (each binary's --version names it).
+# The evidencebook checkout is at the same commit, since the demo's code reads it (ARD_EVIDENCEBOOK).
+CAPSULECTL_VERSION=v0.1.1
+EVIDENCEBOOK_PIN=2ca6e8aafe5d36f12c036e8834b00eee776d9a12
+CAPSULE_CLI_PIN=129a80f3ae9a88530cb85f3438f2f57a1deaf64c
 CAPSULE_ENGINE_PIN=0263ff119911d91eb54dd3d3debdcc71324042eb
 GOOSE_VERSION=1.59.2
 ACP_VERSION=0.108.0
@@ -30,7 +34,7 @@ VPY="$SKILLS/.venv/bin/python"
 LOCAL_BIN="$HOME/.local/bin"
 PLUGINS="$HOME/.local/lib/capsulectl/plugins"
 APP=/Applications/Goose.app
-CORE_V="v0.1.0-main.${CAPSULE_CLI_PIN:0:8}"
+CORE_V=$CAPSULECTL_VERSION
 PLATFORM=darwin-arm64
 REAL_RAIL=0
 CONTINUED=0
@@ -99,7 +103,6 @@ prerequisites() {
   need go go Go
   need node node Node.js
   need npm node npm
-  need gtar gnu-tar "GNU tar (the plugin build needs it)"
   need tmux tmux "tmux (the testbed's screens run in it)"
   [ "$REAL_RAIL" = 0 ] || need cargo rust "Rust (the real rail)"
   command -v lsof >/dev/null 2>&1 || stop "lsof is missing. macOS ships it in /usr/sbin, and the demo's reset needs it."
@@ -162,33 +165,41 @@ capsulectl_at_pin() {
   "$LOCAL_BIN/capsulectl" plugin ls 2>/dev/null | jq -e '.refused == []' >/dev/null 2>&1 || return 1
   [ -d "$PLUGINS/standard-history-module" ] && [ -d "$PLUGINS/capsulectl-deal.d" ]
 }
-build_core() {
-  (cd "$DEMO/capsule-cli" && scripts/release-build.sh "$CORE_V" "$CAPSULE_CLI_PIN" "$DEMO/core") \
-    && install -m 0755 "$DEMO/core/capsulectl-$CORE_V-$PLATFORM" "$LOCAL_BIN/capsulectl"
-}
-build_plugins() {
-  local pkg=github.com/action-state-group/capsule-cli/cli l
-  "$DEMO/evidencebook/capsulectl/scripts/release-build.sh" "$CORE_V" "$EVIDENCEBOOK_PIN" "$DEMO/dist" || return 1
-  for l in book deal; do
-    (cd "$DEMO/evidencebook/capsulectl" && CGO_ENABLED=0 go build -trimpath -buildvcs=false \
-      -ldflags "-s -w -buildid= -X $pkg.CLIVersion=$CORE_V -X $pkg.CLICommit=$CAPSULE_CLI_PIN -X $pkg.PluginVersion=$CORE_V -X $pkg.PluginCommit=$EVIDENCEBOOK_PIN" \
-      -o "$DEMO/dist/capsulectl-$l-$CORE_V-$PLATFORM" "./cmd/capsulectl-$l") || return 1
+# fetch_release <url> <folder> <file>...: each file and the release's SHA256SUMS into the folder, each file checked
+# against its own SHA256SUMS line (a file the list does not name fails)
+fetch_release() {
+  local url=$1 dir=$2 f line
+  shift 2
+  rm -rf "$dir" && mkdir -p "$dir" && curl -fsSL -o "$dir/SHA256SUMS" "$url/SHA256SUMS" || return 1
+  for f in "$@"; do
+    curl -fsSL -o "$dir/$f" "$url/$f" || return 1
+    line=$(awk -v f="$f" '$2 == f && $1 ~ /^[0-9a-f]+$/ && length($1) == 64' "$dir/SHA256SUMS")
+    [ -n "$line" ] || { echo "$f is not in $url/SHA256SUMS"; return 1; }
+    (cd "$dir" && printf '%s\n' "$line" | shasum -a 256 -c -) || return 1
   done
 }
-install_plugins() {  # the views first, the plugins last: a plugin at the pin then means its views are from the same build
-  tar -xzf "$DEMO/dist/standard-history-$CORE_V.tar.gz" -C "$PLUGINS" \
-    && tar -xzf "$DEMO/dist/deal-view-$CORE_V.tar.gz" -C "$PLUGINS" \
-    && "$LOCAL_BIN/capsulectl" plugin install "$DEMO/dist/capsulectl-book-$CORE_V-$PLATFORM" \
-    && "$LOCAL_BIN/capsulectl" plugin install "$DEMO/dist/capsulectl-deal-$CORE_V-$PLATFORM"
+download_release() {  # capsulectl from capsule-cli's release, its plugins and their views from evidencebook's
+  fetch_release "$ORG/capsule-cli/releases/download/$CORE_V" "$DEMO/dist/$CORE_V/capsule-cli" \
+    "capsulectl-$CORE_V-$PLATFORM" \
+    && fetch_release "$ORG/evidencebook/releases/download/capsulectl/$CORE_V" "$DEMO/dist/$CORE_V/evidencebook" \
+      "capsulectl-book-$CORE_V-$PLATFORM" "capsulectl-deal-$CORE_V-$PLATFORM" \
+      "standard-history-$CORE_V.tar.gz" "deal-view-$CORE_V.tar.gz"
+}
+install_release() {  # the views first, the plugins last: a plugin at the pin then means its views are from the same release
+  local d="$DEMO/dist/$CORE_V"
+  install -m 0755 "$d/capsule-cli/capsulectl-$CORE_V-$PLATFORM" "$LOCAL_BIN/capsulectl" \
+    && tar -xzf "$d/evidencebook/standard-history-$CORE_V.tar.gz" -C "$PLUGINS" \
+    && tar -xzf "$d/evidencebook/deal-view-$CORE_V.tar.gz" -C "$PLUGINS" \
+    && "$LOCAL_BIN/capsulectl" plugin install "$d/evidencebook/capsulectl-book-$CORE_V-$PLATFORM" \
+    && "$LOCAL_BIN/capsulectl" plugin install "$d/evidencebook/capsulectl-deal-$CORE_V-$PLATFORM"
 }
 capsulectl_step() {
   say "capsulectl and its book and deal plugins ..."
   if capsulectl_at_pin; then already "already installed ($CORE_V)"; return 0; fi
-  say "  Building them (about 5 minutes) ..."
+  say "  Downloading the $CORE_V release ..."
   mkdir -p "$LOCAL_BIN" "$PLUGINS"
-  DOING="building capsulectl"; run build_core
-  DOING="building the book and deal plugins"; run build_plugins
-  DOING="installing the book and deal plugins"; run install_plugins
+  DOING="downloading the capsulectl $CORE_V release"; run download_release
+  DOING="installing capsulectl and its book and deal plugins"; run install_release
   DOING="checking capsulectl and its plugins"; run capsulectl_at_pin
   say "  Installed $CORE_V."
 }
@@ -467,16 +478,15 @@ main() {
     exec /bin/bash "$SKILLS/demo/ard/setup.sh" --continue ${1+"$@"}
   fi
   at_commit evidencebook "$EVIDENCEBOOK_PIN"
-  at_commit capsule-cli "$CAPSULE_CLI_PIN"
   at_commit capsule-engine "$CAPSULE_ENGINE_PIN"
-  export GOTOOLCHAIN=auto TAR=gtar PATH="$LOCAL_BIN:$PATH"
+  export GOTOOLCHAIN=auto PATH="$LOCAL_BIN:$PATH"
   capsulectl_step
   engine_and_venv_step
   goose_step
   goose_settings_step
   witness_step
   say ""
-  say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), evidencebook ${EVIDENCEBOOK_PIN:0:7}, capsule-cli ${CAPSULE_CLI_PIN:0:7} (capsulectl $CORE_V), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, provider $PROVIDER."
+  say "Set-up is done at evidencebook-skills $(git -C "$SKILLS" rev-parse --short=7 HEAD), capsulectl $CORE_V (capsule-cli ${CAPSULE_CLI_PIN:0:7}, evidencebook ${EVIDENCEBOOK_PIN:0:7}), capsule-engine ${CAPSULE_ENGINE_PIN:0:7}, Goose Desktop $GOOSE_VERSION, provider $PROVIDER."
   say "Next: \"Before each run\" in the RUNBOOK."
 }
 
