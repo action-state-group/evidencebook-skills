@@ -1138,7 +1138,7 @@ def test_a_go_names_the_seller_s_open_disputes_from_its_card():
     assert screens.open_disputes_line("Kestrel Print", card(open_=1)) == (
         "Kestrel Print has 1 open dispute (not final yet). This pack records open disputes but does not hold for "
         "them, since anyone can open one. A dispute decided against the seller would lower its limit, and a ruling "
-        "against it that you hold would block it.")
+        "against it that you hold would block buying from it for 180 days.")
     assert screens.open_disputes_line("Kestrel Print", card(open_=2)).startswith("Kestrel Print has 2 open disputes ")
     assert screens.open_disputes_line("Alder Print Co.", card()) == ""
 
@@ -1149,4 +1149,4 @@ def test_the_pack_only_records_an_open_dispute():
     src = yaml.safe_load((packs.source_path()).read_text())
     rows = {r["id"]: r for r in src["rows"]}
     assert rows["open-disputes"]["on_fail"] == "record" and rows["disputes-against"]["on_fail"] == "LIMIT"
-    assert rows["adverse-adjudication"]["on_fail"] == "NO"
+    assert rows["adverse-adjudication"]["on_fail"] == "NO" and rows["adverse-adjudication"]["params"]["window_days"] == 180
