@@ -1130,3 +1130,21 @@ def test_the_viewer_drift_command_exits_by_what_it_could_compare(monkeypatch, ca
     assert viewer_drift.main() == want
     out = capsys.readouterr()
     assert said in out.out + out.err
+
+
+def test_a_go_names_the_seller_s_open_disputes_from_its_card():
+    # Sherlock2 on #418 (2026-11-27): right after Maya disputed Kestrel, a bare GO read as if the dispute changed
+    # nothing; the line under it says the card's open count and that the pack only records it
+    assert screens.open_disputes_line("Kestrel Print", card(open_=1)) == (
+        "Kestrel Print has 1 open dispute (not final yet). This pack only records an open dispute, since anyone can "
+        "open one; a dispute decided against the seller limits it.")
+    assert screens.open_disputes_line("Kestrel Print", card(open_=2)).startswith("Kestrel Print has 2 open disputes ")
+    assert screens.open_disputes_line("Alder Print Co.", card()) == ""
+
+
+def test_the_pack_only_records_an_open_dispute():
+    # the line above says "only records": the pack's own row, which the words rest on
+    import yaml
+    src = yaml.safe_load((packs.source_path()).read_text())
+    rows = {r["id"]: r for r in src["rows"]}
+    assert rows["open-disputes"]["on_fail"] == "record" and rows["disputes-against"]["on_fail"] == "LIMIT"

@@ -266,6 +266,17 @@ def own_ruling(a: Assessment) -> dict | None:
     return next((v for v in a.own.rulings if v["adverse"]), None)
 
 
+def open_disputes_line(name: str, card: dict) -> str:
+    """Under a GO, the disputes still open about this seller, from its card. The pack's open-disputes row only records
+    them (pack-source.yaml: anyone can open one), so a bare GO right after the buyer disputed this seller would read as
+    if the dispute had changed nothing without saying why (Sherlock2 on #418, 2026-11-27). Empty when none is open."""
+    n = card.get("disputes", {}).get("received", {}).get("by_outcome", {}).get("open", 0)
+    if not n:
+        return ""
+    return (f"{name} has {plural(n, 'open dispute')} (not final yet). This pack only records an open dispute, since "
+            "anyone can open one; a dispute decided against the seller limits it.")
+
+
 def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None = None) -> str:
     """One line: the decision and why, for this seller and this price (Sherlock2's wording, #285)."""
     if a.verdict == "GO":
