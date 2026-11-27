@@ -260,9 +260,10 @@ def test_a_scripted_payment_reads_the_confirmed_limit_too(monkeypatch):
     assert pinned == [750]
 
 
-def _held_pay(monkeypatch, how):
+def _held_pay(monkeypatch, how, hold=True):
     """ard_pay on an order the Everyday Rules hold, its question answered ``how``: the over-limit run of the RUNBOOK's
-    spending-limit section (three reasons), as Steven's hand run of 2026-11-26 reached it."""
+    spending-limit section (three reasons), as Steven's hand run of 2026-11-26 reached it. With ``hold=False``, the same
+    order's plain payment question, no rule holding it. ``ds.session().asked`` lists every dialog opened."""
     import threading
     import types
 
@@ -274,15 +275,18 @@ def _held_pay(monkeypatch, how):
                                 "the payment is not refundable"], limits={"weekly": (2000, 3000)})
     s = types.SimpleNamespace(maya=None, home=None, keys={"alder": "k"}, adjudicator=types.SimpleNamespace(named=dict),
                               rail=None, ask="", declined={}, picked={"alder"}, pay_lock=threading.Lock(), log=[],
-                              assessed={"alder": types.SimpleNamespace(price_msat=2000)})
+                              assessed={"alder": types.SimpleNamespace(price_msat=2000)}, asked=[])
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ds, "_session", None)
     monkeypatch.setattr(ds, "_real", lambda: False)
     monkeypatch.setattr(ds, "gate_off", lambda: False)
-    monkeypatch.setattr(ds, "dialog_answer", lambda *a: how)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a: s.asked.append(a[0]) or how)
 
     def open_and_pay(home, maya, seller, key, chosen, adjudicator, rail, summary, ask, say, **kw):
-        ask(buyer.Question(screens.HELD_TITLE, "text", "Buy anyway", "Don't buy", held))
+        if hold:
+            ask(buyer.Question(screens.HELD_TITLE, "text", "Buy anyway", "Don't buy", held))
+        else:
+            ask(buyer.Question("Approve this payment", "text", "Pay", "Cancel"))
         return None
     monkeypatch.setattr(buyer, "open_and_pay", open_and_pay)
     return ds.ard_pay("alder"), held
@@ -303,14 +307,29 @@ def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch)
     assert ('Ask Maya, in one question: "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated '
             'rail, where no money moves?", and say she can choose another seller instead.') in out
     assert "Never offer to change her spending limit" in out
-    assert set(ds.session().declined) == {"alder"}
+    assert "On her yes to it, call ard_pay again: the dialog asks her once more." in out
 
-    # her yes to that question, then the payment again: the declined guard's question reaches her whole too (Codex's
-    # plan review: 425 characters for a held order's title read as the bare refusal)
+    # her yes to that question, then the payment again: the dialog opens at once, with no second question in chat (the
+    # hand run of #415 at 502bbc4: the declined guard's question as well made the agent ask her twice)
+    assert not ds.session().declined
     again = ds.ard_pay("alder")
+    assert ds.session().asked == [screens.HELD_TITLE, screens.HELD_TITLE]
+    assert again.startswith("REFUSED: " + screens.rules_held(held.reasons))
+
+
+def test_a_declined_payment_no_rule_held_asks_its_question_whole_before_the_dialog_opens_again(monkeypatch):
+    """The declined guard stays for a payment no rule held: the next call opens no dialog and hands the agent the
+    question, whole (Codex's plan review on #415: past 400 characters it read as the bare refusal; #421)."""
+    import desktop_server as ds
+
+    out, _ = _held_pay(monkeypatch, ds.NO, hold=False)
+    assert "agent.log" not in out and set(ds.session().declined) == {"alder"}
+    again = ds.ard_pay("alder")
+    assert ds.session().asked == ["Approve this payment"]
     assert "agent.log" not in again and again.startswith("REFUSED: the presenter did not approve the last payment to "
                                                         "Alder Print Co., so this call opens no dialog")
     assert "If Maya said yes to it after the dialog was declined, call ard_pay again now" in again
+    assert ds._refusal(ds.Said(again[len("REFUSED: "):])) == again[len("REFUSED: "):]
 
 
 def test_a_held_order_nobody_answered_is_never_called_a_decline(monkeypatch):

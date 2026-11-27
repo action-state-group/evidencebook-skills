@@ -513,10 +513,13 @@ def _rail_clause() -> str:
 def held_declined(name: str, price_msat: int) -> str:
     """After Don't buy, what Maya's agent offers next: one question to order again, naming the seller, the amount and
     the rail, so her yes to it is the fresh yes a declined order needs; another seller if she wants one; never a higher
-    limit (Steven's hand run of 2026-11-26, evidencebook-skills#414)."""
+    limit (Steven's hand run of 2026-11-26, evidencebook-skills#414). This question takes the place of the declined
+    guard's, so her yes opens the dialog again on the next call (the hand run of #415 at 502bbc4: with the guard as well,
+    the agent asked her a second question)."""
     return (f'Do not retry on your own. Ask Maya, in one question: "Want me to order again from {name} for '
-            f'{screens.msat(price_msat)}, {_rail_clause()}?", and say she can choose another seller instead. Never offer '
-            "to change her spending limit: change it only when she asks for that in her own words.")
+            f'{screens.msat(price_msat)}, {_rail_clause()}?", and say she can choose another seller instead. On her yes '
+            "to it, call ard_pay again: the dialog asks her once more. Never offer to change her spending limit: change "
+            "it only when she asks for that in her own words.")
 
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
@@ -562,7 +565,7 @@ def ard_pay(seller: str) -> None:
         held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)
-            if how == NO:
+            if how == NO and held is None:  # a held order's answer asks the order-again question instead (held_declined)
                 s.declined[key] = getattr(answer.get("q"), "title", "")
             if held is not None:  # the hold's own sentence first, whole, for Maya to read (#412)
                 raise Said(screens.rules_held(held.reasons) + f" {HELD_NOT_YES[how]}, so nothing was sent to {screens.stop(name)} "
