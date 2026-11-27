@@ -273,8 +273,9 @@ def open_disputes_line(name: str, card: dict) -> str:
     n = card.get("disputes", {}).get("received", {}).get("by_outcome", {}).get("open", 0)
     if not n:
         return ""
-    return (f"{name} has {plural(n, 'open dispute')} (not final yet). This pack only records an open dispute, since "
-            "anyone can open one; a dispute decided against the seller limits it.")
+    return (f"{name} has {plural(n, 'open dispute')} (not final yet). This pack records open disputes but does not hold "
+            "for them, since anyone can open one. A dispute decided against the seller would lower its limit, and a "
+            "ruling against it that you hold would block it.")
 
 
 def decision_line(a: Assessment, ev: Evidence, ceiling_msat_for_tier: int | None = None) -> str:
