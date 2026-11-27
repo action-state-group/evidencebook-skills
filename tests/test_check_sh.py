@@ -213,12 +213,25 @@ job_tau2_live() {
         proc = subprocess.Popen([str(self.repo / "scripts" / "check.sh"), "--full"], cwd=self.repo, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True)
         marker = self.dir / "grandchild"
+
+        def stop():  # however the test ends: the runner's own TERM cleanup first, then KILL to what is left
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.communicate(timeout=20)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.communicate()
+            if marker.exists() and marker.read_text().strip():
+                pid = int(marker.read_text())
+                if not self.gone(pid):
+                    os.kill(pid, signal.SIGKILL)
+        self.addCleanup(stop)
         deadline = time.monotonic() + 30
         while not marker.exists() or not marker.read_text().strip():
             self.assertLess(time.monotonic(), deadline, "the stub job never started its grandchild")
             time.sleep(0.1)
         grandchild = int(marker.read_text())
-        self.addCleanup(lambda: self.gone(grandchild) or os.kill(grandchild, signal.SIGKILL))
         started = time.monotonic()
         proc.send_signal(signal.SIGTERM)
         out, _ = proc.communicate(timeout=60)
