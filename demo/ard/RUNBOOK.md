@@ -196,7 +196,7 @@ The testbed (evidencebook-skills#382) brings up every role of the deal, each on 
    (cd demo/ard && ../../.venv/bin/python countersigner.py up)
    ```
 
-   **Expect:** "the demo's countersigner listens on https://localhost:…/countersign/register, admitting maya, alder, kestrel, adjudicator". It runs until reset (or `countersigner.py down`) and countersigns only those four parties' books; it learns each record's digest and seal time and the party's own payments' details (amount, fees, payment reference, status), never a payment's secret or the other side's records.
+   **Expect:** "the demo's countersigner listens on https://localhost:…/countersign/register, admitting maya, alder, kestrel, adjudicator". It runs until reset (or `countersigner.py down`) and countersigns only those four parties' books; it learns each record's digest and seal time and, for each of the party's own payments, whether it sent or received it, the amount, fees, payment reference, status and when it saw it; never a payment's secret or the other side's records.
 
 3. [Real] Read both balances.
 
