@@ -187,7 +187,9 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     # her ask, in her own words, and the amount proposed in chat but not yet confirmed: no limit
     monkeypatch.setattr(ds.ard, "lookup", lambda *args: s.entries)
     monkeypatch.setattr(buyer, "record_search", lambda *args: None)
-    ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
+    found = ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
+    # #413: the search ends on the limit question, before any card or assessment (Steven's hand runs, 2026-11-26)
+    assert found.endswith("\n\n" + ds.LIMIT_FIRST)
     assert "No spending limit is set yet" in ds.ard_assess()
     dialogs = []
 
@@ -209,7 +211,8 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
                         and sealing(*args))
     out = ds.ard_set_limit(4500)
     assert out == ("Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days. "
-                   "Each payment is checked against it.")
+                   "Each payment is checked against it.\n" + ds.LIMIT_SET_THEN)  # one yes sets it, nothing more (#413)
+    assert ds.LIMIT_FIRST not in ds.ard_find_sellers(s.ask)  # set: no question again
     assert rin.notes(limits.LIMIT_SET)[-1]["statement"]["said"].endswith("waits for your OK.\nAnswer: Set limit")
     assessed = ds.ard_assess()
     assert "Your spending limit: 4,500 msat" in assessed
@@ -253,3 +256,83 @@ def test_a_scripted_payment_reads_the_confirmed_limit_too(monkeypatch):
     with pytest.raises(BaseException):
         buyer.open_and_pay(None, book, "alder", "k", None, {}, None, "Pay?", lambda q: "no", print, simulated=True)
     assert pinned == [750]
+
+
+def _held_pay(monkeypatch, how):
+    """ard_pay on an order the Everyday Rules hold, its question answered ``how``: the over-limit run of the RUNBOOK's
+    spending-limit section (three reasons), as Steven's hand run of 2026-11-26 reached it."""
+    import threading
+    import types
+
+    import buyer
+    import desktop_server as ds
+
+    held = limits.Held(reasons=["over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+                                "no earlier payment to this merchant from this profile",
+                                "the payment is not refundable"], limits={"weekly": (2000, 3000)})
+    s = types.SimpleNamespace(maya=None, home=None, keys={"alder": "k"}, adjudicator=types.SimpleNamespace(named=dict),
+                              rail=None, ask="", declined={}, picked={"alder"}, pay_lock=threading.Lock(), log=[],
+                              assessed={"alder": types.SimpleNamespace(price_msat=2000)})
+    monkeypatch.setattr(ds, "session", lambda: s)
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(ds, "_real", lambda: False)
+    monkeypatch.setattr(ds, "gate_off", lambda: False)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a: how)
+
+    def open_and_pay(home, maya, seller, key, chosen, adjudicator, rail, summary, ask, say, **kw):
+        ask(buyer.Question(screens.HELD_TITLE, "text", "Buy anyway", "Don't buy", held))
+        return None
+    monkeypatch.setattr(buyer, "open_and_pay", open_and_pay)
+    return ds.ard_pay("alder"), held
+
+
+def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch):
+    """evidencebook-skills#412: Don't buy on an order over the limit reached Maya as "this step was refused (the reason
+    is in this party's log, agent.log)", since the refusal ran past the raw-output guard's 400 characters (#327). She
+    reads the hold's own sentence whole: the rule, nothing paid, every reason with the limit; then what to offer
+    next, never a limit change (#414)."""
+    import desktop_server as ds
+
+    out, held = _held_pay(monkeypatch, ds.NO)
+    assert "agent.log" not in out
+    assert out.startswith("REFUSED: " + screens.rules_held(held.reasons) + " Maya chose Don't buy, so nothing was "
+                          "sent to Alder Print Co.")
+    assert "over your weekly limit: 3,000 msat with this order, limit 2,000 msat" in out
+    assert ('Ask Maya, in one question: "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated '
+            'rail, where no money moves?", and say she can choose another seller instead.') in out
+    assert "Never offer to change her spending limit" in out
+    assert set(ds.session().declined) == {"alder"}
+
+    # her yes to that question, then the payment again: the declined guard's question reaches her whole too (Codex's
+    # plan review: 425 characters for a held order's title read as the bare refusal)
+    again = ds.ard_pay("alder")
+    assert "agent.log" not in again and again.startswith("REFUSED: the presenter did not approve the last payment to "
+                                                        "Alder Print Co., so this call opens no dialog")
+    assert "If Maya said yes to it after the dialog was declined, call ard_pay again now" in again
+
+
+def test_a_held_order_nobody_answered_is_never_called_a_decline(monkeypatch):
+    import desktop_server as ds
+
+    out, held = _held_pay(monkeypatch, ds.NO_ANSWER)
+    assert screens.rules_held(held.reasons) in out and "Maya did not answer in time" in out
+    assert "Never say she declined it." in out and "order again" not in out
+    assert not ds.session().declined
+
+
+def test_a_refusal_the_demo_writes_stays_whole_and_raw_output_still_does_not():
+    import desktop_server as ds
+
+    long = "The Everyday Rules held this order for your OK, and nothing was paid: " + "a reason; " * 60
+    assert ds._refusal(ds.Said(long)) == long
+    assert ds._refusal(RuntimeError(long)) == "this step was refused (the reason is in this party's log, agent.log)"
+    assert ds._refusal(RuntimeError('capsulectl: {"error": "x"}')).startswith("this step was refused")
+
+
+def test_the_limit_tool_never_offers_a_limit_on_its_own():
+    """#414: after Don't buy, Maya's agent offered to raise the limit. Its description says it changes only on the
+    person's own ask."""
+    import desktop_server as ds
+
+    doc = " ".join(ds.ard_set_limit.__doc__.split())
+    assert "Never propose a new or higher limit yourself, after a held order included" in doc

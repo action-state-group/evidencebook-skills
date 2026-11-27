@@ -124,6 +124,31 @@ def _buy(w, key, a, who=None, answer_after: float = 0):
     return deal, buyer.shipped(buyer.await_delivery(w["home"], who, deal))
 
 
+def _chrome() -> str:
+    """Google Chrome or Chromium: CHROME, else the usual places. None fails the test as NOT RUN, never a pass."""
+    import shutil
+    for c in (os.environ.get("CHROME", ""), "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
+        if c and (shutil.which(c) or os.access(c, os.X_OK)):
+            return c
+    pytest.fail("NOT RUN: no Chrome to draw the receipt page (set CHROME)")
+
+
+def _drawn(page) -> str:
+    """The page's DOM after its script has drawn it, as a person's browser shows it: headless Chrome with a throwaway
+    profile and no keychain (tests/fresh_env_deals.sh does the same). Chrome can exit non-zero from its own teardown
+    after writing the DOM, so the DOM is the result, not the exit status."""
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as profile:
+        run = subprocess.run([_chrome(), "--headless=new", "--use-mock-keychain", "--password-store=basic",
+                              f"--user-data-dir={profile}", "--disable-gpu", "--window-size=1280,2400",
+                              "--virtual-time-budget=60000", "--dump-dom", f"file://{page}"],
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=180)
+    assert run.stdout.strip(), f"Chrome drew nothing for {page}: {run.stderr[-2000:]}"
+    return run.stdout
+
+
 def _until(pred, seconds, step=3):
     stop = time.time() + seconds
     while time.time() < stop:
@@ -193,6 +218,15 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
                detail=lambda: f"The adjudicator's entry check read {read}" + (
                    f": {pt.WITNESS_NAME} had not stamped every book sent with an entry yet."
                    if any("not witnessed" in x for x in read) else "."))
+
+    # #411: RUNBOOK step 13 opens Maya's Kestrel receipt as a page once the ruling is in her records. The page draws the
+    # seal for a final not-met ruling (Steven, 2026-11-27: "Didn't go as agreed"), in the browser: capsule-viewer's
+    # script sets data-seal when it renders, so the page is read as Chrome draws it.
+    import receipt
+    kestrel_page = receipt.receipt_page(w["maya"], "Maya", deal.deal_id, rail="simulated", seller=False)
+    shown = _drawn(kestrel_page)
+    assert 'data-seal="not_as_agreed"' in shown, "the receipt page draws no Didn't-go-as-agreed seal"
+    assert "Didn't go as agreed" in shown and "Ruled: Delivery not met" in shown
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
     import buyer as b
