@@ -17,7 +17,7 @@
 
 # The pins. The RUNBOOK's header line is the one place for them: demo/ard/tests/test_pins.py checks that these agree
 # with it, so a pin changes there and here in the same commit.
-EVIDENCEBOOK_PIN=e5407dc1e7d60c5a50f446912805a9a83e8f86c5
+EVIDENCEBOOK_PIN=fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f
 CAPSULE_CLI_PIN=052a8a6a7de4360a9e18b1269ba558bf71d0fef2
 CAPSULE_ENGINE_PIN=0263ff119911d91eb54dd3d3debdcc71324042eb
 GOOSE_VERSION=1.59.2

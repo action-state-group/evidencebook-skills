@@ -290,6 +290,17 @@ def test_the_countersign_upgrade_after_deal_2(world, tmp_path):
         assert stamp["signer"] == cs.NAME and stamp["through_step"] == stamp["steps"]
         text = receipt.receipt_text(maya, "Maya", deal2.deal_id, real=False, seller=False, counterparty="Alder Print Co.")
         assert "Countersigned by the demo's countersigner at " in text and "not independent of them" in text
+        # RUNBOOK step 16 opens Maya's receipt page after the upgrade: its file carries the countersigned copy and the
+        # directory row that names the demo's countersigner, for the page's own check (evidencebook#1015; the stamp
+        # itself is drawn by the page's script, which the hand run reads in a browser), and it still verifies.
+        page = receipt.receipt_page(maya, "Maya", deal2.deal_id, rail="simulated", seller=False)
+        html = page.read_text()
+        boot = json.loads(re.search(r"capsulectlDealPage = Object\.freeze\((.*?)\);\n", html).group(1))
+        copy = boot["countersigned_copy"]
+        assert [r["name"] for r in copy["countersigners"]] == [cs.NAME], copy["countersigners"]
+        assert copy["bundle"]["countersignatures"], "the copy carries the countersignature"
+        assert "countersignedCopy: capsulectlDealPage.countersigned_copy" in html
+        assert maya.verify(page)["verdict"] == "VALID"
         # a restart keeps its key, so the countersignature still resolves (Codex, plan review)
         cs.stop(d)
         env = cs.start(d, parties)  # a new port: the outsider below must reach this one (Codex, round 1)
