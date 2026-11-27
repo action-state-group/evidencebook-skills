@@ -241,18 +241,30 @@ def _goose_check(ask=input) -> None:
 PROBE = [str(HERE / "tests" / "witness_probe.py"), "--stamps", "1", "--parallel", "4"]
 
 
-def probe_hosted(say=print) -> bool:
-    """Whether the hosted witness took every probe stamp within the receipt page's wait; its lines go to the screen."""
-    say("measuring Action State's hosted witness: one stamp from each of four parties at once (up to a minute)")
+def probe_hosted(say=print) -> str:
+    """``"ok"`` when the hosted witness took every probe stamp within the receipt page's wait, ``"slow"`` when it did
+    not, ``"unmeasured"`` when the probe could not measure it (exit 2, ``witness_probe.CANNOT_MEASURE``); the probe's
+    lines go to the screen."""
+    say("measuring Action State's hosted witness: one test stamp from each of four throwaway profiles at once, as a "
+        "run's four parties would send (up to a minute)")
     env = {k: v for k, v in os.environ.items() if not k.startswith(("ARD_E2E_WITNESS", "ARD_WITNESS"))}
-    return subprocess.run([_python(), *PROBE], env=env).returncode == 0
+    rc = subprocess.run([_python(), *PROBE], env=env).returncode
+    return {0: "ok", 1: "slow"}.get(rc, "unmeasured")
+
+
+#: What up asks when the probe did not pass, by its outcome.
+SWITCH = {
+    "slow": "The hosted witness did not take every test stamp within the 30 seconds a receipt page waits, so receipts "
+            "may show no witness time.",
+    "unmeasured": "The hosted witness could not be measured (the reason is above).",
+}
 
 
 def up(c: dict, say=print, ask=input, probe: bool = True) -> int:
     _goose_check(ask)
-    if c["witness"] == "public" and probe and not probe_hosted(say):
-        answer = ask("The hosted witness did not take every stamp within the receipt page's 30 seconds, so receipts "
-                     "may show no witness time. Bring the testbed up on the local test witness instead? [Y/n] ")
+    if c["witness"] == "public" and probe and (outcome := probe_hosted(say)) != "ok":
+        answer = ask(f"{SWITCH[outcome]} Bring the testbed up on the local test witness instead? Receipts will then "
+                     "name it, not Action State's witness. [Y/n] ")
         if answer.strip().lower() in ("", "y", "yes"):
             c["witness"] = "local"
     if c["witness"] == "local" or "countersigner" in c["roles"]:

@@ -424,6 +424,12 @@ goose_settings_step() {
 # Last: a real stamp on a throwaway log, so a witness whose home page answers but that takes no stamps stops the set-up
 # here and not in the middle of a run (evidencebook-skills#359; demo/ard/witness_check.py).
 witness_step() {
+  # testbed.sh hands this check to the testbed, which measures the hosted witness and offers the local one when it is
+  # slow (evidencebook-skills#382): a slow or refusing hosted witness must not stop the set-up before that offer
+  if [ "${ARD_SETUP_WITNESS:-}" = testbed ]; then
+    say "Action State's witness: the testbed measures it next."
+    return 0
+  fi
   say "Action State's witness: one test stamp (it can take up to a minute) ..."
   local out
   if out=$(ARD_EVIDENCEBOOK="$DEMO/evidencebook" CAPSULECTL_DEAL="$PLUGINS/capsulectl-deal" \

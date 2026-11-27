@@ -70,7 +70,8 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(testbed, "stop_witness", lambda say=print: steps.append("witness down"))
     monkeypatch.setattr(testbed, "open_screen", lambda role, env: steps.append(f"screen {role}"))
     monkeypatch.setattr(testbed, "stop_screens", lambda h: steps.append("screens down"))
-    monkeypatch.setattr(testbed, "probe_hosted", lambda say=print: steps.append("probe") or "slow" not in fail)
+    monkeypatch.setattr(testbed, "probe_hosted", lambda say=print: steps.append("probe") or (
+        "slow" if "slow" in fail else "unmeasured" if "unmeasured" in fail else "ok"))
     return steps, fail
 
 
@@ -168,6 +169,33 @@ def test_a_slow_hosted_witness_is_switched_for_the_local_one_on_a_yes(world):
     asked = []
     assert _up(witness="public", ask=lambda q: asked.append(q) or "") == 0  # Return takes the default, yes
     assert "30 seconds" in asked[0] and steps[0] == "probe" and "witness up" in steps
+
+
+def test_a_witness_that_could_not_be_measured_is_not_called_slow(world):
+    steps, fail = world
+    fail.add("unmeasured")
+    asked = []
+    assert _up(witness="public", ask=lambda q: asked.append(q) or "y") == 0
+    assert "could not be measured" in asked[0] and "30 seconds" not in asked[0] and "witness up" in steps
+
+
+def test_probe_hosted_runs_the_probe_on_the_hosted_witness_only(monkeypatch):
+    # four throwaway profiles, one stamp each; a witness variable this shell carries never reaches the probe
+    monkeypatch.setenv("ARD_E2E_WITNESS_URL", "https://localhost:9")
+    monkeypatch.setenv("ARD_WITNESS", "local")
+    monkeypatch.setenv("ARD_WITNESS_URL", "https://localhost:9")
+    monkeypatch.setenv("ARD_EVIDENCEBOOK", "/eb")
+    seen = []
+
+    def run(argv, env=None, **kw):
+        seen.append((argv, env))
+        return subprocess.CompletedProcess(argv, rc, "", "")
+    monkeypatch.setattr(testbed.subprocess, "run", run)
+    for rc, outcome in ((0, "ok"), (1, "slow"), (2, "unmeasured"), (-9, "unmeasured")):
+        assert testbed.probe_hosted(say=lambda *_: None) == outcome
+    argv, env = seen[0]
+    assert argv[1].endswith("tests/witness_probe.py") and argv[2:] == ["--stamps", "1", "--parallel", "4"]
+    assert not any(k.startswith(("ARD_E2E_WITNESS", "ARD_WITNESS")) for k in env) and env["ARD_EVIDENCEBOOK"] == "/eb"
 
 
 def test_a_slow_hosted_witness_is_kept_on_a_no(world):
