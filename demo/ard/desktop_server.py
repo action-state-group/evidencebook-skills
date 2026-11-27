@@ -936,7 +936,7 @@ def ard_open_receipt_page() -> None:
             p.log(f"report of {deal_id} for the receipt page: {exc!r}")
         else:
             for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
-                print(f"deal {deal_id[5:13]} with {SELLERS[d.seller]['label']}: {line}")
+                print(f"deal {deal_id[5:13]}: {line}")
 
 
 @_tool("maya", "alder", "kestrel")

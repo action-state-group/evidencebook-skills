@@ -362,7 +362,7 @@ def test_maya_s_receipt_page_answer_says_the_ruling_the_page_shows(tmp_path, mon
     monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "page.html")
     monkeypatch.setattr(pages, "open_page", lambda path: True)
     out = ds.ard_open_receipt_page()
-    assert out.endswith("deal 01234567 with Kestrel Print: " + screens.ruled_for_buyer(ruled, "Kestrel Print")[0])
+    assert out.endswith("deal 01234567: " + screens.ruled_for_buyer(ruled, "Kestrel Print")[0])
 
 
 def test_a_report_that_fails_after_the_page_opened_says_no_ruling_and_no_error(tmp_path, monkeypatch):
