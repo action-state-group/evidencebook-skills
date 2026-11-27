@@ -461,6 +461,14 @@ def test_on_the_2026_protocol_the_form_goes_out_as_input_required_and_its_answer
     assert forms[0].requested_schema["properties"][ds.ANSWER_FIELD]["default"] == "Cancel"
 
 
+def test_the_form_s_field_is_labelled_in_a_person_s_words():
+    # #418 hand run 2026-11-27: Goose Desktop 1.59.2 labels a form's field with its key, not its title, so the
+    # window showed "answer *"; the key itself is the label a person reads
+    _, forms = call_modern(lambda p: said("Pay"))
+    (key, field), = forms[0].requested_schema["properties"].items()
+    assert key == field["title"] == "Your answer" and forms[0].requested_schema["required"] == [key]
+
+
 def test_on_the_2026_protocol_the_safe_answer_refuses():
     assert call_modern(lambda p: said("Cancel"))[0] == ds.NO
 
