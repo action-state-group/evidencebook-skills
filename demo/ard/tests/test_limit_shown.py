@@ -244,7 +244,7 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     title, text, _ = dialogs[-1]
     assert title == "The Everyday Rules held this order for your OK"
     assert "Over your per-order limit: this order 5,000 msat, limit 4,500 msat" in text
-    assert "Over your weekly limit: 5,000 msat with this order, limit 4,500 msat" in text
+    assert "Over your 7-day limit: 5,000 msat with this order, limit 4,500 msat" in text
     assert "nothing was paid" in out and rin.notes("approval")[-1]["statement"]["choice"] == "hold"
 
 
@@ -270,7 +270,7 @@ def _held_pay(monkeypatch, how, hold=True):
     import buyer
     import desktop_server as ds
 
-    held = limits.Held(reasons=["over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+    held = limits.Held(reasons=["over your 7-day limit: 3,000 msat with this order, limit 2,000 msat",
                                 "no earlier payment to this merchant from this profile",
                                 "the payment is not refundable"], limits={"weekly": (2000, 3000)})
     s = types.SimpleNamespace(maya=None, home=None, keys={"alder": "k"}, adjudicator=types.SimpleNamespace(named=dict),
@@ -303,7 +303,7 @@ def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch)
     assert "agent.log" not in out
     assert out.startswith("REFUSED: " + screens.rules_held(held.reasons) + " Maya chose Don't buy, so nothing was "
                           "sent to Alder Print Co. Do not retry")  # one period after "Co." (the hand run of #415)
-    assert "over your weekly limit: 3,000 msat with this order, limit 2,000 msat" in out
+    assert "over your 7-day limit: 3,000 msat with this order, limit 2,000 msat" in out
     assert ('Ask Maya, in one question: "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated '
             'rail, where no money moves?", and say she can choose another seller instead.') in out
     assert "Never offer to change her spending limit" in out

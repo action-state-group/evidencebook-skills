@@ -345,8 +345,8 @@ def hold_question(item: str, price_msat: int, limits: dict, reasons: list[str], 
     if over_limit and weekly and not per_order:  # both limits failing: the reasons layout, so neither is dropped
         cap, total = weekly
         spent, with_order, limit = msat(total - price_msat), msat(total), msat(cap)
-        title = "This order goes over your weekly limit"
-        figures = [f"Spent this week: {spent}", f"With this order: {with_order}", f"Your weekly limit: {limit}"]
+        title = "This order goes over your 7-day limit"
+        figures = [f"Spent in the last 7 days: {spent}", f"With this order: {with_order}", f"Your 7-day limit: {limit}"]
         foot = HELD_FOOT
     elif over_limit and per_order and not weekly:
         cap, value = per_order

@@ -401,14 +401,14 @@ def test_unsetting_the_limit_removes_the_demos_checker(tmp_path):
 
 def test_the_terminal_shows_the_question_and_returns_its_answer(monkeypatch, capsys):
     import demo
-    q = buyer.Question("This order goes over your weekly limit", "line\n\nSaved with your answer:\nCARD", "Buy anyway",
+    q = buyer.Question("This order goes over your 7-day limit", "line\n\nSaved with your answer:\nCARD", "Buy anyway",
                        "Don't buy")
     run = type("R", (), {"auto": False})()
     for typed, want in (("y", "yes"), ("", "no"), ("n", "no")):
         monkeypatch.setattr("builtins.input", lambda prompt: typed)
         assert demo.Script.answer(run, q) == want
     out = capsys.readouterr().out
-    assert "This order goes over your weekly limit\nline\n\nSaved with your answer:\nCARD" in out
+    assert "This order goes over your 7-day limit\nline\n\nSaved with your answer:\nCARD" in out
 
 
 def _rules(*findings, verdict="escalate", limit=2000):
@@ -430,17 +430,17 @@ ORDINARY = {"id": "r02-ordinary-purchase", "check": "counterparty_seen_before/4.
 def test_the_held_order_question_has_a_layout_for_each_hold():
     import limits
     cases = {
-        "weekly only": ([WEEKLY_OVER], "This order goes over your weekly limit",
-                        ["Spent this week: 2,000 msat", "With this order: 3,000 msat", "Your weekly limit: 2,000 msat"]),
+        "weekly only": ([WEEKLY_OVER], "This order goes over your 7-day limit",
+                        ["Spent in the last 7 days: 2,000 msat", "With this order: 3,000 msat", "Your 7-day limit: 2,000 msat"]),
         "per-order only": ([ORDER_OVER], "This order goes over your per-order limit",
                            ["This order: 3,000 msat", "Your per-order limit: 2,000 msat"]),
         "both limits": ([WEEKLY_OVER, ORDER_OVER], screens.HELD_TITLE,
                         ["Over your per-order limit: this order 3,000 msat, limit 2,000 msat",
-                         "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat"]),
+                         "Over your 7-day limit: 3,000 msat with this order, limit 2,000 msat"]),
         "another rule only": ([NEW_MERCHANT, ORDINARY], screens.HELD_TITLE,
                               ["No earlier payment to this merchant from this profile"]),
         "a limit and another rule": ([WEEKLY_OVER, NEW_MERCHANT], screens.HELD_TITLE,
-                                     ["Over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+                                     ["Over your 7-day limit: 3,000 msat with this order, limit 2,000 msat",
                                       "No earlier payment to this merchant from this profile"]),
     }
     for name, (findings, title, lines) in cases.items():

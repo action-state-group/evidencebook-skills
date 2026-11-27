@@ -335,7 +335,7 @@ Type in Maya's window unless a step names another; each step takes 30 to 60 s. C
 
     **Expect:** Kestrel's card as in step 12; Kestrel "NO: you hold a ruling against this seller (deal …, delivery not met, ruled …). Your rules block a seller you hold a ruling against for 180 days. Its card also counts 1 dispute decided against it, of 1 decided; the card does not say which deal."; Alder "GO".
 
-14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog: the same held-order question as in step 6, for Alder Print Co. at 2,000 msat, with the same two reasons ("No earlier payment to this merchant from this profile", "The payment is not refundable") and capsulectl's card under it ("… 2,000 msat …"). With Kestrel's 1,000 msat, this week's total is 3,000 msat, which is within her limit. Click Buy anyway.
+14. Type `Pick Alder Print Co.`, then `Yes, pay it.` and answer the dialog: the same held-order question as in step 6, for Alder Print Co. at 2,000 msat, with the same two reasons ("No earlier payment to this merchant from this profile", "The payment is not refundable") and capsulectl's card under it ("… 2,000 msat …"). With Kestrel's 1,000 msat, the total for the last 7 days is 3,000 msat, which is within her limit. Click Buy anyway.
     **Expect:** invoice 2,000 msat succeeded, "Alder Print Co.'s delivery record says 200 of 200 badges were shipped." and "Nothing has been sent in Maya's name. If she received it, she can say so, and Alder Print Co. gets her statement that she received what she paid for." Maya's agent sends nothing in her name on its own.
 
     Then type `I received all 200.` and answer the dialog ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges were shipped. Choosing Received sends Alder Print Co. your statement that you received it."): click Received.
@@ -365,9 +365,9 @@ The main run sets a spending limit of 3,000 msat in step 2, so every payment is 
 
 3. At step 14, type `Pick Alder Print Co.`, then `Yes, pay it.`
 
-   **Expect:** the same held-order question for Alder Print Co. at 2,000 msat. Its reasons: "Over your weekly limit: 3,000 msat with this order, limit 2,000 msat", "No earlier payment to this merchant from this profile" and "The payment is not refundable", then capsulectl's card ("… over your 2,000 msat limit").
+   **Expect:** the same held-order question for Alder Print Co. at 2,000 msat. Its reasons: "Over your 7-day limit: 3,000 msat with this order, limit 2,000 msat", "No earlier payment to this merchant from this profile" and "The payment is not refundable", then capsulectl's card ("… over your 2,000 msat limit").
 
-   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you the hold's own reasons, without naming any tool and without guessing at a cause: "The Everyday Rules held this order for your OK, and nothing was paid: over your weekly limit: 3,000 msat with this order, limit 2,000 msat; no earlier payment to this merchant from this profile; the payment is not refundable." Then she asks "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated rail, where no money moves?" and says you can choose another seller instead. She does not offer to change your spending limit: it changes only when you ask. The wallet balances do not change. Maya's book keeps the cancelled offer and her answer. Alder Print Co.'s book has no record of the deal.
+   Click Don't buy. **Expect:** nothing is paid, and nothing was sent to Alder Print Co. Maya tells you the hold's own reasons, without naming any tool and without guessing at a cause: "The Everyday Rules held this order for your OK, and nothing was paid: over your 7-day limit: 3,000 msat with this order, limit 2,000 msat; no earlier payment to this merchant from this profile; the payment is not refundable." Then she asks "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated rail, where no money moves?" and says you can choose another seller instead. She does not offer to change your spending limit: it changes only when you ask. The wallet balances do not change. Maya's book keeps the cancelled offer and her answer. Alder Print Co.'s book has no record of the deal.
 
 4. Answer her question:
 
@@ -377,7 +377,7 @@ The main run sets a spending limit of 3,000 msat in step 2, so every payment is 
 
    **Expect:** this is the fresh yes after Don't buy: the same question as in step 3, and no second question in chat. Click Buy anyway: "You approved this held order (…). Paying now.", and the rest of step 14 as written. The approval is sealed in the deal's own records.
 
-When the weekly limit is the only reason, the question is Steven's limit question: titled "This order goes over your weekly limit", with "Spent this week", "With this order" and "Your weekly limit" in place of the reasons, and the same last line. This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
+When the 7-day limit is the only reason, the question is Steven's limit question: titled "This order goes over your 7-day limit", with "Spent in the last 7 days", "With this order" and "Your 7-day limit" in place of the reasons, and the same last line. This run does not reach it, because every order here is also a first payment to its seller and cannot be refunded.
 
 ## Quit and re-entry
 

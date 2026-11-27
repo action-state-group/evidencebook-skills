@@ -151,7 +151,7 @@ def words(finding: dict) -> str:
     limit, value = finding.get("limit"), finding.get("value")
     if isinstance(limit, int) and isinstance(value, int):
         if _period(finding) == "7d":
-            return f"over your weekly limit: {value:,} msat with this order, limit {limit:,} msat"
+            return f"over your 7-day limit: {value:,} msat with this order, limit {limit:,} msat"
         if _period(finding) == "per_purchase":
             return f"over your per-order limit: this order {value:,} msat, limit {limit:,} msat"
     words = re.sub(r"\s*\([^)]*\)$", "", str(finding.get("reason") or finding.get("id", "")))
