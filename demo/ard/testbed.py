@@ -11,10 +11,10 @@
 
 The roles and their choices are in ``testbed.yaml``. The four agents (Alder and Kestrel, the sellers; Maya, the buyer;
 the adjudicator) each get a Goose window (``goose/open-windows.py``); the witness, the payment rail, the catalog
-stand-in and the countersigner, which run no agent, each get a Terminal window showing what the parties sent that role and got back (``watch.py``). ``up`` runs,
+stand-in and the countersigner, which run no agent, each get a window of the tmux session ``ard-testbed`` showing what the parties sent that role and got back (``watch.py``). ``up`` runs,
 in this order: if Goose is running, ask before quitting it; ``demo.py reset`` (which also stops the screens of an
-earlier run); stop the witness an earlier ``up`` started; start the witness (``witness: local``), ``demo.py seed``, open the two
-Terminal screens, open the Goose windows. A failure or Ctrl-C before the windows open stops the witness this run
+earlier run); stop the witness an earlier ``up`` started; start the witness (``witness: local``), ``demo.py seed``, open the
+screens in tmux, open the Goose windows. A failure or Ctrl-C before the windows open stops the witness this run
 started, and so does a window that does not open. ``testbed.sh`` runs the set-up script first and then this, so one command does all of it.
 
 ``witness: local`` starts capsule-anchor at the release Action State's hosted witness runs, with capsule-anchor's own
@@ -206,17 +206,34 @@ def run_env(witness: dict[str, str]) -> dict[str, str]:
     return env
 
 
+#: The tmux session that holds the testbed's screens, one window each (Ethan, 2026-11-26: no Terminal windows).
+TMUX_SESSION = "ard-testbed"
+
+
+def _tmux(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["tmux", *args], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+
+
+def close_screens() -> None:
+    """End the testbed's tmux session, if one is left from an earlier run (its screens' processes go with it)."""
+    if shutil.which("tmux"):
+        _tmux("kill-session", "-t", f"={TMUX_SESSION}")
+
+
 def open_screen(role: str, env: dict[str, str]) -> None:
-    """One Terminal window running ``watch.py <role>``, its title the role's."""
+    """One window of the testbed's tmux session (:data:`TMUX_SESSION`) running ``watch.py <role>``, named for the role."""
+    if not shutil.which("tmux"):
+        raise Stop("tmux is not installed, and the testbed's screens run in it: brew install tmux, then run this again")
     keep = ("ARD_HOME",)
     exports = "".join(f"export {k}={shlex.quote(env[k])}; " for k in keep if env.get(k))
-    cmd = f"{exports}printf '\\033]0;{TITLES.get(role, role.capitalize() + ' (testbed)')}\\007'; clear; exec {shlex.quote(_python())} {shlex.quote(str(HERE / 'watch.py'))} {role}"
-    script = f'tell application "Terminal"\n  do script {_applescript(cmd)}\n  activate\nend tell'
-    subprocess.run(["osascript", "-e", script], check=True, capture_output=True, stdin=subprocess.DEVNULL)
-
-
-def _applescript(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    cmd = f"{exports}exec {shlex.quote(_python())} {shlex.quote(str(HERE / 'watch.py'))} {role}"
+    name = TITLES.get(role, role.capitalize() + " (testbed)")
+    if _tmux("has-session", "-t", f"={TMUX_SESSION}").returncode == 0:
+        run = _tmux("new-window", "-d", "-t", f"={TMUX_SESSION}:", "-n", name, cmd)
+    else:
+        run = _tmux("new-session", "-d", "-s", TMUX_SESSION, "-n", name, "-x", "160", "-y", "48", cmd)
+    if run.returncode != 0:
+        raise Stop(f"could not open the {role} screen in tmux: {' '.join(run.stderr.split()) or run.returncode}")
 
 
 def open_windows(env: dict[str, str], rail: str) -> int:
@@ -290,9 +307,12 @@ def up(c: dict, say=print, ask=input, probe: bool = True) -> int:
             countersigner = True  # from here: a failed start leaves nothing, but a later failure leaves it running
             if subprocess.run([_python(), str(HERE / "countersigner.py"), "up"], env=env).returncode != 0:
                 raise Stop("the countersigner did not start (it says why above)")
+        close_screens()  # an earlier run's screens, stopped by the reset
         for role in SCREENS:
             if role in c["roles"]:
                 open_screen(role, env)
+        if any(role in c["roles"] for role in SCREENS):
+            say(f"the screens are in tmux: tmux attach -t {TMUX_SESSION} (Ctrl-b n for the next one)")
         rc = open_windows(env, c["rail"])
         ok = rc == 0  # the windows are open: the witness and the screens now belong to them, until `down`
         if not ok:
@@ -304,6 +324,7 @@ def up(c: dict, say=print, ask=input, probe: bool = True) -> int:
     finally:
         if not ok:  # a failed or interrupted run leaves nothing of its own running
             stop_screens(home())
+            close_screens()
             if countersigner:
                 subprocess.run([_python(), str(HERE / "countersigner.py"), "down"], env=os.environ)
             if started:
@@ -343,6 +364,7 @@ def down(say=print, ask=input) -> int:
     rc = subprocess.run([_python(), str(HERE / "demo.py"), "reset"], env=os.environ).returncode
     if rc != 0:  # the home and its windows' records stay, so the witness they name stays too
         raise Stop("reset refused (it says why above); the witness was left running")
+    close_screens()
     stop_witness(say)
     return 0
 

@@ -164,15 +164,8 @@ class SellerAgent:
 
     def event(self, line: str) -> None:
         """One of the events a seller is told of (evidencebook-skills#336, Sherlock2): deal agreed, paid, dispute
-        received, ruling. One line in its activity, and the host's desktop notification when ``notify`` is set (the
-        window's server sets it; a Goose window shows nothing until its agent is asked)."""
+        received, ruling. One line in its activity (a Goose window shows nothing until its agent is asked)."""
         self.say(line)
-        notify = getattr(self, "notify", None)
-        if notify is not None:
-            try:
-                notify(self.label, line)
-            except Exception as exc:  # noqa: BLE001: a notification never stops the seller's agent
-                self.party.log(f"notification: {exc!r}")
 
     def _terms(self, deal_id: str) -> str:
         """What the deal is for and its price, from the buyer's offer this seller kept."""

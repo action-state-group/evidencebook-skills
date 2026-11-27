@@ -111,10 +111,11 @@ def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}",
            f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}", f"CAPSULECTL_DEAL={os.environ['CAPSULECTL_DEAL']}"]
     # the testbed's own witness (ARD_WITNESS=local): its address, its key, and the certificate capsulectl trusts it by
-    for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS", "ARD_WITNESS_URL", "ARD_WITNESS_KEY", "SSL_CERT_FILE",
-                "ARD_NOTIFY"):
+    for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS", "ARD_WITNESS_URL", "ARD_WITNESS_KEY", "SSL_CERT_FILE"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
+    if role == "maya":  # a dialog answered by typed reply is read from this Goose's own record of the chat (#418)
+        env.append(f"ARD_GOOSE_DB={goose_root() / 'data' / 'sessions' / 'sessions.db'}")
     if role == "maya":  # the countersign upgrade (ard_countersign): capsule-cli's own capsulectl and the countersigner's folder
         core = os.environ.get("CAPSULECTL") or shutil.which("capsulectl")
         if core:

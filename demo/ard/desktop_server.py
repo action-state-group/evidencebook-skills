@@ -30,7 +30,6 @@ Environment (``demo.py --help`` lists it): ``CAPSULECTL_DEAL``, ``CAPSULE_ENGINE
 home first with ``demo.py seed``. See RUNBOOK.md."""
 from __future__ import annotations
 
-import contextlib
 import fcntl
 import functools
 import inspect
@@ -46,9 +45,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 try:  # mcp >= 2 renamed FastMCP to MCPServer
-    from mcp.server.mcpserver import MCPServer as FastMCP
+    from mcp.server.mcpserver import Context, MCPServer as FastMCP
 except ImportError:  # mcp < 2
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp import Context, FastMCP
 
 import adjudicator as adj  # noqa: E402
 import ard  # noqa: E402
@@ -103,8 +102,9 @@ def _seeded() -> None:
 # -- dialogs ------------------------------------------------------------------------------------------
 
 def dialog_text(text: str) -> str:
-    """The words a native dialog shows for ``text``: AppleScript's string quoting takes no backslash or double quote,
-    so they are replaced. A record of the person's answer commits to these words, the ones the person saw."""
+    """The words a dialog shows for ``text``, with no backslash or double quote (they are replaced, as when the dialogs
+    were drawn by AppleScript, so the words sealed with an answer stay the same). A record of the person's answer
+    commits to these words, the ones the person saw."""
     return text.replace("\\", " ").replace('"', "'")
 
 
@@ -120,28 +120,290 @@ NOT_YES = {NO: "the presenter declined it",
 #: when a person first has to find the dialog). The window's MCP tool timeout (open-windows.py TOOL_TIMEOUT_S) covers
 #: it and the rest of the longest call, ard_pay.
 DIALOG_GIVE_UP_S = 600
+#: The one field of a dialog's form in the window, and its label (proposed; awaiting Sherlock2's wording review).
+ANSWER_FIELD, ANSWER_LABEL = "answer", "Your answer"
+#: A form the window ends sooner than this after it was asked was not shown to anyone: Goose Desktop 1.59.2 ends a form
+#: it cannot draw at once, and one it drew only after 300 s (ACP_ELICITATION_TIMEOUT_SECONDS). Asking again then would
+#: only repeat the same refusal.
+SHOWN_AT_LEAST_S = 30
+
+#: The MCP request of the tool call running on this thread (set by :func:`_tool`): a dialog is asked in that call's
+#: own window. Each tool call runs on its own worker thread (mcp's ``anyio.to_thread``), so a thread-local is that call's.
+_call = threading.local()
+
+
+def answer_schema(yes: str, no: str) -> dict:
+    """The form a dialog is in the party's window: one required choice between its two answers, the safe one (``no``)
+    first and preset, so Submit without a change sends it."""
+    return {"type": "object", "required": [ANSWER_FIELD],
+            "properties": {ANSWER_FIELD: {"type": "string", "title": ANSWER_LABEL, "enum": [no, yes], "default": no}}}
+
+
+def dialog_message(title: str, text: str) -> str:
+    """The words of a dialog in the window: its title, then its text. Goose 1.59.2 shows a form's message as one paragraph
+    (ElicitationRequest.tsx draws it in a span), so a line with no closing punctuation, such as each reason a held order
+    lists, ends with a full stop here and does not run into the next. The words are those sealed with the answer."""
+    lines = [line.strip() for line in dialog_text(f"{title}\n{text}").splitlines() if line.strip()]
+    return " ".join(line if line.endswith((".", "?", "!", ":")) else line + "." for line in lines)
+
+
+#: The tool call's ``_meta`` keys Goose Desktop reads back from a form it is sent, to put the form in the chat and tool
+#: call that asked it (goose v1.59.2 crates/goose/src/session_context.rs; without them Goose refuses a form while two
+#: of the window's tool calls run, mcp_client.rs resolve_tool_call_request_id).
+ECHOED_META = ("agent-session-id", "agent-tool-call-request-id")
+
+
+def echoed_meta(ctx) -> dict | None:
+    """The keys of the call's ``_meta`` Goose reads back from a form it is sent (:data:`ECHOED_META`)."""
+    if ctx is None:
+        return None
+    meta = ctx.request_context.meta or {}  # a dict in mcp 2.3.0, a model in older mcp
+    asked_by = meta if isinstance(meta, dict) else meta.model_dump(by_alias=True)
+    return {k: asked_by[k] for k in ECHOED_META if k in asked_by} or None
+
+
+def _ask_window(ctx, message: str, schema: dict, wait_s: float):
+    """One elicitation in the window of the tool call ``ctx`` belongs to, ended after ``wait_s``; raises TimeoutError
+    then. Runs on the tool's worker thread, so the request itself goes through the server's event loop."""
+    import anyio
+    import anyio.from_thread
+    from mcp import types as mt
+    from mcp.shared.message import ServerMessageMetadata
+
+    rc = ctx.request_context
+    echo = echoed_meta(ctx)
+    request = mt.ElicitRequest(params=mt.ElicitRequestFormParams(message=message, requested_schema=schema, _meta=echo))
+
+    async def ask():
+        with anyio.fail_after(wait_s):
+            return await rc.session.send_request(request, mt.ElicitResult,
+                                                 metadata=ServerMessageMetadata(related_request_id=ctx.request_id))
+    return anyio.from_thread.run(ask, token=getattr(_call, "loop", None))
 
 
 def dialog_answer(title: str, text: str, yes: str, no: str = "Cancel") -> str:
-    """A native dialog on the presenter's screen that the agent neither reads nor answers through the chat, and how it
-    ended: ``"yes"`` (the ``yes`` button), :data:`NO` (the other button), :data:`NO_ANSWER` (it gave up after :data:`DIALOG_GIVE_UP_S`,
-    nobody clicked) or :data:`NOT_SHOWN` (no screen, or any error)."""
-    script = (f'display dialog "{dialog_text(text)}" with title "{dialog_text(title)}" buttons {{"{no}", "{yes}"}} '
-              f'default button "{no}" cancel button "{no}" with icon caution giving up after {DIALOG_GIVE_UP_S}')
-    try:
-        run = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, stdin=subprocess.DEVNULL,
-                             timeout=DIALOG_GIVE_UP_S + 20)
-    except subprocess.TimeoutExpired:  # past its own give-up: most likely on screen, unanswered
-        return NO_ANSWER
-    except (OSError, subprocess.SubprocessError):
+    """A dialog in this party's own Goose window, as a form with a choice between ``no`` (preset) and ``yes`` and
+    Goose's Submit button, and how it ended: ``"yes"`` (``yes`` submitted), :data:`NO` (``no`` submitted), :data:`NO_ANSWER` (nothing submitted within :data:`DIALOG_GIVE_UP_S`) or :data:`NOT_SHOWN` (no window,
+    or any error before it was shown). The form goes from the server to the window (MCP elicitation) and its answer
+    straight back: the window's agent neither sees the answer before the tool returns nor has any tool that gives one.
+    Goose ends a form after 300 s (a cancel, or an error on its own MCP path), so the same form is asked again until
+    :data:`DIALOG_GIVE_UP_S` has passed."""
+    how = _form_answer(title, text, yes, no)
+    if how == NOT_SHOWN and ROLE == BUYER and getattr(_call, "job", None) is not None:  # ard_confirm is Maya's
+        return _typed_answer(title, text, yes, no)
+    return how
+
+
+def _form_answer(title: str, text: str, yes: str, no: str) -> str:
+    """The dialog as a form in the window (:func:`dialog_answer`)."""
+    _call.typed = None
+    ctx = getattr(_call, "ctx", None)
+    if ctx is None:
         return NOT_SHOWN
-    if run.returncode == 0 and "gave up:true" in run.stdout:
+    message, schema = dialog_message(title, text), answer_schema(yes, no)
+    end = time.monotonic() + DIALOG_GIVE_UP_S
+    shown = False
+    while (left := end - time.monotonic()) > 0:
+        asked = time.monotonic()
+        try:
+            result = _ask_window(ctx, message, schema, left)
+        except TimeoutError:
+            return NO_ANSWER
+        except Exception as exc:  # noqa: BLE001: no window, a closed chat, a client without forms, Goose's expiry
+            if type(exc).__name__ == "NoBackChannelError" and getattr(_call, "job", None) is not None:
+                return _form_round(title, yes, no, message, schema, end)
+            result = exc
+        if not isinstance(result, Exception) and result.action == "accept":
+            got = (result.content or {}).get(ANSWER_FIELD)
+            return "yes" if got == yes else NO if got == no else NO_ANSWER
+        # Not submitted: a decline, a cancel or an error. Goose 1.59.2 offers a person no decline (only Submit), but a
+        # client that cannot draw the form declines or cancels it at once (the Claude Code adapter without form support
+        # auto-declines), so none of these is ever the presenter's no.
+        if time.monotonic() - asked < SHOWN_AT_LEAST_S:  # ended at once: the window could not draw it
+            _log(f"dialog {title!r} not shown: {result!r}")
+            return NO_ANSWER if shown else NOT_SHOWN
+        shown = True  # ended after it was on screen: Goose's own expiry, so ask again while time is left
+    return NO_ANSWER
+
+
+#: How long a form round waits for the client's retry: Goose ends a form it showed after 300 s (mcp_client.rs
+#: create_elicitation), and then its retry, or the failed call, comes at once.
+ROUND_WAIT_S = 330
+
+
+def _reply_parts(reply) -> tuple[str | None, dict]:
+    if reply is None:
+        return None, {}
+    if isinstance(reply, dict):
+        return reply.get("action"), reply.get("content") or {}
+    return getattr(reply, "action", None), getattr(reply, "content", None) or {}
+
+
+def _form_round(title: str, yes: str, no: str, message: str, schema: dict, end: float) -> str:
+    """The form on a 2026-07-28 connection, which has no back-channel: the call returns it as its input_required result,
+    the client (Goose's MCP client) shows it in the window and retries the call with the answer, and this thread reads
+    the answer from that retry (:func:`_tool`). As :func:`_form_answer`, a form ended at once was not shown. The form
+    cannot carry the call's ids (ECHOED_META) here: the 2026-07-28 surface of mcp 2.3.0 drops ``_meta`` from an embedded
+    request, and rmcp reads them only from there; so Goose can place the form only while the window runs one call, as the
+    skill has its agent do (one tool per message). Otherwise Goose fails the call, and nothing is done."""
+    job = _call.job
+    shown = False
+    while (left := end - time.monotonic()) > 0:
+        asked = time.monotonic()
+        job.pause_form(message, schema)
+        if not job.replied.wait(min(left, ROUND_WAIT_S)):
+            _log(f"dialog {title!r}: no answer came back from the window")  # the client gave up on the call
+            return NO_ANSWER
+        action, content = _reply_parts(job.reply)
+        if action == "accept":
+            got = content.get(ANSWER_FIELD)
+            return "yes" if got == yes else NO if got == no else NO_ANSWER
+        if time.monotonic() - asked < SHOWN_AT_LEAST_S:
+            _log(f"dialog {title!r} not shown: the window answered {action!r} at once")
+            return NO_ANSWER if shown else NOT_SHOWN
+        shown = True
+    return NO_ANSWER
+
+
+# -- the typed reply: when the window cannot show a form ----------------------------------------------------------------
+#
+# With the Claude Code (ACP) provider the window cannot show a form (Claude Code talks MCP 2026-07-28 to this server,
+# which then has no back-channel, and the Claude Code adapter forwards no form to Goose 1.59.2). The dialog is then asked
+# in the chat (Ethan, 2026-11-26: "弹不出表单就用文字让用户确认"): the tool returns its words and the exact reply to
+# type, and its work waits on its own thread. The answer is read from Goose's own record of the chat, the person's next
+# typed message after the question (Goose writes it only from what is typed in the window), never from the agent: the
+# agent cannot type the person's reply. Only the exact reply is yes; anything else, or no reply within
+# DIALOG_GIVE_UP_S, is the safe answer.
+
+#: How often the record is read for the person's reply.
+REPLY_POLL_S = 2.0
+#: The words a seal adds after the dialog's words when the answer was a typed reply (proposed; awaiting Sherlock2's
+#: wording review).
+TYPED_NOTE = "Answered by a typed reply in the chat"
+
+
+def goose_db() -> Path:
+    """Goose's record of its chats (crates/goose/src/session/session_manager.rs SESSIONS_FOLDER, DB_NAME at v1.59.2):
+    ``ARD_GOOSE_DB``, which open-windows.py sets, else the one under ``GOOSE_PATH_ROOT``, else the demo's Goose root."""
+    if os.environ.get("ARD_GOOSE_DB"):
+        return Path(os.environ["ARD_GOOSE_DB"]).expanduser()
+    if os.environ.get("GOOSE_PATH_ROOT"):
+        return Path(os.environ["GOOSE_PATH_ROOT"]).expanduser() / "data" / "sessions" / "sessions.db"
+    import reset
+    return reset.goose_root() / "data" / "sessions" / "sessions.db"
+
+
+def _read_db(query: str, args: tuple) -> list[tuple]:
+    import sqlite3
+    db = goose_db()
+    if not db.is_file():
+        return []
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+    try:
+        return con.execute(query, args).fetchall()
+    finally:
+        con.close()
+
+
+def chat_of(meta: dict) -> str | None:
+    """The Goose chat (session id) a tool call came from: Goose's own ``agent-session-id`` (a provider Goose runs), or the
+    chat whose recorded tool request has the id Claude Code gives the call (``claudecode/toolUseId``, Claude Code ACP)."""
+    if meta.get("agent-session-id"):
+        return str(meta["agent-session-id"])
+    use = meta.get("claudecode/toolUseId")
+    if not use:
+        return None
+    import json
+    for sid, content in _read_db("SELECT session_id, content_json FROM messages WHERE role = 'assistant' AND "
+                                 "content_json LIKE ? ORDER BY id DESC", (f'%{use}%',)):
+        try:
+            if any(c.get("type") == "toolRequest" and c.get("id") == use for c in json.loads(content)):
+                return sid
+        except (ValueError, AttributeError):
+            continue
+    return None
+
+
+def last_record_id() -> int:
+    """The id of the newest message in Goose's record (its ids only grow): a reply counts only if recorded after it."""
+    rows = _read_db("SELECT COALESCE(MAX(id), 0) FROM messages", ())
+    return int(rows[0][0]) if rows else 0
+
+
+def typed_reply(chat: str, after_id: int) -> tuple[int, str] | None:
+    """The person's first message typed in ``chat`` after the record's message ``after_id``, with its id, or None yet.
+    A tool's result and the turn context Goose adds are recorded as the user's too, so only a plain typed text counts."""
+    import json
+    for mid, content in _read_db("SELECT id, content_json FROM messages WHERE session_id = ? AND role = 'user' AND "
+                                 "id > ? ORDER BY id", (chat, after_id)):
+        try:
+            parts = json.loads(content)
+        except ValueError:
+            continue
+        texts = [c.get("text", "") for c in parts if isinstance(c, dict) and c.get("type") == "text"]
+        if not texts or len(texts) != len(parts) or texts[0].lstrip().startswith("<turn-context>"):
+            continue
+        return int(mid), "\n".join(texts)
+    return None
+
+
+def reply_matches(reply: str, yes: str) -> bool:
+    """Whether the typed reply is exactly ``yes``: case, surrounding spaces and a closing full stop aside."""
+    return reply.strip().rstrip(".").strip().casefold() == yes.casefold()
+
+
+#: One question waits for a typed reply at a time, so one reply never answers two questions.
+_typed_one = threading.Lock()
+#: Set to end every wait for a typed reply at once (tests; a window closing).
+_shutdown = threading.Event()
+
+
+def _typed_answer(title: str, text: str, yes: str, no: str) -> str:
+    """The dialog asked by typed reply (above): this call's tool returns the question, and this thread waits for the
+    person's reply in Goose's record. While one question waits, another is not asked: it is not shown."""
+    job, ctx = _call.job, _call.ctx
+    raw = (ctx.request_context.meta or {}) if ctx is not None else {}
+    meta = raw if isinstance(raw, dict) else raw.model_dump(by_alias=True)
+    if not (meta.get("agent-session-id") or meta.get("claudecode/toolUseId")):
+        _log(f"dialog {title!r}: this call names no chat, so it cannot be answered by a typed reply")
+        return NOT_SHOWN
+    if not _typed_one.acquire(blocking=False):
+        _log(f"dialog {title!r}: another question already waits for a typed reply")
+        return NOT_SHOWN
+    try:
+        after = last_record_id()  # before the question goes out: an earlier message never answers it
+        job.pause(title, text, yes, no)
+        chat = None  # Goose records the call's own request only once the call has returned the question
+        end = time.monotonic() + DIALOG_GIVE_UP_S
+        while time.monotonic() < end and not _shutdown.is_set():
+            chat = chat or chat_of(meta)
+            got = typed_reply(chat, after) if chat else None
+            if got is not None:
+                _call.typed = got[1]
+                return "yes" if reply_matches(got[1], yes) else NO
+            _shutdown.wait(REPLY_POLL_S)
+        if chat is None:
+            _log(f"dialog {title!r}: its chat was not found in Goose's record ({goose_db()})")
         return NO_ANSWER
-    if run.returncode == 0 and f"button returned:{yes}" in run.stdout:
-        return "yes"
-    if "(-128)" in (getattr(run, "stderr", "") or "") or (run.returncode == 0 and "button returned:" in run.stdout):
-        return NO  # the cancel button (osascript: "User canceled. (-128)")
-    return NOT_SHOWN
+    finally:
+        _typed_one.release()
+        job.answered.set()
+
+
+#: How a typed reply other than the exact one is told (proposed; awaiting Sherlock2's wording review): never "chose
+#: Cancel" or "declined".
+TYPED_NOT_YES = "Maya's typed reply was not the exact answer"
+
+
+def not_yes(how: str, table: dict) -> str:
+    """Why a dialog did not end in yes, in ``table``'s words; a typed reply that was not the exact one says so."""
+    return TYPED_NOT_YES if how == NO and getattr(_call, "typed", None) is not None else table[how]
+
+
+def typed_note() -> str:
+    """The line a seal adds when this thread's last dialog was answered by a typed reply, else ""."""
+    reply = getattr(_call, "typed", None)
+    return f"\n{TYPED_NOTE}: {dialog_text(reply)}" if reply is not None else ""
 
 
 def ask_person(title: str, text: str, yes: str, no: str = "Cancel") -> bool:
@@ -243,13 +505,7 @@ def seller() -> flow.SellerAgent:
         _seller_lock = _lock(ROLE)
         stage.ensure_stage(_home())
         _seller = flow.SellerAgent(_home(), ROLE)
-        if os.environ.get("ARD_NOTIFY", "1") != "0":
-            _seller.notify = notify
     return _seller
-
-
-def notification_title(seller_label: str) -> str:
-    return f"{seller_label}'s agent (run by the operator)"
 
 
 def _log(line: str) -> None:
@@ -263,26 +519,112 @@ def _log(line: str) -> None:
         pass
 
 
-def notify(seller_label: str, line: str) -> None:
-    """A desktop notification on the presenter's screen for a seller event (evidencebook-skills#336: the host may show
-    one). Its title names the seller's agent and the operator who runs it (u120), so it never reads as the seller
-    itself writing to the presenter. It never waits: the seller's agent goes on whether or not macOS shows it.
-    ``ARD_NOTIFY=0`` turns it off."""
-    title = notification_title(seller_label)
-    script = f'display notification "{dialog_text(line)}" with title "{dialog_text(title)}"'
-    run = subprocess.Popen(["osascript", "-e", script], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.PIPE, text=True, start_new_session=True)
+class _Job:
+    """One tool call's work, on its own thread, so a dialog asked by typed reply can return the question while the work
+    waits for the answer (:func:`_typed_answer`)."""
 
-    def reap() -> None:  # in the background, so the seller's agent never waits; a failure is logged, not shown
-        try:
-            _, err = run.communicate(timeout=30)
-            if run.returncode:
-                _log(f"notification not shown (osascript exit {run.returncode}): {err.strip()}")
-        except subprocess.TimeoutExpired:
-            run.kill()
-            run.communicate()  # reaped, its pipe closed
-            _log("notification not shown: osascript did not finish in 30 s")
-    threading.Thread(target=reap, daemon=True).start()
+    def __init__(self) -> None:
+        import uuid
+        self.id = uuid.uuid4().hex
+        self.buf = io.StringIO()
+        self.shown = 0  # how much of buf a tool result already returned
+        self.done, self.paused, self.answered = threading.Event(), threading.Event(), threading.Event()
+        self.question: tuple[str, str, str, str] | None = None
+        self.kind = "typed"  # what the pause asks: "typed" (the question in the chat) or "form" (a form round)
+        self.form: tuple[str, dict] | None = None
+        self.replied = threading.Event()
+        self.reply = None  # the form round's answer, from the client's retry of the call
+
+    def pause(self, title: str, text: str, yes: str, no: str) -> None:
+        self.question, self.kind = (title, text, yes, no), "typed"
+        self.answered.clear()
+        self.paused.set()
+
+    def pause_form(self, message: str, schema: dict) -> None:
+        self.form, self.kind, self.reply = (message, schema), "form", None
+        self.replied.clear()
+        self.paused.set()
+
+    def take(self) -> str:
+        out = self.buf.getvalue()
+        part, self.shown = out[self.shown:], len(out)
+        return part
+
+
+#: The tool call of this window whose dialog waits for a typed reply, if any (ard_confirm collects it).
+_waiting: list[_Job] = []
+#: The tool calls whose form went out as an input_required result, by the request state the client's retry echoes.
+_rounds: dict[str, _Job] = {}
+
+
+class _ThreadOut(io.TextIOBase):
+    """sys.stdout that writes to the running tool call's own buffer, on the thread that runs it, and elsewhere to the
+    real stdout: tool calls run at the same time each keep their own output."""
+
+    def __init__(self, real) -> None:
+        self.real = real
+
+    def write(self, s: str) -> int:
+        out = getattr(_call, "out", None)
+        return (out or self.real).write(s)
+
+    def flush(self) -> None:
+        (getattr(_call, "out", None) or self.real).flush()
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+def _own_stdout() -> None:
+    if not isinstance(sys.stdout, _ThreadOut):
+        sys.stdout = _ThreadOut(sys.stdout)
+
+
+def _question_text(job: _Job) -> str:
+    title, text, yes, no = job.question
+    return ("This step waits for the person's answer, which they give by typing in this chat. Show them these words "
+            f"exactly, then end your turn:\n\n{dialog_message(title, text)}\n\nTo answer {yes}, type exactly: {yes}\n"
+            f"Anything else typed, or no reply within {DIALOG_GIVE_UP_S // 60} minutes, means {no}.\n\nWhen they have "
+            "replied, call ard_confirm. Never type or give the answer yourself: only their own typed reply counts.")
+
+
+def _run_job(job: _Job, fn, args, kwargs, ctx, token) -> None:
+    _call.ctx, _call.job, _call.out, _call.loop = ctx, job, job.buf, token
+    try:
+        if _session is not None and _session.log:  # what Maya's agent did since her last request
+            print("Since your last request:")
+            _flush(_session)
+            print()
+        fn(*args, **kwargs)
+    except (SystemExit, Exception) as exc:
+        print(f"\nREFUSED: {_refusal(exc)}")
+    finally:
+        _call.ctx = _call.job = _call.out = _call.loop = None
+        _rounds.pop(job.id, None)  # a form round the client never retried
+        job.answered.set()
+        job.done.set()
+
+
+def _until_paused_or_done(job: _Job) -> str:
+    """The job's output once it ends, or once it pauses on a dialog asked by typed reply (then its question)."""
+    while not job.done.wait(0.1):
+        if job.paused.is_set() and job.kind == "form":
+            job.paused.clear()
+            _rounds[job.id] = job
+            from mcp import types as mt
+            message, schema = job.form
+            return mt.InputRequiredResult(request_state=job.id, input_requests={ANSWER_FIELD: mt.ElicitRequest(
+                params=mt.ElicitRequestFormParams(message=message, requested_schema=schema))})
+        if job.paused.is_set():
+            job.paused.clear()
+            _waiting[:] = [j for j in _waiting if not j.done.is_set() or j.shown < len(j.buf.getvalue())]
+            if job not in _waiting:
+                _waiting.append(job)
+            return (job.take() + "\n\n" + _question_text(job)).strip()
+    if job in _waiting:
+        _waiting.remove(job)
+    _rounds.pop(job.id, None)
+    return job.take().strip()
 
 
 def _tool(*roles: str, description: str | None = None):
@@ -290,20 +632,28 @@ def _tool(*roles: str, description: str | None = None):
     ``REFUSED:`` and changes nothing."""
     def deco(fn):
         @functools.wraps(fn)
-        def run(*args, **kwargs) -> str:
-            buf = io.StringIO()
-            try:
-                with contextlib.redirect_stdout(buf):
-                    if _session is not None and _session.log:  # what Maya's agent did since her last request
-                        print("Since your last request:")
-                        _flush(_session)
-                        print()
-                    fn(*args, **kwargs)
-            except (SystemExit, Exception) as exc:
-                return (buf.getvalue() + f"\nREFUSED: {_refusal(exc)}").strip()
-            return buf.getvalue().strip()
-        run.__signature__ = inspect.signature(fn).replace(return_annotation=str)
-        run.__annotations__ = {**fn.__annotations__, "return": str}
+        def run(*args, ard_request: Context | None = None, **kwargs) -> str:
+            _own_stdout()
+            state = getattr(ard_request, "request_state", None) if ard_request is not None else None
+            if state is not None and state in _rounds:  # the client's retry with the form's answer
+                job = _rounds.pop(state)
+                responses = ard_request.input_responses or {}
+                job.reply = responses.get(ANSWER_FIELD)
+                job.replied.set()
+                return _until_paused_or_done(job)
+            job = _Job()
+            token = None
+            if ard_request is not None:  # mcp runs this on its worker thread: the event loop a form is sent through
+                import anyio.from_thread
+                import anyio.lowlevel
+                token = anyio.from_thread.run_sync(anyio.lowlevel.current_token)
+            threading.Thread(target=_run_job, args=(job, fn, args, kwargs, ard_request, token), daemon=True).start()
+            return _until_paused_or_done(job)
+        sig = inspect.signature(fn)
+        # mcp passes the request's Context to the parameter annotated with it and leaves it out of the tool's inputs
+        request = inspect.Parameter("ard_request", inspect.Parameter.KEYWORD_ONLY, default=None, annotation=Context)
+        run.__signature__ = sig.replace(parameters=[*sig.parameters.values(), request], return_annotation=str)
+        run.__annotations__ = {**fn.__annotations__, "ard_request": Context, "return": str}
         del run.__wrapped__
         if ROLE in roles:
             return server.tool(description=description)(run)
@@ -458,8 +808,9 @@ def ard_set_limit(limit_msat: int) -> None:
     """Set the person's spending limit. When the person names the most they will pay in their ask, propose it to them
     as their spending limit in one short question ("<the amount> msat as your spending limit?") and end your turn;
     never set it on your own reading of their words. Only after they say yes, call this with the amount in msat: it
-    asks them in a dialog on the presenter's screen, and only their click there sets it. You cannot see or answer the
-    dialog. Once set, it is sealed in their records, and their card, the assessment and every payment check use it.
+    asks them in a dialog in this window, and only their answer there sets it. You cannot answer the dialog. If the
+    step hands you a question to show, show it word for word, end your turn, and call ard_confirm after the person
+    replies. Once set, it is sealed in their records, and their card, the assessment and every payment check use it.
     Never propose a new or higher limit yourself, after a held order included: change it only when the person asks for
     that in their own words."""
     limit = limits.check_amount(limit_msat)
@@ -468,9 +819,9 @@ def ard_set_limit(limit_msat: int) -> None:
     with s.pay_lock:  # never while a payment is checked or waits for her answer under the limit it read (Codex on #361)
         how = "yes" if gate_off() else dialog_answer(title, text, screens.LIMIT_YES)
         if how != "yes":
-            raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so no spending limit was set. Do not retry on your own; ask "
+            raise RuntimeError(f"{not_yes(how, RECEIVED_NOT_YES)}, so no spending limit was set. Do not retry on your own; ask "
                                "Maya.")
-        limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + f"\nAnswer: {screens.LIMIT_YES}")
+        limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + typed_note() + f"\nAnswer: {screens.LIMIT_YES}")
     print(screens.limit_line(limits.sealed(s.maya), _ceilings(s.pack or packs.starting())))
     print(LIMIT_SET_THEN)
 
@@ -523,9 +874,11 @@ def held_declined(name: str, price_msat: int) -> str:
 
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
-_PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears on the presenter's screen first and this call "
+_PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears in this window first and this call "
         "blocks, for up to 10 minutes, until the presenter answers it (Pay or Cancel; Buy anyway or Don't buy when the "
-        "Everyday Rules hold the order): do not retry or call it again while it waits. Only after that yes does it send "
+        "Everyday Rules hold the order; with Claude Code ACP it returns the question to show instead): do not retry or "
+        "call it again while it waits. You cannot answer the dialog. If the step hands you a question to show, show it "
+        "word for word, end your turn, and call ard_confirm after the person replies. Only after that yes does it send "
         "the order to the seller (the agreement names the deal's adjudicator and "
         "Action State's witness) and pay it. Refused "
         "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
@@ -561,17 +914,18 @@ def ard_pay(seller: str) -> None:
                 answer["how"] = dialog_answer(q.title, q.text, q.yes, q.no)
             return answer["how"]
         made = buyer.open_and_pay(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary, ask,
-                                  print, simulated=not _real(), said=dialog_text, rail_words=words, request=s.ask)
+                                  print, simulated=not _real(), said=lambda w: dialog_text(w) + typed_note(), rail_words=words,
+                                  request=s.ask)
         held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)
             if how == NO and held is None:  # a held order's answer asks the order-again question instead (held_declined)
                 s.declined[key] = getattr(answer.get("q"), "title", "")
             if held is not None:  # the hold's own sentence first, whole, for Maya to read (#412)
-                raise Said(screens.rules_held(held.reasons) + f" {HELD_NOT_YES[how]}, so nothing was sent to {screens.stop(name)} "
+                raise Said(screens.rules_held(held.reasons) + f" {not_yes(how, HELD_NOT_YES)}, so nothing was sent to {screens.stop(name)} "
                            + (held_declined(name, a.price_msat) if how == NO else "Do not retry on your own; if Maya "
                               "asks again, confirm with her first. Never say she declined it."))
-            raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
+            raise RuntimeError(f"{not_yes(how, NOT_YES)}, so the order was not placed: nothing was sent to the seller and nothing "
                                "was paid. Do not retry on your own; if Maya asks again, confirm with her first."
                                + ("" if how == NO else " Never say she declined it."))
         if held is not None:
@@ -598,9 +952,9 @@ RECEIVED_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in 
 
 @_tool("maya")
 def ard_confirm_received(seller: str, deal: str = "") -> None:
-    """Ask Maya, in a dialog on the presenter's screen, whether she received what she paid for in her deal with
+    """Ask Maya, in a dialog in this window, whether she received what she paid for in her deal with
     ``seller``; only her yes seals her statement that she did and sends it to the seller. Call only when Maya says she
-    received the delivery, never on your own after a payment or a delivery. You cannot see or answer the dialog. With
+    received the delivery, never on your own after a payment or a delivery. You cannot answer the dialog. If the step hands you a question to show, show it word for word, end your turn, and call ard_confirm after the person replies. With
     more than one deal with that seller still to confirm, pass ``deal`` (the deal id, or its first characters)."""
     s = session()
     key = _seller_key(seller)
@@ -634,7 +988,7 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
             f"shipped. Choosing Received sends {name} your statement that you received it.")
     how = "yes" if gate_off() else dialog_answer("Confirm what you received", text, "Received")
     if how != "yes":
-        raise RuntimeError(f"{RECEIVED_NOT_YES[how]}, so nothing was sent in Maya's name. Do not retry on your own; ask "
+        raise RuntimeError(f"{not_yes(how, RECEIVED_NOT_YES)}, so nothing was sent in Maya's name. Do not retry on your own; ask "
                            "Maya.")
     with s.pay_lock:
         buyer.close_received(s.home, s.maya, target)
@@ -674,6 +1028,32 @@ def ard_countersign(seller: str, deal: str = "") -> None:
     print(f"Maya's deal {target.deal_id[5:13]} with {name}: " + receipt.countersign_line(stamp, "Maya", name))
 
 
+#: One ard_confirm collects a step's outcome at a time.
+_collect = threading.Lock()
+#: How long ard_confirm waits for the person's reply to reach Goose's record before it says there is none yet.
+CONFIRM_WAIT_S = 6
+
+
+@_tool("maya")
+def ard_confirm() -> None:
+    """Only after you showed the person a question a step asked them to answer by typing in this chat, word for word,
+    and they replied: the outcome of that step. Their reply is read from this chat's own record, never from you, so
+    never call this to answer it yourself. It says when no reply has come yet."""
+    if not _collect.acquire(timeout=CONFIRM_WAIT_S):
+        raise RuntimeError("another ard_confirm is collecting that step's outcome")
+    try:
+        if not _waiting:
+            raise RuntimeError("no step is waiting for a typed reply")
+        job = _waiting[0]
+        if not job.answered.wait(CONFIRM_WAIT_S):
+            print("No reply from the person yet. Show them the question exactly as the step gave it, then end your "
+                  "turn.")
+            return
+        print(_until_paused_or_done(job))
+    finally:
+        _collect.release()
+
+
 #: How the dispute dialog ended other than Dispute, in Maya's terms (as RECEIVED_NOT_YES).
 DISPUTE_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in time",
                    NOT_SHOWN: "the dialog could not be shown"}
@@ -681,11 +1061,12 @@ DISPUTE_NOT_YES = {NO: "Maya chose Cancel", NO_ANSWER: "Maya did not answer in t
 
 @_tool("maya")
 def ard_dispute(seller: str, deal: str = "") -> None:
-    """Dispute the delivery of Maya's deal with ``seller``, only after her yes in a dialog on the presenter's screen
+    """Dispute the delivery of Maya's deal with ``seller``, only after her yes in a dialog in this window
     (evidencebook-skills#333): her signed statement that it was not met, and a dispute, sent to the seller and to the
     adjudicator the agreement names, which then asks each side for its books. It moves no money. Call only when Maya
-    says the delivery was short or did not come. This call blocks, for up to 10 minutes, until she clicks Dispute or
-    Cancel: do not call it again while it waits; you cannot see or answer the dialog. With more than one deal with that
+    says the delivery was short or did not come. This call blocks, for up to 10 minutes, until she answers Dispute or
+    Cancel (with Claude Code ACP it returns the question to show instead): do not call it again while it waits; you
+    cannot answer the dialog. If the step hands you a question to show, show it word for word, end your turn, and call ard_confirm after the person replies. With more than one deal with that
     seller, pass ``deal`` (the deal id, or its first characters)."""
     s = session()
     key = _seller_key(seller)
@@ -721,7 +1102,7 @@ def ard_dispute(seller: str, deal: str = "") -> None:
             "statement that the delivery was not met. It moves no money.")
     how = "yes" if gate_off() else dialog_answer("Dispute this delivery", text, "Dispute")
     if how != "yes":
-        raise RuntimeError(f"{DISPUTE_NOT_YES[how]}, so nothing was sent in Maya's name. Do not retry on your own; ask "
+        raise RuntimeError(f"{not_yes(how, DISPUTE_NOT_YES)}, so nothing was sent in Maya's name. Do not retry on your own; ask "
                            "Maya.")
     buyer.dispute(s.home, s.maya, target, print)
     print(screens.DISPUTE_RAISED.format(seller=name))

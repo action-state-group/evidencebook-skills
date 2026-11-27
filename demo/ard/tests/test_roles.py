@@ -110,61 +110,20 @@ def test_a_ruling_for_her_says_the_outcome_and_no_refund():
 
 
 class Seller:
-    """A seller's agent with no binary: its log, its party's log, a notification hook."""
+    """A seller's agent with no binary: its log and its party's log."""
 
-    def __init__(self, tmp_path, notify=None):
+    def __init__(self, tmp_path):
         self.agent = flow.SellerAgent.__new__(flow.SellerAgent)
         a = self.agent
         a.log, a._lock, a.label, a.name, a.home = [], threading.Lock(), "Kestrel Print", "kestrel", tmp_path
         a.party = type("P", (), {"log": lambda self, line: None})()
-        if notify is not None:
-            a.notify = notify
 
 
-def test_each_seller_event_is_one_line_and_a_notification(tmp_path):
-    shown = []
-    s = Seller(tmp_path, notify=lambda label, line: shown.append((label, line))).agent
+def test_each_seller_event_is_one_line_in_its_activity(tmp_path):
+    s = Seller(tmp_path).agent
     s.event("dispute received: the buyer disputed the delivery of deal 01234567")
-    s.say("delivered to the buyer: 150 of 200 badges")  # activity, not one of the four events: no notification
-    assert len(s.log) == 2 and shown == [("Kestrel Print", "dispute received: the buyer disputed the delivery of deal "
-                                                           "01234567")]
-
-
-def test_a_failing_notification_never_stops_the_seller(tmp_path):
-    def broken(label, line):
-        raise OSError("no osascript")
-    s = Seller(tmp_path, notify=broken).agent
-    s.event("paid: the buyer says it paid 1,000 msat")
-    assert s.log[-1].endswith("paid: the buyer says it paid 1,000 msat")
-
-
-def test_a_notification_that_fails_after_it_started_is_logged(tmp_path, monkeypatch):
-    """Codex's round 1: osascript that starts and then exits non-zero is logged, never waited on by the seller."""
-    monkeypatch.setenv("ARD_HOME", str(tmp_path))
-    monkeypatch.setattr(ds, "ROLE", "kestrel")
-
-    class Run:
-        returncode = 1
-
-        def __init__(self, *a, **k):
-            pass
-
-        def communicate(self, timeout=None):
-            return "", "execution error: not allowed"
-    monkeypatch.setattr(ds.subprocess, "Popen", Run)
-    threads = []
-    real = ds.threading.Thread
-
-    def capture(target, daemon):
-        t = real(target=target, daemon=daemon)
-        threads.append(t)
-        return t
-    monkeypatch.setattr(ds.threading, "Thread", capture)
-    ds.notify("Kestrel Print", "paid: the buyer says it paid 1,000 msat")
-    for t in threads:
-        t.join(5)
-    assert "notification not shown (osascript exit 1): execution error: not allowed" in \
-        (tmp_path / "kestrel" / "agent.log").read_text()
+    s.say("delivered to the buyer: 150 of 200 badges")
+    assert len(s.log) == 2 and s.log[0].endswith("dispute received: the buyer disputed the delivery of deal 01234567")
 
 
 def test_a_card_that_fails_its_checks_names_no_key_or_derivation(tmp_path, monkeypatch):
@@ -181,11 +140,6 @@ def test_a_card_that_fails_its_checks_names_no_key_or_derivation(tmp_path, monke
         with pytest.raises(pt.Refused) as got:
             flow.fetch_card(tmp_path, reader, "kestrel", key)
         assert "…" not in str(got.value) and "standard_history" not in str(got.value) and "ffff" not in str(got.value)
-
-
-def test_the_notification_names_the_sellers_agent_and_the_operator_not_the_demo():
-    title = ds.notification_title("Kestrel Print")
-    assert title == "Kestrel Print's agent (run by the operator)" and "demo" not in title.lower()
 
 
 def test_the_deal_agreed_line_reads_the_offer_kept(tmp_path):
@@ -211,36 +165,6 @@ def test_a_deal_is_agreed_once_the_sellers_agreement_reached_her(tmp_path):
     f = buyer.wire.path(tmp_path, "maya", KESTREL.deal_id, "agree")
     f.write_text("{}")
     assert buyer.agreed(tmp_path, KESTREL) and not buyer.paid(tmp_path, KESTREL)
-
-
-def test_a_notification_that_hangs_is_killed_and_reaped(tmp_path, monkeypatch):
-    monkeypatch.setenv("ARD_HOME", str(tmp_path))
-    monkeypatch.setattr(ds, "ROLE", "kestrel")
-    calls = []
-
-    class Run:
-        returncode = None
-
-        def __init__(self, *a, **k):
-            pass
-
-        def communicate(self, timeout=None):
-            calls.append(timeout)
-            if timeout:
-                raise ds.subprocess.TimeoutExpired("osascript", timeout)
-            return "", ""
-
-        def kill(self):
-            calls.append("kill")
-    monkeypatch.setattr(ds.subprocess, "Popen", Run)
-    threads = []
-    real = ds.threading.Thread
-    monkeypatch.setattr(ds.threading, "Thread", lambda target, daemon: threads.append(real(target=target, daemon=daemon))
-                        or threads[-1])
-    ds.notify("Kestrel Print", "paid")
-    for t in threads:
-        t.join(5)
-    assert calls == [30, "kill", None] and "did not finish in 30 s" in (tmp_path / "kestrel" / "agent.log").read_text()
 
 
 @pytest.mark.parametrize("leg,rows", [(True, {"paid_as_agreed": "met", "delivered": "not_met"}),

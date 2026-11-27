@@ -72,7 +72,7 @@ case "$1" in
   checkout) echo "${!#}" >"$d/.git/HEAD-stub" ;;
 esac''',
 }
-FORMULA = {"gnu-tar": "gtar", "node": "node npm", "rust": "cargo"}
+FORMULA = {"gnu-tar": "gtar", "node": "node npm", "rust": "cargo", "tmux": "tmux"}
 EXTENSIONS = ("developer", "computercontroller", "skills")
 
 
@@ -102,11 +102,11 @@ def mac(tmp_path):
     log.touch()
     for name, body in STUBS.items():
         _exe(stubs / name, body)
-    for name in ("git", "jq", "node", "npm", "gtar", "go", "cargo"):
+    for name in ("git", "jq", "node", "npm", "gtar", "tmux", "go", "cargo"):
         _exe(stubs / "templates" / name, STUBS.get(name, "exit 0"))
     for formula, cmds in FORMULA.items():
         (stubs / "templates" / f"formula-{formula}").write_text(cmds)
-    for name in ("node", "gtar"):
+    for name in ("node", "gtar", "tmux"):
         _exe(stubs / name, "exit 0")
     (stubs / "goose-version").write_text(PIN["GOOSE_VERSION"] + "\n")
 
@@ -163,7 +163,7 @@ esac''')
     # /usr/bin must not make a "missing" tool look installed (evidencebook-skills#365's main run on Linux).
     system = tmp_path / "system"
     system.mkdir()
-    replaced = set(STUBS) | {"git", "jq", "node", "npm", "gtar", "go", "cargo"}
+    replaced = set(STUBS) | {"git", "jq", "node", "npm", "gtar", "tmux", "go", "cargo"}
     for d in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"):
         for tool in sorted(Path(d).iterdir()) if Path(d).is_dir() else ():
             link = system / tool.name

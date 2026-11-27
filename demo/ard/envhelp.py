@@ -49,8 +49,6 @@ VARS = (
         "witness ARD_WITNESS_URL and ARD_WITNESS_KEY name (testbed.py starts one on this Mac and sets all three); by "
         "default each checkpoint goes to Action State's hosted witness, witness.agentactioncapsule.org, which receives "
         "hashes only", "off", ()),
-    Var("ARD_NOTIFY", "0 turns off the desktop notification each seller event shows (deal agreed, paid, dispute "
-        "received, ruling); by default the seller windows show one", "0", ()),
 )
 
 
