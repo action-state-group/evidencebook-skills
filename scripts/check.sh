@@ -20,6 +20,12 @@
 # to main that changes their inputs. The exit status is non-zero when any job
 # that ran failed.
 #
+# The jobs see none of this shell's ARD_* variables, and each runs with fresh,
+# empty demo folders of its own (ARD_HOME and the rest, demo_homes below),
+# removed when the run ends: a laptop's seeded ~/.config/ard-commerce-demo is
+# never read or written, so the check tests what CI's clean runner tests
+# (evidencebook-skills#357).
+#
 # The pins (commits, tags, release versions) are read from the workflow files, so they
 # stay the one source. ard-demo's end-to-end test stamps on a witness started on
 # this machine, as CI's local leg does (local_witness below, evidencebook-skills#371,
@@ -56,6 +62,11 @@ done
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+
+# The demo's settings come from the jobs alone, as on CI's clean runner (evidencebook-skills#357): a variable this
+# shell exported (ARD_HOME, ARD_RAIL, ARD_WITNESS ...) is dropped, and each job gets fresh, empty demo folders of its own
+# (demo_homes below).
+while read -r var; do unset "$var"; done < <(compgen -e | grep '^ARD_' || true)
 
 jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report contracts neutrality ard-demo-unit
   tau2-live-unit ard-demo tau2-live)
@@ -448,6 +459,18 @@ job_tau2_live() {
   )
 }
 
+# demo_homes JOB: export the demo's folders (demo/ard/tests/conftest.py DEMO_HOMES), each a fresh, empty one under
+# $tmp/homes/JOB, which the EXIT trap removes with the rest of $tmp. The person's own (~/.config/ard-commerce-demo, a
+# seeded one on a laptop, never on CI; ~/ard-demo) are never read or written by a job (evidencebook-skills#357).
+demo_homes() {
+  local var d
+  for var in ARD_HOME ARD_GOOSE_ROOT ARD_TESTBED ARD_ACP_PREFIX ARD_CAPSULE_ANCHOR; do
+    d=$tmp/homes/$1/$var
+    mkdir -p "$d"
+    export "$var=$d"
+  done
+}
+
 # Every job starts at once, so the check takes as long as its slowest job, not the sum of all
 # (evidencebook-skills#419). Each runs in its own process group (set -m), writing its own log; a job's log is
 # printed whole when it ends, with its pass or FAIL line, so two jobs' output never interleave. Ending the script
@@ -479,7 +502,7 @@ for job in "${jobs[@]}"; do
   fi
   start_of[$job]=$SECONDS
   # errexit inside the job: a job is a function run with `set -e`, as when the jobs ran one by one.
-  (set -e; "job_${job//-/_}") </dev/null >"$tmp/$job.log" 2>&1 &
+  (set -e; demo_homes "$job"; "job_${job//-/_}") </dev/null >"$tmp/$job.log" 2>&1 &
   pid_of[$job]=$!
 done
 set +m

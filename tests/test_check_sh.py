@@ -45,23 +45,11 @@ class Selection(unittest.TestCase):
         self.assertIn("usage: scripts/check.sh [--full] [--plan]", run.stderr)
 
 
-class Runner(unittest.TestCase):
-    """The runner that starts every job at once (evidencebook-skills#419), on a copy of check.sh whose jobs are
-    replaced by stubs just before the runner: the copy's own runner, traps and cleanup run, nothing else does."""
+class Stubbed(unittest.TestCase):
+    """A copy of check.sh whose jobs are replaced by STUBS just before the runner: the copy's own runner, traps and
+    cleanup run, nothing else does."""
 
-    STUBS = r"""
-for j in "${jobs[@]}"; do eval "job_${j//-/_}() { echo \"ran $j\"; }"; done
-job_unit() { echo unit-out; sleep 1; }
-job_contracts() { echo contracts-out; exit 3; }
-job_tau2_live() {
-  # A grandchild that ignores TERM, and checks that the run's $tmp is still there while it is being stopped.
-  # set +e: the job's errexit would end it when TERM kills its sleep.
-  ( set +e; trap '[[ -d "$tmp" ]] && echo kept >"$OUT/tmp-at-term"' TERM; echo $BASHPID >"$OUT/grandchild";
-    while :; do sleep 0.1; done ) &
-  [[ -n "${HANG:-}" ]] && wait
-  kill -KILL $! 2>/dev/null; true
-}
-"""
+    STUBS = ""
 
     def setUp(self):
         self.dir = pathlib.Path(tempfile.mkdtemp())
@@ -84,6 +72,24 @@ job_tau2_live() {
         self.repo = repo
         self.env = {**GIT_ENV, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}", "OUT": str(self.dir),
                     "CHECK_DEPS": str(self.dir / "deps")}
+
+
+class Runner(Stubbed):
+    """The runner that starts every job at once (evidencebook-skills#419)."""
+
+    STUBS = r"""
+for j in "${jobs[@]}"; do eval "job_${j//-/_}() { echo \"ran $j\"; }"; done
+job_unit() { echo unit-out; sleep 1; }
+job_contracts() { echo contracts-out; exit 3; }
+job_tau2_live() {
+  # A grandchild that ignores TERM, and checks that the run's $tmp is still there while it is being stopped.
+  # set +e: the job's errexit would end it when TERM kills its sleep.
+  ( set +e; trap '[[ -d "$tmp" ]] && echo kept >"$OUT/tmp-at-term"' TERM; echo $BASHPID >"$OUT/grandchild";
+    while :; do sleep 0.1; done ) &
+  [[ -n "${HANG:-}" ]] && wait
+  kill -KILL $! 2>/dev/null; true
+}
+"""
 
     def gone(self, pid):
         try:
@@ -150,6 +156,44 @@ job_tau2_live() {
         while not self.gone(grandchild):
             self.assertLess(time.monotonic(), deadline, f"process {grandchild} outlived the check")
             time.sleep(0.1)
+
+
+class DemoHomes(Stubbed):
+    """Each job runs with fresh, empty demo folders of its own and none of the caller's ARD_* variables, and the run
+    leaves none behind (evidencebook-skills#357): what a job sees does not depend on whether the person has a seeded
+    demo home."""
+
+    VARS = ("ARD_HOME", "ARD_GOOSE_ROOT", "ARD_TESTBED", "ARD_ACP_PREFIX", "ARD_CAPSULE_ANCHOR")
+    STUBS = r"""
+for j in "${jobs[@]}"; do
+  eval "job_${j//-/_}() {
+    env | grep '^ARD_' | sort >\"\$OUT/$j.env\"
+    for v in ARD_HOME ARD_GOOSE_ROOT ARD_TESTBED ARD_ACP_PREFIX ARD_CAPSULE_ANCHOR; do
+      [[ -d \"\${!v}\" && -z \"\$(ls -A \"\${!v}\")\" ]] || { echo \"\$v not a fresh empty folder\"; exit 1; }
+      echo seeded >\"\${!v}/left-by-$j\"
+    done
+  }"
+done
+"""
+
+    def test_each_job_gets_fresh_demo_folders_and_none_of_the_callers(self):
+        real = self.dir / "seeded-home"
+        real.mkdir()
+        (real / "pages").mkdir()
+        env = {**self.env, "ARD_HOME": str(real), "ARD_RAIL": "lightning", "ARD_WITNESS": "public"}
+        run = subprocess.run([str(self.repo / "scripts" / "check.sh"), "--full"], cwd=self.repo, env=env,
+                             capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        seen = {}
+        for job in FAST + E2E:
+            got = dict(line.split("=", 1) for line in (self.dir / f"{job}.env").read_text().splitlines())
+            self.assertEqual(sorted(got), sorted(self.VARS), job)  # ARD_RAIL and ARD_WITNESS were dropped
+            for var, value in got.items():
+                self.assertNotEqual(value, str(real))
+                self.assertNotIn(value, seen, f"{job} shares {var} with {seen.get(value)}")
+                seen[value] = job
+                self.assertFalse(pathlib.Path(value).exists(), f"{job}'s {var} outlived the run")
+        self.assertEqual([p.name for p in real.iterdir()], ["pages"])  # the caller's home is untouched
 
 
 class CIStillRunsIt(unittest.TestCase):
