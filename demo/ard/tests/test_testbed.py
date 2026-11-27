@@ -70,6 +70,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(testbed, "stop_witness", lambda say=print: steps.append("witness down"))
     monkeypatch.setattr(testbed, "open_screen", lambda role, env: steps.append(f"screen {role}"))
     monkeypatch.setattr(testbed, "stop_screens", lambda h: steps.append("screens down"))
+    monkeypatch.setattr(testbed, "close_screens", lambda: steps.append("tmux closed"))
     monkeypatch.setattr(testbed, "probe_hosted", lambda say=print: steps.append("probe") or (
         "slow" if "slow" in fail else "unmeasured" if "unmeasured" in fail else "ok"))
     return steps, fail
@@ -84,7 +85,8 @@ def _up(witness="local", ask=lambda q: "n", probe=True):
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
     steps, _ = world
     assert _up() == 0
-    assert steps == ["reset", "witness down", "witness up", "seed", "countersigner up", "screen witness", "screen rail",
+    assert steps == ["reset", "witness down", "witness up", "seed", "countersigner up", "tmux closed", "screen witness",
+                     "screen rail",
                      "screen catalog", "screen countersigner", "windows"]
 
 
@@ -93,14 +95,14 @@ def test_a_failed_seed_stops_the_witness_this_run_started(world):
     fail.add("seed")
     with pytest.raises(testbed.Stop, match="seed failed"):
         _up()
-    assert steps[-2:] == ["screens down", "witness down"] and "windows" not in steps
+    assert steps[-3:] == ["screens down", "tmux closed", "witness down"] and "windows" not in steps
 
 
 def test_ctrl_c_stops_the_witness_this_run_started(world):
     steps, fail = world
     fail.add("seed^C")
     assert _up() == 130
-    assert steps[-2:] == ["screens down", "witness down"] and "windows" not in steps
+    assert steps[-3:] == ["screens down", "tmux closed", "witness down"] and "windows" not in steps
 
 
 def test_a_refused_reset_starts_nothing_and_stops_nothing(world):
@@ -130,14 +132,14 @@ def test_a_witness_that_fails_to_start_is_stopped(world, monkeypatch):
     monkeypatch.setattr(testbed, "start_witness", failing)
     with pytest.raises(testbed.Stop):
         _up()
-    assert steps[-3:] == ["witness up", "screens down", "witness down"] and "seed" not in steps
+    assert steps[-4:] == ["witness up", "screens down", "tmux closed", "witness down"] and "seed" not in steps
 
 
 def test_windows_that_do_not_open_stop_the_witness_this_run_started(world):
     steps, fail = world
     fail.add("windows")
     assert _up() == 1
-    assert steps[-4:] == ["windows", "screens down", "countersigner down", "witness down"]  # all it started, too
+    assert steps[-5:] == ["windows", "screens down", "tmux closed", "countersigner down", "witness down"]  # all it started, too
 
 
 def test_a_local_witness_without_python_311_is_refused_before_anything_changes(world, monkeypatch):
@@ -484,7 +486,7 @@ def test_a_countersigner_that_does_not_start_stops_the_run(world):
     fail.add("countersigner up")
     with pytest.raises(testbed.Stop, match="countersigner did not start"):
         _up()
-    assert "windows" not in steps and steps[-3:] == ["screens down", "countersigner down", "witness down"]
+    assert "windows" not in steps and steps[-4:] == ["screens down", "tmux closed", "countersigner down", "witness down"]
 
 
 def test_the_countersigner_needs_python_311_even_with_the_hosted_witness(world, monkeypatch):
@@ -512,3 +514,48 @@ def test_the_countersigner_screen_says_what_it_signed_and_that_it_is_not_indepen
     assert "seal times" in feeds.HEADINGS["countersigner"] and "payment reference" in feeds.HEADINGS["countersigner"] and "never a payment's secret" in feeds.HEADINGS[
         "countersigner"] and "not independent" in feeds.HEADINGS["countersigner"]
     assert "not independent" in testbed.TITLES["countersigner"]
+
+
+# -- the screens run in tmux, never in Terminal windows (Ethan, 2026-11-26) ------------------------------------------
+
+def _tmux_world(monkeypatch, has_session: bool):
+    calls = []
+
+    def tmux(*args):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0 if args[0] != "has-session" or has_session else 1, "", "")
+    monkeypatch.setattr(testbed, "_tmux", tmux)
+    monkeypatch.setattr(testbed.shutil, "which", lambda name: "/opt/homebrew/bin/tmux" if name == "tmux" else None)
+    return calls
+
+
+def test_the_first_screen_starts_the_testbed_tmux_session(monkeypatch):
+    calls = _tmux_world(monkeypatch, has_session=False)
+    testbed.open_screen("countersigner", {"ARD_HOME": "/tmp/h"})
+    new = calls[-1]
+    assert new[:3] == ("new-session", "-d", "-s") and new[3] == testbed.TMUX_SESSION
+    assert new[new.index("-n") + 1] == "Countersigner (testbed, not independent)"
+    assert "export ARD_HOME=/tmp/h; exec " in new[-1] and new[-1].endswith("watch.py countersigner")
+
+
+def test_later_screens_are_windows_of_that_session(monkeypatch):
+    calls = _tmux_world(monkeypatch, has_session=True)
+    testbed.open_screen("rail", {})
+    assert calls[-1][:4] == ("new-window", "-d", "-t", f"={testbed.TMUX_SESSION}:") and "Rail (testbed)" in calls[-1]
+
+
+def test_no_screen_opens_a_terminal_window():
+    src = (HERE / "testbed.py").read_text()
+    assert 'application "Terminal"' not in src and "do script" not in src
+
+
+def test_without_tmux_the_screens_are_refused_plainly(monkeypatch):
+    monkeypatch.setattr(testbed.shutil, "which", lambda name: None)
+    with pytest.raises(testbed.Stop, match="brew install tmux"):
+        testbed.open_screen("rail", {})
+
+
+def test_close_screens_ends_only_the_testbed_session(monkeypatch):
+    calls = _tmux_world(monkeypatch, has_session=True)
+    testbed.close_screens()
+    assert calls == [("kill-session", "-t", f"={testbed.TMUX_SESSION}")]

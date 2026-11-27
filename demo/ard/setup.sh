@@ -100,6 +100,7 @@ prerequisites() {
   need node node Node.js
   need npm node npm
   need gtar gnu-tar "GNU tar (the plugin build needs it)"
+  need tmux tmux "tmux (the testbed's screens run in it)"
   [ "$REAL_RAIL" = 0 ] || need cargo rust "Rust (the real rail)"
   command -v lsof >/dev/null 2>&1 || stop "lsof is missing. macOS ships it in /usr/sbin, and the demo's reset needs it."
   PY=""
