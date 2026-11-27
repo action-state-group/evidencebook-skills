@@ -459,7 +459,7 @@ job_tau2_live() {
   )
 }
 
-# demo_homes JOB: export the demo's folders (demo/ard/tests/conftest.py DEMO_HOMES), each a fresh, empty one under
+# demo_homes JOB: export the demo's folders (DEMO_HOMES in the demo tests' conftest), each a fresh, empty one under
 # $tmp/homes/JOB, which the EXIT trap removes with the rest of $tmp. The person's own (~/.config/ard-commerce-demo, a
 # seeded one on a laptop, never on CI; ~/ard-demo) are never read or written by a job (evidencebook-skills#357).
 demo_homes() {
