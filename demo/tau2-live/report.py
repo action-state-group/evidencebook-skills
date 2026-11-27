@@ -3,7 +3,8 @@
 
     uv run python report.py CASE_DIR
 
-1. Waits for the deal store's next checkpoint (a report rests on one).
+1. Cuts the deal store's next checkpoint tick (a report rests on one), waiting for it
+   when it is not yet due: up to the store's cadence interval and jitter.
 2. Seals the airline's own report (``deal report --out``).
 3. Writes two Evidence Bundles of it: ``keep`` (the airline's own view, nothing
    withheld) and ``adjudicator`` (the copy for the judge: rows withheld, the
@@ -22,7 +23,9 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import records
@@ -31,8 +34,20 @@ HERE = Path(__file__).resolve().parent
 
 
 def wait_for_checkpoint(store: records.Store, book: str) -> dict:
-    """Run the store's cadence until a tick covers what the case sealed."""
-    return store.run("deal", "tick", "--wait-up-to", "6m", profile=book)
+    """Cut the store's next checkpoint tick, waiting for it when it is not yet due.
+
+    A tick checkpoints everything sealed before it, so the first one cut now or later covers the
+    case. ``deal tick`` cuts one at once when it is due; otherwise it says when it will be
+    (``due``), and ``deal tick --wait-up-to`` just past that time takes that one tick and returns:
+    the next is at least half a cadence interval later, outside the window. A tick another poll cuts in
+    the meantime covers the case as well; ``deal report`` refuses a book its checkpoint does not
+    cover."""
+    tick = store.run("deal", "tick", profile=book)
+    if tick.get("state") != "ticked":
+        due = datetime.fromisoformat(tick["due"].replace("Z", "+00:00"))
+        wait = max(0, math.ceil((due - datetime.now(timezone.utc)).total_seconds())) + 2
+        tick = store.run("deal", "tick", "--wait-up-to", f"{wait}s", profile=book)
+    return tick
 
 
 def verify(store: records.Store, bundle: Path, deal: bool = True) -> dict:

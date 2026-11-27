@@ -15,6 +15,7 @@ sys.path.insert(0, str(HERE))
 import airline_mcp  # noqa: E402
 import evaluate  # noqa: E402
 import records  # noqa: E402
+import report  # noqa: E402
 
 UTC = timezone.utc
 
@@ -101,3 +102,68 @@ def test_a_window_that_differs_from_the_existing_store_is_refused(tmp_path):
     assert FakeStore(state=tmp_path, window="month").book() == "airline"
     with pytest.raises(records.RecordError, match="has window 'month', fixed"):
         FakeStore(state=tmp_path, window="day").book()
+
+
+class TickStore(records.Store):
+    """A store whose `deal tick` answers are canned, recording each call."""
+
+    def __init__(self, answers, **kw):
+        super().__init__(**kw)
+        self.answers, self.calls = list(answers), []
+
+    def run(self, *args, profile=None):
+        self.calls.append(args)
+        return self.answers.pop(0)
+
+
+def test_a_due_tick_is_cut_at_once_with_no_wait(tmp_path):
+    store = TickStore([{"state": "ticked", "tick": 2}], state=tmp_path)
+    assert report.wait_for_checkpoint(store, "airline") == {"state": "ticked", "tick": 2}
+    assert store.calls == [("deal", "tick")]
+
+
+def test_a_tick_not_yet_due_is_waited_for_just_past_its_due_time(tmp_path, monkeypatch):
+    now = datetime(2026, 11, 27, 9, 0, 0, 500000, tzinfo=UTC)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(report, "datetime", Clock)
+    store = TickStore([{"state": "not_due", "due": "2026-11-27T09:00:40Z"}, {"state": "ticked", "tick": 2}],
+                      state=tmp_path)
+    assert report.wait_for_checkpoint(store, "airline")["state"] == "ticked"
+    # 39.5 seconds to the due time, rounded up, plus the 2-second margin.
+    assert store.calls == [("deal", "tick"), ("deal", "tick", "--wait-up-to", "42s")]
+
+
+def test_a_due_time_already_past_waits_only_the_margin(tmp_path):
+    store = TickStore([{"state": "not_due", "due": "2020-01-01T00:00:00Z"}, {"state": "ticked"}], state=tmp_path)
+    report.wait_for_checkpoint(store, "airline")
+    assert store.calls[1] == ("deal", "tick", "--wait-up-to", "2s")
+
+
+class InitStore(records.Store):
+    """A store whose `deal init` writes a profile file, as capsulectl does."""
+
+    def run(self, *args, profile=None):
+        if args[:2] == ("deal", "init"):
+            path = self.state / "config" / "capsule" / "profiles" / f"{profile}.yaml"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("name: airline\n")
+            (self.state / "books" / "airline").mkdir(parents=True, exist_ok=True)
+            (self.state / "books" / "airline" / "deal.db").write_text("")
+        return {"window": self.window}
+
+
+@pytest.mark.parametrize("cadence, block", [
+    (None, ""),
+    ("1m", "cadence:\n    interval: 1m\n    jitter: 0s\n"),
+])
+def test_a_store_cadence_is_written_into_its_profile_when_created(tmp_path, cadence, block):
+    InitStore(state=tmp_path, cadence=cadence).book()
+    profile = tmp_path / "config" / "capsule" / "profiles" / "airline.yaml"
+    assert profile.read_text() == "name: airline\n" + block
+    InitStore(state=tmp_path, cadence="2m").book()  # an existing store keeps its cadence
+    assert profile.read_text() == "name: airline\n" + block
