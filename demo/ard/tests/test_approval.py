@@ -75,40 +75,28 @@ def test_no_window_means_not_shown(monkeypatch):
     assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == ds.NOT_SHOWN
 
 
-def test_goose_ending_its_form_asks_again_until_ten_minutes_then_no_answer(monkeypatch):
-    # Goose Desktop 1.59.2 ends a form after 300 s; the dialog keeps the 10 minutes by asking again with the same words
-    asked = window(monkeypatch, mt.ElicitResult(action="cancel"), mt.ElicitResult(action="cancel"), took=300)
+@pytest.mark.parametrize("ended", [
+    mt.ElicitResult(action="cancel"),                          # Goose Desktop's own expiry of the form it drew
+    RuntimeError("Elicitation request timed out or failed"),  # Goose's MCP client at its 300 s (mcp_client.rs)
+])
+def test_a_form_goose_ends_after_it_was_shown_is_no_answer_and_never_asked_again(monkeypatch, ended):
+    # #438: Goose 1.59.2 ends a form after 300 s and fails the call, so the form waits 5 minutes and is asked once
+    asked = window(monkeypatch, ended, took=300)
     assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == ds.NO_ANSWER
-    assert len(asked) == 2 and asked[0][:2] == asked[1][:2]
-    assert [a[2] for a in asked] == [600, 300] and ds.DIALOG_GIVE_UP_S == 600
+    assert len(asked) == 1 and asked[0][2] == ds.DIALOG_GIVE_UP_S
+    assert ds.FORM_LIMIT_S == 300 and ds.DIALOG_GIVE_UP_S == 600  # 600 is the typed reply's wait
 
 
-def test_goose_s_own_expiry_error_also_asks_again(monkeypatch):
-    # on Goose's own MCP path its 300 s expiry comes back as an error (mcp_client.rs create_elicitation), not a cancel
-    asked = window(monkeypatch, RuntimeError("Elicitation request timed out or failed"), said("Pay"), took=300)
-    assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == "yes" and len(asked) == 2
-
-
-def test_an_answer_to_the_second_form_counts(monkeypatch):
-    window(monkeypatch, mt.ElicitResult(action="cancel"), said("Pay"), took=300)
-    assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == "yes"
-
-
-def test_the_ten_minutes_ending_is_no_answer(monkeypatch):
+def test_the_dialog_s_own_end_is_no_answer(monkeypatch):
     window(monkeypatch, TimeoutError())
     assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == ds.NO_ANSWER
 
 
 def test_a_form_ended_at_once_was_not_shown_and_is_not_asked_again(monkeypatch):
-    # a window that cannot draw the form cancels it at once: no loop of asks for ten minutes
+    # a window that cannot draw the form cancels it at once
     asked = window(monkeypatch, mt.ElicitResult(action="cancel"), took=0.1)
     assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == ds.NOT_SHOWN
     assert len(asked) == 1
-
-
-def test_a_window_gone_after_the_form_was_shown_is_no_answer(monkeypatch):
-    window(monkeypatch, mt.ElicitResult(action="cancel"), RuntimeError("closed"), took=300)
-    assert ds.dialog_answer("Approve this payment", "Pay X", "Pay") == ds.NO_ANSWER
 
 
 @pytest.mark.parametrize("title,yes,no", [
@@ -482,11 +470,11 @@ def test_on_the_2026_protocol_a_form_the_window_cannot_draw_is_not_shown():
     assert call_modern(lambda p: mt.ElicitResult(action="decline"))[0] == ds.NOT_SHOWN
 
 
-def test_on_the_2026_protocol_goose_s_expiry_asks_again(monkeypatch):
+def test_on_the_2026_protocol_a_form_goose_ended_is_no_answer_and_never_asked_again(monkeypatch):
+    # #438: as with the older handshake, a form Goose ended after it was on screen is no answer, asked once
     monkeypatch.setattr(ds, "SHOWN_AT_LEAST_S", -1)  # as if the form was on screen until Goose ended it
-    answers = iter([mt.ElicitResult(action="cancel"), said("Pay")])
-    text, forms = call_modern(lambda p: next(answers))
-    assert text == "yes" and len(forms) == 2 and forms[0].message == forms[1].message
+    text, forms = call_modern(lambda p: mt.ElicitResult(action="cancel"))
+    assert text == ds.NO_ANSWER and len(forms) == 1
 
 
 def test_one_typed_reply_answers_one_question_only(monkeypatch, record):
@@ -532,7 +520,7 @@ def test_a_form_round_the_client_never_retries_is_let_go(monkeypatch):
     job = ds._Job()
 
     def step():
-        print(ds._form_round("Approve this payment", "Pay", "Cancel", "m", {}, ds.time.monotonic() + 5))
+        print(ds._form_round("Approve this payment", "Pay", "Cancel", "m", {}))
     import threading as _th
     th = _th.Thread(target=ds._run_job, args=(job, step, (), {}, None, None))
     th.start()
