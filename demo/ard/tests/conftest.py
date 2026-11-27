@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
+import atexit
 import os
+import pwd
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -10,6 +14,112 @@ sys.path.insert(0, str(HERE))
 import _paths  # noqa: E402
 
 _paths.setup()
+
+# The tests never use the person's own demo folders (evidencebook-skills#357, #324): a laptop holds a seeded demo home
+# that CI's clean runner lacks, so a test that read it passed locally and failed on main (#353). Each folder below is
+# taken from its variable when that is set (scripts/check.sh gives every job fresh, empty ones) and is otherwise a fresh,
+# empty one of this test process's own, so a laptop and CI test the same thing. The real folders are those of the user
+# this process runs as, from the password database: a test that changes $HOME (test_reset.py's ``mac``) never moves them.
+DEMO_HOMES = ("ARD_HOME", "ARD_GOOSE_ROOT", "ARD_TESTBED", "ARD_ACP_PREFIX", "ARD_CAPSULE_ANCHOR")
+_USER = Path(pwd.getpwuid(os.getuid()).pw_dir)
+#: The person's own folders the demo's code reaches by default: the demo home (demo.DEFAULT_HOME), its Goose root
+#: (reset.GOOSE_ROOT_DEFAULT), the testbed, its capsule-anchor checkout and the ACP prefix under ~/ard-demo (not
+#: ~/ard-demo itself, which the RUNBOOK's checkouts of this repository and evidencebook live in), and the person's own
+#: Goose settings and recipe trust, which reset.clear_recipe_trust edits.
+REAL_FOLDERS = [_USER / ".config" / "ard-commerce-demo", _USER / ".config" / "ard-commerce-goose",
+                _USER / "ard-demo" / "testbed", _USER / "ard-demo" / "acp", _USER / "ard-demo" / "capsule-anchor",
+                _USER / ".config" / "goose", _USER / "Library" / "Application Support" / "Goose"]
+
+
+def _inside(path: str, roots) -> bool:
+    return any(path == str(r) or path.startswith(str(r) + os.sep) for r in roots)
+
+
+def demo_homes(env, make=lambda var: tempfile.mkdtemp(prefix=f"{var.lower()}-")) -> dict[str, str]:
+    """The folder each of :data:`DEMO_HOMES` takes: ``env``'s value, else ``make(var)``. A value inside one of
+    :data:`REAL_FOLDERS` is refused, before any folder is made."""
+    real = [os.path.realpath(r) for r in REAL_FOLDERS]
+    for var in DEMO_HOMES:
+        value = env.get(var)
+        if value and _inside(os.path.realpath(os.path.expanduser(value)), real):
+            raise pytest.UsageError(f"{var}={value} is the person's own demo folder; the tests use a fresh one "
+                                    f"(unset {var}, or point it at an empty folder)")
+    return {var: env.get(var) or make(var) for var in DEMO_HOMES}
+
+
+_made = [v for v in DEMO_HOMES if not os.environ.get(v)]
+os.environ.update(demo_homes(os.environ))
+for _var in _made:
+    atexit.register(shutil.rmtree, os.environ[_var], True)
+
+
+class RealFolderTouched(RuntimeError):
+    """A test reached one of :data:`REAL_FOLDERS`."""
+
+
+class _Guard:
+    """An audit hook that refuses any file operation under :data:`REAL_FOLDERS` (``os.stat`` raises no audit event, so
+    a bare existence check passes). The refusal is raised where the operation is, and also noted, because code that
+    catches the error (``except Exception``, say) would hide it: the test that made it fails afterwards all the same."""
+
+    #: The events whose first one or two arguments are paths.
+    EVENTS = {"open": 1, "os.listdir": 1, "os.scandir": 1, "os.mkdir": 1, "os.remove": 1, "os.rmdir": 1, "os.chmod": 1,
+              "os.truncate": 1, "os.utime": 1, "shutil.rmtree": 1, "os.rename": 2, "os.replace": 2, "os.link": 2,
+              "os.symlink": 2, "shutil.copytree": 2, "shutil.copyfile": 2, "shutil.move": 2}
+
+    def __init__(self, roots):
+        # A root that is a symbolic link is guarded under both names.
+        self.roots = sorted({f(r) for r in roots for f in (os.path.abspath, os.path.realpath)})
+        self.touched: list[str] = []
+
+    def __call__(self, event, args):
+        n = self.EVENTS.get(event)
+        if not n:
+            return
+        for arg in args[:n]:
+            if isinstance(arg, (str, bytes, os.PathLike)):
+                p = os.fsdecode(os.fspath(arg))
+                if not os.path.isabs(p):
+                    try:
+                        p = os.path.join(os.getcwd(), p)
+                    except OSError:  # the working folder is gone: a relative path then names nothing of the person's
+                        continue
+                p = os.path.normpath(p)
+                if _inside(p, self.roots):
+                    self.touched.append(f"{event} {p}")
+                    raise RealFolderTouched(f"{event} {p}: the tests never use the person's own demo folders "
+                                            "(conftest.REAL_FOLDERS); use the fresh one in the folder's variable")
+
+    def take(self) -> list[str]:
+        out, self.touched = self.touched, []
+        return out
+
+
+GUARD = _Guard(REAL_FOLDERS)
+sys.addaudithook(GUARD)
+
+
+def _fail_if_touched(when: str) -> None:
+    touched = GUARD.take()
+    if touched:
+        pytest.fail(f"touched the person's own demo folders ({when}): " + "; ".join(touched), pytrace=False)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_folder():
+    _fail_if_touched("in a fixture set up for this test")  # a module or session fixture may have
+    yield
+    _fail_if_touched("in this test")
+
+
+def pytest_sessionfinish(session):
+    # What a fixture's teardown touched after the last test.
+    touched = GUARD.take()
+    if touched:
+        print("\ntouched the person's own demo folders: " + "; ".join(touched), file=sys.stderr)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 os.environ.setdefault("CAPSULE_WITNESS", "off")
 # Every agreement names Action State's hosted witness by default (party.WITNESS_URL); the unit tests never reach it, and
 # only tests/test_e2e.py turns it back on.

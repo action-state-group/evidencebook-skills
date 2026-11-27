@@ -48,7 +48,6 @@ def _local_witness(mp: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(scope="module")
 def world(tmp_path_factory):
-    os.environ["ARD_WITNESS"] = "public"
     os.environ.setdefault("ARD_STAGE_PORT", "47681")
     import adjudicator as adj
     import ard
@@ -60,8 +59,11 @@ def world(tmp_path_factory):
     from cast import SELLERS
 
     with pytest.MonkeyPatch.context() as mp:  # undone however the fixture ends, a failed set-up too
+        mp.setenv("ARD_WITNESS", "public")
         _local_witness(mp)
         home = tmp_path_factory.mktemp("ard-e2e")
+        # The pages a deal writes (pages.path, the receipt page) go to this home, not to ARD_HOME's (#324).
+        mp.setenv("ARD_HOME", str(home))
         seed.seed(home, say=lambda *_: None)
         st = stage.Stage(home)
         agents = {n: flow.SellerAgent(home, n) for n in SELLERS}
