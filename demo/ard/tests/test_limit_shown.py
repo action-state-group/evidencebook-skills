@@ -298,7 +298,7 @@ def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch)
     out, held = _held_pay(monkeypatch, ds.NO)
     assert "agent.log" not in out
     assert out.startswith("REFUSED: " + screens.rules_held(held.reasons) + " Maya chose Don't buy, so nothing was "
-                          "sent to Alder Print Co.")
+                          "sent to Alder Print Co. Do not retry")  # one period after "Co." (the hand run of #415)
     assert "over your weekly limit: 3,000 msat with this order, limit 2,000 msat" in out
     assert ('Ask Maya, in one question: "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated '
             'rail, where no money moves?", and say she can choose another seller instead.') in out

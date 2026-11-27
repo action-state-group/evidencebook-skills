@@ -565,7 +565,7 @@ def ard_pay(seller: str) -> None:
             if how == NO:
                 s.declined[key] = getattr(answer.get("q"), "title", "")
             if held is not None:  # the hold's own sentence first, whole, for Maya to read (#412)
-                raise Said(screens.rules_held(held.reasons) + f" {HELD_NOT_YES[how]}, so nothing was sent to {name}. "
+                raise Said(screens.rules_held(held.reasons) + f" {HELD_NOT_YES[how]}, so nothing was sent to {screens.stop(name)} "
                            + (held_declined(name, a.price_msat) if how == NO else "Do not retry on your own; if Maya "
                               "asks again, confirm with her first. Never say she declined it."))
             raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
