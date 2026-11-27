@@ -18,7 +18,7 @@ import unittest.mock
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from capsulectl_calls import CapsuleDoesNotVerify  # noqa: E402
+from capsulectl_calls import CapsuleDoesNotVerify, EvidenceUnavailable, UntrustedSigner  # noqa: E402
 from clause_report import CLAUSE_REPORT, LEGACY_CLAUSE_REPORT  # noqa: E402
 from rollup_day import group_reports  # noqa: E402
 from run_daily import build_report  # noqa: E402
@@ -174,6 +174,39 @@ class Told(unittest.TestCase):
 
     def test_no_terminal_is_no(self):
         self.assertFalse(regrade.told("r", io.StringIO("y\n"), io.StringIO()))
+
+
+class MalformedRowsAndVerifierFailures(unittest.TestCase):
+    def setUp(self):
+        self.row = judged_row("met")
+        self.rg = regrade_record(ROW_ID, self.row, "not_met", "r", "rater:1", AT)
+
+    def test_a_malformed_row_is_no_row_and_other_pairs_still_show(self):
+        other_row = {**judged_row("met"), "case_id": "case-2"}
+        other_rg = regrade_record("99" * 32, other_row, "met", "r", "rater:1", AT)
+        for broken in ({k: v for k, v in self.row.items() if k != "case_id"},
+                       {k: v for k, v in self.row.items() if k != "verdict"},
+                       {**self.row, "verdict": "pass"},
+                       {**self.row, "judge_pin_digest": "not-a-digest"}):
+            self.assertFalse(is_judged_row(broken))
+            shown = rows_with_regrades([(ROW_ID, broken), ("r1", self.rg), ("99" * 32, other_row), ("r2", other_rg)],
+                                       lambda _cid: None)
+            self.assertEqual([r["case_id"] for r in shown["rows"]], ["case-2"])
+            self.assertEqual(shown["not_shown"], [{"capsule_id": "r1", "why": "cites no judged row in this book"}])
+
+    def test_an_untrusted_signer_is_not_shown(self):
+        def check(cid):
+            if cid == "r1":
+                raise UntrustedSigner("signer not in the trusted keys")
+        shown = rows_with_regrades([(ROW_ID, self.row), ("r1", self.rg)], check)
+        self.assertEqual(shown["rows"], [])
+        self.assertTrue(shown["not_shown"][0]["why"].startswith("does not verify"))
+
+    def test_a_verifier_with_no_verdict_stops_the_read(self):
+        def check(_cid):
+            raise EvidenceUnavailable("capsulectl verify gave no verdict")
+        with self.assertRaises(EvidenceUnavailable):
+            rows_with_regrades([(ROW_ID, self.row), ("r1", self.rg)], check)
 
 
 class CountsIgnoreRegrades(unittest.TestCase):

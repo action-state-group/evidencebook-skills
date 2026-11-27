@@ -32,13 +32,14 @@ and lists any regrade it does not show, with why.
 """
 import argparse
 import json
+import re
 import pathlib
 import sys
 import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from capsulectl_calls import (EvidenceUnavailable, list_capsules, payload, publish,  # noqa: E402
-                              run, seal_request, verify)
+from capsulectl_calls import (CapsuleDoesNotVerify, EvidenceUnavailable, UntrustedSigner,  # noqa: E402
+                              list_capsules, payload, publish, run, seal_request, verify)
 from clause_report import is_clause_report  # noqa: E402
 
 REGRADE = "regrade"
@@ -51,6 +52,7 @@ GRADES = ("met", "not_met", "not_evaluable")
 REASON_NOTICE = ("Your reason is sealed with this regrade. Once sealed it cannot be edited or removed, "
                  "and it travels with the judged row.")
 OUT_OF_SCOPE = "out_of_scope"
+_HEX64 = re.compile(r"[0-9a-f]{64}")
 
 
 class RegradeRefused(ValueError):
@@ -60,10 +62,13 @@ class RegradeRefused(ValueError):
 
 def is_judged_row(body):
     """Whether `body` is a judged row a person may re-grade: a clause report whose
-    verdict a judge reached (it names the judge pin it was judged under). A
-    recomputed determination was never judged, so it has no judge to re-grade."""
+    verdict a judge reached, naming the judge pin it was judged under, with the
+    case, clause and verdict a reader shows. A recomputed determination was never
+    judged, so it has no judge to re-grade; a malformed report is no row."""
     return (is_clause_report(body) and body.get("epistemic_type", "semantic_judgment") == "semantic_judgment"
-            and bool(body.get("judge_pin_digest")))
+            and isinstance(body.get("judge_pin_digest"), str) and bool(_HEX64.fullmatch(body["judge_pin_digest"]))
+            and all(isinstance(body.get(k), str) and body[k].strip() for k in ("case_id", "clause_id"))
+            and body.get("verdict") in GRADES + (OUT_OF_SCOPE,))
 
 
 def is_regrade(body):
@@ -143,8 +148,9 @@ def _well_formed(body):
 def rows_with_regrades(entries, check):
     """Pair each judged row with the regrades that cite it. `entries` is
     [(capsule_id, payload)] in log order; `check(capsule_id)` authenticates one
-    capsule and raises EvidenceUnavailable (CapsuleDoesNotVerify, UntrustedSigner)
-    when it does not. Returns one item per regraded row: the row's own verdict as
+    capsule and raises CapsuleDoesNotVerify or UntrustedSigner when it does not.
+    Any other EvidenceUnavailable (a verifier that gave no verdict) propagates: the
+    read stops, rather than reporting a record as unverified. Returns one item per regraded row: the row's own verdict as
     the judge sealed it, and every regrade of it in log order, each authenticated
     with its row before it is placed beside it. A regrade never changes `judge`.
 
@@ -159,7 +165,7 @@ def rows_with_regrades(entries, check):
             try:
                 check(cid)
                 checked[cid] = None
-            except EvidenceUnavailable as e:
+            except (CapsuleDoesNotVerify, UntrustedSigner) as e:
                 checked[cid] = str(e)
         return checked[cid]
 

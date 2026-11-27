@@ -87,4 +87,6 @@ regrade: the judge's verdict and judge pin under `judge`, and each regrade under
 `regrades`, in log order. It verifies each regrade and its row first. A regrade it
 does not show is listed under `not_shown` with the reason: it does not verify, it is
 malformed, it cites no judged row in the book, or its case, clause or row type
-differs from the row's.
+differs from the row's. A clause report missing its case, clause, verdict or judge
+pin digest is not a judged row. When `capsulectl verify` gives no verdict at all,
+the read stops with `evidence unavailable` instead of calling a record unverified.

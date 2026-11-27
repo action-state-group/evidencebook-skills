@@ -51,13 +51,15 @@ way.
   `presentation.json`, the bundle presentation extension a report viewer
   renders (nothing in this repository reads it). `airline-support-outcomes` and
   `eu-ai-act-obligations` compile to `demo/<name>/` and run through the two cron
-  skills; `everyday-rules` compiles to `packs/everyday-rules/compiled/` and is
+  skills. A person may re-grade a clause report those skills sealed from a
+  judge's verdict with `scripts/regrade.py`; the regrade sits beside the report
+  and never replaces it
+  ([`docs/judge-report-and-regrade.md`](docs/judge-report-and-regrade.md)).
+  `everyday-rules` compiles to `packs/everyday-rules/compiled/` and is
   judged with `scripts/judge_bundle.py`, not the skills. Beside each Result it
   writes a judge sidecar, `<result>.judge.json` (format `judge-sidecar/v1`,
   described in [`docs/jev-judge.md`](docs/jev-judge.md)), recording which rows
-  the judge was sent. A person may re-grade a judged row with
-  `scripts/regrade.py`; the regrade sits beside the row and never replaces it
-  ([`docs/judge-report-and-regrade.md`](docs/judge-report-and-regrade.md)).
+  the judge was sent.
   `inference-deals` (a Mesh node's come-through terms, card `settlement`) is a
   deterministic pack: it names an `evaluator` instead of a judge, compiles to
   `compiled.json` alone under `packs/inference-deals/compiled/`, and
