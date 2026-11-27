@@ -122,13 +122,20 @@ def test_a_due_tick_is_cut_at_once_with_no_wait(tmp_path):
     assert store.calls == [("deal", "tick")]
 
 
-def test_a_tick_not_yet_due_is_waited_for_just_past_its_due_time(tmp_path):
-    due = (datetime.now(UTC) + timedelta(seconds=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    store = TickStore([{"state": "not_due", "due": due}, {"state": "ticked", "tick": 2}], state=tmp_path)
+def test_a_tick_not_yet_due_is_waited_for_just_past_its_due_time(tmp_path, monkeypatch):
+    now = datetime(2026, 11, 27, 9, 0, 0, 500000, tzinfo=UTC)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(report, "datetime", Clock)
+    store = TickStore([{"state": "not_due", "due": "2026-11-27T09:00:40Z"}, {"state": "ticked", "tick": 2}],
+                      state=tmp_path)
     assert report.wait_for_checkpoint(store, "airline")["state"] == "ticked"
-    assert store.calls[0] == ("deal", "tick")
-    flag, window = store.calls[1][2:]
-    assert flag == "--wait-up-to" and 40 <= int(window.removesuffix("s")) <= 42
+    # 39.5 seconds to the due time, rounded up, plus the 2-second margin.
+    assert store.calls == [("deal", "tick"), ("deal", "tick", "--wait-up-to", "42s")]
 
 
 def test_a_due_time_already_past_waits_only_the_margin(tmp_path):
