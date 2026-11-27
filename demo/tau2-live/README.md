@@ -43,25 +43,32 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
 
 ## What you need
 
-- macOS or Linux, [uv](https://docs.astral.sh/uv/), Go 1.27+ (to build capsulectl, its plugins and capsule-engine).
+- macOS or Linux, [uv](https://docs.astral.sh/uv/), Go 1.27+ (only to build capsule-engine).
 - [Goose](https://block.github.io/goose/) 1.59 or later, with a working provider. The demo was
   run with the `claude-acp` provider (`goose configure`). The `goose` command must be on
   `PATH`, or Goose Desktop must be installed at `/Applications/Goose.app`.
 - capsulectl, its deal and book plugins, and capsule-engine (the admission decision a deal
-  opens under). The commands below build them into this directory's `.tools`, so nothing
-  outside it changes; the `export` line is needed in every shell you run the demo from. They
-  are built at the commits the demo is tested at: the report asks the store for a stamp
-  (`deal tick --now`), which no capsulectl release has yet. `go install` checks each module
-  against Go's checksum database (sum.golang.org), as the release downloads were checked
-  against their SHA256SUMS.
+  opens under). The commands below download capsulectl and both plugins from their releases,
+  check each against its release's SHA256SUMS, and only then install them in this directory's
+  `.tools`, so nothing outside it changes; the `export` line is needed in every shell you run
+  the demo from. Use `P=linux-amd64` or `P=linux-arm64` on Linux.
 
   ```sh
   cd demo/tau2-live
-  EB=fdd97ddf5c9f60904ad0f0a0a4b069c592fbfc7f; CLI=052a8a6a7de4360a9e18b1269ba558bf71d0fef2
-  mkdir -p .tools/bin .tools/plugins
+  V=v0.1.1; P=darwin-arm64
+  CLI=https://github.com/action-state-group/capsule-cli/releases/download/$V
+  EB=https://github.com/action-state-group/evidencebook/releases/download/capsulectl/$V
+  mkdir -p .tools/bin .tools/plugins .tools/dl/cli .tools/dl/eb
+  (cd .tools/dl/cli && curl -fsSLO $CLI/SHA256SUMS && curl -fsSLO $CLI/capsulectl-$V-$P \
+    && grep " capsulectl-$V-$P\$" SHA256SUMS | shasum -a 256 -c -) \
+  && (cd .tools/dl/eb && curl -fsSLO $EB/SHA256SUMS && curl -fsSLO $EB/capsulectl-deal-$V-$P \
+    && curl -fsSLO $EB/capsulectl-book-$V-$P \
+    && grep " capsulectl-deal-$V-$P\$" SHA256SUMS | shasum -a 256 -c - \
+    && grep " capsulectl-book-$V-$P\$" SHA256SUMS | shasum -a 256 -c -) \
+  && install -m 755 .tools/dl/cli/capsulectl-$V-$P .tools/bin/capsulectl \
+  && install -m 755 .tools/dl/eb/capsulectl-deal-$V-$P .tools/plugins/capsulectl-deal \
+  && install -m 755 .tools/dl/eb/capsulectl-book-$V-$P .tools/plugins/capsulectl-book
   chmod 755 .tools/plugins
-  GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-cli/cmd/capsulectl@$CLI
-  GOBIN=$PWD/.tools/plugins go install github.com/action-state-group/evidencebook/capsulectl/cmd/capsulectl-deal@$EB github.com/action-state-group/evidencebook/capsulectl/cmd/capsulectl-book@$EB
   GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@v0.6.0
   export PATH=$PWD/.tools/bin:$PATH CAPSULECTL_PLUGIN_ROOTS=$PWD/.tools/plugins
   capsulectl plugin ls | grep -o '"name":"[a-z]*"'    # "book" and "deal"

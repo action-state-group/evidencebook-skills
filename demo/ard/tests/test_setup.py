@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """demo/ard/setup.sh (evidencebook-skills#364): shellcheck, and the script run with a temporary HOME and stand-in
 commands on PATH (brew, git, go, npm, curl, Goose's tools), so each test sees what the script would install, build or
-download, and what it leaves alone when everything is already at its pin."""
+download, and what it leaves alone when everything is already at its pin. The curl stand-in serves a stand-in capsulectl
+release (real files and a real SHA256SUMS, #435)."""
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import re
@@ -11,6 +14,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -19,8 +23,11 @@ HERE = Path(__file__).resolve().parents[1]
 SCRIPT = HERE / "setup.sh"
 TEXT = SCRIPT.read_text()
 PIN = {k: re.search(rf"^{k}=(\S+)$", TEXT, re.M).group(1)
-       for k in ("EVIDENCEBOOK_PIN", "CAPSULE_CLI_PIN", "CAPSULE_ENGINE_PIN", "GOOSE_VERSION", "ACP_VERSION")}
-CORE_V = f"v0.1.0-main.{PIN['CAPSULE_CLI_PIN'][:8]}"
+       for k in ("CAPSULECTL_VERSION", "EVIDENCEBOOK_PIN", "CAPSULE_CLI_PIN", "CAPSULE_ENGINE_PIN", "GOOSE_VERSION",
+                 "ACP_VERSION")}
+CORE_V = PIN["CAPSULECTL_VERSION"]
+OLD_V, OLD_CLI, OLD_EB = "v0.1.0-main.052a8a6a", "052a8a6a7de4360a9e18b1269ba558bf71d0fef2", "f" * 40  # the pins before #435
+ORG = "https://github.com/action-state-group"
 MAIN = "a" * 40  # where the stand-in origin/main of evidencebook-skills is
 
 JQ = shutil.which("jq")
@@ -39,7 +46,12 @@ n=$(( $(cat "$STUB_DIR/opened" 2>/dev/null || echo 0) + 1 )); echo $n >"$STUB_DI
 [ "$n" != "$(cat "$STUB_DIR/choose-on" 2>/dev/null)" ] \
   || echo "active_provider: google" >>"$HOME/.config/ard-commerce-goose/config/config.yaml"''',
     "ditto": 'echo "ditto $*" >>"$STUB_LOG"; exit 1',
-    "curl": 'echo "curl $*" >>"$STUB_LOG"; echo "curl: (6) Could not resolve host" >&2; exit 6',
+    # a release file under $STUB_DIR/releases/<repository>/<tag>/ is served; anything else is not reached
+    "curl": r'''echo "curl $*" >>"$STUB_LOG"
+url=${!#}; out=""; while [ $# -gt 0 ]; do [ "$1" != -o ] || out=$2; shift; done
+rel=${url#https://github.com/action-state-group/}; rel=${rel/\/releases\/download\//\/}
+if [ "$rel" != "$url" ] && [ -f "$STUB_DIR/releases/$rel" ]; then cp "$STUB_DIR/releases/$rel" "$out"; exit 0; fi
+echo "curl: (6) Could not resolve host" >&2; exit 6''',
     "npm": 'echo "npm $*" >>"$STUB_LOG"',
     "plutil": 'cat "$STUB_DIR/goose-version" 2>/dev/null || exit 1',
     "claude": 'echo "claude $*" >>"$STUB_LOG"; [ "$1 $2" = "auth status" ] && echo \'{"loggedIn": true}\'',
@@ -72,13 +84,73 @@ case "$1" in
   checkout) echo "${!#}" >"$d/.git/HEAD-stub" ;;
 esac''',
 }
-FORMULA = {"gnu-tar": "gtar", "node": "node npm", "rust": "cargo", "tmux": "tmux"}
+FORMULA = {"node": "node npm", "rust": "cargo", "tmux": "tmux"}
 EXTENSIONS = ("developer", "computercontroller", "skills")
 
 
 def _exe(path: Path, body: str) -> None:
     path.write_text("#!/bin/bash\n" + body + "\n")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _core(version: str, commit: str) -> str:
+    """A capsulectl stand-in: its version, an empty plugin list, and `plugin install`, which copies the plugin into the
+    plugin folder, executable (capsule-cli cli/plugin_install.go stages it 0755), under its name without the version
+    and platform."""
+    return f'''case "$1" in
+  --version) echo "capsulectl {version} (commit {commit})" ;;
+  plugin) case "$2" in
+    ls) echo '{{"plugins": [], "refused": []}}' ;;
+    install) echo "capsulectl $*" >>"$STUB_LOG"; n=$(basename "$3"); n=${{n%%-v[0-9]*}}
+             install -m 0755 "$3" "$HOME/.local/lib/capsulectl/plugins/$n" ;;
+  esac ;;
+esac'''
+
+
+def _plugin(name: str, version: str, commit: str) -> str:
+    return f'echo "capsulectl-{name} {version} (commit {commit})"'
+
+
+def _tgz(top: str) -> bytes:
+    """A view tarball: one folder with one file, as the release's standard-history and deal-view tarballs hold."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        d = tarfile.TarInfo(top)
+        d.type, d.mode = tarfile.DIRTYPE, 0o755
+        tar.addfile(d)
+        f = tarfile.TarInfo(f"{top}/view.css")
+        f.size = 4
+        tar.addfile(f, io.BytesIO(b"x{}\n"))
+    return buf.getvalue()
+
+
+def _release(stubs: Path) -> dict[str, Path]:
+    """The stand-in release at the pins: capsule-cli's and evidencebook's, each with its SHA256SUMS; returns each
+    file's path by name."""
+    v = CORE_V
+    files = {
+        ("capsule-cli", v): {f"capsulectl-{v}-darwin-arm64": "#!/bin/bash\n" + _core(v, PIN["CAPSULE_CLI_PIN"]) + "\n"},
+        ("evidencebook", f"capsulectl/{v}"): {
+            **{f"capsulectl-{n}-{v}-darwin-arm64": "#!/bin/bash\n" + _plugin(n, v, PIN["EVIDENCEBOOK_PIN"]) + "\n"
+               for n in ("book", "deal")},
+            f"standard-history-{v}.tar.gz": _tgz("standard-history-module"),
+            f"deal-view-{v}.tar.gz": _tgz("capsulectl-deal.d"),
+            f"deal-skill-{v}.tar.gz": _tgz("skills"),  # in the release, not installed
+        },
+    }
+    paths = {}
+    for (repo, tag), named in files.items():
+        d = stubs / "releases" / repo / tag
+        d.mkdir(parents=True)
+        sums = []
+        for name, body in named.items():
+            data = body.encode() if isinstance(body, str) else body
+            (d / name).write_bytes(data)
+            sums.append(f"{hashlib.sha256(data).hexdigest()}  {name}")
+            paths[name] = d / name
+        (d / "SHA256SUMS").write_text("\n".join(sums) + "\n")
+        paths[f"{repo}/SHA256SUMS"] = d / "SHA256SUMS"
+    return paths
 
 
 def _config(provider: str | None, on: bool) -> str:
@@ -102,11 +174,11 @@ def mac(tmp_path):
     log.touch()
     for name, body in STUBS.items():
         _exe(stubs / name, body)
-    for name in ("git", "jq", "node", "npm", "gtar", "tmux", "go", "cargo"):
+    for name in ("git", "jq", "node", "npm", "tmux", "go", "cargo"):
         _exe(stubs / "templates" / name, STUBS.get(name, "exit 0"))
     for formula, cmds in FORMULA.items():
         (stubs / "templates" / f"formula-{formula}").write_text(cmds)
-    for name in ("node", "gtar", "tmux"):
+    for name in ("node", "tmux"):
         _exe(stubs / name, "exit 0")
     (stubs / "goose-version").write_text(PIN["GOOSE_VERSION"] + "\n")
 
@@ -130,8 +202,7 @@ if [ -f "$STUB_DIR/venv-cut" ]; then
   esac
 fi
 exec {sys.executable} "$@"''')
-    for repo, pin in (("evidencebook", "EVIDENCEBOOK_PIN"), ("capsule-cli", "CAPSULE_CLI_PIN"),
-                      ("capsule-engine", "CAPSULE_ENGINE_PIN")):
+    for repo, pin in (("evidencebook", "EVIDENCEBOOK_PIN"), ("capsule-engine", "CAPSULE_ENGINE_PIN")):
         (demo / repo / ".git").mkdir(parents=True)
         (demo / repo / ".git" / "HEAD-stub").write_text(PIN[pin] + "\n")
     (demo / "bin").mkdir()
@@ -146,12 +217,9 @@ exec {sys.executable} "$@"''')
     local_bin, plugins = home / ".local" / "bin", home / ".local" / "lib" / "capsulectl" / "plugins"
     local_bin.mkdir(parents=True)
     plugins.mkdir(parents=True)
-    _exe(local_bin / "capsulectl", f'''case "$1" in
-  --version) echo "capsulectl {CORE_V} (commit {PIN['CAPSULE_CLI_PIN']})" ;;
-  plugin) [ "$2" = ls ] && echo '{{"plugins": [], "refused": []}}' || echo "capsulectl $*" >>"$STUB_LOG" ;;
-esac''')
+    _exe(local_bin / "capsulectl", _core(CORE_V, PIN["CAPSULE_CLI_PIN"]))
     for name in ("book", "deal"):
-        _exe(plugins / f"capsulectl-{name}", f'echo "capsulectl-{name} {CORE_V} (commit {PIN["EVIDENCEBOOK_PIN"]})"')
+        _exe(plugins / f"capsulectl-{name}", _plugin(name, CORE_V, PIN["EVIDENCEBOOK_PIN"]))
     (plugins / "standard-history-module").mkdir()
     (plugins / "capsulectl-deal.d").mkdir()
 
@@ -163,7 +231,7 @@ esac''')
     # /usr/bin must not make a "missing" tool look installed (evidencebook-skills#365's main run on Linux).
     system = tmp_path / "system"
     system.mkdir()
-    replaced = set(STUBS) | {"git", "jq", "node", "npm", "gtar", "tmux", "go", "cargo"}
+    replaced = set(STUBS) | {"git", "jq", "node", "npm", "tmux", "go", "cargo"}
     for d in ("/usr/bin", "/bin", "/usr/sbin", "/sbin"):
         for tool in sorted(Path(d).iterdir()) if Path(d).is_dir() else ():
             link = system / tool.name
@@ -177,6 +245,7 @@ esac''')
         pass
     m = Mac()
     m.home, m.demo, m.stubs, m.log, m.env, m.goose_config = home, demo, stubs, log, env, goose / "config.yaml"
+    m.local_bin, m.plugins, m.release = local_bin, plugins, _release(stubs)
 
     def run(stdin: str | None = None) -> subprocess.CompletedProcess:
         log.write_text("")
@@ -207,10 +276,10 @@ def test_a_set_up_mac_is_left_as_it_is(mac):
     assert [c for c in mac.calls() if " fetch" in c] == [f"git -C {mac.demo}/evidencebook-skills fetch -q origin"]
     assert mac.goose_config.read_bytes() == before
     assert "Installing" not in run.stdout and "Building" not in run.stdout
-    assert "already installed (v0.1.0-main." in run.stdout and "Goose extensions: already all off" in run.stdout
-    assert (f"Set-up is done at evidencebook-skills {MAIN[:7]}, evidencebook {PIN['EVIDENCEBOOK_PIN'][:7]}, capsule-cli "
-            f"{PIN['CAPSULE_CLI_PIN'][:7]} (capsulectl {CORE_V}), capsule-engine {PIN['CAPSULE_ENGINE_PIN'][:7]}, Goose "
-            f"Desktop {PIN['GOOSE_VERSION']}, provider OpenAI.") in run.stdout
+    assert f"already installed ({CORE_V})" in run.stdout and "Goose extensions: already all off" in run.stdout
+    assert (f"Set-up is done at evidencebook-skills {MAIN[:7]}, capsulectl {CORE_V} (capsule-cli "
+            f"{PIN['CAPSULE_CLI_PIN'][:7]}, evidencebook {PIN['EVIDENCEBOOK_PIN'][:7]}), capsule-engine "
+            f"{PIN['CAPSULE_ENGINE_PIN'][:7]}, Goose Desktop {PIN['GOOSE_VERSION']}, provider OpenAI.") in run.stdout
     assert run.stdout.rstrip().endswith('Next: "Before each run" in the RUNBOOK.')
     # the checks of "What you need" are printed once, before the hand-over to the checkout's copy
     assert run.stdout.count("jq: already installed") == 1
@@ -229,12 +298,92 @@ def test_a_missing_tool_is_installed_once(mac):
 
 
 def test_a_repository_off_its_pin_is_moved(mac):
-    head = mac.demo / "capsule-cli" / ".git" / "HEAD-stub"
+    head = mac.demo / "evidencebook" / ".git" / "HEAD-stub"
     head.write_text("b" * 40 + "\n")
     run = mac.run()
     assert run.returncode == 0, run.stdout + run.stderr
-    assert f"Setting capsule-cli to {PIN['CAPSULE_CLI_PIN'][:7]} ..." in run.stdout
-    assert head.read_text().strip() == PIN["CAPSULE_CLI_PIN"]
+    assert f"Setting evidencebook to {PIN['EVIDENCEBOOK_PIN'][:7]} ..." in run.stdout
+    assert head.read_text().strip() == PIN["EVIDENCEBOOK_PIN"]
+
+
+# ---- capsulectl from its release (#435) -------------------------------------------------------------------------------
+def _downloads(mac) -> list[str]:
+    return [c.split()[-1] for c in mac.calls() if c.startswith("curl ") and "/releases/download/" in c]
+
+
+def _release_urls() -> list[str]:
+    cli, eb = f"{ORG}/capsule-cli/releases/download/{CORE_V}", f"{ORG}/evidencebook/releases/download/capsulectl/{CORE_V}"
+    return [f"{cli}/SHA256SUMS", f"{cli}/capsulectl-{CORE_V}-darwin-arm64", f"{eb}/SHA256SUMS"] + [
+        f"{eb}/{f}" for f in (f"capsulectl-book-{CORE_V}-darwin-arm64", f"capsulectl-deal-{CORE_V}-darwin-arm64",
+                              f"standard-history-{CORE_V}.tar.gz", f"deal-view-{CORE_V}.tar.gz")]
+
+
+def _installed(mac) -> list[str]:
+    out = [subprocess.run([str(mac.local_bin / "capsulectl"), "--version"], capture_output=True, text=True).stdout]
+    out += [subprocess.run([str(mac.plugins / f"capsulectl-{n}"), "--version"], capture_output=True, text=True).stdout
+            for n in ("book", "deal")]
+    return [line.strip() for line in out]
+
+
+def _old_pins(mac) -> None:
+    """A Mac set up at the pins before #435: capsulectl and its plugins built from commits, a capsule-cli checkout."""
+    _exe(mac.local_bin / "capsulectl", _core(OLD_V, OLD_CLI))
+    for n in ("book", "deal"):
+        _exe(mac.plugins / f"capsulectl-{n}", _plugin(n, OLD_V, OLD_EB))
+    (mac.demo / "capsule-cli" / ".git").mkdir(parents=True)
+    (mac.demo / "capsule-cli" / ".git" / "HEAD-stub").write_text(OLD_CLI + "\n")
+
+
+def test_a_mac_at_the_old_pins_gets_the_release_and_a_rerun_downloads_nothing(mac):
+    _old_pins(mac)
+    run = mac.run()
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert f"  Downloading the {CORE_V} release ...\n  Installed {CORE_V}." in run.stdout
+    assert _downloads(mac) == _release_urls()  # deal-skill is in the release, not downloaded
+    assert _installed(mac) == [f"capsulectl {CORE_V} (commit {PIN['CAPSULE_CLI_PIN']})"] + [
+        f"capsulectl-{n} {CORE_V} (commit {PIN['EVIDENCEBOOK_PIN']})" for n in ("book", "deal")]
+    assert (mac.plugins / "standard-history-module" / "view.css").is_file()
+    assert (mac.plugins / "capsulectl-deal.d" / "view.css").is_file()
+    # nothing is built, and capsule-cli's old checkout is neither moved nor needed
+    assert not [c for c in mac.calls() if c.startswith("go build") or "capsule-cli" in c and c.startswith("git")]
+    run = mac.run()
+    assert run.returncode == 0 and _downloads(mac) == [] and f"already installed ({CORE_V})" in run.stdout
+
+
+def test_a_fresh_mac_gets_the_release(mac):
+    shutil.rmtree(mac.home / ".local")
+    run = mac.run()
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert _downloads(mac) == _release_urls()
+    assert _installed(mac)[0] == f"capsulectl {CORE_V} (commit {PIN['CAPSULE_CLI_PIN']})"
+    assert not (mac.demo / "capsule-cli").exists()
+
+
+@pytest.mark.parametrize("fault", ["missing", "not-listed", "changed"])
+def test_a_release_file_that_does_not_check_out_installs_nothing(mac, fault):
+    """A file that cannot be downloaded, that its release's SHA256SUMS does not list, or whose checksum differs stops
+    the set-up before anything is installed: the old capsulectl and plugins stay as they were."""
+    _old_pins(mac)
+    deal = mac.release[f"capsulectl-deal-{CORE_V}-darwin-arm64"]
+    if fault == "missing":
+        deal.unlink()
+    elif fault == "not-listed":
+        sums = mac.release["evidencebook/SHA256SUMS"]
+        sums.write_text("".join(line for line in sums.read_text().splitlines(True) if deal.name not in line))
+    else:
+        deal.write_text(deal.read_text() + "# changed\n")
+    before = _installed(mac)
+    run = mac.run()
+    assert run.returncode == 1
+    m = re.search(rf"Set-up stopped while downloading the capsulectl {CORE_V} release\.\nThe details are in (\S+);",
+                  run.stderr)
+    assert m, run.stderr
+    details = Path(m.group(1)).read_text()
+    assert {"missing": "Could not resolve host", "not-listed": f"{deal.name} is not in",
+            "changed": f"{deal.name}: FAILED"}[fault] in details
+    assert _installed(mac) == before
+    assert not [c for c in mac.calls() if c.startswith("capsulectl plugin install")]
+    assert not (mac.plugins / "standard-history-module" / "view.css").exists()
 
 
 def test_a_checkout_with_changes_of_its_own_is_not_moved(mac):

@@ -286,18 +286,18 @@ local_witness() {
 }
 
 # ard_setup: the pinned evidencebook checkout and the binaries and Python environments ard-demo's two jobs use, in
-# the caller's locals eb, ce, deal, core, cpy and py (each is built once and kept in the cache).
+# the caller's locals eb, ce, deal, core, cpy and py (each is fetched or built once and kept in the cache).
 ard_setup() {
-  local w=tests.yml eb_ref ce_tag cli_ref anchor_ref
+  local w=tests.yml eb_ref ce_tag v anchor_ref
   eb_ref=$(pin $w ard-demo EVIDENCEBOOK_REF)
-  cli_ref=$(pin $w ard-demo CAPSULE_CLI_REF)
+  v=$(pin $w ard-demo CAPSULECTL_VERSION)
   ce_tag=$(pin $w ard-demo CAPSULE_ENGINE_TAG)
   eb=$(checkout evidencebook "$eb_ref")
   ce=$(engine "$ce_tag")
-  # capsulectl-deal is built from the pinned evidencebook checkout, as CI builds it.
-  deal=$(gobuild "$eb/capsulectl" capsulectl-deal "$eb_ref" ./cmd/capsulectl-deal)
-  # capsulectl itself, for the countersign upgrade's `countersign request` (#383).
-  core=$(gobuild "$(checkout capsule-cli "$cli_ref")" capsulectl "$cli_ref" ./cmd/capsulectl)
+  # capsulectl-deal and capsulectl itself (the countersign upgrade's `countersign request`, #383): the release the
+  # RUNBOOK installs, as CI installs it (#435).
+  deal=$(release evidencebook "capsulectl/$v" "capsulectl-deal-$v-$plat")
+  core=$(release capsule-cli "$v" "capsulectl-$v-$plat")
   # The demo's countersigner (demo/ard/countersigner.py) at its own pin, installed here: the end-to-end step below
   # reaches no host but this machine, so it cannot install capsule-anchor itself.
   anchor_ref=$(sed -n 's/^ANCHOR_REF = "\([0-9a-f]*\)"$/\1/p' demo/ard/countersigner.py)
@@ -423,17 +423,15 @@ job_obligations_report() {
   CAPSULECTL="$ctl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_obligations.sh
 }
 
-# tau2_setup: the binaries tau2-live's two jobs use, built at the job's pins, on PATH (capsulectl, capsule-engine), and
-# the plugin root in the caller's local roots.
+# tau2_setup: the binaries tau2-live's two jobs use, at the job's pins, on PATH (capsulectl, capsule-engine), and the
+# plugin root in the caller's local roots. capsulectl and its plugins are the job's release (#435).
 tau2_setup() {
-  local w=tests.yml eb_ref cli_ref ce eb ctl deal book bin
-  eb_ref=$(pin $w tau2-live EVIDENCEBOOK_REF)
-  cli_ref=$(pin $w tau2-live CAPSULE_CLI_REF)
+  local w=tests.yml v ce ctl deal book bin
+  v=$(pin $w tau2-live CAPSULECTL_VERSION)
   ce=$(engine "$(pin $w tau2-live CAPSULE_ENGINE_REF)")
-  eb=$(checkout evidencebook "$eb_ref")
-  ctl=$(gobuild "$(checkout capsule-cli "$cli_ref")" capsulectl "$cli_ref" ./cmd/capsulectl)
-  deal=$(gobuild "$eb/capsulectl" capsulectl-deal "$eb_ref" ./cmd/capsulectl-deal)
-  book=$(gobuild "$eb/capsulectl" capsulectl-book "$eb_ref" ./cmd/capsulectl-book)
+  ctl=$(release capsule-cli "$v" "capsulectl-$v-$plat")
+  deal=$(release evidencebook "capsulectl/$v" "capsulectl-deal-$v-$plat")
+  book=$(release evidencebook "capsulectl/$v" "capsulectl-book-$v-$plat")
   roots=$(plugins "capsulectl-deal=$deal" "capsulectl-book=$book")
   bin=$(mktemp -d "$tmp/tau2-bin.XXXX")
   ln -sf "$ctl" "$bin/capsulectl"
