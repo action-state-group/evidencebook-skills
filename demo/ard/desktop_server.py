@@ -117,14 +117,14 @@ NOT_YES = {NO: "the presenter declined it",
 
 
 #: How long a dialog waits for the presenter before it gives up (run finding F6a, 2026-11-25: 3 minutes was too short
-#: when a person first has to find the dialog). The window's MCP tool timeout (open-windows.py TOOL_TIMEOUT_S) covers
-#: it and the rest of the longest call, ard_pay.
+#: when a person first has to find the dialog): a typed reply waits this long; a form waits until the window ends it,
+#: at most this long, which with Goose 1.59.2 is 5 minutes (FORM_LIMIT_S). The window's MCP tool timeout
+#: (open-windows.py TOOL_TIMEOUT_S) covers it and the rest of the longest call, ard_pay.
 DIALOG_GIVE_UP_S = 600
 #: The one field of a dialog's form in the window, and its label (proposed; awaiting Sherlock2's wording review).
 ANSWER_FIELD, ANSWER_LABEL = "answer", "Your answer"
 #: A form the window ends sooner than this after it was asked was not shown to anyone: Goose Desktop 1.59.2 ends a form
-#: it cannot draw at once, and one it drew only after 300 s (ACP_ELICITATION_TIMEOUT_SECONDS). Asking again then would
-#: only repeat the same refusal.
+#: it cannot draw at once, and one it drew only after 300 s (FORM_LIMIT_S).
 SHOWN_AT_LEAST_S = 30
 
 #: The MCP request of the tool call running on this thread (set by :func:`_tool`): a dialog is asked in that call's
@@ -183,52 +183,60 @@ def _ask_window(ctx, message: str, schema: dict, wait_s: float):
 
 def dialog_answer(title: str, text: str, yes: str, no: str = "Cancel") -> str:
     """A dialog in this party's own Goose window, as a form with a choice between ``no`` (preset) and ``yes`` and
-    Goose's Submit button, and how it ended: ``"yes"`` (``yes`` submitted), :data:`NO` (``no`` submitted), :data:`NO_ANSWER` (nothing submitted within :data:`DIALOG_GIVE_UP_S`) or :data:`NOT_SHOWN` (no window,
-    or any error before it was shown). The form goes from the server to the window (MCP elicitation) and its answer
-    straight back: the window's agent neither sees the answer before the tool returns nor has any tool that gives one.
-    Goose ends a form after 300 s (a cancel, or an error on its own MCP path), so the same form is asked again until
-    :data:`DIALOG_GIVE_UP_S` has passed."""
+    Goose's Submit button, and how it ended: ``"yes"`` (``yes`` submitted), :data:`NO` (``no`` submitted),
+    :data:`NO_ANSWER` (nothing submitted before the window ended the form) or :data:`NOT_SHOWN` (no window, or any error
+    before it was shown). The form goes from the server to the window (MCP elicitation) and its answer straight back:
+    the window's agent neither sees the answer before the tool returns nor has any tool that gives one. It is asked
+    once: Goose ends a form after 5 minutes (:data:`FORM_LIMIT_S`) and fails the call, so it cannot be shown again.
+    Where the window cannot show a form, Maya's dialog is asked by typed reply instead (:func:`_typed_answer`)."""
     how = _form_answer(title, text, yes, no)
     if how == NOT_SHOWN and ROLE == BUYER and getattr(_call, "job", None) is not None:  # ard_confirm is Maya's
         return _typed_answer(title, text, yes, no)
     return how
 
 
+def _ended(title: str, asked: float, what) -> str:
+    """How a form that ended without a submitted answer ended: at once, the window could not draw it (:data:`NOT_SHOWN`);
+    later, it was on screen and nobody answered (:data:`NO_ANSWER`). Goose 1.59.2 offers a person no decline (only
+    Submit), and a client that cannot draw the form declines or cancels it at once (the Claude Code adapter without
+    form support auto-declines), so none of these is ever the presenter's no."""
+    if time.monotonic() - asked < SHOWN_AT_LEAST_S:
+        _log(f"dialog {title!r} not shown: {what!r}")
+        return NOT_SHOWN
+    _log(f"dialog {title!r}: nobody answered before the window ended it ({what!r})")
+    return NO_ANSWER
+
+
 def _form_answer(title: str, text: str, yes: str, no: str) -> str:
-    """The dialog as a form in the window (:func:`dialog_answer`)."""
+    """The dialog as a form in the window (:func:`dialog_answer`), asked once. It waits until the window ends it, at
+    most :data:`DIALOG_GIVE_UP_S` (with Goose, :data:`FORM_LIMIT_S`); it is never asked again."""
     _call.typed = None
     ctx = getattr(_call, "ctx", None)
     if ctx is None:
         return NOT_SHOWN
     message, schema = dialog_message(title, text), answer_schema(yes, no)
-    end = time.monotonic() + DIALOG_GIVE_UP_S
-    shown = False
-    while (left := end - time.monotonic()) > 0:
-        asked = time.monotonic()
-        try:
-            result = _ask_window(ctx, message, schema, left)
-        except TimeoutError:
-            return NO_ANSWER
-        except Exception as exc:  # noqa: BLE001: no window, a closed chat, a client without forms, Goose's expiry
-            if type(exc).__name__ == "NoBackChannelError" and getattr(_call, "job", None) is not None:
-                return _form_round(title, yes, no, message, schema, end)
-            result = exc
-        if not isinstance(result, Exception) and result.action == "accept":
-            got = (result.content or {}).get(ANSWER_FIELD)
-            return "yes" if got == yes else NO if got == no else NO_ANSWER
-        # Not submitted: a decline, a cancel or an error. Goose 1.59.2 offers a person no decline (only Submit), but a
-        # client that cannot draw the form declines or cancels it at once (the Claude Code adapter without form support
-        # auto-declines), so none of these is ever the presenter's no.
-        if time.monotonic() - asked < SHOWN_AT_LEAST_S:  # ended at once: the window could not draw it
-            _log(f"dialog {title!r} not shown: {result!r}")
-            return NO_ANSWER if shown else NOT_SHOWN
-        shown = True  # ended after it was on screen: Goose's own expiry, so ask again while time is left
-    return NO_ANSWER
+    asked = time.monotonic()
+    try:
+        result = _ask_window(ctx, message, schema, DIALOG_GIVE_UP_S)
+    except TimeoutError:
+        return NO_ANSWER
+    except Exception as exc:  # noqa: BLE001: no window, a closed chat, a client without forms, Goose's limit
+        if type(exc).__name__ == "NoBackChannelError" and getattr(_call, "job", None) is not None:
+            return _form_round(title, yes, no, message, schema)
+        return _ended(title, asked, exc)
+    if result.action == "accept":
+        got = (result.content or {}).get(ANSWER_FIELD)
+        return "yes" if got == yes else NO if got == no else NO_ANSWER
+    return _ended(title, asked, result.action)
 
 
-#: How long a form round waits for the client's retry: Goose ends a form it showed after 300 s (mcp_client.rs
-#: create_elicitation), and then its retry, or the failed call, comes at once.
-ROUND_WAIT_S = 330
+#: How long Goose 1.59.2 keeps a form it showed: it answers the form request after at most 300 s, with an error when
+#: nobody submitted (crates/goose/src/agents/mcp_client.rs:418-435), and on the 2026-07-28 protocol rmcp 3.4.1 then
+#: fails the whole call, with no retry (src/service/client.rs fulfill_input_request). So with Goose a form waits 5
+#: minutes and is never shown again; evidencebook-skills#438.
+FORM_LIMIT_S = 300
+#: How long a form round waits for the client's retry: past Goose's limit the call has failed and no retry comes.
+ROUND_WAIT_S = FORM_LIMIT_S + 30
 
 
 def _reply_parts(reply) -> tuple[str | None, dict]:
@@ -239,30 +247,24 @@ def _reply_parts(reply) -> tuple[str | None, dict]:
     return getattr(reply, "action", None), getattr(reply, "content", None) or {}
 
 
-def _form_round(title: str, yes: str, no: str, message: str, schema: dict, end: float) -> str:
+def _form_round(title: str, yes: str, no: str, message: str, schema: dict) -> str:
     """The form on a 2026-07-28 connection, which has no back-channel: the call returns it as its input_required result,
     the client (Goose's MCP client) shows it in the window and retries the call with the answer, and this thread reads
-    the answer from that retry (:func:`_tool`). As :func:`_form_answer`, a form ended at once was not shown. The form
-    cannot carry the call's ids (ECHOED_META) here: the 2026-07-28 surface of mcp 2.3.0 drops ``_meta`` from an embedded
-    request, and rmcp reads them only from there; so Goose can place the form only while the window runs one call, as the
-    skill has its agent do (one tool per message). Otherwise Goose fails the call, and nothing is done."""
+    the answer from that retry (:func:`_tool`). As :func:`_form_answer`, asked once. The form cannot carry the call's ids
+    (ECHOED_META) here: the 2026-07-28 surface of mcp 2.3.0 drops ``_meta`` from an embedded request, and rmcp reads them
+    only from there; so Goose can place the form only while the window runs one call, as the skill has its agent do
+    (one tool per message). Otherwise Goose fails the call, and nothing is done."""
     job = _call.job
-    shown = False
-    while (left := end - time.monotonic()) > 0:
-        asked = time.monotonic()
-        job.pause_form(message, schema)
-        if not job.replied.wait(min(left, ROUND_WAIT_S)):
-            _log(f"dialog {title!r}: no answer came back from the window")  # the client gave up on the call
-            return NO_ANSWER
-        action, content = _reply_parts(job.reply)
-        if action == "accept":
-            got = content.get(ANSWER_FIELD)
-            return "yes" if got == yes else NO if got == no else NO_ANSWER
-        if time.monotonic() - asked < SHOWN_AT_LEAST_S:
-            _log(f"dialog {title!r} not shown: the window answered {action!r} at once")
-            return NO_ANSWER if shown else NOT_SHOWN
-        shown = True
-    return NO_ANSWER
+    asked = time.monotonic()
+    job.pause_form(message, schema)
+    if not job.replied.wait(ROUND_WAIT_S):  # Goose failed the call at its limit: nobody answered
+        _log(f"dialog {title!r}: no answer came back from the window")
+        return NO_ANSWER
+    action, content = _reply_parts(job.reply)
+    if action == "accept":
+        got = content.get(ANSWER_FIELD)
+        return "yes" if got == yes else NO if got == no else NO_ANSWER
+    return _ended(title, asked, action)
 
 
 # -- the typed reply: when the window cannot show a form ----------------------------------------------------------------
@@ -878,7 +880,7 @@ def held_declined(name: str, price_msat: int) -> str:
 
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
 _PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears in this window first and this call "
-        "blocks, for up to 10 minutes, until the presenter answers it (Pay or Cancel; Buy anyway or Don't buy when the "
+        "blocks, for up to 5 minutes, until the presenter answers it (Pay or Cancel; Buy anyway or Don't buy when the "
         "Everyday Rules hold the order; with Claude Code ACP it returns the question to show instead): do not retry or "
         "call it again while it waits. You cannot answer the dialog. If the step hands you a question to show, show it "
         "word for word, end your turn, and call ard_confirm after the person replies. Only after that yes does it send "
@@ -1067,7 +1069,7 @@ def ard_dispute(seller: str, deal: str = "") -> None:
     """Dispute the delivery of Maya's deal with ``seller``, only after her yes in a dialog in this window
     (evidencebook-skills#333): her signed statement that it was not met, and a dispute, sent to the seller and to the
     adjudicator the agreement names, which then asks each side for its books. It moves no money. Call only when Maya
-    says the delivery was short or did not come. This call blocks, for up to 10 minutes, until she answers Dispute or
+    says the delivery was short or did not come. This call blocks, for up to 5 minutes, until she answers Dispute or
     Cancel (with Claude Code ACP it returns the question to show instead): do not call it again while it waits; you
     cannot answer the dialog. If the step hands you a question to show, show it word for word, end your turn, and call ard_confirm after the person replies. With more than one deal with that
     seller, pass ``deal`` (the deal id, or its first characters)."""
