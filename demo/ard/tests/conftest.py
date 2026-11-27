@@ -23,9 +23,11 @@ _paths.setup()
 DEMO_HOMES = ("ARD_HOME", "ARD_GOOSE_ROOT", "ARD_TESTBED", "ARD_ACP_PREFIX", "ARD_CAPSULE_ANCHOR")
 _USER = Path(pwd.getpwuid(os.getuid()).pw_dir)
 #: The person's own folders the demo's code reaches by default: the demo home (demo.DEFAULT_HOME), its Goose root
-#: (reset.GOOSE_ROOT_DEFAULT), ~/ard-demo (the testbed, its capsule-anchor checkout and the ACP prefix), and the
-#: person's own Goose settings and recipe trust, which reset.clear_recipe_trust edits.
-REAL_FOLDERS = [_USER / ".config" / "ard-commerce-demo", _USER / ".config" / "ard-commerce-goose", _USER / "ard-demo",
+#: (reset.GOOSE_ROOT_DEFAULT), the testbed, its capsule-anchor checkout and the ACP prefix under ~/ard-demo (not
+#: ~/ard-demo itself, which the RUNBOOK's checkouts of this repository and evidencebook live in), and the person's own
+#: Goose settings and recipe trust, which reset.clear_recipe_trust edits.
+REAL_FOLDERS = [_USER / ".config" / "ard-commerce-demo", _USER / ".config" / "ard-commerce-goose",
+                _USER / "ard-demo" / "testbed", _USER / "ard-demo" / "acp", _USER / "ard-demo" / "capsule-anchor",
                 _USER / ".config" / "goose", _USER / "Library" / "Application Support" / "Goose"]
 
 
@@ -35,15 +37,14 @@ def _inside(path: str, roots) -> bool:
 
 def demo_homes(env, make=lambda var: tempfile.mkdtemp(prefix=f"{var.lower()}-")) -> dict[str, str]:
     """The folder each of :data:`DEMO_HOMES` takes: ``env``'s value, else ``make(var)``. A value inside one of
-    :data:`REAL_FOLDERS` is refused."""
-    out = {}
+    :data:`REAL_FOLDERS` is refused, before any folder is made."""
+    real = [os.path.realpath(r) for r in REAL_FOLDERS]
     for var in DEMO_HOMES:
-        value = env.get(var) or make(var)
-        if _inside(os.path.realpath(os.path.expanduser(value)), [os.path.realpath(r) for r in REAL_FOLDERS]):
+        value = env.get(var)
+        if value and _inside(os.path.realpath(os.path.expanduser(value)), real):
             raise pytest.UsageError(f"{var}={value} is the person's own demo folder; the tests use a fresh one "
                                     f"(unset {var}, or point it at an empty folder)")
-        out[var] = value
-    return out
+    return {var: env.get(var) or make(var) for var in DEMO_HOMES}
 
 
 _made = [v for v in DEMO_HOMES if not os.environ.get(v)]
@@ -67,7 +68,8 @@ class _Guard:
               "os.symlink": 2, "shutil.copytree": 2, "shutil.copyfile": 2, "shutil.move": 2}
 
     def __init__(self, roots):
-        self.roots = [os.path.abspath(r) for r in roots]
+        # A root that is a symbolic link is guarded under both names.
+        self.roots = sorted({f(r) for r in roots for f in (os.path.abspath, os.path.realpath)})
         self.touched: list[str] = []
 
     def __call__(self, event, args):
@@ -77,7 +79,12 @@ class _Guard:
         for arg in args[:n]:
             if isinstance(arg, (str, bytes, os.PathLike)):
                 p = os.fsdecode(os.fspath(arg))
-                p = os.path.normpath(p if os.path.isabs(p) else os.path.join(os.getcwd(), p))
+                if not os.path.isabs(p):
+                    try:
+                        p = os.path.join(os.getcwd(), p)
+                    except OSError:  # the working folder is gone: a relative path then names nothing of the person's
+                        continue
+                p = os.path.normpath(p)
                 if _inside(p, self.roots):
                     self.touched.append(f"{event} {p}")
                     raise RealFolderTouched(f"{event} {p}: the tests never use the person's own demo folders "

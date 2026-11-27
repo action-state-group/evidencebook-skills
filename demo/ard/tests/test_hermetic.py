@@ -59,9 +59,35 @@ def test_a_variable_that_names_a_real_folder_is_refused(tmp_path):
     env["ARD_HOME"] = str(conftest.REAL_FOLDERS[0])
     with pytest.raises(pytest.UsageError, match="ARD_HOME=.* is the person's own demo folder"):
         conftest.demo_homes(env)
-    env["ARD_HOME"] = str(conftest.REAL_FOLDERS[2] / "testbed")  # inside ~/ard-demo
+    env["ARD_HOME"] = str(conftest.REAL_FOLDERS[2] / "deals")  # inside ~/ard-demo/testbed
     with pytest.raises(pytest.UsageError):
         conftest.demo_homes(env)
+
+
+def test_a_refusal_makes_no_folder_first():
+    made = []
+    with pytest.raises(pytest.UsageError, match="ARD_GOOSE_ROOT"):
+        conftest.demo_homes({"ARD_GOOSE_ROOT": str(conftest.REAL_FOLDERS[1])}, make=made.append)
+    assert made == []
+
+
+def test_the_checkouts_beside_the_testbed_stay_readable():
+    # The RUNBOOK keeps this repository's and evidencebook's checkouts in ~/ard-demo: tests run from there.
+    ard_demo = conftest.REAL_FOLDERS[2].parent
+    for p in (ard_demo / "evidencebook-skills" / "demo" / "ard" / "pages.py", ard_demo / "evidencebook" / "go.mod"):
+        conftest.GUARD("open", (str(p), "r", 0))
+    assert conftest.GUARD.take() == []
+
+
+def test_a_root_that_is_a_symbolic_link_is_guarded_under_both_names(tmp_path):
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    link = tmp_path / "ard-commerce-demo"
+    link.symlink_to(target)
+    guard = conftest._Guard([link])
+    for p in (link / "pages" / "a.html", target / "pages" / "a.html"):
+        with pytest.raises(conftest.RealFolderTouched):
+            guard("open", (str(p), "r", 0))
 
 
 def test_an_unset_variable_gets_a_folder_of_its_own(tmp_path):
