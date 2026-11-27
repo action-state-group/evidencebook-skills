@@ -43,7 +43,7 @@ def test_dont_buy_quotes_the_holds_sentence_and_the_order_again_question(monkeyp
 
     monkeypatch.setenv("ARD_RAIL", "fake")
 
-    reasons = ["over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+    reasons = ["over your 7-day limit: 3,000 msat with this order, limit 2,000 msat",
                "no earlier payment to this merchant from this profile", "the payment is not refundable"]
     step = _step(3, "## The spending limit: an order over it")
     assert f'"{screens.rules_held(reasons)}"' in step
