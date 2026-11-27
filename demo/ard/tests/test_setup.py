@@ -375,6 +375,17 @@ def test_the_witness_takes_a_real_stamp_last(mac):
     assert "Action State's witness: one test stamp (it can take up to a minute) ...\n  Action State's witness took a test stamp.\n" in run.stdout
 
 
+def test_the_testbed_takes_the_witness_check_over(mac):
+    """testbed.sh runs the set-up with ARD_SETUP_WITNESS=testbed: a refusing witness does not stop it, since the
+    testbed measures the witness next and offers the local one (evidencebook-skills#382)."""
+    (mac.stubs / "witness-rc").write_text("1")
+    mac.env["ARD_SETUP_WITNESS"] = "testbed"
+    run = mac.run()
+    assert run.returncode == 0, run.stdout + run.stderr
+    assert not any(c.startswith("witness-check") for c in mac.calls())
+    assert "Action State's witness: the testbed measures it next." in run.stdout
+
+
 def test_a_witness_that_takes_no_stamp_stops_the_set_up(mac):
     """A witness whose home page answers but that refuses stamps stops the set-up with the check's own words."""
     (mac.stubs / "witness-out").write_text("Action State's witness answered but refused a test stamp (HTTP 409).\n"

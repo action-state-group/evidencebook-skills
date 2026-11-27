@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The multi-role testbed (evidencebook-skills#382): every role of the ARD deal, each on its own screen, in one step.
 
-    python testbed.py up [--witness public|local|off]   # reset, start the witness, seed, start the countersigner, open every screen
+    python testbed.py up [--witness public|local|off] [--no-probe]
+                                     # measure the hosted witness, reset, start the witness, seed, start the
+                                     # countersigner, open every screen
     python testbed.py reopen                             # open the screens again (after quitting Goose), same witness
     python testbed.py down                               # close the screens, reset, stop the witness
     python testbed.py env                                # the export lines for this testbed's witness
@@ -234,8 +236,37 @@ def _goose_check(ask=input) -> None:
         raise Stop("Goose did not quit: quit it yourself, then run this again. Nothing was changed.")
 
 
-def up(c: dict, say=print, ask=input) -> int:
+#: The hosted witness's probe (evidencebook-skills#378): one stamp from each of four fresh profiles at once, about the
+#: load of the four parties of a run, each given the receipt page's wait (``receipt.PAGE_WAIT_S``).
+PROBE = [str(HERE / "tests" / "witness_probe.py"), "--stamps", "1", "--parallel", "4"]
+
+
+def probe_hosted(say=print) -> str:
+    """``"ok"`` when the hosted witness took every probe stamp within the receipt page's wait, ``"slow"`` when it did
+    not, ``"unmeasured"`` when the probe could not measure it (exit 2, ``witness_probe.CANNOT_MEASURE``); the probe's
+    lines go to the screen."""
+    say("measuring Action State's hosted witness: one test stamp from each of four throwaway profiles at once, as a "
+        "run's four parties would send (up to a minute)")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("ARD_E2E_WITNESS", "ARD_WITNESS"))}
+    rc = subprocess.run([_python(), *PROBE], env=env).returncode
+    return {0: "ok", 1: "slow"}.get(rc, "unmeasured")
+
+
+#: What up asks when the probe did not pass, by its outcome.
+SWITCH = {
+    "slow": "The hosted witness did not take every test stamp within the 30 seconds a receipt page waits, so receipts "
+            "may show no witness time.",
+    "unmeasured": "The hosted witness could not be measured (the reason is above).",
+}
+
+
+def up(c: dict, say=print, ask=input, probe: bool = True) -> int:
     _goose_check(ask)
+    if c["witness"] == "public" and probe and (outcome := probe_hosted(say)) != "ok":
+        answer = ask(f"{SWITCH[outcome]} Bring the testbed up on the local test witness instead? Receipts will then "
+                     "name it, not Action State's witness. [Y/n] ")
+        if answer.strip().lower() in ("", "y", "yes"):
+            c["witness"] = "local"
     if c["witness"] == "local" or "countersigner" in c["roles"]:
         witness_python()  # both run capsule-anchor, which needs 3.11: refused here, before the reset, not after it
     if subprocess.run([_python(), str(HERE / "demo.py"), "reset"], env=os.environ).returncode != 0:
@@ -320,6 +351,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="testbed.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("command", choices=["up", "reopen", "down", "env"])
     ap.add_argument("--witness", choices=WITNESSES, help="override testbed.yaml's witness for this run")
+    ap.add_argument("--no-probe", action="store_true",
+                    help="with the hosted witness, skip measuring it before the run (up only)")
     args = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)
     try:
@@ -329,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "env":
             sys.stdout.write(witness_env_file().read_text() if witness_env_file().is_file() else "")
             return 0
-        return {"up": lambda: up(c), "reopen": lambda: reopen(c), "down": down}[args.command]()
+        return {"up": lambda: up(c, probe=not args.no_probe), "reopen": lambda: reopen(c), "down": down}[args.command]()
     except Stop as e:
         print(f"testbed: {e}", file=sys.stderr)
         return 2

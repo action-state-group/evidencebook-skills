@@ -41,9 +41,18 @@ def test_every_stamp_taken_passes(fake, monkeypatch, capsys):
     assert f"{pt.WITNESS_URL}: 4 of 4 stamps taken within 30 s" in out
 
 
-@pytest.mark.parametrize("how", ["slow", "no profile"])
-def test_a_slow_stamp_or_a_failed_profile_fails_and_names_the_witness(fake, monkeypatch, capsys, how):
+@pytest.mark.parametrize("how, status", [("slow", 1), ("no profile", witness_probe.CANNOT_MEASURE)])
+def test_a_slow_stamp_or_a_failed_profile_fails_and_names_the_witness(fake, monkeypatch, capsys, how, status):
+    # a slow stamp is 1; a profile that could not be made did not measure the witness, 2 (#382)
     monkeypatch.setattr(fake, "outcome", staticmethod(lambda name: how if name == "probe-1" else "taken"))
-    assert witness_probe.main(["--stamps", "2", "--parallel", "2"]) == 1
+    assert witness_probe.main(["--stamps", "2", "--parallel", "2"]) == status
     out = capsys.readouterr().out
     assert f"{pt.WITNESS_URL}: 2 of 4 stamps not taken within 30 s: probe-1" in out
+
+
+def test_no_checkout_cannot_measure(monkeypatch, capsys):
+    def missing():
+        raise witness_probe._paths.SetupError("ARD_EVIDENCEBOOK is not set")
+    monkeypatch.setattr(witness_probe._paths, "setup", missing)
+    assert witness_probe.main([]) == witness_probe.CANNOT_MEASURE
+    assert "could not measure the witness: ARD_EVIDENCEBOOK is not set" in capsys.readouterr().out

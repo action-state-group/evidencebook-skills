@@ -12,7 +12,8 @@ set -euo pipefail
 main() {
   local demo="$HOME/ard-demo"
   local skills="$demo/evidencebook-skills"
-  /bin/bash "$skills/demo/ard/setup.sh"
+  # the set-up leaves the witness to testbed.py up, which measures it and offers the local one when it is slow
+  ARD_SETUP_WITNESS=testbed /bin/bash "$skills/demo/ard/setup.sh"
   # The three paths every demo command needs (RUNBOOK.md, "In every terminal"): the set-up just put them there.
   export ARD_EVIDENCEBOOK="$demo/evidencebook" \
     CAPSULECTL_DEAL="$HOME/.local/lib/capsulectl/plugins/capsulectl-deal" \
