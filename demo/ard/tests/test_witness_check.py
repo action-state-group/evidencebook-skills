@@ -8,6 +8,7 @@ import os
 import shutil
 import socket
 import ssl
+import struct
 import subprocess
 import tempfile
 import threading
@@ -104,14 +105,18 @@ def serve(cert: Path, status: int, hang: threading.Event | None = None, delay: f
             if hang is not None:
                 hang.wait(120)
             time.sleep(delay)
+            self.send_response(status)
+            self.end_headers()
+            self.wfile.write(b"refused")
+
+        def handle(self):
             try:
-                self.send_response(status)
-                self.end_headers()
-                self.wfile.write(b"refused")
+                super().handle()
             except OSError:
-                # The check stopped waiting first, as the hang and slow cases make it: its connection is gone. Left
-                # alone, the server thread's traceback lands on stderr during whichever test runs next, and fails a
-                # test that reads stderr (test_main_says_one_line, evidencebook-skills#419).
+                # The check stopped waiting first, as the hang and slow cases make it: its connection is gone, while
+                # this thread reads the stamp or answers it. Left alone, the server thread's traceback lands on stderr
+                # during whichever test runs next, and fails a test that reads stderr (test_main_says_one_line,
+                # evidencebook-skills#419).
                 pass
 
         def do_GET(self):
@@ -128,6 +133,30 @@ def serve(cert: Path, status: int, hang: threading.Event | None = None, delay: f
     srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, posts
+
+
+@pytest.mark.parametrize("left", ["while it reads the stamp", "before it answers"])
+def test_a_client_that_leaves_prints_nothing(cert, capsys, left):
+    """A check that stops waiting resets its connection; the stub's thread prints no traceback, which would land in
+    a later test's stderr (evidencebook-skills#419)."""
+    srv, posts = serve(cert, 409, delay=0.5)
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+        s = ctx.wrap_socket(socket.create_connection(("127.0.0.1", srv.server_address[1])))
+        length = 100000 if left == "while it reads the stamp" else 2
+        s.sendall(b"POST /stamp HTTP/1.1\r\nHost: x\r\nContent-Length: %d\r\n\r\nxx" % length)
+        time.sleep(0.2)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))  # close with a reset
+        s.close()
+        deadline = time.monotonic() + 5
+        while not posts and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(1)  # past the stub's answer, which meets the reset
+    finally:
+        srv.shutdown()
+    assert posts
+    assert "Traceback" not in capsys.readouterr().err
 
 
 def free_port() -> int:
