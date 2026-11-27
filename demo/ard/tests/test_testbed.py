@@ -70,13 +70,14 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(testbed, "stop_witness", lambda say=print: steps.append("witness down"))
     monkeypatch.setattr(testbed, "open_screen", lambda role, env: steps.append(f"screen {role}"))
     monkeypatch.setattr(testbed, "stop_screens", lambda h: steps.append("screens down"))
+    monkeypatch.setattr(testbed, "probe_hosted", lambda say=print: steps.append("probe") or "slow" not in fail)
     return steps, fail
 
 
-def _up(witness="local", ask=lambda q: "n"):
+def _up(witness="local", ask=lambda q: "n", probe=True):
     c = testbed.config()
     c["witness"] = witness
-    return testbed.up(c, say=lambda *_: None, ask=ask)
+    return testbed.up(c, say=lambda *_: None, ask=ask, probe=probe)
 
 
 def test_up_resets_then_starts_the_witness_seeds_and_opens_every_screen(world):
@@ -158,7 +159,29 @@ def test_with_goose_running_it_asks_first_and_a_no_changes_nothing(world):
 def test_the_hosted_witness_starts_no_local_one(world):
     steps, _ = world
     assert _up(witness="public") == 0
+    assert steps[0] == "probe" and "witness up" not in steps
+
+
+def test_a_slow_hosted_witness_is_switched_for_the_local_one_on_a_yes(world):
+    steps, fail = world
+    fail.add("slow")
+    asked = []
+    assert _up(witness="public", ask=lambda q: asked.append(q) or "") == 0  # Return takes the default, yes
+    assert "30 seconds" in asked[0] and steps[0] == "probe" and "witness up" in steps
+
+
+def test_a_slow_hosted_witness_is_kept_on_a_no(world):
+    steps, fail = world
+    fail.add("slow")
+    assert _up(witness="public", ask=lambda q: "n") == 0
     assert "witness up" not in steps
+
+
+@pytest.mark.parametrize("witness, probe", [("local", True), ("off", True), ("public", False)])
+def test_the_probe_runs_only_for_the_hosted_witness_and_can_be_skipped(world, witness, probe):
+    steps, _ = world
+    _up(witness=witness, probe=probe)
+    assert "probe" not in steps
 
 
 def test_the_run_names_only_the_witness_it_chose(monkeypatch):
@@ -443,7 +466,7 @@ def test_the_countersigner_needs_python_311_even_with_the_hosted_witness(world, 
     monkeypatch.setattr(testbed.shutil, "which", lambda name: None)
     with pytest.raises(testbed.Stop, match="Python 3.11"):
         _up(witness="public")
-    assert steps == []
+    assert steps == ["probe"]  # measuring the hosted witness changes nothing
 
 
 def test_the_countersigner_screen_says_what_it_signed_and_that_it_is_not_independent(tmp_path):
