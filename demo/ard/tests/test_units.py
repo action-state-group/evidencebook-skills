@@ -76,8 +76,7 @@ def test_a_name_ending_in_a_period_gets_no_second_one():
     # Steven's 2fa6abe run (#362): "Signed by Alder Print Co.." had a double period
     assert screens.stop("Alder Print Co.") == "Alder Print Co." and screens.stop("Kestrel Print") == "Kestrel Print."
     assert screens.signed_line("Alder Print Co.", "alder").startswith("Signed by Alder Print Co. These")
-    for line in (screens.rule_question("deal-0123456789abcdef", "delivered", "Alder Print Co."),
-                 screens.signed_line("Alder Print Co.", "alder", witness_checked=True)):
+    for line in (screens.signed_line("Alder Print Co.", "alder", witness_checked=True),):
         assert ".." not in line, line
 
 
@@ -149,17 +148,11 @@ def test_a_second_buyer_sees_limit_from_the_card_alone():
 
 
 def test_no_line_a_person_reads_names_the_demo():
-    lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE, screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print"),
+    lines = [screens.ADJUDICATOR_INDEPENDENCE, screens.WITNESS_LINE,
              screens.DISPUTE_RAISED, screens.signed_line("Kestrel Print", "kestrel"),
              screens.signed_line("Kestrel Print", "kestrel", True), screens.sample_note("kestrel"),
              pages.WITNESS_NOTE, adj.RULES_TEXT]
     assert not [s for s in lines if "demo" in s.lower()]
-
-
-def test_the_ruling_question_scopes_the_challenge():
-    q = screens.rule_question("deal-0123456789abcdef", "delivered", "Kestrel Print")
-    assert "not met, against Kestrel Print" in q and "not independent of the parties" in q
-    assert "challenge" not in q  # the ruling names no deadline (#336); the 7 days are in the published rules
 
 
 def test_the_delivery_record_in_words():
@@ -855,14 +848,14 @@ def test_a_ruling_stamp_the_witness_took_late_is_sent_again(monkeypatch):
             return {"state": "ticked"}
     sent = []
     monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
-    monkeypatch.setattr(adj.Adjudicator, "_send_ruling", lambda self, case: sent.append(case["deal_id"]))
+    monkeypatch.setattr(adj.Adjudicator, "_send_ruling", lambda self, case, stamped: sent.append((case["deal_id"], stamped)))
     case = {"deal_id": "deal-0123456789abcdef", "ruling": {}, "parties": {}}
     assert adj.Adjudicator("home").stamp(case, seconds=12, later=60) is False
     adj.LATER[-1].join(5)
-    assert tries == [12, 60] and sent == [case["deal_id"]] * 2
+    assert tries == [12, 60] and sent == [(case["deal_id"], False), (case["deal_id"], True)]  # marked once stamped
     tries[:] = [0]  # the next wait succeeds at once
     sent.clear()
-    assert adj.Adjudicator("home").stamp(case) is True and sent == [case["deal_id"]]
+    assert adj.Adjudicator("home").stamp(case) is True and sent == [(case["deal_id"], True)]
 
 
 def test_ruling_resends_never_overlap(monkeypatch):
@@ -877,7 +870,7 @@ def test_ruling_resends_never_overlap(monkeypatch):
         _lock = lock
     monkeypatch.setattr(adj.Adjudicator, "party", property(lambda self: P()))
 
-    def rule(self, case, row, value, against):
+    def rule(self, case, row, value, against, decided_by="", answers=None):
         inside[0] += 1
         most[0] = max(most[0], inside[0])
         time.sleep(0.05)
@@ -885,10 +878,11 @@ def test_ruling_resends_never_overlap(monkeypatch):
         return {"file": "ruling.json"}
     monkeypatch.setattr(adj.Adjudicator, "rule", rule)
     monkeypatch.setattr(adj.wire, "send", lambda *a: None)
+    monkeypatch.setattr(adj.wire, "send_json", lambda *a: None)  # the sent mark: nothing written under the test's cwd
     case = {"deal_id": "deal-0123456789abcdef", "ruling": {"row": "r", "value": "v", "against": "a"},
             "parties": {"buyer": "maya", "seller": "kestrel"}}
     a = adj.Adjudicator("home")
-    threads = [threading.Thread(target=a._send_ruling, args=(case,)) for _ in range(4)]
+    threads = [threading.Thread(target=a._send_ruling, args=(case, False)) for _ in range(4)]
     for t in threads:
         t.start()
     for t in threads:

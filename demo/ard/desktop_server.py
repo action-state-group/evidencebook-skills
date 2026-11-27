@@ -19,8 +19,8 @@ starting ``REFUSED:`` and changes nothing.
 ``alder`` / ``kestrel``   a seller, its own profile and keys; its agent answers on its own:
     ard_seller_activity  ->  what its agent did: the deal, the delivery, a dispute, a ruling, its card now
 ``adjudicator``   the demo's adjudicator (its own capsulectl-deal profile, run by the demo operator):
-    ard_case          ->  the cases sent to it: it asks each side for its books and shows what they show
-    ard_rule          ->  the presenter's ruling on a case (a dialog), recorded and time-stamped
+    ard_case          ->  the cases sent to it: what each side's books show, and what the adjudicator ruled and why
+                          (it rules on its own, with no person: evidencebook-skills#416)
     ard_case_activity ->  whether each party entered the ruling in its own book
 Every party's window also has ard_show_card, ard_open_card_page, ard_show_receipt and ard_open_receipt_page: its own
 History card and its own receipt (the adjudicator holds no deal of its own, so not those).
@@ -682,7 +682,7 @@ def _refusal(exc: BaseException) -> str:
     text = str(exc)
     if isinstance(exc, Said):
         return text
-    if "{" in text or len(text) > 400:  # whatever wrapped it (ard_rule wraps capsulectl's refusal in a RuntimeError)
+    if "{" in text or len(text) > 400:  # whatever wrapped it (a tool that wraps capsulectl's refusal in a RuntimeError)
         _log(f"a tool refused: {exc!r}")
         return "this step was refused (the reason is in this party's log, agent.log)"
     return text
@@ -1158,74 +1158,61 @@ def _adjudicator() -> adj.Adjudicator:
     return adj.Adjudicator(_home())
 
 
-#: How often the adjudicator's window looks for a dispute that has arrived (_ask_on_arrival).
+#: How often the adjudicator's window looks for a dispute that has arrived and a case it can rule (_ask_on_arrival).
 ASK_EVERY_S = 3
 
 
 def _ask_on_arrival() -> None:
-    """The adjudicator asks each side for its books as soon as a dispute arrives, not when the case is first opened
-    (evidencebook-skills#326), so the first ``ard_case`` already finds the answers coming in. Asking is idempotent
-    (``Adjudicator.ask`` skips a case it already asked about); a failure is written to the adjudicator's log and tried
-    again on the next round."""
+    """The adjudicator's own work, with no person (Ethan, 2026-11-26, evidencebook-skills#416): it asks each side for
+    its books as soon as a dispute arrives (evidencebook-skills#326), rules each case the books decide
+    (``Adjudicator.rule_decided``), and sends again any ruling not yet sent or stamped (``Adjudicator.resume``). This loop is the only place a ruling is sealed in this window; ``ard_case`` only reads.
+    Each step is idempotent; a failure is written to the adjudicator's log and tried again on the next round."""
     a = adj.Adjudicator(_home())
     while True:
-        try:
-            a.ask()
-        except Exception as exc:  # noqa: BLE001: a background step never ends the window's server
-            a.party.log(f"asking for books: {exc!r}")
+        for step in (a.ask, a.rule_decided, a.resume):
+            try:
+                step()
+            except Exception as exc:  # noqa: BLE001: a background step never ends the window's server
+                a.party.log(f"{step.__name__}: {exc!r}")
         time.sleep(ASK_EVERY_S)
 
 
 @_tool("adjudicator")
 def ard_case() -> None:
-    """Show the disputes sent to this adjudicator: it asks each side for its books (each side's agent answers on its own,
-    with its own book and the copy it holds of the other side's), then shows who answered and what the books show (the
-    seller's own signed delivery record, each side's statement on the row) and any ruling recorded. It decides nothing."""
-    cases = _adjudicator().gather(30)
+    """Show the disputes sent to this adjudicator: who answered its request for their books (each side's agent answers
+    on its own, with its own book and the copy it holds of the other side's), what the books show (the seller's own
+    signed delivery record, each side's statement on the row), and what the adjudicator ruled and why, or why it has
+    not. The adjudicator rules on its own, with no person; this tool decides nothing and records nothing."""
+    a = _adjudicator()
+    cases = a.gather(30)
     if not cases:
         print("no case yet: a party has sent no dispute to this adjudicator")
         return
+    stop = time.monotonic() + CASE_WAIT_S  # both answers in: the window's loop checks and rules within a round or two
+    while time.monotonic() < stop and any(len(c["answers"]) == 2 and not c["ruling"] and not _settled(c)
+                                          for c in cases):
+        time.sleep(1)
+        cases = a.cases()
     print(screens.ADJUDICATOR_INDEPENDENCE)
     for raw in cases:
         print()
         print("\n".join(flow.case_lines(flow.case_view(raw, flow.case_names(raw)), flow.case_names(raw))))
+        r = raw["ruling"]
+        if r and pt.witnessed() and not adj.stamped(_home(), raw["deal_id"]):
+            print(f"Its stamp is not taken yet: this window keeps asking {pt.WITNESS_NAME} and sends the ruling to "
+                  "both parties again with its stamp. Keep this window open until then.")
+        elif r:
+            print("Sent to both parties; each enters it in its own records.")
 
 
-@_tool("adjudicator")
-def ard_rule(seller: str) -> None:
-    """Rule on the open case about ``seller``'s delivery: a dialog on the presenter's screen asks for the decision
-    (against the seller, the row not met); only the presenter's click records it, with capsulectl's ``deal ruling`` over
-    the books the sides sent. The ruling is then time-stamped by Action State's witness and sent to both parties, each of
-    which enters it in its own records."""
-    key = _seller_key(seller)
-    a = _adjudicator()
-    seller_name = SELLERS[key]["label"]
-    for raw in a.gather(30):
-        if raw["parties"]["seller"] != key:
-            continue
-        if not raw["answers"]:
-            raise RuntimeError("neither side has answered the adjudicator's request for its books yet: no ruling from "
-                               "this case yet (try again in a minute)")
-        c = flow.case_view(raw, flow.case_names(raw))
-        if not raw["ruling"] and not gate_off():
-            how = dialog_answer("Rule on this case", screens.rule_question(c.deal_id, c.row, seller_name), "Rule")
-            if how != "yes":
-                raise RuntimeError(f"{NOT_YES[how]}, so no ruling was recorded")
-        try:
-            r = raw["ruling"] or a.rule(raw, c.row, "not_met", "seller")
-        except adj.AdjudicatorError as exc:
-            raise RuntimeError(f"capsulectl refused the ruling: {exc}") from None
-        print(f"Ruling recorded on deal {c.deal_id[5:13]}, row {c.row}: not met, against {screens.stop(seller_name)}")
-        if a.stamp({**raw, "ruling": r}):
-            print(f"Its stamp was taken by {pt.WITNESS_NAME}; each party's window shows the time it was stamped.")
-        elif pt.witnessed():
-            print(f"Not yet time-stamped: {pt.WITNESS_NAME} did not answer within 12 seconds. Both parties have the "
-                  f"ruling without a stamp. This window keeps asking for {adj.LATER_S // 60} minutes and, once stamped, "
-                  "sends the ruling to both parties again with its stamp. Keep this window open until then. If none "
-                  "comes by then, run this again.")
-        print("Sent to both parties; each enters it in its own records.")
-        return
-    raise RuntimeError(f"no case about {seller_name}")
+#: How long ard_case waits for the window's loop to rule a case whose answers are both in.
+CASE_WAIT_S = 30
+
+
+def _settled(case: dict) -> bool:
+    """The adjudicator checked this case on the answers it has now and the check did not decide it (a decisive check
+    is waited on until its ruling is sealed)."""
+    return adj.needs_person(case.get("decision"), case["answers"])
 
 
 @_tool("adjudicator")

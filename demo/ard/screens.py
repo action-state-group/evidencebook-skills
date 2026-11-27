@@ -329,16 +329,6 @@ DISPUTE_RAISED = ("Dispute raised on this deal's delivery. Sent to {seller} and 
                   "Nothing is refunded by this step.")
 
 
-def rule_question(deal_id: str, row: str, seller: str) -> str:
-    """The Adjudicator window's dialog: the presenter's decision, recorded by the operator. It names no challenge window:
-    the ruling names no deadline, and Sherlock2 dropped the line (evidencebook-skills#336); the window, 7 days (Steven,
-    ops u214), stays in the adjudicator's published rules (:data:`adjudicator.RULES_TEXT`)."""
-    return (f"Rule on deal {deal_id[5:13]}, row {row}: not met, against {stop(seller)} "
-            f"Conflict: the operator runs this adjudicator and every party here, so it is not independent "
-            f"of the parties.")
-
-
-
 #: The foot of the held-order question, whichever layout (#270 items 2 and 3). It names no place to change the rules:
 #: the demo has none (Steven's feedback of 2026-11-25; Sherlock2 on #321, option a); the limit is the one the person
 #: confirmed in chat (ard_set_limit, #361).

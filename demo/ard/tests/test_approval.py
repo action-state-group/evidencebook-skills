@@ -105,7 +105,6 @@ def test_a_form_ended_at_once_was_not_shown_and_is_not_asked_again(monkeypatch):
     ("This order needs your OK", "Buy anyway", "Don't buy"),
     ("Confirm what you received", "Received", "Cancel"),
     ("Dispute this delivery", "Dispute", "Cancel"),
-    ("Rule on this case", "Rule", "Cancel"),
 ])
 def test_every_dialog_presets_the_safe_answer(monkeypatch, title, yes, no):
     asked = window(monkeypatch, said(no))
@@ -243,7 +242,7 @@ TOOLS = {
              "ard_show_receipt": [], "ard_open_receipt_page": [], "ard_confirm": []},
     "alder": {"ard_seller_activity": [], "ard_show_card": [], "ard_open_card_page": [], "ard_show_receipt": [],
               "ard_open_receipt_page": []},
-    "adjudicator": {"ard_case": [], "ard_rule": ["seller"], "ard_case_activity": []},
+    "adjudicator": {"ard_case": [], "ard_case_activity": []},  # it rules on its own: no tool records a ruling (#416)
 }
 TOOLS["kestrel"] = TOOLS["alder"]
 

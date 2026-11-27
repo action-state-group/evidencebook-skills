@@ -334,7 +334,7 @@ class SellerAgent:
                 check = p.check(deal_id, "commit", SELLERS[self.name]["item"], ref["amount_msat"], "the buyer")
                 if not check.get("proceed"):
                     raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
-                return p.perform(deal_id, check["check_id"], info["observed"])
+                return p.perform(deal_id, check["check_id"], info["observed"], info["states"])
             if self._done(deal_id, "held"):
                 continue  # this seller's own check held the delivery: it is not retried every round
             try:
@@ -346,11 +346,12 @@ class SellerAgent:
                 self.say(str(exc))
                 continue
             wire.send(self.home, to, deal_id, "act", act)
-            if self.name != "kestrel":  # Kestrel says nothing on the row (plan Q3): the ruling rests on its own record
+            if not info["states"]:  # a seller whose delivery record states its row (Kestrel) sends no statement of its own
                 st = self._step(deal_id, "statement-sent", lambda: p.statement(deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
                 wire.send(self.home, to, deal_id, "statement", st)
             self._mark(deal_id, "paid")
-            self.say(f"delivered to the buyer: {info['shipped']} (this seller's delivery record says so)")
+            states = (", and states the delivery not met" if info["states"].get(pt.DELIVERED) == "not_met" else "")
+            self.say(f"delivered to the buyer: {info['shipped']} (this seller's delivery record says so{states})")
 
     def _statements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "statement"):
@@ -488,15 +489,17 @@ class Case:
     asked_at: str = ""
     ruling: dict | None = None
     signed: set[str] = field(default_factory=set)            # sides with at least one of their records read
+    observed: dict[str, str] = field(default_factory=dict)   # record id -> a delivery record's own words
+    decision: dict | None = None                             # what deal ruling check said (adjudicator.decision)
 
 
-def _records(book: dict) -> list[tuple[str, dict]]:
+def _records(book: dict) -> list[tuple[str, str, dict]]:
     """An answer's records with whose book each comes from: ``own`` (the answering side's) or ``held`` (its copy of the
     other side's)."""
-    def each(records) -> list[dict]:  # keyed by record id
-        return list((records or {}).values())
-    return [("own", r) for r in each(book.get("records"))] + \
-        [("held", r) for r in each((book.get("received") or {}).get("records"))]
+    def each(records) -> list[tuple[str, dict]]:  # keyed by record id
+        return list((records or {}).items())
+    return [("own", i, r) for i, r in each(book.get("records"))] + \
+        [("held", i, r) for i, r in each((book.get("received") or {}).get("records"))]
 
 
 def case_view(case: dict, names: dict[str, str]) -> Case:
@@ -507,25 +510,29 @@ def case_view(case: dict, names: dict[str, str]) -> Case:
     row = dispute.get("record", {}).get("payload", {}).get("body", {}).get("row")
     if not row:  # a dispute file of another shape: never show or rule on a guessed row
         raise ValueError(f"the dispute for {case['deal_id']} names no row")
-    c = Case(case["deal_id"], row, asked_at=case.get("asked_at", ""), ruling=case.get("ruling"))
+    c = Case(case["deal_id"], row, asked_at=case.get("asked_at", ""), ruling=case.get("ruling"),
+             decision=case.get("decision"))
     seen: set[str] = set()
     for side, a in case["answers"].items():
         c.answered[side] = a["at"]
         book = json.loads(Path(a["file"]).read_text())["bundle"].get("extensions", {}).get("x-deal-v1", {}).get("book", {})
         other = "seller" if side == "buyer" else "buyer"
-        for whose, rec in _records(book):
+        for whose, rid, rec in _records(book):
             signer = side if whose == "own" else other
             c.signed.add(signer)
             b = (rec.get("payload") or {}).get("body", {})
-            line = ""
+            lines = []
             if "observed" in b and b.get("act"):
-                line = f"{names.get(signer, signer)}'s own signed delivery record: {buyer_words(b['observed'])}"
+                c.observed[rid] = buyer_words(b["observed"])
+                lines.append(f"{names.get(signer, signer)}'s own signed delivery record: {c.observed[rid]}")
             for st in b.get("statements", []) if isinstance(b.get("statements"), list) else []:
-                if st.get("row") == row:
-                    line = f"{names.get(signer, signer)}'s statement on the row: {st.get('value', '').replace('_', ' ')}"
-            if line and line not in seen:
-                seen.add(line)
-                c.deciding.append(line)
+                if st.get("row") == row:  # beside the delivery record's words when the same record states the row
+                    lines.append(f"{names.get(signer, signer)}'s statement on the row: "
+                                 f"{st.get('value', '').replace('_', ' ')}")
+            for line in lines:
+                if line not in seen:
+                    seen.add(line)
+                    c.deciding.append(line)
     return c
 
 
@@ -556,11 +563,36 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
         else:
             out.append(f"  {names[side]}: no answer yet")
     out += [f"  {line}" for line in c.deciding]
+    out += [f"  {line}" for line in ruling_lines(c, names)]
+    return out
+
+
+#: A row in words, as the adjudicator's window says what was not met.
+ROW_WORDS = {"delivered": "the delivery", "paid": "the payment"}
+
+
+def ruling_lines(c: Case, names: dict[str, str]) -> list[str]:
+    """What the adjudicator ruled and why, in Sherlock2's words (buzz 4ec88700, evidencebook-skills#416); or why it has
+    not. The ruling record itself does not say it was made without a person (Sherlock2, buzz 319f98a4): only this
+    screen does, from what ``deal ruling check`` said."""
+    d = c.decision or {}
+    k = d.get("decisive")
     if c.ruling:
         who = names.get(c.ruling["against"], "no one")
+        if k and c.ruling.get("decided_by") == k.get("record_id"):
+            said = c.observed.get(k["record_id"])
+            what = ROW_WORDS.get(c.row, f"row {c.row}")
+            return [f"Ruled without a person: {who} stated in its own signed record that {what} was not met"
+                    + (f" (its record says {said})." if said else ".")
+                    + f" Against {screens.stop(who)} Either side may challenge it within {adj.CHALLENGE_DAYS} days. "
+                    "A challenge is recorded beside the ruling and never replaces it.",
+                    f"ruling {c.ruling['ruling'][:8]}…"]
         found = "not met" if c.ruling["value"] == "not_met" else "met"
-        out.append(f"  ruling recorded: {found}, against {who} (ruling {c.ruling['ruling'][:8]}…)")
-    return out
+        return [f"ruling recorded: {found}, against {who} (ruling {c.ruling['ruling'][:8]}…)"]
+    if d.get("needs_person") and not d.get("retry"):
+        return [f"This case needs a person: {d['needs_person']}. Nothing is ruled: no person rules cases in this demo."]
+    return [f"Not ruled yet: the adjudicator rules once both sides have answered, or {adj.RULE_AFTER_S // 60} minutes "
+            "after asking, on the answers in by then."]
 
 
 def entry_lines(deal_id: str, rows: list[dict], names: dict[str, str]) -> list[str]:

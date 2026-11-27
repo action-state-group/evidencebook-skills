@@ -48,8 +48,9 @@ PARTIES = {
     "adjudicator": {
         "title": "The adjudicator (run by the operator)", "skill": "adjudicate-deal",
         "facts": "You are the adjudicator's assistant. The operator runs this adjudicator and every party here, so it "
-                 "is not independent of them. You gather and show a case; only the presenter decides a "
-                 "ruling, in the dialog your ard_rule tool opens.",
+                 "is not independent of them. The adjudicator rules on its own, with no person, when the side it would "
+                 "rule against has stated, in a record it signed, that the row was not met; you show the case and what "
+                 "it ruled, and you decide nothing.",
         "prompt": "Reply in English only. In one short sentence, say you are the adjudicator's assistant and ready. Do "
                   "not call any tool until I ask.",
     },
@@ -388,7 +389,7 @@ def check_provider(root: Path) -> tuple[str | None, str | None]:
         # Sherlock2 on #340 (ops c0813d7e, amended f5adbf20; #356): the allowed choices by the names Goose shows,
         # and where to switch, in plain words, no provider id
         return ("the demo's Goose uses a model provider that runs its own agent with its own tools, which could answer "
-                "the Set limit, Pay, Received, Dispute and Rule dialogs instead of you. Choose ChatGPT Codex (a "
+                "the Set limit, Pay, Received and Dispute dialogs instead of you. Choose ChatGPT Codex (a "
                 "ChatGPT sign-in), an API key (Google, OpenAI, Anthropic and others), or Claude Code (ACP): start the "
                 "demo's Goose with open-windows.py --goose-only and change it in Settings, Models"), provider
     if not provider:

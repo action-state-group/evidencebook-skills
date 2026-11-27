@@ -604,7 +604,7 @@ def test_giving_up_is_not_noted_as_sent_and_a_note_failure_is_the_proof_steps_ow
 
 
 def test_a_wrapped_refusal_with_raw_output_is_plain_too(tmp_path, monkeypatch):
-    """Codex's round 2: ard_rule wraps capsulectl's refusal in a RuntimeError."""
+    """Codex's round 2: a tool that wraps capsulectl's refusal in a RuntimeError."""
     ds = pytest.importorskip("desktop_server")
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
     out = ds._refusal(RuntimeError('capsulectl refused the ruling: {"error": "x"}'))

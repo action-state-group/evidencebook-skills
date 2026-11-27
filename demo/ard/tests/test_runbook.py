@@ -22,7 +22,7 @@ def _step(n: int, section: str = "## The run") -> str:
 def test_maya_opens_her_kestrel_receipt_after_the_ruling_before_ordering_again():
     """#411: after the adjudicator's not-met ruling (step 10) and its entry (step 11), Maya opens her receipt as a page
     while her latest deal is Kestrel's, so the seal shows; then the second order."""
-    assert "Rule against Kestrel" in _step(10)
+    assert "Show the ruling." in _step(10) and "Against Kestrel Print." in _step(10)  # ruled with no person (#416)
     step = _step(13)
     page, order = step.index("Open your receipt as a page."), step.index("Order 200 more badges.")
     assert page < order

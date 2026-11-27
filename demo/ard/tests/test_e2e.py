@@ -185,9 +185,22 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     view = flow.case_view(case, names)
     assert set(view.answered) == {"buyer", "seller"}
     assert "Kestrel Print's own signed delivery record: 150 of 200 badges" in view.deciding
-    r = w["adj"].rule(case, view.row, "not_met", "seller")
-    assert r["sealed"] and set(r["books"]) == {"buyer", "seller"}
-    w["adj"].stamp(_fresh(w, deal.deal_id))  # a slow witness: the stamp is taken later, in the background (#307)
+    assert "Kestrel Print's statement on the row: not met" in view.deciding  # beside the record's words (#416)
+    # the answers carry the rules digest the agreement names, so the adjudicator's guard against old rules reads one
+    assert adj._rules_digests([a["file"] for a in case["answers"].values()]) == {adj.rules_digest()}
+    # no person rules (#416): the adjudicator's own step checks the case and seals the ruling on Kestrel's own word,
+    # then takes its stamp (a slow witness: later, in the background, #307) and sends it to both parties
+    assert w["adj"].rule_decided() == [deal.deal_id]
+    assert w["adj"].rule_decided() == []  # once only
+    fresh = _fresh(w, deal.deal_id)
+    r, k = fresh["ruling"], fresh["decision"]["decisive"]
+    # the record on disk is the stamp's resend, which seals nothing new (sealed: false); the ruling itself is there
+    assert r["ruling"] and set(r["books"]) == {"buyer", "seller"}
+    assert (r["value"], r["against"], r["decided_by"]) == ("not_met", "seller", k["record_id"])
+    lines = flow.case_lines(flow.case_view(fresh, names), names)
+    assert ("Ruled without a person: Kestrel Print stated in its own signed record that the delivery was not met (its "
+            "record says 150 of 200 badges). Against Kestrel Print. Either side may challenge it within 7 days. A "
+            "challenge is recorded beside the ruling and never replaces it.") in [x.strip() for x in lines], lines
 
     # each side enters it in its own records and sends its book back; the entry check reads both
     _until(lambda: (flow.enter_rulings(w["home"], w["maya"], "buyer", "kestrel", lambda *_: None) or True)
@@ -432,6 +445,7 @@ def test_a_silent_seller_is_read_from_the_records_it_signed_that_the_buyer_holds
     carries its own book and the copy it holds of Alder's, so the case still reads Alder's own signed delivery record
     (u211 item 2: a silent side is ruled on only from records it signed), and the ruling reads Alder's book from the
     buyer's held copy."""
+    import adjudicator as adj
     import buyer
     import flow
     import party as pt
@@ -448,6 +462,13 @@ def test_a_silent_seller_is_read_from_the_records_it_signed_that_the_buyer_holds
     view = flow.case_view(case, flow.case_names(case))
     assert set(view.answered) == {"buyer"}
     assert "Alder Print Co.'s own signed delivery record: 200 of 200 badges" in view.deciding
+    # the adjudicator waits RULE_AFTER_S for the silent side, then checks on the one answer: no record Alder signed
+    # states the delivery not met, so the case needs a person and nothing is sealed (#416)
+    assert w["adj"].rule_decided(now=time.time() + adj.RULE_AFTER_S) == []
+    fresh = _fresh(w, deal.deal_id)
+    assert fresh["ruling"] is None and fresh["decision"]["needs_person"].startswith("the seller "), fresh["decision"]
+    assert any(x.strip().startswith("This case needs a person: ") for x in
+               flow.case_lines(flow.case_view(fresh, flow.case_names(fresh)), flow.case_names(fresh)))
     r = w["adj"].rule(case, view.row, "met", "none")
     seller_book = r["books"]["seller"]["records"]
     assert seller_book and {x["timed_by"] for x in seller_book} <= {"own_stamp", "holder_link"}
