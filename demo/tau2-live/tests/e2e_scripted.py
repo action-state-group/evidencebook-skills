@@ -7,8 +7,8 @@ ending in two bundles that capsulectl deal verify accepts.
 
 Needs capsulectl with the deal and book plugins, and capsule-engine, on PATH (or
 CAPSULECTL_PLUGIN_ROOTS for the plugins). Exits non-zero on the first failed check.
-The store ticks every minute (records.Store cadence), so the report step waits at most
-a minute for its checkpoint, not the five of capsulectl's default cadence (#427).
+The report step stamps the store when it needs a checkpoint (deal tick --now), so the run
+never waits for the store's cadence (#431).
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ async def over_stdio(store: records.Store, case_dir: Path) -> None:
 def main() -> None:
     state = Path(sys.argv[1]).resolve()
     state.mkdir(parents=True, exist_ok=True)
-    store = records.Store(state=state, cadence="1m")
+    store = records.Store(state=state)
     task = next(t for t in json.loads(SCENARIOS.read_text())["tasks"] if t["id"] == "40")
     case = records.open_case(store, "40", evaluate.ensure_evaluator(store))
     meta = json.loads((case.dir / "case.json").read_text())

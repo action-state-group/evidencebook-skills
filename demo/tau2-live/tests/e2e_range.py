@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The range report through released capsulectl only, on the ended-window fixture.
+"""The range report through capsulectl only, on the ended-window fixture.
 
     uv run python tests/e2e_range.py WORK_DIR
 

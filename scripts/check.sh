@@ -14,8 +14,8 @@
 #                             (with --full: the full set)
 #
 # ard-demo and tau2-live, the end-to-end runs of tests.yml's two jobs, run
-# only with --full: each takes minutes on its own (ard-demo about 8, tau2-live
-# about 6), and the check before every push stays well under 10
+# only with --full: ard-demo takes about 8 minutes on its own (tau2-live under
+# a minute since #431), and the check before every push stays well under 10
 # (evidencebook-skills#425). CI's tests.yml runs both nightly and on every push
 # to main that changes their inputs. The exit status is non-zero when any job
 # that ran failed.
@@ -423,16 +423,17 @@ job_obligations_report() {
   CAPSULECTL="$ctl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_obligations.sh
 }
 
-# tau2_setup: the released binaries tau2-live's two jobs use, on PATH (capsulectl, capsule-engine), and the plugin
-# root in the caller's local roots.
+# tau2_setup: the binaries tau2-live's two jobs use, built at the job's pins, on PATH (capsulectl, capsule-engine), and
+# the plugin root in the caller's local roots.
 tau2_setup() {
-  local v ref ce ctl deal book bin
-  v=$(pin tests.yml tau2-live CAPSULECTL_VERSION)
-  ref=$(pin tests.yml tau2-live CAPSULE_ENGINE_REF)
-  ce=$(engine "$ref")
-  ctl=$(release capsule-cli "$v" "capsulectl-$v-$plat")
-  deal=$(release evidencebook "capsulectl/$v" "capsulectl-deal-$v-$plat")
-  book=$(release evidencebook "capsulectl/$v" "capsulectl-book-$v-$plat")
+  local w=tests.yml eb_ref cli_ref ce eb ctl deal book bin
+  eb_ref=$(pin $w tau2-live EVIDENCEBOOK_REF)
+  cli_ref=$(pin $w tau2-live CAPSULE_CLI_REF)
+  ce=$(engine "$(pin $w tau2-live CAPSULE_ENGINE_REF)")
+  eb=$(checkout evidencebook "$eb_ref")
+  ctl=$(gobuild "$(checkout capsule-cli "$cli_ref")" capsulectl "$cli_ref" ./cmd/capsulectl)
+  deal=$(gobuild "$eb/capsulectl" capsulectl-deal "$eb_ref" ./cmd/capsulectl-deal)
+  book=$(gobuild "$eb/capsulectl" capsulectl-book "$eb_ref" ./cmd/capsulectl-book)
   roots=$(plugins "capsulectl-deal=$deal" "capsulectl-book=$book")
   bin=$(mktemp -d "$tmp/tau2-bin.XXXX")
   ln -sf "$ctl" "$bin/capsulectl"
