@@ -54,7 +54,7 @@ done
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 
-jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report ard-demo tau2-live)
+jobs=(unit viewer-drift admission-engine live-engine report-grades obligations-report contracts neutrality ard-demo tau2-live)
 
 # What ard-demo reads in this repository, besides the pinned checkouts and binaries: the demo itself; the
 # skills (demo/ard/goose/open-windows.py and its tests read skills/*/SKILL.md); the pack compiler that
@@ -200,13 +200,18 @@ req_venv() {
 
 # engine REF: capsule-engine (Go) built from REF; prints the binary's path.
 engine() {
-  local out="$deps/bin/capsule-engine@${1//\//_}" src
+  gobuild "$(checkout capsule-engine "$1")/go" capsule-engine "$1" ./cmd/capsule-engine
+}
+
+# gobuild DIR NAME REF PKG: NAME built from package PKG in DIR, a checkout at REF, kept in the cache by NAME and REF;
+# prints the binary's path.
+gobuild() {
+  local out="$deps/bin/$2@${3//\//_}"
   if [[ ! -x "$out" ]]; then
     deps_lock
     if [[ ! -x "$out" ]]; then
-      src=$(checkout capsule-engine "$1")
       mkdir -p "$deps/bin"
-      (cd "$src/go" && go build -o "$out.partial" ./cmd/capsule-engine)
+      (cd "$1" && go build -o "$out.partial" "$4")
       mv "$out.partial" "$out"
     fi
     deps_unlock
@@ -310,27 +315,9 @@ job_ard_demo() {
   eb=$(checkout evidencebook "$eb_ref")
   ce=$(engine "$ce_tag")
   # capsulectl-deal is built from the pinned evidencebook checkout, as CI builds it.
-  deal="$deps/bin/capsulectl-deal@$eb_ref"
-  if [[ ! -x "$deal" ]]; then
-    deps_lock
-    if [[ ! -x "$deal" ]]; then
-      mkdir -p "$deps/bin"
-      (cd "$eb/capsulectl" && go build -o "$deal.partial" ./cmd/capsulectl-deal)
-      mv "$deal.partial" "$deal"
-    fi
-    deps_unlock
-  fi
+  deal=$(gobuild "$eb/capsulectl" capsulectl-deal "$eb_ref" ./cmd/capsulectl-deal)
   # capsulectl itself, for the countersign upgrade's `countersign request` (#383).
-  core="$deps/bin/capsulectl@$cli_ref"
-  if [[ ! -x "$core" ]]; then
-    deps_lock
-    if [[ ! -x "$core" ]]; then
-      mkdir -p "$deps/bin"
-      (cd "$(checkout capsule-cli "$cli_ref")" && go build -o "$core.partial" ./cmd/capsulectl)
-      mv "$core.partial" "$core"
-    fi
-    deps_unlock
-  fi
+  core=$(gobuild "$(checkout capsule-cli "$cli_ref")" capsulectl "$cli_ref" ./cmd/capsulectl)
   # The demo's countersigner (demo/ard/countersigner.py) at its own pin, installed here: the end-to-end step below
   # reaches no host but this machine, so it cannot install capsule-anchor itself.
   anchor_ref=$(sed -n 's/^ANCHOR_REF = "\([0-9a-f]*\)"$/\1/p' demo/ard/countersigner.py)
@@ -361,6 +348,41 @@ job_ard_demo() {
   grep -qE '"POST /checkpoints HTTP/[0-9.]+" 2[0-9][0-9]' "$log" || { cat "$log" >&2; echo "ard-demo: the local witness took no stamp" >&2; return 1; }
 }
 
+# contracts.yml's add-only rule on what a push sends: the commits since the merge base with origin/main (a pull
+# request's base), as CI compares its base with the pull request's head. A published contract
+# (contracts/<id>/<version>.json) is never modified, deleted or renamed.
+job_contracts() {
+  local base diff changed
+  base=$(git merge-base HEAD origin/main) || { echo "contracts: no merge base with origin/main" >&2; return 1; }
+  diff=$(git diff --name-status --no-renames "$base" HEAD -- contracts/)
+  changed=$(grep -v '^A' <<<"$diff" || true)
+  if [[ -n "$changed" ]]; then
+    echo "A published contract is immutable; publish a new version instead:"
+    echo "$changed"
+    return 1
+  fi
+  echo "contracts/: additions only"
+}
+
+# neutrality.yml: the scan with the scanner origin/main holds (CI runs the base branch's scanner on a pull request's
+# files as data, so a branch's own edit to the scanner never judges itself), after that scanner's self-test. The term
+# list is the repository secret NEUTRALITY_TERMS, which this public repository does not hold: it is read from the
+# file $NEUTRALITY_TERMS_FILE (default ~/.config/evidencebook-skills/neutrality-terms.json, the secret's JSON) and
+# given to the scanner process alone. Without that file the scan is reported NOT RUN in the summary, never a pass.
+job_neutrality() {
+  local py scanner terms=${NEUTRALITY_TERMS_FILE:-$HOME/.config/evidencebook-skills/neutrality-terms.json}
+  py=$(venv bare)
+  scanner=$tmp/neutrality_scan.py
+  git show origin/main:.github/neutrality_scan.py >"$scanner"
+  "$py/bin/python" "$scanner" --self-test
+  if [[ ! -f "$terms" ]]; then
+    # The summary line carries it too (a job's note file), so the run's last lines say the scan did not run.
+    echo "the scan NOT RUN: no term list at $terms" | tee "$tmp/neutrality.note"
+    return 0
+  fi
+  NEUTRALITY_TERMS=$(<"$terms") NEUTRALITY_REVEAL=true "$py/bin/python" "$scanner" .
+}
+
 job_viewer_drift() {
   local py
   py=$(venv bare)
@@ -386,18 +408,17 @@ job_live_engine() {
 }
 
 job_report_grades() {
-  local eb_ref cli_ref eb cli bin="$tmp/report-grades" roots py
+  local eb_ref cli_ref eb cli ctl book roots py
   eb_ref=$(pin fast.yml report-grades EVIDENCEBOOK_REF)
   cli_ref=$(pin fast.yml report-grades CAPSULE_CLI_REF)
   eb=$(checkout evidencebook "$eb_ref")
   cli=$(checkout capsule-cli "$cli_ref")
-  mkdir -p "$bin"
-  (cd "$cli" && go build -o "$bin/capsulectl" ./cmd/capsulectl)
-  (cd "$eb/capsulectl" && go build -o "$bin/capsulectl-book" ./cmd/capsulectl-book)
-  roots=$(plugins "capsulectl-book=$bin/capsulectl-book")
+  ctl=$(gobuild "$cli" capsulectl "$cli_ref" ./cmd/capsulectl)
+  book=$(gobuild "$eb/capsulectl" capsulectl-book "$eb_ref" ./cmd/capsulectl-book)
+  roots=$(plugins "capsulectl-book=$book")
   py=$(venv report pyyaml rfc8785)
-  CAPSULECTL="$bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_report.sh
-  CAPSULECTL="$bin/capsulectl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_deals.sh
+  CAPSULECTL="$ctl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_report.sh
+  CAPSULECTL="$ctl" CAPSULECTL_PLUGIN_ROOTS="$roots" PATH="$py/bin:$PATH" bash tests/fresh_env_deals.sh
 }
 
 job_obligations_report() {
@@ -433,28 +454,75 @@ job_tau2_live() {
   )
 }
 
+# Every job starts at once, so the check takes as long as its slowest job, not the sum of all
+# (evidencebook-skills#419). Each runs in its own process group (set -m), writing its own log; a job's log is
+# printed whole when it ends, with its pass or FAIL line, so two jobs' output never interleave. Ending the script
+# (a failure of its own, Ctrl-C, a kill) stops every job's group, the processes a job started included.
 failed=()
-summary=()
+declare -A pid_of=() start_of=() result=()
+# stop_jobs: TERM to each running job's process group (ard-demo's witness, started with nohup, is in its group too),
+# up to 10 seconds for the groups to go, then KILL to what is left; only then is $tmp, which the jobs read, removed.
+stop_jobs() {
+  local p i alive
+  ((${#pid_of[@]})) || return 0
+  for p in "${pid_of[@]}"; do kill -TERM -- "-$p" 2>/dev/null || true; done
+  for ((i = 0; i < 100; i++)); do
+    alive=0
+    for p in "${pid_of[@]}"; do kill -0 -- "-$p" 2>/dev/null && alive=1; done
+    ((alive)) || return 0
+    sleep 0.1
+  done
+  for p in "${pid_of[@]}"; do kill -KILL -- "-$p" 2>/dev/null || true; done
+}
+trap 'stop_jobs; rm -rf "$tmp"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 printf '%s\n' "$ard_why"
+set -m
 for job in "${jobs[@]}"; do
   if [[ "$job" == ard-demo ]] && ((!ard_runs)); then
-    summary+=("$(printf '%-20s %s' "$job" skipped)")
+    result[$job]=skipped
     continue
   fi
-  printf '\n=== %s\n' "$job"
-  start=$SECONDS
-  # Not in an `if`: errexit would be off inside the job.
-  set +e
-  (set -e; "job_${job//-/_}")
-  rc=$?
-  set -e
-  if ((rc == 0)); then status=pass; else status=FAIL; failed+=("$job"); fi
-  summary+=("$(printf '%-20s %s  %ds' "$job" "$status" $((SECONDS - start)))")
+  start_of[$job]=$SECONDS
+  # errexit inside the job: a job is a function run with `set -e`, as when the jobs ran one by one.
+  (set -e; "job_${job//-/_}") </dev/null >"$tmp/$job.log" 2>&1 &
+  pid_of[$job]=$!
+done
+set +m
+printf 'check.sh: running %s at once\n' "${!pid_of[*]}"
+while ((${#pid_of[@]})); do
+  ended=()
+  for job in "${!pid_of[@]}"; do
+    kill -0 "${pid_of[$job]}" 2>/dev/null || ended+=("$job")
+  done
+  if ((${#ended[@]} == 0)); then
+    # The next job to end, whichever it is (bash 4.4's wait -n takes no job list; this script starts no others).
+    wait -n || true
+    continue
+  fi
+  for job in "${ended[@]}"; do
+    set +e
+    wait "${pid_of[$job]}"
+    rc=$?
+    set -e
+    unset "pid_of[$job]"
+    if ((rc == 0)); then status=pass; else status=FAIL; failed+=("$job"); fi
+    result[$job]=$(printf '%s  %ds' "$status" $((SECONDS - start_of[$job])))
+    [[ ! -s "$tmp/$job.note" ]] || result[$job]+=" ($(<"$tmp/$job.note"))"
+    printf '\n=== %s\n' "$job"
+    cat "$tmp/$job.log"
+    printf '=== %s: %s\n' "$job" "${result[$job]}"
+  done
 done
 printf '\n'
-printf '%s\n' "${summary[@]}"
+for job in "${jobs[@]}"; do printf '%-20s %s\n' "$job" "${result[$job]}"; done
 if ((${#failed[@]})); then
   printf 'check.sh: FAILED: %s\n' "${failed[*]}" >&2
   exit 1
 fi
-echo "check.sh: all jobs passed"
+if [[ -s "$tmp/neutrality.note" ]]; then
+  echo "check.sh: all jobs passed; NOT RUN: neutrality's scan ($(<"$tmp/neutrality.note"))"
+else
+  echo "check.sh: all jobs passed"
+fi
