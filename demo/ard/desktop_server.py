@@ -121,8 +121,11 @@ NOT_YES = {NO: "the presenter declined it",
 #: at most this long, which with Goose 1.59.2 is 5 minutes (FORM_LIMIT_S). The window's MCP tool timeout
 #: (open-windows.py TOOL_TIMEOUT_S) covers it and the rest of the longest call, ard_pay.
 DIALOG_GIVE_UP_S = 600
-#: The one field of a dialog's form in the window, and its label (proposed; awaiting Sherlock2's wording review).
-ANSWER_FIELD, ANSWER_LABEL = "answer", "Your answer"
+#: The one field of a dialog's form in the window. Its key is the words a person reads: Goose Desktop 1.59.2 labels the
+#: field with its key, not its ``title`` (#418's hand run on 2026-11-27 showed "answer *"), so key and title are the same.
+ANSWER_FIELD = ANSWER_LABEL = "Your answer"
+#: The key of the form in a 2026-07-28 input round (``input_requests`` and the client's ``input_responses``).
+ROUND_KEY = "dialog"
 #: A form the window ends sooner than this after it was asked was not shown to anyone: Goose Desktop 1.59.2 ends a form
 #: it cannot draw at once, and one it drew only after 300 s (FORM_LIMIT_S).
 SHOWN_AT_LEAST_S = 30
@@ -618,7 +621,7 @@ def _until_paused_or_done(job: _Job) -> str:
             _rounds[job.id] = job
             from mcp import types as mt
             message, schema = job.form
-            return mt.InputRequiredResult(request_state=job.id, input_requests={ANSWER_FIELD: mt.ElicitRequest(
+            return mt.InputRequiredResult(request_state=job.id, input_requests={ROUND_KEY: mt.ElicitRequest(
                 params=mt.ElicitRequestFormParams(message=message, requested_schema=schema))})
         if job.paused.is_set():
             job.paused.clear()
@@ -643,7 +646,7 @@ def _tool(*roles: str, description: str | None = None):
             if state is not None and state in _rounds:  # the client's retry with the form's answer
                 job = _rounds.pop(state)
                 responses = ard_request.input_responses or {}
-                job.reply = responses.get(ANSWER_FIELD)
+                job.reply = responses.get(ROUND_KEY)
                 job.replied.set()
                 return _until_paused_or_done(job)
             job = _Job()
