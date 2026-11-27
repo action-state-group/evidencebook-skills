@@ -16,7 +16,8 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CHECK = ROOT / "scripts" / "check.sh"
-OTHERS = ["unit", "viewer-drift", "admission-engine", "live-engine", "report-grades", "obligations-report", "tau2-live"]
+OTHERS = ["unit", "viewer-drift", "admission-engine", "live-engine", "report-grades", "obligations-report", "contracts", "neutrality",
+          "tau2-live"]
 GIT_ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid", "GIT_CONFIG_GLOBAL": os.devnull,
            "GIT_CONFIG_NOSYSTEM": "1"}
