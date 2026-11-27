@@ -104,9 +104,15 @@ def serve(cert: Path, status: int, hang: threading.Event | None = None, delay: f
             if hang is not None:
                 hang.wait(120)
             time.sleep(delay)
-            self.send_response(status)
-            self.end_headers()
-            self.wfile.write(b"refused")
+            try:
+                self.send_response(status)
+                self.end_headers()
+                self.wfile.write(b"refused")
+            except OSError:
+                # The check stopped waiting first, as the hang and slow cases make it: its connection is gone. Left
+                # alone, the server thread's traceback lands on stderr during whichever test runs next, and fails a
+                # test that reads stderr (test_main_says_one_line, evidencebook-skills#419).
+                pass
 
         def do_GET(self):
             self.send_response(200)
