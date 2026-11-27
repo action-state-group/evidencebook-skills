@@ -213,18 +213,28 @@ class Script:
         raw = next(c for c in self.adjudicator.cases() if c["deal_id"] == deal.deal_id)  # with an answer sent just now
         if len(raw["answers"]) < 2:
             print(f"only {len(raw['answers'])} of the 2 sides answered in time; the case shows what came")
+        # the adjudicator rules on its own, with no question to anyone (evidencebook-skills#416): at once on both answers,
+        # or, with one, once RULE_AFTER_S has passed since it asked, on the answers in by then (a late one still counts)
+        if len(raw["answers"]) < 2:
+            print(f"the adjudicator rules {adj.RULE_AFTER_S // 60} minutes after asking, on the answers in by then")
+        stop = adj.epoch(raw["asked_at"]) + adj.RULE_AFTER_S + 30
+        while True:
+            adj.answer_requests(self.home, self.maya, BUYER, "buyer", print)
+            self.adjudicator.rule_decided()
+            self.adjudicator.resume()
+            raw = next(c for c in self.adjudicator.cases() if c["deal_id"] == deal.deal_id)
+            if raw["ruling"] or adj.needs_person(raw["decision"], raw["answers"]) or time.time() > stop:
+                break
+            time.sleep(1)
         names = flow.case_names(raw)
-        c = flow.case_view(raw, names)
-        print("\n".join(flow.case_lines(c, names)))
-        if not self.ask(screens.rule_question(c.deal_id, c.row, SELLERS[deal.seller]["label"])):
-            print("no ruling recorded")
+        print("\n".join(flow.case_lines(flow.case_view(raw, names), names)))
+        if not raw["ruling"]:
             return
-        r = self.adjudicator.rule(raw, c.row, "not_met", "seller")
-        if not self.adjudicator.stamp({**raw, "ruling": r}) and pt.witnessed():
+        if pt.witnessed() and not adj.stamped(self.home, deal.deal_id):
             print(f"Not yet time-stamped: {pt.WITNESS_NAME} did not answer within 12 seconds. Both parties have the "
                   f"ruling without a stamp. This run keeps asking for {adj.LATER_S // 60} minutes and, once stamped, "
                   "sends the ruling to both parties again with its stamp.")
-        print(f"Ruling recorded: not met, against {screens.stop(SELLERS[deal.seller]['label'])} Sent to both parties; each enters it.")
+        print("Sent to both parties; each enters it.")
         agent = self.agents[deal.seller]
         stop = time.time() + 60
         while time.time() < stop and not (self.maya.notes(flow.RULING_ENTERED) and agent.party.notes(flow.RULING_ENTERED)):

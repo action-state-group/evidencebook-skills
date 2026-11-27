@@ -16,6 +16,10 @@ SELLERS_DIR = Path(__file__).resolve().parent / "sellers"
 #: 150 of the 200 badges, and its own delivery record says so: the dispute in deal 1 rests on that record.
 SHIPS = {"alder": ("delivered:badges_200_of_200", "200 of 200 badges"),
          "kestrel": ("partial:badges_150_of_200", "150 of 200 badges")}
+#: What a seller's own delivery record states on the delivered row, beside its words (Sherlock2, 2026-11-25, buzz 4ec88700):
+#: Kestrel states its delivery not met, so the adjudicator rules on Kestrel's own signed word, without a person
+#: (evidencebook ``xdealv1.DecideCase``; evidencebook-skills#416). Alder states its rows in a statement of its own.
+STATES = {"kestrel": {"delivered": "not_met"}}
 DISCLOSES = ("subjects", "derivations", "human_gated", "answers_within")
 
 
@@ -71,7 +75,8 @@ def seller_file(name: str, products: dict[str, dict[str, dict]] | None = None) -
             "discloses": discloses}
 
 
-SELLERS = {n: {**seller_file(n), "observed": observed, "shipped": shipped} for n, (observed, shipped) in SHIPS.items()}
+SELLERS = {n: {**seller_file(n), "observed": observed, "shipped": shipped, "states": STATES.get(n, {})}
+           for n, (observed, shipped) in SHIPS.items()}
 #: Each seller's sample history, made by ``demo.py seed`` (evidencebook-skills#317, Steven's ruling via Sherlock2):
 #: different depths, so the cards give a choice. Kestrel keeps 10, the demo pack's band-history minimum (k=10 from
 #: tier T1: pack-source.yaml ``band-history``); fewer would make it LIMIT before deal 1. Alder's count is the most that keeps

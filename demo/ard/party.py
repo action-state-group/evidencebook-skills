@@ -428,9 +428,14 @@ class Party:
                  "--payment-ref-type", "ln.payment_hash", "--payment-ref", payment_ref, "--out", out)
         return out
 
-    def perform(self, deal_id: str, check_id: str, observed: str) -> str:
+    def perform(self, deal_id: str, check_id: str, observed: str, statements: dict[str, str] | None = None) -> str:
+        """Seal the delivery (``deal perform``) with its own words (``observed``) and, when given, this party's own
+        statements on rows (``row: value``) in the same record."""
         out = self.tmp("act.json")
-        self.run("perform", "--deal", deal_id, "--act", "delivered", "--check", check_id, "--observed", observed, "--out", out)
+        args = ["perform", "--deal", deal_id, "--act", "delivered", "--check", check_id, "--observed", observed]
+        for row, value in sorted((statements or {}).items()):
+            args += ["--statement", f"{row}={value}"]
+        self.run(*args, "--out", out)
         return out
 
     def statement(self, deal_id: str, rows: dict[str, str]) -> str:
