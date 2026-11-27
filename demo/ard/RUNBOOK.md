@@ -26,7 +26,7 @@ The registry, the seller sites and the 25 sample deals are local stand-ins, and 
 
 ## What you need
 
-1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs only what is missing with Homebrew, saying so first, and upgrades nothing you already have: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm. It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
+1. A Mac on Apple silicon, on the internet, and its password: Homebrew's installer asks for it when Homebrew is not there yet. The set-up script below checks everything else and installs only what is missing with Homebrew, saying so first, and upgrades nothing you already have: Python 3.10 or later (3.14 tested by hand at an earlier pin), git, jq, Go, Node.js and npm, and tmux (the testbed's screens run in it). It checks that lsof is there (macOS ships it; `demo.py reset` needs it).
 
 2. A model for the Goose windows: either a Claude Code subscription (Claude Code ACP), or a provider Goose runs itself: ChatGPT Codex (a ChatGPT sign-in) or an API key (Google, OpenAI, Anthropic and others). Providers that run their own agent (Claude Code CLI, OpenAI Codex CLI, Cursor Agent, Gemini CLI and ACP agents other than Claude Code) are refused: their agent brings its own tools, so it could answer the Set limit, Pay, Received, Dispute and Rule dialogs instead of you. The set-up script asks which one, once.
 
