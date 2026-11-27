@@ -269,7 +269,7 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     assert a.verdict == "NO" and "adverse-adjudication" in a.reasons and "disputes-against" in a.reasons
     line = screens.decision_line(a, ev)
     assert line.startswith("NO: you hold a ruling against this seller") and "the card does not say which deal" in line
-    assert made["alder"][1].verdict == "GO"
+    assert made["alder"][1].verdict == "GO", (made["alder"][1].tier, made["alder"][1].reasons, made["alder"][0].card)
 
     # a buyer who holds no ruling: LIMIT from the card alone (Steven's #280 rule)
     second = pt.Party(w["home"], "second-buyer").create("person")
