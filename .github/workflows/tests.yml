@@ -2,8 +2,9 @@
 # The suites over about five minutes: the ARD demo end to end and the live tau2
 # demo. They run nightly, on a push to main that changes their inputs, and by
 # hand (workflow_dispatch, also on a branch), never on pull requests
-# (asg-agent-team-ethan#409): fast.yml is the pull request set, and
-# `scripts/check.sh` runs both sets locally before a push. The file keeps its
+# (asg-agent-team-ethan#409): fast.yml is the pull request set. Before a push,
+# `scripts/check.sh` runs these jobs' unit tests, and `scripts/check.sh --full`
+# their end-to-end runs too (evidencebook-skills#425). The file keeps its
 # name so the pinned refs below stay where open branches edit them. Nothing
 # here needs a secret (no model runs).
 name: heavy tests

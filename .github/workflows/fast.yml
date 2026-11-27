@@ -6,7 +6,9 @@
 # secrets; nothing here needs one (no model runs: the end-to-end report takes
 # the no-judge path). The suites over about five minutes (ard-demo, tau2-live)
 # are in tests.yml and run nightly and on main, not on pull requests
-# (asg-agent-team-ethan#409); `scripts/check.sh` runs both sets locally.
+# (asg-agent-team-ethan#409). Locally, `scripts/check.sh` runs this set and the
+# unit tests of tests.yml's jobs; `scripts/check.sh --full` adds their
+# end-to-end runs (evidencebook-skills#425).
 name: tests
 on:
   pull_request:
