@@ -32,8 +32,7 @@ def _commit(repo: str) -> str:
 
 
 def test_every_set_up_checkout_is_the_header_pin():
-    # capsule-cli is not checked out (#435): its pin is the commit the released capsulectl names in --version
-    for repo in ("evidencebook", "capsule-cli", "capsule-engine"):
+    for repo in ("evidencebook", "capsule-engine"):
         full = _commit(repo)
         assert f"{repo} {full[:7]}" in HEADER, f"the header names another {repo} than setup.sh checks out ({full[:7]})"
 
@@ -43,8 +42,9 @@ def test_capsulectl_is_the_header_release():
     --version against the commits the header names (capsule-cli's for capsulectl, evidencebook's for the plugins)."""
     version = _pin("CAPSULECTL_VERSION")
     assert re.fullmatch(r"v\d+\.\d+\.\d+", version), "the set-up installs a release, never a commit build"
-    assert f"capsulectl {version}, installed from its two releases, capsule-cli {version} (capsule-cli " \
-        f"{_commit('capsule-cli')[:7]}) and evidencebook capsulectl/{version}" in HEADER
+    # capsule-cli is not checked out (#435): its pin is the commit the released capsulectl names in --version
+    assert f"capsulectl {version}, installed from its two releases, capsule-cli {version} at " \
+        f"{_commit('capsule-cli')[:7]} and evidencebook capsulectl/{version}" in HEADER
     assert "CORE_V=$CAPSULECTL_VERSION" in SETUP
 
 

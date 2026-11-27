@@ -48,21 +48,26 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
   run with the `claude-acp` provider (`goose configure`). The `goose` command must be on
   `PATH`, or Goose Desktop must be installed at `/Applications/Goose.app`.
 - capsulectl, its deal and book plugins, and capsule-engine (the admission decision a deal
-  opens under). The commands below put them in this directory's `.tools`, so nothing outside
-  it changes; the `export` line is needed in every shell you run the demo from. Use the
-  `linux-amd64` or `linux-arm64` assets on Linux.
+  opens under). The commands below download capsulectl and both plugins from their releases,
+  check each against its release's SHA256SUMS, and only then install them in this directory's
+  `.tools`, so nothing outside it changes; the `export` line is needed in every shell you run
+  the demo from. Use `P=linux-amd64` or `P=linux-arm64` on Linux.
 
   ```sh
   cd demo/tau2-live
   V=v0.1.1; P=darwin-arm64
-  mkdir -p .tools/bin .tools/plugins .tools/dl
-  gh release download $V -R action-state-group/capsule-cli -p "capsulectl-$V-$P" -p SHA256SUMS -D .tools/dl
-  gh release download capsulectl/$V -R action-state-group/evidencebook -p "capsulectl-deal-$V-$P" -p "capsulectl-book-$V-$P" -p SHA256SUMS -D .tools/dl/eb
-  (cd .tools/dl && grep " capsulectl-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
-  (cd .tools/dl/eb && grep -E " capsulectl-(deal|book)-$V-$P\$" SHA256SUMS | shasum -a 256 -c -)
-  install -m 755 .tools/dl/capsulectl-$V-$P .tools/bin/capsulectl
-  install -m 755 .tools/dl/eb/capsulectl-deal-$V-$P .tools/plugins/capsulectl-deal
-  install -m 755 .tools/dl/eb/capsulectl-book-$V-$P .tools/plugins/capsulectl-book
+  CLI=https://github.com/action-state-group/capsule-cli/releases/download/$V
+  EB=https://github.com/action-state-group/evidencebook/releases/download/capsulectl/$V
+  mkdir -p .tools/bin .tools/plugins .tools/dl/cli .tools/dl/eb
+  (cd .tools/dl/cli && curl -fsSLO $CLI/SHA256SUMS && curl -fsSLO $CLI/capsulectl-$V-$P \
+    && grep " capsulectl-$V-$P\$" SHA256SUMS | shasum -a 256 -c -) \
+  && (cd .tools/dl/eb && curl -fsSLO $EB/SHA256SUMS && curl -fsSLO $EB/capsulectl-deal-$V-$P \
+    && curl -fsSLO $EB/capsulectl-book-$V-$P \
+    && grep " capsulectl-deal-$V-$P\$" SHA256SUMS | shasum -a 256 -c - \
+    && grep " capsulectl-book-$V-$P\$" SHA256SUMS | shasum -a 256 -c -) \
+  && install -m 755 .tools/dl/cli/capsulectl-$V-$P .tools/bin/capsulectl \
+  && install -m 755 .tools/dl/eb/capsulectl-deal-$V-$P .tools/plugins/capsulectl-deal \
+  && install -m 755 .tools/dl/eb/capsulectl-book-$V-$P .tools/plugins/capsulectl-book
   chmod 755 .tools/plugins
   GOBIN=$PWD/.tools/bin go install github.com/action-state-group/capsule-engine/go/cmd/capsule-engine@v0.6.0
   export PATH=$PWD/.tools/bin:$PATH CAPSULECTL_PLUGIN_ROOTS=$PWD/.tools/plugins

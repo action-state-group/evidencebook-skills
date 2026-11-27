@@ -16,7 +16,7 @@ on:
     # Both jobs' inputs: this file, the demos, the repository code and data they
     # read (the skills, the pack compiler and packs, the scripts, their schemas,
     # vocabulary, wording and contracts) and the requirements manifest.
-    paths: [".github/workflows/tests.yml", ".github/scripts/report-failure.sh", "requirements.txt", "demo/ard/**", "demo/tau2-live/**", "demo/tau2-outcomes/**", "airline-data/**", "skills/**", "scripts/**", "packs/**", "schemas/**", "vocab/**", "wording/**", "contracts/**"]
+    paths: [".github/workflows/tests.yml", ".github/scripts/report-failure.sh", ".github/scripts/capsulectl-release.sh", "requirements.txt", "demo/ard/**", "demo/tau2-live/**", "demo/tau2-outcomes/**", "airline-data/**", "skills/**", "scripts/**", "packs/**", "schemas/**", "vocab/**", "wording/**", "contracts/**"]
   workflow_dispatch:
     inputs:
       report-hosted:
