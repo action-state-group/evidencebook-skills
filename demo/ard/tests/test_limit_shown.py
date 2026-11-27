@@ -123,6 +123,33 @@ def test_only_a_seller_that_can_be_paid_gets_the_limit_words(monkeypatch, capsys
     assert two.endswith("GO: line. Within your limit of 500 msat for one order; your 7-day total is checked at payment.")
 
 
+def test_a_go_seller_with_an_open_dispute_gets_the_line_under_it(monkeypatch):
+    """Codex on #443: through ard_assess itself, the open-disputes line follows a GO with open disputes on its card,
+    and never a GO with none nor a seller that is not GO."""
+    import desktop_server as ds
+    import buyer
+    import pack as packs
+    open1 = {"outcomes": {}, "disputes": {"received": {"by_outcome": {"open": 1}}}}
+    s = type("S", (), {})()
+    s.entries = [{"id": "kestrel", "name": "Kestrel Print", "commitment": {"key_id": "k"}, "offer": {"price_msat": 1000}},
+                 {"id": "alder", "name": "Alder Print Co.", "commitment": {"key_id": "k"}, "offer": {"price_msat": 2000}},
+                 {"id": "third", "name": "Third Seller", "commitment": {"key_id": "k"}, "offer": {"price_msat": 3000}}]
+    cards = {"kestrel": open1, "alder": {"outcomes": {}}, "third": open1}
+    s.evidence = {e["id"]: buyer.Evidence(e["id"], card=cards[e["id"]]) for e in s.entries}
+    s.assessed, s.maya, s.pack = {}, Book(), packs.starting()
+    verdicts = {1000: "GO", 2000: "GO", 3000: "LIMIT"}
+    monkeypatch.setattr(ds, "session", lambda: s)
+    monkeypatch.setattr(buyer, "assess", lambda m, ev, key, price, p: type("A", (), {
+        "verdict": verdicts[price], "tier": None, "price_msat": price, "reasons": [], "cap_msat": 10, "rulings": []})())
+    monkeypatch.setattr(ds.screens, "decision_line", lambda a, ev, ceiling=None: f"{a.verdict}: line")
+    out = ds.ard_assess()
+    assert "Kestrel Print has 1 open dispute (not final yet)." in out
+    lines = out.splitlines()
+    k = next(i for i, line in enumerate(lines) if line.strip().startswith("Kestrel Print ") and "GO: line" in line)
+    assert lines[k + 1].strip().startswith("Kestrel Print has 1 open dispute")
+    assert "Alder Print Co. has" not in out and "Third Seller has" not in out
+
+
 @pytest.mark.parametrize("limit,want", [(4500, "Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days"),
                                         (None, "No spending limit is set yet, so only this pack's limits apply")])
 def test_the_buyers_card_shows_her_limit_even_when_the_witness_takes_no_stamp(monkeypatch, limit, want):

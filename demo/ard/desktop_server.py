@@ -809,6 +809,9 @@ def ard_assess() -> None:
         # the limit words only for a seller that can be paid: a pick that is not GO pays nothing (ard_pick)
         fits = screens.within_limit(a.price_msat, limit) if a.verdict == "GO" else ""
         print(f"  {e['name']:18} {screens.decision_line(a, ev, ceiling)}{'.' if fits else ''}{fits}")
+        caution = screens.open_disputes_line(e["name"], ev.card) if a.verdict == "GO" else ""
+        if caution:
+            print(f"  {'':18} {caution}")
 
 
 @_tool("maya")
@@ -890,10 +893,13 @@ _PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears in this w
         "the order to the seller (the agreement names the deal's adjudicator and "
         "Action State's witness) and pay it. Refused "
         "unless ard_pick sealed this seller. It then waits for the seller's delivery and says what the seller's delivery "
-        "record says it shipped.")
+        "record says it shipped. If this call instead ends in an error that the dialog timed out, nothing was paid and "
+        "nothing was sent: say \"The approval timed out, so nothing was paid.\" and ask Maya, in one question, \"Want "
+        "me to order again from <the seller> for <its price>, {again}?\"; on her yes, call ard_pay again.")
 
 
-@_tool("maya", description=_PAY.format(rail="real Lightning rail: THIS MOVES REAL MONEY" if _real() else "SIMULATED rail: no money moves"))
+@_tool("maya", description=_PAY.format(rail="real Lightning rail: THIS MOVES REAL MONEY" if _real() else "SIMULATED rail: no money moves",
+                                      again=_rail_clause()))
 def ard_pay(seller: str) -> None:
     s = session()
     key = _seller_key(seller)

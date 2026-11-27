@@ -258,6 +258,32 @@ print(json.dumps(anyio.run(run)))
 """
 
 
+DESCRIBE_PAY = """
+import anyio, sys
+from mcp.client.client import Client
+import desktop_server as ds
+async def run():
+    async with Client(ds.server, mode="legacy") as c:
+        return {t.name: t.description for t in (await c.list_tools()).tools}["ard_pay"]
+print(anyio.run(run))
+"""
+
+
+def test_after_a_payment_dialog_times_out_maya_is_offered_to_order_again():
+    # Sherlock2 on #418 (2026-11-27): Goose ends a form after 5 minutes with an error that replaces the step's text, so
+    # the pay tool's description, as Maya's window lists it, says what to say: nothing was paid, and the offer to order
+    # again that follows Don't buy, with this run's rail
+    env = {**os.environ, "ARD_ROLE": "maya", "PYTHONPATH": os.pathsep.join([str(HERE), *sys.path])}
+    env.pop("ARD_RAIL", None)
+    run = subprocess.run([sys.executable, "-c", DESCRIBE_PAY], env=env, capture_output=True, text=True, cwd=HERE,
+                         stdin=subprocess.DEVNULL, timeout=60)
+    assert run.returncode == 0, run.stderr
+    doc = " ".join(run.stdout.split())
+    assert 'say "The approval timed out, so nothing was paid."' in doc
+    assert ('"Want me to order again from <the seller> for <its price>, on the simulated rail, where no money moves?"; '
+            "on her yes, call ard_pay again.") in doc
+
+
 @pytest.mark.parametrize("role", sorted(TOOLS))
 def test_no_tool_of_the_agent_answers_a_dialog(role):
     env = {**os.environ, "ARD_ROLE": role, "PYTHONPATH": os.pathsep.join([str(HERE), *sys.path])}
