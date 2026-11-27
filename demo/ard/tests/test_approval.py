@@ -242,7 +242,7 @@ TOOLS = {
              "ard_show_receipt": [], "ard_open_receipt_page": [], "ard_confirm": []},
     "alder": {"ard_seller_activity": [], "ard_show_card": [], "ard_open_card_page": [], "ard_show_receipt": [],
               "ard_open_receipt_page": []},
-    "adjudicator": {"ard_case": [], "ard_case_activity": []},  # it rules on its own: no tool records a ruling (#416)
+    "adjudicator": {"ard_case": [], "ard_case_activity": [], "ard_ruling": []},  # it rules on its own: no tool records a ruling (#416)
 }
 TOOLS["kestrel"] = TOOLS["alder"]
 
@@ -574,3 +574,31 @@ def test_a_held_order_s_reasons_do_not_run_together_in_one_paragraph():
                    "not refundable. Your answer is saved on the receipt.")
     sealed = ds.dialog_text("The Everyday Rules held this order for your OK\n" + text)
     assert [w.rstrip(".") for w in msg.split()] == [w.rstrip(".") for w in sealed.split()]
+
+
+SCHEMAS = """
+import anyio, json
+from mcp.client.client import Client
+import desktop_server as ds
+async def run():
+    async with Client(ds.server, mode="legacy") as c:
+        return {t.name: t.output_schema for t in (await c.list_tools()).tools}
+print(json.dumps(anyio.run(run)))
+"""
+
+
+@pytest.mark.parametrize("role", ["adjudicator", "maya"])
+def test_the_adjudicators_tools_send_their_lines_as_printed(role):
+    """#446: goose showed a tool's structured copy, {"result": "..."}, as one line of JSON, so the person read the
+    agent's retelling instead of the adjudicator's lines. The adjudicator's tools send plain text only; the other
+    windows are unchanged here."""
+    env = {**os.environ, "ARD_ROLE": role, "PYTHONPATH": os.pathsep.join([str(HERE), *sys.path])}
+    run = subprocess.run([sys.executable, "-c", SCHEMAS], env=env, capture_output=True, text=True, cwd=HERE,
+                         stdin=subprocess.DEVNULL, timeout=60)
+    assert run.returncode == 0, run.stderr
+    import json
+    schemas = json.loads(run.stdout)
+    if role == "adjudicator":
+        assert schemas == {"ard_case": None, "ard_case_activity": None, "ard_ruling": None}
+    else:
+        assert all(schemas.values()), schemas

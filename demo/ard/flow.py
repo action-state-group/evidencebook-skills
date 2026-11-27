@@ -549,7 +549,9 @@ def case_names(case: dict) -> dict[str, str]:
 def case_lines(c: Case, names: dict[str, str]) -> list[str]:
     """What the adjudicator's screen says about a case: who was asked and who answered, what their books show, and the
     ruling once recorded. It decides nothing."""
-    out = [f"deal {c.deal_id[5:13]}, row {c.row}: disputed by {names['buyer']}"]
+    # The ruling right under the deal's line, before the books: a long answer never pushes it out of the part of the
+    # tool's output Goose shows (goose CLI 1.59.2 shows 20 lines of a tool's output, its first and last 10; #446).
+    out = [case_header(c, names)] + [f"  {line}" for line in ruling_lines(c, names)]
     if c.asked_at:
         out.append(f"  asked both sides for their books at {screens.local_time(c.asked_at)}")
     for side in ("buyer", "seller"):
@@ -563,8 +565,12 @@ def case_lines(c: Case, names: dict[str, str]) -> list[str]:
         else:
             out.append(f"  {names[side]}: no answer yet")
     out += [f"  {line}" for line in c.deciding]
-    out += [f"  {line}" for line in ruling_lines(c, names)]
     return out
+
+
+def case_header(c: Case, names: dict[str, str]) -> str:
+    """A case's first line on the adjudicator's screen: the deal, the row and who disputed it."""
+    return f"deal {c.deal_id[5:13]}, row {c.row}: disputed by {names['buyer']}"
 
 
 #: A row in words, as the adjudicator's window says what was not met.

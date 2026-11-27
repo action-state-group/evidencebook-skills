@@ -51,8 +51,8 @@ PARTIES = {
                  "is not independent of them. The adjudicator rules on its own, with no person, when the side it would "
                  "rule against has stated, in a record it signed, that the row was not met; you show the case and what "
                  "it ruled, and you decide nothing.",
-        "prompt": "Reply in English only. In one short sentence, say you are the adjudicator's assistant and ready. Do "
-                  "not call any tool until I ask.",
+        # its answers are its tools' output alone (goose/locked/lock.py, QUIET; #446), so it opens on its case tool
+        "prompt": "Call your ard_case tool now.",
     },
     "maya": {
         "title": "Maya buys conference badges (buyer)", "skill": "buy-with-evidence",
