@@ -168,3 +168,55 @@ def test_the_adjudicators_cli_runs_through_the_filter(tmp_path):
 def test_an_adapters_own_settings_do_not_make_a_window_quiet():
     args = lock.locked_args(["--settings", "{}", "--mcp-config", json.dumps({"mcpServers": {"ard_maya": {}}})])
     assert not lock.is_quiet(args)
+
+
+def test_the_agents_thinking_never_reaches_the_adapter_either():
+    """Codex's round 1: the adapter sends thinking as thought chunks, which Goose can show."""
+    delta = {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                               "delta": {"type": "thinking_delta", "thinking": "Maya agrees, so"}}}
+    assert lock.quiet(_line(delta)) is None
+    start = {"type": "stream_event", "event": {"type": "content_block_start", "index": 0,
+                                               "content_block": {"type": "thinking", "thinking": "it hardly matters"}}}
+    assert json.loads(lock.quiet(_line(start)))["event"]["content_block"]["thinking"] == ""
+    whole = {"type": "assistant", "message": {"content": [
+        {"type": "thinking", "thinking": "it hardly matters", "signature": "sig"}]}}
+    assert json.loads(lock.quiet(_line(whole)))["message"]["content"] == [
+        {"type": "thinking", "thinking": "", "signature": "sig"}]
+    sig = {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                             "delta": {"type": "signature_delta", "signature": "sig"}}}
+    assert lock.quiet(_line(sig)) == _line(sig)
+
+
+def test_when_the_adapter_stops_reading_the_cli_is_ended(tmp_path):
+    """Codex's round 1: a closed output pipe ends the CLI too, so no session runs on with no one to answer."""
+    pid = tmp_path / "pid"
+    cli = tmp_path / "node_modules" / "@anthropic-ai" / "claude-agent-sdk-darwin-arm64" / "claude"
+    cli.parent.mkdir(parents=True)
+    cli.write_text(f"#!{sys.executable}\nimport json, os, signal, sys, time\n"
+                   f"open({str(pid)!r}, 'w').write(str(os.getpid()))\n"
+                   "signal.signal(signal.SIGPIPE, signal.SIG_IGN)\n"
+                   "while True:\n"
+                   "    try:\n"
+                   "        print(json.dumps({'type': 'system', 'subtype': 'tick'}), flush=True)\n"
+                   "    except BrokenPipeError:\n"
+                   "        pass\n"
+                   "    time.sleep(0.05)\n")
+    cli.chmod(0o755)
+    env = {"PATH": os.environ["PATH"], "ARD_ACP_PREFIX": str(tmp_path), "ARD_PYTHON": sys.executable}
+    cfg = json.dumps({"mcpServers": {"ard_adjudicator": {}}})
+    proc = subprocess.Popen([str(LOCKED / "claude-locked"), "--mcp-config", cfg], env=env, stdout=subprocess.PIPE,
+                            stdin=subprocess.DEVNULL)
+    assert proc.stdout.readline()
+    proc.stdout.close()
+    assert proc.wait(timeout=30) != 0
+    child = int(pid.read_text())
+    import time
+    for _ in range(100):
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(child, 9)
+        pytest.fail("the CLI was left running")

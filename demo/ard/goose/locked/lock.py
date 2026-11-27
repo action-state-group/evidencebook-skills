@@ -83,10 +83,25 @@ def stop_hook(event: dict) -> dict:
     return {} if event.get("stop_hook_active") else {"decision": "block", "reason": STOP_REASON}
 
 
+#: The streamed deltas that carry the agent's own words, and the field of each block kind that holds them.
+WORD_DELTAS = ("text_delta", "thinking_delta")
+WORDS = {"text": "text", "thinking": "thinking"}
+
+
+def _empty(block) -> bool:
+    """Empty the agent's words in ``block`` in place; whether anything changed."""
+    field = WORDS.get(block.get("type")) if isinstance(block, dict) else None
+    if field and block.get(field):
+        block[field] = ""
+        return True
+    return False
+
+
 def quiet(line: bytes) -> bytes | None:
     """One line of the CLI's stream-json output (claude-agent-acp 0.108.0 reads it, dist/v1/acp-agent.js) with the
-    agent's own text taken out: a streamed text delta is dropped, and the text of a whole message or of the turn's
-    result is emptied in place, so every block keeps its index. Anything else passes unchanged."""
+    agent's own words taken out, its text and its thinking (which the adapter sends as thought chunks,
+    dist/sdk-to-acp.js): a streamed text or thinking delta is dropped, and the words of a whole block or of the turn's
+    result are emptied in place, so every block keeps its index. Anything else passes unchanged."""
     try:
         msg = json.loads(line)
     except ValueError:
@@ -96,15 +111,13 @@ def quiet(line: bytes) -> bytes | None:
     kind, changed = msg.get("type"), False
     if kind == "stream_event":
         ev = msg.get("event") or {}
-        if ev.get("type") == "content_block_delta" and (ev.get("delta") or {}).get("type") == "text_delta":
+        if ev.get("type") == "content_block_delta" and (ev.get("delta") or {}).get("type") in WORD_DELTAS:
             return None
-        block = ev.get("content_block") or {}
-        if ev.get("type") == "content_block_start" and block.get("type") == "text" and block.get("text"):
-            block["text"], changed = "", True
+        if ev.get("type") == "content_block_start":
+            changed = _empty(ev.get("content_block"))
     elif kind == "assistant":
         for block in (msg.get("message") or {}).get("content") or []:
-            if isinstance(block, dict) and block.get("type") == "text" and block.get("text"):
-                block["text"], changed = "", True
+            changed = _empty(block) or changed
     elif kind == "result" and msg.get("result"):
         msg["result"], changed = "", True
     return (json.dumps(msg) + "\n").encode() if changed else line
@@ -164,12 +177,30 @@ def run_quiet(cmd: list[str], env: dict[str, str]) -> int:
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, lambda n, _f: child.send_signal(n))
     out = sys.stdout.buffer
-    for line in iter(child.stdout.readline, b""):
-        kept = quiet(line)
-        if kept is not None:
-            out.write(kept)
-            out.flush()
+    try:
+        for line in iter(child.stdout.readline, b""):
+            kept = quiet(line)
+            if kept is not None:
+                out.write(kept)
+                out.flush()
+    except BrokenPipeError:  # the adapter stopped reading: the CLI's session has no one left to answer
+        stop(child)
+        return 1
+    except BaseException:
+        stop(child)
+        raise
     return child.wait()
+
+
+def stop(child: subprocess.Popen, grace_s: float = 5) -> None:
+    """End the CLI: TERM, then KILL if it is still running after ``grace_s``."""
+    if child.poll() is None:
+        child.terminate()
+        try:
+            child.wait(grace_s)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait()
 
 
 def main() -> None:
