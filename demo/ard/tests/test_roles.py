@@ -281,7 +281,8 @@ def test_the_search_lines_in_mayas_chat_are_plain(monkeypatch):
     import ard
     import desktop_server as ds
     kept = []
-    maya = type("M", (), {"note": lambda self, *a, **k: (kept.append(a), {"record_id": f"r{len(kept)}"})[1]})()
+    maya = type("M", (), {"note": lambda self, *a, **k: (kept.append(a), {"record_id": f"r{len(kept)}"})[1],
+                          "notes": lambda self, kind: []})()
     s = type("S", (), {"maya": maya})()
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ard, "lookup", lambda *a: [

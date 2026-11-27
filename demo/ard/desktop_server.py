@@ -311,12 +311,19 @@ def _tool(*roles: str, description: str | None = None):
     return deco
 
 
+class Said(RuntimeError):
+    """A refusal the demo writes for the person in full, such as every reason a held order lists: :func:`_refusal`
+    never shortens it, however long it is (evidencebook-skills#412)."""
+
+
 def _refusal(exc: BaseException) -> str:
     """A tool's refusal without raw output (evidencebook-skills#327). The demo's refusals and capsulectl's error words
     are written for a person and stay; a refusal that carries a verb's raw output (JSON, or a long dump), whatever
     exception carries it, goes to this window's log and reads as one plain line. It claims nothing about what the step
-    did before it was refused."""
+    did before it was refused. A :class:`Said` refusal is the demo's own and stays whole."""
     text = str(exc)
+    if isinstance(exc, Said):
+        return text
     if "{" in text or len(text) > 400:  # whatever wrapped it (ard_rule wraps capsulectl's refusal in a RuntimeError)
         _log(f"a tool refused: {exc!r}")
         return "this step was refused (the reason is in this party's log, agent.log)"
@@ -362,6 +369,20 @@ def ard_find_sellers(ask: str) -> None:
         # the search's own checks are not shown in her chat (#332, Sherlock2)
     if len(s.entries) < len(SELLERS):
         print("only " + ", ".join(e["name"] for e in s.entries) + " answered: the other seller's window is not running")
+    if limits.sealed(s.maya) is None:  # Steven's hand runs of 2026-11-26: the question never came (#413)
+        print(f"\n{LIMIT_FIRST}")
+
+
+#: What Maya's agent does after a search while she has no spending limit (evidencebook-skills#413).
+LIMIT_FIRST = ("No spending limit is set yet. Before anything else, ask Maya in one short question whether the most she "
+               "said she will pay should be her spending limit, and end your turn: show no History card and assess "
+               "nothing until she answers. Until she sets it, it is not her limit: never call it her limit.")
+#: For Maya's agent beside the assessment: the 7-day total is the payment check's to say (evidencebook-skills#415's
+#: hand run: "Your 7-day total only allows one of these", of 1,000 and 2,000 msat under a 3,000 msat limit).
+NO_SUMS = ("Never add up prices or payments against the limit yourself: say only what these lines and the payment check "
+           "say.")
+#: After the limit dialog: one yes sets the limit and nothing more (#413).
+LIMIT_SET_THEN = "Tell Maya what the limit is now, and end your turn: wait for her next request."
 
 
 @_tool("maya")
@@ -415,6 +436,8 @@ def ard_assess() -> None:
     print(f"The assessment rules: {screens.PACK_NOTE}")  # its version and digest are in the buyer's assessment records
     print(screens.limit_line(limit, _ceilings(p)))
     print(f"({screens.ASSESSMENT_NOTE})")
+    if limit is not None:  # the hand run of #415: Maya added up the two prices herself, and got the 7-day limit wrong
+        print(NO_SUMS)
     cards = [ev for ev in s.evidence.values() if ev.read is not None]
     print(f"({screens.operator_note(sum(ev.read.witness_status == 'pass' for ev in cards), len(cards))})\n")
     for e in s.entries:
@@ -432,11 +455,13 @@ def ard_assess() -> None:
 
 @_tool("maya")
 def ard_set_limit(limit_msat: int) -> None:
-    """Set the person's spending limit. When the person names the most they will pay, propose it to them as their
-    spending limit in one short question ("<the amount> msat as your spending limit?") and end your turn; never set it
-    on your own reading of their words. Only after they say yes, call this with the amount in msat: it asks them in a
-    dialog on the presenter's screen, and only their click there sets it. You cannot see or answer the dialog. Once
-    set, it is sealed in their records, and their card, the assessment and every payment check use it."""
+    """Set the person's spending limit. When the person names the most they will pay in their ask, propose it to them
+    as their spending limit in one short question ("<the amount> msat as your spending limit?") and end your turn;
+    never set it on your own reading of their words. Only after they say yes, call this with the amount in msat: it
+    asks them in a dialog on the presenter's screen, and only their click there sets it. You cannot see or answer the
+    dialog. Once set, it is sealed in their records, and their card, the assessment and every payment check use it.
+    Never propose a new or higher limit yourself, after a held order included: change it only when the person asks for
+    that in their own words."""
     limit = limits.check_amount(limit_msat)
     s = session()
     title, text = screens.limit_question(limit)
@@ -447,6 +472,7 @@ def ard_set_limit(limit_msat: int) -> None:
                                "Maya.")
         limits.seal(s.maya, limit, dialog_text(f"{title}\n{text}") + f"\nAnswer: {screens.LIMIT_YES}")
     print(screens.limit_line(limits.sealed(s.maya), _ceilings(s.pack or packs.starting())))
+    print(LIMIT_SET_THEN)
 
 
 
@@ -474,6 +500,28 @@ def ard_pick(seller: str) -> None:
     print(f"{SELLERS[key]['label']} is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes.")
 
 
+#: How a held order's question ended other than Buy anyway, in Maya's terms (evidencebook-skills#412).
+HELD_NOT_YES = {NO: "Maya chose Don't buy", NO_ANSWER: "Maya did not answer in time",
+                NOT_SHOWN: "the question could not be shown"}
+
+
+def _rail_clause() -> str:
+    """Whether real money moves, as a payment question says it."""
+    return "over Lightning, which moves real money" if _real() else "on the simulated rail, where no money moves"
+
+
+def held_declined(name: str, price_msat: int) -> str:
+    """After Don't buy, what Maya's agent offers next: one question to order again, naming the seller, the amount and
+    the rail, so her yes to it is the fresh yes a declined order needs; another seller if she wants one; never a higher
+    limit (Steven's hand run of 2026-11-26, evidencebook-skills#414). This question takes the place of the declined
+    guard's, so her yes opens the dialog again on the next call (the hand run of #415 at 502bbc4: with the guard as well,
+    the agent asked her a second question)."""
+    return (f'Do not retry on your own. Ask Maya, in one question: "Want me to order again from {name} for '
+            f'{screens.msat(price_msat)}, {_rail_clause()}?", and say she can choose another seller instead. On her yes '
+            "to it, call ard_pay again: the dialog asks her once more. Never offer to change her spending limit: change "
+            "it only when she asks for that in her own words.")
+
+
 _RAIL_WORDS = ("over Lightning: this moves real money, to a wallet {shared} share", "on the simulated rail: no money moves")
 _PAY = ("Step 6: pay the picked seller on the {rail}. A dialog appears on the presenter's screen first and this call "
         "blocks, for up to 10 minutes, until the presenter answers it (Pay or Cancel; Buy anyway or Don't buy when the "
@@ -497,10 +545,9 @@ def ard_pay(seller: str) -> None:
     with s.pay_lock:
         if key in s.declined:
             held = s.declined.pop(key)
-            raise RuntimeError(
+            raise Said(  # whole: past 400 characters for a held order's title, it read as the bare refusal (#412)
                 f"the presenter did not approve the last payment to {name}, so this call opens no dialog and pays nothing. "
-                f'The question is: "Pay {name} {screens.msat(a.price_msat)} '
-                + ("over Lightning, which moves real money" if _real() else "on the simulated rail, where no money moves")
+                f'The question is: "Pay {name} {screens.msat(a.price_msat)} {_rail_clause()}'
                 + (f", although {held[:1].lower() + held[1:]}?" if held and held != "Approve this payment" else "?")
                 + '" If Maya said yes to it after the dialog was declined, call ard_pay again now; otherwise ask her, end '
                 "your turn, and call ard_pay again only after she says yes.")
@@ -518,11 +565,14 @@ def ard_pay(seller: str) -> None:
         held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)
-            if how == NO:
+            if how == NO and held is None:  # a held order's answer asks the order-again question instead (held_declined)
                 s.declined[key] = getattr(answer.get("q"), "title", "")
-            reasons = (" " + screens.rules_held(held.reasons)) if held is not None else ""
+            if held is not None:  # the hold's own sentence first, whole, for Maya to read (#412)
+                raise Said(screens.rules_held(held.reasons) + f" {HELD_NOT_YES[how]}, so nothing was sent to {screens.stop(name)} "
+                           + (held_declined(name, a.price_msat) if how == NO else "Do not retry on your own; if Maya "
+                              "asks again, confirm with her first. Never say she declined it."))
             raise RuntimeError(f"{NOT_YES[how]}, so the order was not placed: nothing was sent to the seller and nothing "
-                               "was paid." + reasons + " Do not retry on your own; if Maya asks again, confirm with her first."
+                               "was paid. Do not retry on your own; if Maya asks again, confirm with her first."
                                + ("" if how == NO else " Never say she declined it."))
         if held is not None:
             print(screens.rules_approved(held.reasons, held.over_limit))
@@ -881,6 +931,15 @@ def ard_open_receipt_page() -> None:
     opened = pages.open_page(path)
     print(f"{name}: its receipt page " + ("opened in the browser on the presenter's screen; nothing else is needed "
                                           "(do not copy or link the file)" if opened else "written (not opened)") + f": {path}")
+    if ROLE not in SELLERS:  # what a ruled deal's page shows at its top, said here too (#411's hand run)
+        d = session().latest()
+        try:
+            rep = p.report(deal_id)
+        except pt.Refused as exc:
+            p.log(f"report of {deal_id} for the receipt page: {exc!r}")
+        else:
+            for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
+                print(f"deal {deal_id[5:13]}: {line}")
 
 
 @_tool("maya", "alder", "kestrel")

@@ -187,8 +187,11 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     # her ask, in her own words, and the amount proposed in chat but not yet confirmed: no limit
     monkeypatch.setattr(ds.ard, "lookup", lambda *args: s.entries)
     monkeypatch.setattr(buyer, "record_search", lambda *args: None)
-    ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
-    assert "No spending limit is set yet" in ds.ard_assess()
+    found = ds.ard_find_sellers("Rin here: 30 lanyards by Monday, under 4,500 msat.")
+    # #413: the search ends on the limit question, before any card or assessment (Steven's hand runs, 2026-11-26)
+    assert found.endswith("\n\n" + ds.LIMIT_FIRST)
+    unset = ds.ard_assess()
+    assert "No spending limit is set yet" in unset and ds.NO_SUMS not in unset
     dialogs = []
 
     def answer(how):
@@ -209,10 +212,12 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
                         and sealing(*args))
     out = ds.ard_set_limit(4500)
     assert out == ("Your spending limit: 4,500 msat for any one order, and 4,500 msat in total over 7 days. "
-                   "Each payment is checked against it.")
+                   "Each payment is checked against it.\n" + ds.LIMIT_SET_THEN)  # one yes sets it, nothing more (#413)
+    assert ds.LIMIT_FIRST not in ds.ard_find_sellers(s.ask)  # set: no question again
     assert rin.notes(limits.LIMIT_SET)[-1]["statement"]["said"].endswith("waits for your OK.\nAnswer: Set limit")
     assessed = ds.ard_assess()
     assert "Your spending limit: 4,500 msat" in assessed
+    assert ds.NO_SUMS in assessed  # the 7-day total is the payment check's to say (#415's hand run)
     assert assessed.splitlines()[-1].endswith("Over your limit of 4,500 msat for one order: the order would wait for "
                                               "your OK at payment.")
 
@@ -253,3 +258,155 @@ def test_a_scripted_payment_reads_the_confirmed_limit_too(monkeypatch):
     with pytest.raises(BaseException):
         buyer.open_and_pay(None, book, "alder", "k", None, {}, None, "Pay?", lambda q: "no", print, simulated=True)
     assert pinned == [750]
+
+
+def _held_pay(monkeypatch, how, hold=True):
+    """ard_pay on an order the Everyday Rules hold, its question answered ``how``: the over-limit run of the RUNBOOK's
+    spending-limit section (three reasons), as Steven's hand run of 2026-11-26 reached it. With ``hold=False``, the same
+    order's plain payment question, no rule holding it. ``ds.session().asked`` lists every dialog opened."""
+    import threading
+    import types
+
+    import buyer
+    import desktop_server as ds
+
+    held = limits.Held(reasons=["over your weekly limit: 3,000 msat with this order, limit 2,000 msat",
+                                "no earlier payment to this merchant from this profile",
+                                "the payment is not refundable"], limits={"weekly": (2000, 3000)})
+    s = types.SimpleNamespace(maya=None, home=None, keys={"alder": "k"}, adjudicator=types.SimpleNamespace(named=dict),
+                              rail=None, ask="", declined={}, picked={"alder"}, pay_lock=threading.Lock(), log=[],
+                              assessed={"alder": types.SimpleNamespace(price_msat=2000)}, asked=[])
+    monkeypatch.setattr(ds, "session", lambda: s)
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(ds, "_real", lambda: False)
+    monkeypatch.setattr(ds, "gate_off", lambda: False)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a: s.asked.append(a[0]) or how)
+
+    def open_and_pay(home, maya, seller, key, chosen, adjudicator, rail, summary, ask, say, **kw):
+        if hold:
+            ask(buyer.Question(screens.HELD_TITLE, "text", "Buy anyway", "Don't buy", held))
+        else:
+            ask(buyer.Question("Approve this payment", "text", "Pay", "Cancel"))
+        return None
+    monkeypatch.setattr(buyer, "open_and_pay", open_and_pay)
+    return ds.ard_pay("alder"), held
+
+
+def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch):
+    """evidencebook-skills#412: Don't buy on an order over the limit reached Maya as "this step was refused (the reason
+    is in this party's log, agent.log)", since the refusal ran past the raw-output guard's 400 characters (#327). She
+    reads the hold's own sentence whole: the rule, nothing paid, every reason with the limit; then what to offer
+    next, never a limit change (#414)."""
+    import desktop_server as ds
+
+    out, held = _held_pay(monkeypatch, ds.NO)
+    assert "agent.log" not in out
+    assert out.startswith("REFUSED: " + screens.rules_held(held.reasons) + " Maya chose Don't buy, so nothing was "
+                          "sent to Alder Print Co. Do not retry")  # one period after "Co." (the hand run of #415)
+    assert "over your weekly limit: 3,000 msat with this order, limit 2,000 msat" in out
+    assert ('Ask Maya, in one question: "Want me to order again from Alder Print Co. for 2,000 msat, on the simulated '
+            'rail, where no money moves?", and say she can choose another seller instead.') in out
+    assert "Never offer to change her spending limit" in out
+    assert "On her yes to it, call ard_pay again: the dialog asks her once more." in out
+
+    # her yes to that question, then the payment again: the dialog opens at once, with no second question in chat (the
+    # hand run of #415 at 502bbc4: the declined guard's question as well made the agent ask her twice)
+    assert not ds.session().declined
+    again = ds.ard_pay("alder")
+    assert ds.session().asked == [screens.HELD_TITLE, screens.HELD_TITLE]
+    assert again.startswith("REFUSED: " + screens.rules_held(held.reasons))
+
+
+def test_a_declined_payment_no_rule_held_asks_its_question_whole_before_the_dialog_opens_again(monkeypatch):
+    """The declined guard stays for a payment no rule held: the next call opens no dialog and hands the agent the
+    question, whole (Codex's plan review on #415: past 400 characters it read as the bare refusal; #421)."""
+    import desktop_server as ds
+
+    out, _ = _held_pay(monkeypatch, ds.NO, hold=False)
+    assert "agent.log" not in out and set(ds.session().declined) == {"alder"}
+    again = ds.ard_pay("alder")
+    assert ds.session().asked == ["Approve this payment"]
+    assert "agent.log" not in again and again.startswith("REFUSED: the presenter did not approve the last payment to "
+                                                        "Alder Print Co., so this call opens no dialog")
+    assert "If Maya said yes to it after the dialog was declined, call ard_pay again now" in again
+    assert ds._refusal(ds.Said(again[len("REFUSED: "):])) == again[len("REFUSED: "):]
+
+
+def test_a_held_order_nobody_answered_is_never_called_a_decline(monkeypatch):
+    import desktop_server as ds
+
+    out, held = _held_pay(monkeypatch, ds.NO_ANSWER)
+    assert screens.rules_held(held.reasons) in out and "Maya did not answer in time" in out
+    assert "Never say she declined it." in out and "order again" not in out
+    assert not ds.session().declined
+
+
+def test_a_refusal_the_demo_writes_stays_whole_and_raw_output_still_does_not(tmp_path, monkeypatch):
+    import desktop_server as ds
+
+    monkeypatch.setenv("ARD_HOME", str(tmp_path))  # the raw refusals go to this home's agent.log, not a real demo's
+
+    long = "The Everyday Rules held this order for your OK, and nothing was paid: " + "a reason; " * 60
+    assert ds._refusal(ds.Said(long)) == long
+    assert ds._refusal(RuntimeError(long)) == "this step was refused (the reason is in this party's log, agent.log)"
+    assert ds._refusal(RuntimeError('capsulectl: {"error": "x"}')).startswith("this step was refused")
+
+
+def test_the_limit_tool_never_offers_a_limit_on_its_own():
+    """#414: after Don't buy, Maya's agent offered to raise the limit. Its description says it changes only on the
+    person's own ask."""
+    import desktop_server as ds
+
+    doc = " ".join(ds.ard_set_limit.__doc__.split())
+    assert "Never propose a new or higher limit yourself, after a held order included" in doc
+
+
+def test_maya_s_receipt_page_answer_says_the_ruling_the_page_shows(tmp_path, monkeypatch):
+    """#411's hand run: after "Open your receipt as a page." on her ruled Kestrel deal, Maya said the update did not say
+    how the adjudicator ruled. The answer now carries the ruling, as her card does (screens.ruled_for_buyer)."""
+    import types
+
+    import buyer
+    import desktop_server as ds
+    import pages
+    import receipt
+
+    deal = buyer.Deal("deal-0123456789abcdef", "kestrel", "k", 1000, "o", "fake", "maya")
+    ruled = {"rows": [{"id": "delivered", "status": "ruled", "ruling": {"value": "not_met", "against": "seller"}}]}
+    p = types.SimpleNamespace(report=lambda deal_id: {"report": ruled}, log=lambda line: None)
+    monkeypatch.setattr(ds, "ROLE", "maya")
+    monkeypatch.setattr(ds, "_own_deal", lambda: (p, "Maya", deal.deal_id))
+    monkeypatch.setattr(ds, "session", lambda: types.SimpleNamespace(latest=lambda: deal, log=[]))
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "page.html")
+    monkeypatch.setattr(pages, "open_page", lambda path: True)
+    out = ds.ard_open_receipt_page()
+    assert out.endswith("deal 01234567: " + screens.ruled_for_buyer(ruled, "Kestrel Print")[0])
+
+
+def test_a_report_that_fails_after_the_page_opened_says_no_ruling_and_no_error(tmp_path, monkeypatch):
+    """Codex on #415: the page opened, then the report for the ruling line failed. The answer still says the page
+    opened, names no ruling and no raw error, and the error goes to the party log."""
+    import types
+
+    import buyer
+    import desktop_server as ds
+    import pages
+    import party as pt
+    import receipt
+
+    deal = buyer.Deal("deal-0123456789abcdef", "kestrel", "k", 1000, "o", "fake", "maya")
+    logged = []
+
+    def report(deal_id):
+        raise pt.Refused("capsulectl: {\"error\": \"busy\"}")
+    p = types.SimpleNamespace(report=report, log=logged.append)
+    monkeypatch.setattr(ds, "ROLE", "maya")
+    monkeypatch.setattr(ds, "_own_deal", lambda: (p, "Maya", deal.deal_id))
+    monkeypatch.setattr(ds, "session", lambda: types.SimpleNamespace(latest=lambda: deal, log=[]))
+    monkeypatch.setattr(ds, "_session", None)
+    monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "page.html")
+    monkeypatch.setattr(pages, "open_page", lambda path: True)
+    out = ds.ard_open_receipt_page()
+    assert "its receipt page opened in the browser" in out and "REFUSED" not in out
+    assert "Ruled" not in out and "busy" not in out and any("busy" in line for line in logged)

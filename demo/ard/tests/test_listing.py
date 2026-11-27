@@ -212,6 +212,9 @@ class FakeMaya:
         self.kept.append((record_type, statement, kw))
         return {"record_id": f"r{len(self.kept)}"}
 
+    def notes(self, record_type):
+        return []  # no spending limit set (limits.sealed)
+
 
 def test_the_search_keeps_each_sellers_checks_in_the_buyers_records():
     import json

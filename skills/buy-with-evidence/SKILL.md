@@ -31,11 +31,16 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 
 0. **First turn.** Before anything else, show the person their own History card and the spending limit they set,
    or that none is set and what limits apply then, as the card tool gives it. Search nothing yet.
-1. **Take the ask.** What, by when, and the most the person will pay. Propose that amount to them as their spending
-   limit in one short question. It becomes their limit only when they say yes and then confirm it on the host's own
-   screen, which seals it (on the demo host, `ard_set_limit` and its dialog). Never set it on your own reading of
-   their words. In the assessment, repeat the spending limit and whether each price fits it, as the assessment tool
-   gives them; a limit the person confirmed is the one each payment is checked against.
+1. **Take the ask.** What, by when, and the most the person will pay. When no spending limit is set, propose that
+   amount to them as their spending limit in one short question, right after the search's results are shown and
+   before any History card or assessment, and end your turn. It becomes their limit only when they say yes and then
+   confirm it on the host's own screen, which seals it (on the demo host, `ard_set_limit` and its dialog); their yes
+   sets the limit and nothing more. Never set it on your own reading of their words, and until it is set, call the
+   amount "the most you said you'll pay", never "your limit" or "your limits", and promise no limit check. In the
+   assessment, repeat the spending limit and whether each price fits it, as the assessment tool gives them; a limit
+   the person confirmed is the one each payment is checked against. Never work out yourself whether an order, or
+   several together, fits the limit: say only what the assessment and the payment check say. Change a limit only when the person asks for that in their own words: never offer a
+   new or higher one yourself, after a held order included.
 2. **Search each registry** with `POST /search` and the item only. The person's budget
    stays with you: use it only in the assessment and at the pick; the deadline is theirs to judge. Each result is only a
    pointer. For each result, fetch the seller's own entry from its own `/.well-known/ard.json`,
@@ -77,9 +82,11 @@ changes a threshold; never "score", "rate" or "rank". A seller's history is show
 - Never pick for the person. Never pay without their yes to that payment, in a message after
   your question.
 - If a step answers REFUSED or fails with an error, say so in one sentence and stop: do not retry it on
-  your own, and never look for configuration, files or other tools to work around it. If the person
-  asks again, even with "yes, pay", ask your question first (the seller, the amount, whether real money
-  moves), and pay only on their yes to that question.
+  your own, and never look for configuration, files or other tools to work around it. A held order the person
+  did not approve is the one exception to the one sentence: say the reasons the answer gives, and ask the
+  question it gives you. If the person asks again, even with "yes, pay", ask your question first (the
+  seller, the amount, whether real money moves), and pay only on their yes to that question. If the person
+  says yes to the order-again question in a held order's answer, that is the yes: pay, with no second question.
 - Never write the outcome note. A card's did-not-hold count may come from the seller's own note: say so,
   and never call it confirmed.
 - Use only the tools of your own extension: no terminal, no file tools, no session or agent
@@ -161,8 +168,10 @@ liar-catch checks are Mesh's own exception, not a second commerce card: this ski
   recipe says which rail this run uses). For a second order to the same seller, ask "Want me to order
   again?" in that sentence. The dialog is the second check, never the only one.
 - When `ard_pay`'s answer names the reasons the Everyday Rules held the order, whether the person then
-  declined or approved it, tell the person every reason it lists, each in its own words: leave none out. This is
-  the one answer that may run past two sentences: list the reasons, one per line.
+  declined or approved it, tell the person every reason it lists, each in its own words: leave none out, and
+  never guess at a cause it does not give. This is the one answer that may run past two sentences: list the
+  reasons, one per line. After Don't buy, ask the order-again question the answer gives, word for word, and
+  that they can choose another seller instead; never offer to change their limit.
 - If `ard_pay` refuses because the last dialog was declined, and you asked the person to confirm this payment after
   that and they said yes, call it again at once: one question per order, never a second.
 - `ard_pay` opens an approval dialog on the presenter's screen; you cannot see or answer it. Only
