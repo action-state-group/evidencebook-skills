@@ -20,9 +20,9 @@
 # capsulectl and its book and deal plugins come from the capsulectl release: capsule-cli's release and evidencebook's
 # capsulectl/ release of the same version, each built from the commit below (each binary's --version names it).
 # The evidencebook checkout is at the same commit, since the demo's code reads it (ARD_EVIDENCEBOOK).
-CAPSULECTL_VERSION=v0.1.1
-EVIDENCEBOOK_PIN=2ca6e8aafe5d36f12c036e8834b00eee776d9a12
-CAPSULE_CLI_PIN=129a80f3ae9a88530cb85f3438f2f57a1deaf64c
+CAPSULECTL_VERSION=v0.1.2
+EVIDENCEBOOK_PIN=0c6691b369df6a99fb7e37ae2a08f3d6f9291ff0
+CAPSULE_CLI_PIN=82d328369bef1b95a64cd0cc17e78e9bf6d464d4
 CAPSULE_ENGINE_PIN=0263ff119911d91eb54dd3d3debdcc71324042eb
 GOOSE_VERSION=1.59.2
 ACP_VERSION=0.108.0

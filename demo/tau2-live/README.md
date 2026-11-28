@@ -55,7 +55,7 @@ both agents), and reported at two disclosure levels whose bundles both verify. T
 
   ```sh
   cd demo/tau2-live
-  V=v0.1.1; P=darwin-arm64
+  V=v0.1.2; P=darwin-arm64
   CLI=https://github.com/action-state-group/capsule-cli/releases/download/$V
   EB=https://github.com/action-state-group/evidencebook/releases/download/capsulectl/$V
   mkdir -p .tools/bin .tools/plugins .tools/dl/cli .tools/dl/eb
