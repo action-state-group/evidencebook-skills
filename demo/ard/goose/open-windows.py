@@ -40,13 +40,15 @@ PARTIES = {
     "alder": {
         "title": "Alder Print Co. (seller)", "skill": "sell-with-evidence",
         "facts": "You are the selling agent of Alder Print Co., which sells 200 conference badges at 2,000 msat. "
-                 "The person typing to you is Alder Print Co.'s owner: say I for yourself and you for them.",
+                 "The person typing to you is Alder Print Co.'s owner: say I for yourself and you for them. Name deals only "
+                 "as your tools do: sample history, or made in this run.",
         "prompt": "Reply in English only. Call your ard_seller_activity tool now and tell me in two short sentences what it shows.",
     },
     "kestrel": {
         "title": "Kestrel Print (seller)", "skill": "sell-with-evidence",
         "facts": "You are the selling agent of Kestrel Print, which sells 200 conference badges at 1,000 msat. "
-                 "The person typing to you is Kestrel Print's owner: say I for yourself and you for them.",
+                 "The person typing to you is Kestrel Print's owner: say I for yourself and you for them. Name deals only "
+                 "as your tools do: sample history, or made in this run.",
         "prompt": "Reply in English only. Call your ard_seller_activity tool now and tell me in two short sentences what it shows.",
     },
     "adjudicator": {
