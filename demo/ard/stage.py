@@ -63,7 +63,7 @@ class Stage:
     def __init__(self, home: Path):
         from discovery import Discovery
 
-        self.home = Path(home).expanduser()
+        self.home = Path(home).expanduser().resolve()  # what it says it serves (HOME_PATH): one spelling per folder
         self.dir = self.home / "stage"
         for sub in ("commitments", "cards", "wire"):
             (self.dir / sub).mkdir(parents=True, exist_ok=True)
@@ -225,7 +225,7 @@ def ensure_stage(home: Path) -> None:
     that started or reused it is alive (:data:`OWNERS`). This process is recorded first, and the owners' lock is held
     until the stage answers, so a second window starting at the same time waits for this stage instead of starting
     another. A stage that serves another home is refused, not reused: it would not see this window as its owner."""
-    home = Path(home).expanduser()
+    home = Path(home).expanduser().resolve()  # as the stage names it (Stage.home): one spelling for one folder
     with _owners_locked(home):
         add_owner(home)
         if not stage_up():
@@ -238,9 +238,9 @@ def ensure_stage(home: Path) -> None:
                 raise RuntimeError("the stage (seller origins and registry) did not start")
         other = serves()
         if other != str(home):
-            raise RuntimeError(f"port {HTTP_PORT} is taken by the stage of another demo home ({other or 'an earlier '
-                               'version of the demo'}): stop it (demo.py reset on that home), or set ARD_STAGE_PORT to a "
-                               "free port")
+            whose = other or "an earlier version of the demo"
+            raise RuntimeError(f"port {HTTP_PORT} is taken by the stage of another demo home ({whose}): stop it "
+                               "(demo.py reset on that home), or set ARD_STAGE_PORT to a free port")
 
 
 def main(argv: list[str]) -> int:

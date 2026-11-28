@@ -108,6 +108,19 @@ def test_a_stage_of_another_home_is_refused_not_reused(tmp_path, monkeypatch):
         stage.ensure_stage(tmp_path)
 
 
+def test_a_relative_home_is_the_folder_it_names_from_here(tmp_path, monkeypatch):
+    """Codex on #459: ARD_HOME=demo from two folders is two homes; the stage's own name for its home is absolute."""
+    (tmp_path / "a").mkdir()
+    monkeypatch.chdir(tmp_path / "a")
+    monkeypatch.setattr(stage, "stage_up", lambda: True)
+    monkeypatch.setattr(stage, "serves", lambda: str(tmp_path / "b" / "demo"))  # the stage another folder's window started
+    with pytest.raises(RuntimeError, match="another demo home"):
+        stage.ensure_stage(Path("demo"))
+    monkeypatch.setattr(stage, "serves", lambda: str((tmp_path / "a" / "demo").resolve()))
+    stage.ensure_stage(Path("demo"))
+    assert stage.live_owners(tmp_path / "a" / "demo") == {os.getpid()}
+
+
 def test_two_windows_starting_at_once_start_one_stage(tmp_path, monkeypatch):
     """Codex on #459: the second window waits under the owners' lock for the stage the first started (it answers only
     after a while), instead of starting another."""
