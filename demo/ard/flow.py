@@ -73,6 +73,15 @@ def read_card(bundle: Path) -> tuple[dict, dict, str]:
 
 #: How long an on-demand publish waits for the witness to take its stamp, so the card carries its receipt (#350).
 CARD_STAMP_WAIT_S = 12
+#: How long after its last deal step (or its start) a seller's agent keeps cutting the cadence's routine checkpoints
+#: (evidencebook-skills#453). A window left open stamped Action State's witness about once a minute per seller for as
+#: long as it ran (2,596 stamps in 22 h from one stack left running). Past this with nothing new, the loop still
+#: publishes the card as of its newest checkpoint; a deal step it takes later starts the routine ticks again, so that
+#: deal reaches the card, and an on-demand publish stamps as before. After such an idle stretch the witness learns when
+#: a deal step happened (the restart) and roughly when the last one did (the stop, less this bound): acceptable for the
+#: demo, and the same idle-backoff trade-off evidencebook#1085 holds open for capsulectl's own cadence, which this leaves
+#: unchanged (Sherlock2 on #459).
+ROUTINE_TICKS_S = 2 * 3600
 
 
 def stamped(bundle: Path) -> bool:
@@ -147,6 +156,7 @@ class SellerAgent:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
+        self.active = time.monotonic()
         self.advertise()
         self.wait_sample_held()
         self.republish(now=True)
@@ -164,7 +174,9 @@ class SellerAgent:
 
     def event(self, line: str) -> None:
         """One of the events a seller is told of (evidencebook-skills#336, Sherlock2): deal agreed, paid, dispute
-        received, ruling. One line in its activity (a Goose window shows nothing until its agent is asked)."""
+        received, ruling. One line in its activity (a Goose window shows nothing until its agent is asked). A deal step:
+        the routine ticks go on (:meth:`routine_ticks`)."""
+        self.active = time.monotonic()
         self.say(line)
 
     def _terms(self, deal_id: str) -> str:
@@ -232,11 +244,24 @@ class SellerAgent:
                     self.party.wait_checkpoint(CARD_STAMP_WAIT_S)
                 except pt.WitnessSlow:
                     pass  # published without its receipt; a later round publishes it once the witness takes it
-            else:
+            elif self.routine_ticks():
                 self.party.tick()
             publish_card(self.home, self.party, keep_stamped=not now)
         except pt.Refused as exc:
             self.failed("publishing this seller's History card", exc)
+
+    def routine_ticks(self) -> bool:
+        """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S` since the last deal
+        step, :meth:`_mark`); says once when they stop, and once when a deal step starts them again."""
+        if time.monotonic() - self.__dict__.setdefault("active", time.monotonic()) < ROUTINE_TICKS_S:
+            if self.__dict__.pop("_ticks_ended", False):
+                self.say("Routine time-stamps started again with this deal step.")
+            return True
+        if not self.__dict__.get("_ticks_ended"):
+            self._ticks_ended = True
+            self.say(f"Routine time-stamps stopped after {ROUTINE_TICKS_S // 3600} hours with no deal activity. The next "
+                     "deal step starts them again.")
+        return False
 
     def _loop(self) -> None:
         last_card = 0.0
@@ -270,6 +295,7 @@ class SellerAgent:
         d = self.party.dir / "handled"
         d.mkdir(exist_ok=True)
         (d / f"{deal_id}.{kind}").write_text(value)
+        self.active = time.monotonic()  # a deal step: the routine ticks go on (routine_ticks)
 
     def _step(self, deal_id: str, kind: str, make: Callable[[], str]) -> str:
         """One step of a deal, once: the file it wrote, made now or by an earlier round. A step is marked only after it

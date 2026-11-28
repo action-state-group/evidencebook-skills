@@ -37,4 +37,4 @@ Every deal record is capsulectl-deal's (evidencebook, x-deal-v1): no deal record
 
 ## Tests
 
-`tests/` runs without the binaries, except `tests/test_e2e.py`, which runs both deals against the real binaries and Action State's hosted witness with `ARD_E2E=1` (about 20 minutes, most of it the sample deals' contest windows). CI's `ard-demo` job runs both.
+`tests/` runs without the binaries, except `tests/test_e2e.py`, which runs both deals against the real binaries with `ARD_E2E=1` (about 20 minutes, most of it the sample deals' contest windows). It stamps on a local witness that `scripts/check.sh --full` starts (capsule-anchor's `ci/local-witness`); it names Action State's hosted witness only with `ARD_E2E_WITNESS=hosted`, which only CI's nightly hosted leg sets, and with neither it refuses to run. CI's `ard-demo` job runs both.
