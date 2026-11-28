@@ -293,12 +293,13 @@ def test_routine_ticks_end_after_their_bound_and_a_deal_step_starts_them_again(m
     agent.republish()
     agent.republish()
     assert agent.party.calls == ["tick"]  # past it: no routine tick, the card still published each round
-    assert said == ["routine time-stamps stopped: no deal for 2 hours. The next deal starts them again."]
+    assert said == ["Routine time-stamps stopped after 2 hours with no deal activity. The next deal step starts them "
+                    "again."]
     agent.republish(now=True)
     assert agent.party.calls == ["tick", ("wait", flow.CARD_STAMP_WAIT_S)]  # an on-demand stamp still goes
     agent._mark("deal-1", "offer")  # a buyer's offer taken
     agent.republish()
-    assert agent.party.calls[-1] == "tick" and said[-1] == "routine time-stamps started again with this deal"
+    assert agent.party.calls[-1] == "tick" and said[-1] == "Routine time-stamps started again with this deal step."
 
 
 def fake_ctl(tmp_path, stdout: str, code: int):

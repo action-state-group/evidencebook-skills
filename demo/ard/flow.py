@@ -77,8 +77,10 @@ CARD_STAMP_WAIT_S = 12
 #: (evidencebook-skills#453). A window left open stamped Action State's witness about once a minute per seller for as
 #: long as it ran (2,596 stamps in 22 h from one stack left running). Past this with nothing new, the loop still
 #: publishes the card as of its newest checkpoint; a deal step it takes later starts the routine ticks again, so that
-#: deal reaches the card, and an on-demand publish stamps as before. Counting from the last deal step shows the witness
-#: nothing the deal's own stamps do not: ``deal agree`` already stamps on demand, off the cadence (:meth:`Party.stamp`).
+#: deal reaches the card, and an on-demand publish stamps as before. After such an idle stretch the witness learns when
+#: a deal step happened (the restart) and roughly when the last one did (the stop, less this bound): acceptable for the
+#: demo, and the same idle-backoff trade-off evidencebook#1085 holds open for capsulectl's own cadence, which this leaves
+#: unchanged (Sherlock2 on #459).
 ROUTINE_TICKS_S = 2 * 3600
 
 
@@ -253,12 +255,12 @@ class SellerAgent:
         step, :meth:`_mark`); says once when they stop, and once when a deal step starts them again."""
         if time.monotonic() - self.__dict__.setdefault("active", time.monotonic()) < ROUTINE_TICKS_S:
             if self.__dict__.pop("_ticks_ended", False):
-                self.say("routine time-stamps started again with this deal")
+                self.say("Routine time-stamps started again with this deal step.")
             return True
         if not self.__dict__.get("_ticks_ended"):
             self._ticks_ended = True
-            self.say(f"routine time-stamps stopped: no deal for {ROUTINE_TICKS_S // 3600} hours. The next deal starts "
-                     "them again.")
+            self.say(f"Routine time-stamps stopped after {ROUTINE_TICKS_S // 3600} hours with no deal activity. The next "
+                     "deal step starts them again.")
         return False
 
     def _loop(self) -> None:
