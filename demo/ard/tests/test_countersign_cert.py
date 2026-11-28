@@ -37,28 +37,29 @@ import (
 )
 
 func main() {
+	// one line per argument, in order, with no path in it (a path may hold spaces)
 	for _, f := range os.Args[1:] {
 		b, err := os.ReadFile(f)
 		if err != nil {
-			fmt.Println(f, err)
+			fmt.Println(err)
 			continue
 		}
 		p, _ := pem.Decode(b)
 		if p == nil {
-			fmt.Println(f, "no PEM block")
+			fmt.Println("no PEM block")
 			continue
 		}
 		if _, err := x509.ParseCertificate(p.Bytes); err != nil {
-			fmt.Println(f, err)
+			fmt.Println(err)
 		} else {
-			fmt.Println(f, "ok")
+			fmt.Println("ok")
 		}
 	}
 }
 """
 
 
-def _go_parse(tmp_path: Path, *certs: Path) -> dict[str, str]:
+def _go_parse(tmp_path: Path, *certs: Path) -> list[str]:
     """What Go's x509.ParseCertificate says of each certificate, as capsulectl would parse it. Go is required: the
     local check and CI's ard-demo job both have it, and a skip here would hide the very bug this file is about."""
     go = shutil.which("go")
@@ -71,7 +72,9 @@ def _go_parse(tmp_path: Path, *certs: Path) -> dict[str, str]:
     done = subprocess.run([go, "run", ".", *map(str, certs)], cwd=mod, capture_output=True, text=True, timeout=300,
                           env={**os.environ, "GOFLAGS": "-mod=mod", "GOWORK": "off"})
     assert done.returncode == 0, done.stderr
-    return dict(line.split(" ", 1) for line in done.stdout.splitlines())
+    said = done.stdout.splitlines()
+    assert len(said) == len(certs), done.stdout
+    return said
 
 
 def test_the_certificate_is_on_the_named_curve_for_localhost(tmp_path):
@@ -88,10 +91,10 @@ def test_the_certificate_is_on_the_named_curve_for_localhost(tmp_path):
 
 
 def test_go_parses_the_demos_certificate_and_refuses_the_one_libressl_made(tmp_path):
+    tmp_path = tmp_path / "a folder with spaces"  # Codex, PR round 1: a path with a space is read whole
+    tmp_path.mkdir()
     cs._certificate(tmp_path)
-    said = _go_parse(tmp_path, tmp_path / "tls.crt", EXPLICIT)
-    assert said[str(tmp_path / "tls.crt")] == "ok"
-    assert said[str(EXPLICIT)] == "x509: invalid ECDSA parameters"
+    assert _go_parse(tmp_path, tmp_path / "tls.crt", EXPLICIT) == ["ok", "x509: invalid ECDSA parameters"]
 
 
 def test_a_certificate_made_before_the_fix_is_replaced_and_a_good_one_kept(tmp_path):
