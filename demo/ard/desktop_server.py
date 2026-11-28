@@ -446,7 +446,8 @@ class Session:
         self.assessed: dict[str, buyer.Assessment] = {}
         self.pack: packs.Pack | None = None
         self.ask = ""  # what she asked for, in her own words (ard_find_sellers): each deal's intent seals it
-        self.picked: set[str] = set()
+        #: the sellers picked under the last search, each with Maya's own words naming it ("" when the agent picked)
+        self.picked: dict[str, str] = {}
         self.deals: list[buyer.Deal] = buyer.deals_from_notes(self.maya)  # a reopened window keeps its deals
         #: the sellers whose last payment dialog was declined, each with that dialog's title (a held order's question)
         self.declined: dict[str, str] = {}
@@ -722,7 +723,7 @@ def ard_find_sellers(ask: str) -> None:
                            "is in agent.log.") from None
     # her ask and the sellers found replace the last search's only once this one is kept; a pick belongs to the search
     # it came from, so a new search clears it (Codex on #361: a pick never pays under another search's ask)
-    s.entries, s.ask, s.picked = found, ask, set()
+    s.entries, s.ask, s.picked = found, ask, {}
     print(f"searched a local stand-in registry, run by the operator: POST {stage.REGISTRY_URL} {{query: {stage.QUERY!r}}}")
     for e in s.entries:
         price = screens.msat(e["offer"]["price_msat"]) if "offer" in e else "?"
@@ -847,20 +848,28 @@ def _ceilings(p: packs.Pack) -> list[int]:
 
 
 @_tool("maya")
-def ard_pick(seller: str) -> None:
-    """Step 5: seal Maya's pick of ``seller`` ("alder" or "kestrel"), citing every assessment. A seller that is not GO
-    ends here: no deal opens and nothing is paid. For a GO seller, ard_pay opens the deal and pays it next."""
+def ard_pick(seller: str, said: str = "") -> None:
+    """Step 5: seal the pick of ``seller`` ("alder" or "kestrel"), citing every assessment. When Maya named the seller
+    herself, pass her words that named it as ``said``, word for word ("Pick Kestrel Print, the cheaper one."): the pick
+    is sealed as hers. Leave ``said`` out only when she left the choice to you: the pick is then sealed as yours, and
+    her payment question says you picked. A seller that is not GO ends here: no deal opens and nothing is paid. For a GO
+    seller, ard_pay opens the deal and pays it next."""
     s = session()
     key = _seller_key(seller)
     if key not in s.assessed:
         raise RuntimeError("call ard_assess first")
+    said = said.strip()
+    if said and not buyer.names_only(said, key):
+        raise RuntimeError(f"Maya's words do not name {SELLERS[key]['label']} alone, so they are not her pick of it. Pass "
+                           "her words only when she named this seller; if she left the choice to you, call ard_pick "
+                           "without them.")
     a = s.assessed[key]
-    buyer.seal_pick(s.maya, s.keys[key], a, [m for k, m in s.assessed.items() if k != key])
+    buyer.seal_pick(s.maya, s.keys[key], a, [m for k, m in s.assessed.items() if k != key], said)
     print(f"pick sealed before any payment: {SELLERS[key]['label']} at {screens.msat(a.price_msat)}, citing every assessment")
     if a.verdict != "GO":
         print(screens.limit_outcome(a))
         return
-    s.picked.add(key)
+    s.picked[key] = said
     # no tool name: the agent repeated "Call ard_pay" to the person (evidencebook-skills#362; Sherlock2's words)
     print(f"{SELLERS[key]['label']} is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes.")
 
@@ -932,7 +941,7 @@ def ard_pay(seller: str) -> None:
             return answer["how"]
         made = buyer.open_and_pay(s.home, s.maya, key, s.keys[key], a, s.adjudicator.named(), s.rail, summary, ask,
                                   print, simulated=not _real(), said=lambda w: dialog_text(w) + typed_note(), rail_words=words,
-                                  request=s.ask)
+                                  request=s.ask, picked=s.picked[key])
         held = getattr(answer.get("q"), "held", None)
         if made is None:
             how = answer.get("how", NOT_SHOWN)

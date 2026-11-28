@@ -194,7 +194,7 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     import pack as packs
 
     rin = Book()
-    s = types.SimpleNamespace(maya=rin, pack=packs.starting(), log=[], deals=[], declined={}, picked=set(),
+    s = types.SimpleNamespace(maya=rin, pack=packs.starting(), log=[], deals=[], declined={}, picked={},
                               ask="", home=None, pay_lock=threading.Lock(),
                               entries=[{"id": "alder", "name": "Seller Two", "commitment": {"key_id": "k"},
                                         "offer": {"price_msat": 5000}}])
@@ -253,7 +253,7 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     monkeypatch.setattr(buyer.limits, "pin", lambda maya, limit: pinned.append(limit))
     monkeypatch.setattr(buyer.limits, "unpin", lambda maya: pytest.fail("a confirmed limit is never unpinned"))
 
-    def draft(maya, seller, key, chosen, adjudicator, rail="lightning", me="maya", limit=None, request=""):
+    def draft(maya, seller, key, chosen, adjudicator, rail="lightning", me="maya", limit=None, request="", picked=""):
         intents.append((limit, request))
         return buyer.Deal("deal-0123456789abcdef", seller, key, chosen.price_msat, "o", rail, me)
     monkeypatch.setattr(buyer, "draft_deal", draft)
@@ -264,7 +264,7 @@ def test_the_limit_the_person_confirms_drives_her_card_assessment_and_held_order
     monkeypatch.setattr(buyer, "check_payment", lambda *args: {
         "check_id": "c", "verdict": "pause", "proceed": False,
         "rules": {"status": "evaluated", "verdict": "escalate", "findings": [order, week]}})
-    s.assessed, s.picked = {"alder": a}, {"alder"}
+    s.assessed, s.picked = {"alder": a}, {"alder": ""}
     monkeypatch.setattr(ds, "dialog_answer", answer("no"))
     out = ds.ard_pay("alder")
     assert pinned == [4500] and intents == [(4500, "Rin here: 30 lanyards by Monday, under 4,500 msat.")]
@@ -301,7 +301,7 @@ def _held_pay(monkeypatch, how, hold=True):
                                 "no earlier payment to this merchant from this profile",
                                 "the payment is not refundable"], limits={"weekly": (2000, 3000)})
     s = types.SimpleNamespace(maya=None, home=None, keys={"alder": "k"}, adjudicator=types.SimpleNamespace(named=dict),
-                              rail=None, ask="", declined={}, picked={"alder"}, pay_lock=threading.Lock(), log=[],
+                              rail=None, ask="", declined={}, picked={"alder": ""}, pay_lock=threading.Lock(), log=[],
                               assessed={"alder": types.SimpleNamespace(price_msat=2000)}, asked=[])
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ds, "_session", None)

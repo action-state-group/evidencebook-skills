@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -227,11 +228,26 @@ def assess(maya: pt.Party, ev: Evidence, seller_key: str, price_msat: int, pack:
                       sealed["record_id"], d, own)
 
 
-def seal_pick(maya: pt.Party, seller_key: str, chosen: Assessment, others: list[Assessment]) -> str:
-    """The pick, sealed before any deal or payment, citing every assessment it was made against."""
+def names_only(words: str, seller: str) -> bool:
+    """Whether ``words`` name ``seller`` (its label, or the label's first word) and no other seller: only then are they
+    the person's own pick of it. Words naming two sellers ("choose between Alder and Kestrel") or none ("the cheaper
+    one") are not."""
+    said = set(re.findall(r"[a-z0-9]+", words.lower()))
+
+    def named(key: str) -> bool:
+        name = re.findall(r"[a-z0-9]+", SELLERS[key]["label"].lower())
+        return bool(name) and name[0] in said
+    return named(seller) and not any(named(k) for k in SELLERS if k != seller)
+
+
+def seal_pick(maya: pt.Party, seller_key: str, chosen: Assessment, others: list[Assessment], said: str = "") -> str:
+    """The pick, sealed before any deal or payment, citing every assessment it was made against. ``said`` is the
+    person's own words naming the seller when they picked it (``by: maya``); without them the agent picked
+    (``by: agent``)."""
     cites = tuple(a.record_id for a in [chosen, *others])
     rec = maya.note(PICKED, {"seller": seller_key, "price_msat": chosen.price_msat, "assessment": chosen.verdict,
-                             "assessed_against": list(cites)}, subject_ref=seller_key, cites=cites)
+                             "assessed_against": list(cites), "by": "maya" if said else "agent",
+                             **({"said": said} if said else {})}, subject_ref=seller_key, cites=cites)
     return rec["record_id"]
 
 
@@ -254,10 +270,13 @@ class Deal:
 
 
 def draft_deal(maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
-               rail: str = "lightning", me: str = BUYER, limit: int | None = None, request: str = ASK) -> Deal:
+               rail: str = "lightning", me: str = BUYER, limit: int | None = None, request: str = ASK,
+               picked: str = "") -> Deal:
     """Maya's side of a deal from a GO assessment, before the seller hears of it: the offer (naming the adjudicator and
     the witness), written but not sent, and her intent. Her payment can be checked on it already (``deal check``), so
-    the person answers before anything reaches the seller (evidencebook-skills#289, evidencebook#890)."""
+    the person answers before anything reaches the seller (evidencebook-skills#289, evidencebook#890). ``picked`` is
+    her own words when she picked this seller: sealed as her pick of its item, so capsulectl's card never says the
+    agent picked it (#454); without them the agent picked, and the card says so."""
     if chosen.verdict != "GO":
         raise pt.Refused(f"the assessment is {chosen.verdict}"
                          + (f": deals under {chosen.cap_msat:,} msat" if chosen.cap_msat else "")
@@ -267,6 +286,8 @@ def draft_deal(maya: pt.Party, seller: str, seller_key: str, chosen: Assessment,
     deal = Deal(o["deal_id"], seller, seller_key, chosen.price_msat, o["offer"], rail, me, offer_file=o["file"])
     deal.intent = maya.intent(deal.deal_id, request, "purchase", ["pay"], limit, label(seller), rail=rail,
                               domain=ard.publisher(seller))
+    if picked:
+        maya.picked(deal.deal_id, picked, item)
     return deal
 
 
@@ -369,11 +390,12 @@ def question(deal: Deal, check: dict, held: limits.Held | None, summary: str, ra
 def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chosen: Assessment, adjudicator: dict,
                  rail: Any, summary: str, ask: Callable[[Question], Any], say: Callable[[str], None],
                  simulated: bool, said: Callable[[str], str] = lambda text: text,
-                 rail_words: str = "", request: str = ASK) -> tuple[Deal, Any] | None:
+                 rail_words: str = "", request: str = ASK, picked: str = "") -> tuple[Deal, Any] | None:
     """The payment checked first, then the person's answer, then the deal: nothing reaches the seller until the person
     said yes (evidencebook-skills#289). Maya's offer is drafted, not sent (:func:`draft_deal`), the invoice is made and
     capsulectl's payment check runs on it (under the spending limit she confirmed, if any: :mod:`limits`;
-    her sealed intent carries the same figure, with ``request``, what she asked for in her own words). Then one
+    her sealed intent carries the same figure, with ``request``, what she asked for in her own words, and ``picked``, her
+    own words when she picked this seller: :func:`draft_deal`). Then one
     dialog (:func:`question`) through ``ask``, which returns True or ``"yes"`` for the yes button, ``"no"`` for the
     other, and anything else when nobody answered or no dialog was shown. On yes, a paused check is answered in the words
     the dialog showed and the button (``said`` renders them as the dialog did: the dialog as shown, card included, then the button, never words of the person's own beyond that click), the offer is sent and agreed, and the
@@ -384,7 +406,8 @@ def open_and_pay(home: Path, maya: pt.Party, seller: str, seller_key: str, chose
         limits.pin(maya, limit)
     else:
         limits.unpin(maya)
-    deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name, limit=limit, request=request)
+    deal = draft_deal(maya, seller, seller_key, chosen, adjudicator, rail=rail.SEALED, me=maya.name, limit=limit, request=request,
+                      picked=picked)
     try:  # until the offer is sent, any failure cancels it: the seller never hears of it
         inv = rail.checked_invoice(chosen.price_msat)  # a failure here moved no money (pay.NotSent)
         feeds.payment(home, "invoice", maya.name, seller, chosen.price_msat, inv.payment_hash, rail.SEALED)

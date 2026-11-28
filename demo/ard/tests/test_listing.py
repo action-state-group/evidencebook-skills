@@ -247,7 +247,7 @@ def test_the_search_keeps_each_sellers_checks_in_the_buyers_records():
 def test_ard_find_sellers_writes_the_records(monkeypatch):
     import buyer
     import stage
-    s = type("S", (), {"entries": [], "maya": FakeMaya(), "ask": "", "picked": {"old-pick"}})()
+    s = type("S", (), {"entries": [], "maya": FakeMaya(), "ask": "", "picked": {"old-pick": ""}})()
     monkeypatch.setattr(ds, "session", lambda: s)
     refused = {**CHECKED, "id": "west", "name": "West", "problem": ard.NOT_VERIFIED, "detail": "ValueError('bad sig')"}
     good = {**CHECKED, "offer": ENTRY["x-demo-offer"], "commitment": {"key_id": "k"}}
@@ -257,7 +257,7 @@ def test_ard_find_sellers_writes_the_records(monkeypatch):
     assert [(k, r["seller"], r["query"]) for k, r, _ in s.maya.kept] == [(buyer.LISTING_CHECKED, "north", stage.QUERY),
                                                                          (buyer.LISTING_CHECKED, "west", stage.QUERY)]
     assert "bad sig" not in ds.ard_show_listing("West")
-    assert s.ask == "200 badges by Friday" and s.picked == set()  # a pick belongs to the search it came from
+    assert s.ask == "200 badges by Friday" and s.picked == {}  # a pick belongs to the search it came from
 
 
 @pytest.mark.parametrize("fail_at", [1, 2])
@@ -274,7 +274,7 @@ def test_a_record_that_cannot_be_kept_refuses_the_search_and_keeps_the_last_one(
         return real(*a, **k)
     maya.note = note
     before = [{**CHECKED, "id": "old"}]
-    s = type("S", (), {"entries": before, "maya": maya, "ask": "the last ask", "picked": {"north"}})()
+    s = type("S", (), {"entries": before, "maya": maya, "ask": "the last ask", "picked": {"north": ""}})()
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(ds, "_log", logged.append)
     monkeypatch.setattr(ard, "lookup", lambda *a: [CHECKED, {**CHECKED, "id": "second"}])
@@ -282,7 +282,7 @@ def test_a_record_that_cannot_be_kept_refuses_the_search_and_keeps_the_last_one(
     assert out == "REFUSED: The search could not be saved to your records, so its results are not used. The reason is " \
                   "in agent.log." and "/secret" not in out
     assert s.entries is before and any("disk full" in line for line in logged)
-    assert s.ask == "the last ask" and s.picked == {"north"}  # the last search's ask and pick stand (Codex on #361)
+    assert s.ask == "the last ask" and s.picked == {"north": ""}  # the last search's ask and pick stand (Codex on #361)
 
 
 @pytest.mark.skipif(not __import__("os").environ.get("CAPSULECTL_DEAL"), reason="CAPSULECTL_DEAL names capsulectl-deal")

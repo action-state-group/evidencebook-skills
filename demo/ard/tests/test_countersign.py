@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -60,7 +61,9 @@ def test_the_folder_is_inside_the_demo_home_so_reset_forgets_it(tmp_path):
 
 def test_countersigned_in_sherlock2s_words():
     line = receipt.countersign_line(COUNTERSIGNED, "Maya", "Alder Print Co.")
-    assert line.startswith("Countersigned by the demo's countersigner at 2026-11-26 ")
+    # the line gives the local time: 18:46Z is already the next day east of UTC+5
+    day = datetime.fromisoformat(COUNTERSIGNED["recomputed_at"].replace("Z", "+00:00")).astimezone().date()
+    assert line.startswith(f"Countersigned by the demo's countersigner at {day.isoformat()} ")
     assert line.endswith(", as capsulectl reports. It signed Maya's own records of this deal, 1 to 4 of 4: their "
                          "digests and seal times, and Maya's own payments' amounts, fees, references and status. It does "
                          "not cover Alder Print Co.'s records. In this demo the operator runs it and every party, "
