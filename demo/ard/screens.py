@@ -62,8 +62,8 @@ def own_sample_note(seller: str, made: int, real: bool) -> str:
     if made <= 0:
         return line + "; no deal has been made in this run yet."
     if made == 1:
-        return line + f"; the other one is the only deal made in this run ({rail})."
-    return line + f"; {made} deals were made in this run ({rail})."
+        return line + f"; after them came the only deal made in this run ({rail})."
+    return line + f"; after them came {made} deals made in this run ({rail})."
 
 
 def trying_again(what: str, exc: BaseException) -> str:
@@ -72,7 +72,7 @@ def trying_again(what: str, exc: BaseException) -> str:
     failure's own text goes to the party's log (:meth:`party.Party.log`), never into a chat."""
     if isinstance(exc, pt.WitnessSlow):
         return f"{what}: waiting for {pt.WITNESS_NAME}, which is slow or not answering; {TRYING_AGAIN}"
-    return f"{what}: not done yet (the reason is in your log, agent.log); {TRYING_AGAIN}"
+    return f"{what}: not done yet (the reason is in agent.log); {TRYING_AGAIN}"
 
 
 #: How every :func:`trying_again` line ends: a party's log says it once until something else happens (once_per_failure).

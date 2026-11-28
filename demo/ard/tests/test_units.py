@@ -678,10 +678,10 @@ def test_a_sellers_card_says_its_first_deals_are_sample_history():
 
 @pytest.mark.parametrize("made,real,tail", [
     (0, False, "; no deal has been made in this run yet."),
-    (1, False, "; the other one is the only deal made in this run (simulated payment, no money moved)."),
-    (2, False, "; 2 deals were made in this run (simulated payment, no money moved)."),
+    (1, False, "; after them came the only deal made in this run (simulated payment, no money moved)."),
+    (2, False, "; after them came 2 deals made in this run (simulated payment, no money moved)."),
     # Codex's PR review: a real rail is no proof the deal was paid, so the note names the rail only
-    (1, True, "; the other one is the only deal made in this run (on the real Lightning rail)."),
+    (1, True, "; after them came the only deal made in this run (on the real Lightning rail)."),
 ])
 def test_a_sellers_own_note_names_the_deals_made_in_this_run(made, real, tail):
     # Sherlock2 on #456: "the only deal made in this run (simulated payment, no money moved)", never "real deal"

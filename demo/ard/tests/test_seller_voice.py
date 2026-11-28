@@ -151,7 +151,7 @@ def test_every_line_a_party_says_about_its_books_speaks_to_it():
                     said.append(_said_text(node.value))
     text = "\n".join(s for s in said if s)
     assert "the adjudicator asked for your books" in text and "entered in your records" in text
-    assert "the reason is in your log" in text and "your checkpoint did not go through" in text
+    assert "the reason is in agent.log" in text and "your checkpoint did not go through" in text
     assert not clean(text) and "this party" not in text, text
 
 
