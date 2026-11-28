@@ -393,7 +393,7 @@ When the 7-day limit is the only reason, the question is Steven's limit question
    .venv/bin/python demo/ard/goose/open-windows.py --rail fake
    ```
 
-   **Expect:** Kestrel's card still counts the lost dispute; each seller's `What happened with the buyer since then?` still lists its deal's events (deal agreed, paid, delivered, and for Kestrel the dispute and the books sent), rebuilt from its own records at their own times, before the new "advertised" line, and Kestrel's ruling line as in step 11; the adjudicator's window opens on its case, which still shows the not-independent line and the ruling, as the tool prints them; nothing is paid twice. To run deal 1 again, reset and seed first.
+   **Expect:** Kestrel's card still counts the lost dispute; each seller's `What happened with the buyer since then?` still lists its deal's events (deal agreed, paid, delivered, and for Kestrel the dispute and the books sent), rebuilt from its own records at their own times, then "window opened again: the lines above are read from this seller's own records, each at the time it was kept; the lines below are new" and the new "advertised" line, and Kestrel's ruling line as in step 11; the adjudicator's window opens on its case, which still shows the not-independent line and the ruling, as the tool prints them; nothing is paid twice. To run deal 1 again, reset and seed first.
 
 ## Fallbacks
 

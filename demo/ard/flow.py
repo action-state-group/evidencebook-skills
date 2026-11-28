@@ -156,6 +156,8 @@ class SellerAgent:
         # what this seller did before this window opened, from its own records: a reopened window shows its deals too
         # (evidencebook-skills#457, Sherlock2: "after re-entry, seller activity rebuilds from the book, not from memory")
         self.log: list[str] = self.earlier()
+        if self.log:  # where this window's own lines start: its agent read the rebuilt times as wrong (#457's hand run)
+            self.say(REOPENED)
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
         self.active = time.monotonic()
@@ -448,6 +450,11 @@ class SellerAgent:
             if not self._done(deal_id, "named"):
                 self.party.receive(f)
                 self._mark(deal_id, "named")
+
+
+#: The line a reopened seller window adds after the lines rebuilt from its records (:meth:`SellerAgent.earlier`).
+REOPENED = ("window opened again: the lines above are read from this seller's own records, each at the time it was kept; "
+            "the lines below are new")
 
 
 def _clock(at: float) -> str:

@@ -1031,13 +1031,21 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
 
 def _deal_state(p: pt.Party, deal_id: str) -> None:
     """The deal's rows as her receipt says them now, so the deal's state is the receipt's, never the agent's own word
-    ("complete" for a deal still open to dispute, evidencebook-skills#457). A report not ready says nothing."""
+    ("complete" for a deal still open to dispute, evidencebook-skills#457). A report rests on a checkpoint and her
+    statement was sealed after the last one, so a checkpoint is taken first (as ard_show_card does); a report still not
+    ready says so."""
     import receipt
 
+    try:
+        p.stamp()
+    except pt.Refused as exc:
+        p.log(f"stamp for the deal's state after her statement: {exc!r}")
     try:
         rep = p.report(deal_id)
     except pt.Refused as exc:
         p.log(f"report of {deal_id} after her statement: {exc!r}")
+        print(f"Her receipt for deal {deal_id[5:13]} is not ready yet, so its state is not shown here; ask for the "
+              "receipt in a minute.")
         return
     print(f"Her receipt for deal {deal_id[5:13]} now says: " + "; ".join(receipt.row_lines(rep.get("report", rep))) + ".")
 

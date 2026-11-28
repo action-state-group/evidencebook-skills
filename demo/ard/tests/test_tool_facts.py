@@ -133,6 +133,18 @@ def test_a_reopened_seller_window_lists_its_deals_from_its_own_records(tmp_path)
     assert lines[0].startswith(flow._clock(101))
 
 
+def test_a_reopened_window_marks_where_its_own_lines_start(tmp_path, monkeypatch):
+    """#457's hand run: after re-entry Kestrel's agent called the new "advertised" line "later than the current time"."""
+    monkeypatch.setattr(flow.SellerAgent, "earlier", lambda self: ["10:00:47 CST  deal agreed: …"])
+    for step in ("advertise", "wait_sample_held", "republish"):
+        monkeypatch.setattr(flow.SellerAgent, step, lambda self, *a, **k: None)
+    monkeypatch.setattr(flow.pt.Party, "exists", property(lambda self: True))
+    s = flow.SellerAgent(tmp_path, "kestrel", start=False)
+    assert s.log[0] == "10:00:47 CST  deal agreed: …" and s.log[1].endswith(flow.REOPENED)
+    monkeypatch.setattr(flow.SellerAgent, "earlier", lambda self: [])
+    assert flow.SellerAgent(tmp_path, "kestrel", start=False).log == []  # a first window: no such line
+
+
 def test_a_new_seller_window_on_a_fresh_home_lists_nothing_earlier(tmp_path):
     s = Seller(tmp_path).agent
     s.party = Party(tmp_path / "alder")

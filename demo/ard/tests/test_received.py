@@ -34,6 +34,10 @@ class FakeMaya:
     def log(self, line):
         pass
 
+    def stamp(self):  # the checkpoint her statement's report rests on
+        self.stamped = getattr(self, "stamped", 0) + 1
+        return {}
+
 
 DEAL = buyer.Deal(deal_id="deal-0123456789abcdef", seller="alder", seller_key="k" * 64, price_msat=2000, offer="o",
                   rail="simulated", me="maya")
@@ -88,6 +92,7 @@ def test_her_yes_seals_it_once(session, monkeypatch, sent):
     # the deal's state in her receipt's words, never "complete" (#457 F10)
     assert ("Her receipt for deal 01234567 now says: payment: met so far, as both sides said (still open to dispute) "
             "(met); delivery: met so far, as both sides said (still open to dispute) (met).") in out
+    assert session.maya.stamped == 1  # a checkpoint first: her statement came after the last one
     again = ds.ard_confirm_received("alder")
     assert "already said she received it" in again and "still open to dispute" in again  # a second ask seals nothing more
     assert session.maya.statements == [(DEAL.deal_id, {buyer.pt.PAID: "met", buyer.pt.DELIVERED: "met"})]
@@ -169,3 +174,15 @@ def test_the_pick_result_names_no_tool(monkeypatch):
     out = ds.ard_pick("alder")
     assert "REFUSED" not in out and s.picked == {"alder": ""}, out
     assert "ard_" not in out and "is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes." in out, out
+
+
+def test_a_receipt_not_ready_after_her_statement_says_so(session, monkeypatch, sent):
+    """The hand run of #457 at 6741ce2: the report refused a book with her statement after its last checkpoint, and
+    the answer said nothing of the deal's state, so her agent called the deal done."""
+    def refused(deal_id):
+        raise buyer.pt.Refused("your deal book has records after its last checkpoint")
+    monkeypatch.setattr(session.maya, "report", refused)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: "yes")
+    out = ds.ard_confirm_received("alder")
+    assert ("Her receipt for deal 01234567 is not ready yet, so its state is not shown here; ask for the receipt in a "
+            "minute.") in out, out
