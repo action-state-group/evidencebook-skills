@@ -419,7 +419,7 @@ When the 7-day limit is the only reason, the question is Steven's limit question
 
    **Expect:** "removed …" and "cleared Goose's trust in N of the demo's recipes …", or, when none of them is trusted (the first reset, say), "deleted no Goose recipe trust …".
 
-   Do this step even when you stop for now: each open seller window sends Action State's witness a routine time-stamp about once a minute. A window left open stops those 2 hours after it opened (its activity says "routine time-stamps stopped"), and the stage the windows share stops once every window has quit.
+   Do this step even when you stop for now: each open seller window sends Action State's witness a routine time-stamp about once a minute. A window left open stops those after 2 hours with no deal (its activity says "routine time-stamps stopped"), and the stage the windows share stops once every window has quit.
 
 2. Check that nothing of the demo is left running.
 

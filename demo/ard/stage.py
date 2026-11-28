@@ -51,6 +51,8 @@ def catalog_url(seller: str, product: str) -> str:
     return f"{CATALOG_ORIGIN}/catalog/{seller}/{product}.json"
 
 
+#: Where a stage says which demo home it serves (:func:`serves`).
+HOME_PATH = "/stage/home"
 #: The file a stage holds open under ``<home>/stage`` for as long as it runs (``demo.py reset`` finds it by it).
 STAGE_LOCK = ".stage.lock"
 
@@ -88,6 +90,8 @@ class Stage:
         (``/catalog/<seller>/<product>.json``), each read also shown on the catalog's screen (:mod:`feeds`)."""
         if path == "/adjudicator/rules":
             return adj.RULES_TEXT.encode()
+        if path == HOME_PATH:  # which home this stage serves (ensure_stage), so a window never takes another's
+            return str(self.home).encode()
         m = CATALOG_PATH.fullmatch(path)
         seller = SELLERS.get(m.group(1)) if m else None  # the catalog as this stage read it at its start
         if seller is None or seller["product"] != m.group(2):
@@ -207,19 +211,36 @@ def _spawn(argv: list[str]) -> None:
                      start_new_session=True)
 
 
+def serves() -> str:
+    """The demo home the stage on :data:`HTTP_PORT` serves, or "" when it does not say (one from before #453)."""
+    try:
+        with urllib.request.urlopen(f"{CATALOG_ORIGIN}{HOME_PATH}", timeout=5) as r:  # the demo's own localhost stage
+            return r.read().decode()
+    except Exception:
+        return ""
+
+
 def ensure_stage(home: Path) -> None:
     """Start the stage as its own process if none listens, so it outlives any one window; it stops once no process
-    that started or reused it is alive (:data:`OWNERS`). This process is recorded first, under the owners' lock."""
+    that started or reused it is alive (:data:`OWNERS`). This process is recorded first, and the owners' lock is held
+    until the stage answers, so a second window starting at the same time waits for this stage instead of starting
+    another. A stage that serves another home is refused, not reused: it would not see this window as its owner."""
+    home = Path(home).expanduser()
     with _owners_locked(home):
         add_owner(home)
-        if stage_up():
-            return
-        _spawn([sys.executable, str(HERE / "stage.py"), "--owned", str(home)])
-    for _ in range(75):
-        if stage_up():
-            return
-        time.sleep(0.2)
-    raise RuntimeError("the stage (seller origins and registry) did not start")
+        if not stage_up():
+            _spawn([sys.executable, str(HERE / "stage.py"), "--owned", str(home)])
+            for _ in range(75):
+                if stage_up():
+                    break
+                time.sleep(0.2)
+            else:
+                raise RuntimeError("the stage (seller origins and registry) did not start")
+        other = serves()
+        if other != str(home):
+            raise RuntimeError(f"port {HTTP_PORT} is taken by the stage of another demo home ({other or 'an earlier '
+                               'version of the demo'}): stop it (demo.py reset on that home), or set ARD_STAGE_PORT to a "
+                               "free port")
 
 
 def main(argv: list[str]) -> int:

@@ -274,25 +274,31 @@ def test_a_due_republish_ticks_and_keeps_the_stamped_card(monkeypatch, tmp_path)
     assert agent.party.calls == ["tick"] and published(tmp_path)["n"] == 0
 
 
-def test_routine_ticks_end_after_their_bound_while_the_card_is_still_published(monkeypatch, tmp_path):
-    """evidencebook-skills#453: a window left open stops cutting routine checkpoints ROUTINE_TICKS_S after it started,
-    says so once, and still publishes its card; a deal's own on-demand stamp is unchanged."""
+def test_routine_ticks_end_after_their_bound_and_a_deal_step_starts_them_again(monkeypatch, tmp_path):
+    """evidencebook-skills#453: a window left open stops cutting routine checkpoints ROUTINE_TICKS_S after its last
+    deal step, says so once, and still publishes its card; a deal step later (any step marked done) starts them again,
+    so that deal reaches the card; an on-demand stamp goes either way."""
     monkeypatch.setenv("ARD_WITNESS", "public")
     agent = flow.SellerAgent.__new__(flow.SellerAgent)
     agent.home, agent.party = tmp_path, Seller(tmp_path, stamped=False)
+    agent.party.dir = tmp_path / "alder"
+    agent.party.dir.mkdir()
     agent.failed = lambda what, exc: pytest.fail(f"{what}: {exc}")
     said = []
     agent.say = said.append
-    agent.started = time.monotonic()
+    agent.active = time.monotonic()
     agent.republish()
     assert agent.party.calls == ["tick"] and not said  # within the bound: a routine tick
-    agent.started = time.monotonic() - flow.ROUTINE_TICKS_S - 1
+    agent.active = time.monotonic() - flow.ROUTINE_TICKS_S - 1
     agent.republish()
     agent.republish()
     assert agent.party.calls == ["tick"]  # past it: no routine tick, the card still published each round
-    assert len(said) == 1 and "routine time-stamps stopped 2 hours after this window opened" in said[0]
+    assert said == ["routine time-stamps stopped: no deal for 2 hours. The next deal starts them again."]
     agent.republish(now=True)
     assert agent.party.calls == ["tick", ("wait", flow.CARD_STAMP_WAIT_S)]  # an on-demand stamp still goes
+    agent._mark("deal-1", "offer")  # a buyer's offer taken
+    agent.republish()
+    assert agent.party.calls[-1] == "tick" and said[-1] == "routine time-stamps started again with this deal"
 
 
 def fake_ctl(tmp_path, stdout: str, code: int):

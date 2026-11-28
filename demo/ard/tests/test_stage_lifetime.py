@@ -85,6 +85,7 @@ def test_the_stage_stops_only_once_its_last_owner_is_gone_and_closes_under_the_l
 def test_ensure_stage_records_its_caller_and_starts_an_owned_stage(tmp_path, monkeypatch):
     started = []
     monkeypatch.setattr(stage, "stage_up", lambda: bool(started))
+    monkeypatch.setattr(stage, "serves", lambda: str(tmp_path))
     monkeypatch.setattr(stage, "_spawn", started.append)
     stage.ensure_stage(tmp_path)
     assert started[0][2:] == ["--owned", str(tmp_path)] and stage.live_owners(tmp_path) == {os.getpid()}
@@ -92,9 +93,41 @@ def test_ensure_stage_records_its_caller_and_starts_an_owned_stage(tmp_path, mon
 
 def test_a_window_that_reuses_the_stage_is_recorded_too(tmp_path, monkeypatch):
     monkeypatch.setattr(stage, "stage_up", lambda: True)
+    monkeypatch.setattr(stage, "serves", lambda: str(tmp_path))
     monkeypatch.setattr(stage, "_spawn", lambda argv: pytest.fail("a running stage is not started again"))
     stage.ensure_stage(tmp_path)
     assert stage.live_owners(tmp_path) == {os.getpid()}
+
+
+def test_a_stage_of_another_home_is_refused_not_reused(tmp_path, monkeypatch):
+    """Codex on #459: a window of home B must not take home A's stage on the same port, which would never see it as an
+    owner (and serves A's files)."""
+    monkeypatch.setattr(stage, "stage_up", lambda: True)
+    monkeypatch.setattr(stage, "serves", lambda: "/elsewhere/home-a")
+    with pytest.raises(RuntimeError, match="taken by the stage of another demo home \\(/elsewhere/home-a\\)"):
+        stage.ensure_stage(tmp_path)
+
+
+def test_two_windows_starting_at_once_start_one_stage(tmp_path, monkeypatch):
+    """Codex on #459: the second window waits under the owners' lock for the stage the first started (it answers only
+    after a while), instead of starting another."""
+    spawned, up_at = [], []
+    monkeypatch.setattr(stage, "_spawn", lambda argv: (spawned.append(argv), up_at.append(time.monotonic() + 0.6)))
+    monkeypatch.setattr(stage, "stage_up", lambda: bool(up_at) and time.monotonic() >= up_at[0])
+    monkeypatch.setattr(stage, "serves", lambda: str(tmp_path))
+    errors = []
+
+    def window():
+        try:
+            stage.ensure_stage(tmp_path)
+        except Exception as exc:  # noqa: BLE001 - reported below
+            errors.append(exc)
+    ts = [threading.Thread(target=window) for _ in range(2)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(20)
+    assert not errors and len(spawned) == 1
 
 
 def _run_main(tmp_path: Path, *args: str) -> subprocess.Popen:

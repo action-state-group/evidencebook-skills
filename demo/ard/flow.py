@@ -73,12 +73,12 @@ def read_card(bundle: Path) -> tuple[dict, dict, str]:
 
 #: How long an on-demand publish waits for the witness to take its stamp, so the card carries its receipt (#350).
 CARD_STAMP_WAIT_S = 12
-#: How long after a seller's agent starts its loop keeps cutting the cadence's routine checkpoints (evidencebook-skills
-#: #453). A window left open stamped Action State's witness about once a minute per seller for as long as it ran (2,596
-#: stamps in 22 h from one stack left running). Past this, the loop still publishes the card as of its newest checkpoint
-#: and a deal's own steps still stamp on demand (Party.stamp), so only the routine ticks end. The bound counts from the
-#: start, never from the last deal: a cadence that stopped some time after the last deal would tell the witness when
-#: deals happen, which the cadence exists to hide (capsulectl deal_cadence.go, dealWitnessSees). A run takes well under it.
+#: How long after its last deal step (or its start) a seller's agent keeps cutting the cadence's routine checkpoints
+#: (evidencebook-skills#453). A window left open stamped Action State's witness about once a minute per seller for as
+#: long as it ran (2,596 stamps in 22 h from one stack left running). Past this with nothing new, the loop still
+#: publishes the card as of its newest checkpoint; a deal step it takes later starts the routine ticks again, so that
+#: deal reaches the card, and an on-demand publish stamps as before. Counting from the last deal step shows the witness
+#: nothing the deal's own stamps do not: ``deal agree`` already stamps on demand, off the cadence (:meth:`Party.stamp`).
 ROUTINE_TICKS_S = 2 * 3600
 
 
@@ -154,7 +154,7 @@ class SellerAgent:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
-        self.started = time.monotonic()
+        self.active = time.monotonic()
         self.advertise()
         self.wait_sample_held()
         self.republish(now=True)
@@ -172,7 +172,9 @@ class SellerAgent:
 
     def event(self, line: str) -> None:
         """One of the events a seller is told of (evidencebook-skills#336, Sherlock2): deal agreed, paid, dispute
-        received, ruling. One line in its activity (a Goose window shows nothing until its agent is asked)."""
+        received, ruling. One line in its activity (a Goose window shows nothing until its agent is asked). A deal step:
+        the routine ticks go on (:meth:`routine_ticks`)."""
+        self.active = time.monotonic()
         self.say(line)
 
     def _terms(self, deal_id: str) -> str:
@@ -247,14 +249,16 @@ class SellerAgent:
             self.failed("publishing this seller's History card", exc)
 
     def routine_ticks(self) -> bool:
-        """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S`); says once when it
-        stops."""
-        if time.monotonic() - self.__dict__.setdefault("started", time.monotonic()) < ROUTINE_TICKS_S:
+        """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S` since the last deal
+        step, :meth:`_mark`); says once when they stop, and once when a deal step starts them again."""
+        if time.monotonic() - self.__dict__.setdefault("active", time.monotonic()) < ROUTINE_TICKS_S:
+            if self.__dict__.pop("_ticks_ended", False):
+                self.say("routine time-stamps started again with this deal")
             return True
         if not self.__dict__.get("_ticks_ended"):
             self._ticks_ended = True
-            self.say(f"routine time-stamps stopped {ROUTINE_TICKS_S // 3600} hours after this window opened; a deal's "
-                     "own steps still time-stamp it. Reopen the window to start them again.")
+            self.say(f"routine time-stamps stopped: no deal for {ROUTINE_TICKS_S // 3600} hours. The next deal starts "
+                     "them again.")
         return False
 
     def _loop(self) -> None:
@@ -289,6 +293,7 @@ class SellerAgent:
         d = self.party.dir / "handled"
         d.mkdir(exist_ok=True)
         (d / f"{deal_id}.{kind}").write_text(value)
+        self.active = time.monotonic()  # a deal step: the routine ticks go on (routine_ticks)
 
     def _step(self, deal_id: str, kind: str, make: Callable[[], str]) -> str:
         """One step of a deal, once: the file it wrote, made now or by an earlier round. A step is marked only after it
