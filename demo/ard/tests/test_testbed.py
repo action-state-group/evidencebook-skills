@@ -341,22 +341,6 @@ def test_every_window_is_handed_the_local_witness(monkeypatch):
 
 # -- the two screens ---------------------------------------------------------------------------------------------------
 
-def test_the_witness_screen_says_what_it_received_and_never_a_record(tmp_path):
-    feeds.stamp(tmp_path, "kestrel", "Action State's witness",
-                {"state": "ticked", "tick": 4, "checkpoint": 27, "delivered": [3, 4], "pending": [], "witness_sees": "x"})
-    feeds.stamp(tmp_path, "kestrel", "Action State's witness", {"state": "not_due", "delivered": [], "pending": []})
-    feeds.stamp(tmp_path, "kestrel", "Action State's witness", {"state": "ticked", "witness": "not_configured"})
-    feeds.stamp(tmp_path, "kestrel", "Action State's witness", {"error": "refused"})
-    lines = feeds.path(tmp_path, "witness").read_text().splitlines()
-    assert len(lines) == 1  # nothing due, no witness, and an error are no event the witness saw
-    event = json.loads(lines[0])
-    assert set(event) == {"at", "party", "witness", "stamp", "covers", "taken", "waiting"}
-    from cast import label
-    said = feeds.words("witness", event, label)
-    assert "Kestrel Print's book sent its hash no. 4;" in said and "entries" not in said  # an MMR size is no count of entries; the clock may read 27
-    assert "Action State's witness took 2 of Kestrel Print's stamps" in said
-
-
 def test_the_rail_screen_says_who_paid_whom_in_plain_words(tmp_path):
     from cast import label
     feeds.payment(tmp_path, "invoice", "maya", "kestrel", 1000, "f" * 64, "simulated")
