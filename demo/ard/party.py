@@ -381,6 +381,14 @@ class Party:
                 raise
             return ""
 
+    def picked(self, deal_id: str, words: str, item: str) -> str:
+        """Seal the person's own pick after the opening intent (``deal note --kind intent``, evidencebook purchase.md,
+        "The user picked from options"): ``words`` are theirs, and ``item`` is written exactly as the check's
+        ``terms.item``, so capsulectl counts it as theirs, never as the agent's pick. Their limit and actions stay as
+        the opening sealed them."""
+        said = {"verbatim": words, "asked": {"item": item}}
+        return self.run("note", "--deal", deal_id, "--kind", "intent", "--input", self.write("picked.json", said))["intent"]
+
     def agree(self, offer_digest: str, intent: str = "") -> dict:
         out = self.tmp("agree.json")
         done = self.run("agree", offer_digest, *(["--intent", intent] if intent else []), "--out", out)

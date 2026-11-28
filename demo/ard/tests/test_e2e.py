@@ -585,12 +585,15 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
     assert over in q.held.reasons and "per_order" in q.held.limits
     assert f"{screens.CARD_HEAD}\nPAUSED FOR YOU" in q.text  # capsulectl's card, in full, under the question
     assert f"{limit:,} msat limit" in q.text  # the card reads the limit her sealed intent carries (#361)
+    assert "I picked item " in q.text and ", not you." in q.text  # no words of hers named the seller: the agent's pick
     assert len(seller.deals()) == deals and wire.pending(w["home"], "alder", "offer") == offers
 
     made = buyer.open_and_pay(w["home"], w["maya"], "alder", w["keys"]["alder"], a, w["adj"].named(), pay.FakeRail(),
-                              "Pay (test)", answer("yes"), lambda *_: None, simulated=True)
+                              "Pay (test)", answer("yes"), lambda *_: None, simulated=True, picked="Pick Alder Print Co.")
     assert made is not None
     assert over in asked[-1].held.reasons
+    # her own pick (#454): capsulectl's card no longer says the agent picked it
+    assert f"{screens.CARD_HEAD}\nPAUSED FOR YOU" in asked[-1].text and "I picked" not in asked[-1].text, asked[-1].text
     deal, _ = made
     assert buyer.shipped(buyer.await_delivery(w["home"], w["maya"], deal))
 

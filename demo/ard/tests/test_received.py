@@ -109,7 +109,7 @@ def test_two_deals_to_confirm_ask_which(session, monkeypatch, sent):
 def test_the_payment_tool_seals_nothing_after_a_full_delivery(session, monkeypatch, sent):
     import types
     a = types.SimpleNamespace(price_msat=2000)
-    session.picked, session.assessed, session.keys, session.declined = {"alder"}, {"alder": a}, {"alder": "k"}, {}
+    session.picked, session.assessed, session.keys, session.declined = {"alder": ""}, {"alder": a}, {"alder": "k"}, {}
     session.rail = None
     session.adjudicator = types.SimpleNamespace(named=lambda: {})
     monkeypatch.setenv("ARD_APPROVAL", "none")
@@ -151,9 +151,9 @@ def test_the_pick_result_names_no_tool(monkeypatch):
     # Steven's 2fa6abe run (#362): the pick said "Call ard_pay" and the agent repeated the tool name to the person
     import types
     s = types.SimpleNamespace(assessed={"alder": types.SimpleNamespace(price_msat=2000, verdict="GO")}, keys={"alder": "k"},
-                              maya=FakeMaya(), picked=set())
+                              maya=FakeMaya(), picked={})
     monkeypatch.setattr(ds, "session", lambda: s)
     monkeypatch.setattr(buyer, "seal_pick", lambda *a, **k: None)
     out = ds.ard_pick("alder")
-    assert "REFUSED" not in out and s.picked == {"alder"}, out
+    assert "REFUSED" not in out and s.picked == {"alder": ""}, out
     assert "ard_" not in out and "is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes." in out, out

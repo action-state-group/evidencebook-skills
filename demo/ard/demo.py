@@ -177,7 +177,8 @@ class Script:
 
     def buy(self, made: dict[str, buyer.Assessment], key: str) -> buyer.Deal | None:
         a, name = made[key], SELLERS[key]["label"]
-        buyer.seal_pick(self.maya, self.keys[key], a, [m for k, m in made.items() if k != key])
+        said = f"Pick {name}."  # the terminal run's Maya names the seller herself (#454)
+        buyer.seal_pick(self.maya, self.keys[key], a, [m for k, m in made.items() if k != key], said)
         rule(f"Maya picks {name}")
         print(f"pick sealed before any payment: {name} at {screens.msat(a.price_msat)}")
         if a.verdict != "GO":
@@ -186,7 +187,7 @@ class Script:
         words = "over Lightning, which moves real money" if self.real else "on the simulated rail: no money moves"
         made = buyer.open_and_pay(self.home, self.maya, key, self.keys[key], a, self.adjudicator.named(), self.rail,
                                   f"Pay {name} {screens.msat(a.price_msat)} {words}.", self.answer, print,
-                                  simulated=not self.real, rail_words=words)
+                                  simulated=not self.real, rail_words=words, picked=said)
         if made is None:
             print("not approved: nothing was sent to the seller and nothing was paid")
             return None
