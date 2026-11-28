@@ -232,6 +232,25 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
                    f": {pt.WITNESS_NAME} had not stamped every book sent with an entry yet."
                    if any("not witnessed" in x for x in read) else "."))
 
+    # #458: the witness's screen after a run with both agreements and the ruling, whose stamps capsulectl cuts inside
+    # `deal agree` and `deal ruling` and a later tick delivers: every line names whose book, and where capsulectl
+    # numbers what it delivers (evidencebook#1083), no party's number is skipped
+    import feeds
+    from cast import label
+    events = [json.loads(x) for x in feeds.path(w["home"], "witness").read_text().splitlines()]
+    deal_lines, routine_lines = feeds.witness_screen(events, label)
+    who = "|".join(re.escape(label(p)) for p in ("maya", "kestrel", "alder", "adjudicator"))
+    for line in deal_lines:
+        assert re.match(rf"\d\d:\d\d:\d\d  ({who})'s book (sent|has) ", line), line
+    for line in routine_lines:
+        assert re.match(rf"({who})'s routine stamps, one a minute: ", line), line
+    hashes = feeds.witness_hashes(events)
+    assert {h.party for h in hashes if h.kind == "deal"} >= {"maya", "kestrel", "adjudicator"}
+    for party in {h.party for h in hashes}:
+        nos = [h.no for h in hashes if h.party == party]
+        if None not in nos:
+            assert nos == list(range(nos[0], nos[0] + len(nos))), (party, nos)
+
     # #411: RUNBOOK step 13 opens Maya's Kestrel receipt as a page once the ruling is in her records. The page draws the
     # seal for a final not-met ruling (Steven, 2026-11-27: "Didn't go as agreed"), in the browser: capsule-viewer's
     # script sets data-seal when it renders, so the page is read as Chrome draws it.
