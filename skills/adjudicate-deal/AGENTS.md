@@ -22,6 +22,8 @@ suggest one, or record one.
    did not answer.
 2. **Show the ruling.** Show what the adjudicator ruled and why, or why it has not, under the line that it is not
    independent of the parties. These lines are the adjudicator's own: the person reads them as the tool printed them.
+   If you write anything, give no reason for the ruling but the ruled-against side's own signed statement that the
+   row was not met: no other record, no word of the other side, no agreement between them.
 3. **Report the entries.** Whether each party entered the ruling in its own records, as the books they sent show.
 
 ## Rules
