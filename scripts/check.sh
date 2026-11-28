@@ -338,6 +338,8 @@ job_ard_demo() {
     python -m pytest -v "$t/test_e2e.py"
   # The run stamped on this witness, not on none (capsule-anchor's ci/local-witness/check does the same in CI).
   grep -qE '"POST /checkpoints HTTP/[0-9.]+" 2[0-9][0-9]' "$log" || { cat "$log" >&2; echo "ard-demo: the local witness took no stamp" >&2; return 1; }
+  # How many checkpoints the run sent, all to this witness (evidencebook-skills#453): the hosted one gets none.
+  echo "ard-demo: the local witness answered $(grep -cE '"POST /checkpoints HTTP/' "$log") POST /checkpoints"
 }
 
 # contracts.yml's add-only rule on what a push sends: the commits since the merge base with origin/main (a pull

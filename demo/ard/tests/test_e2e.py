@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The whole story, end to end, with the real binaries: capsulectl-deal (``CAPSULECTL_DEAL``), capsule-engine
 (``CAPSULE_ENGINE``); capsulectl-deal also rules as the adjudicator's own profile) and a witness every agreement names:
-Action State's hosted one, or the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh and CI's
-local leg start one; :func:`_local_witness`). It seeds a home (about a minute), then runs
+the one ``ARD_E2E_WITNESS_URL`` and ``ARD_E2E_WITNESS_KEY`` name (scripts/check.sh and CI's local leg start one;
+:func:`_local_witness`), or Action State's hosted one only with ``ARD_E2E_WITNESS=hosted`` (CI's hosted leg); with
+neither it refuses (:mod:`_e2ewitness`, evidencebook-skills#453). It seeds a home (about a minute), then runs
 deal 1 (Maya buys from Kestrel, Kestrel's own delivery record says 150 of 200, Maya disputes, the adjudicator rules
 against Kestrel, both enter the ruling) and deal 2 (Kestrel's card counts the lost dispute; Maya's own ruling makes it
 NO; a buyer who holds no ruling sees LIMIT from the card alone; Alder is GO and paid).
@@ -18,6 +19,7 @@ import re
 import time
 
 import pytest
+import _e2ewitness
 from _stampwait import stamp_wait, try_tick
 
 pytestmark = pytest.mark.skipif(os.environ.get("ARD_E2E") != "1" or not all(
@@ -31,16 +33,18 @@ def _local_witness(mp: pytest.MonkeyPatch) -> None:
     neither wait on nor load Action State's service. The demo's own code then names it the way ``ARD_WITNESS=local`` does
     (evidencebook-skills#382): every profile after ``deal init`` (:meth:`party.Party.create`), and the buyer's pack trusts
     its key (:func:`pack.starting`). CI's local leg starts one the same way (tests.yml, #378); a person's run, and CI's
-    hosted leg (nightly and by hand), keep the hosted witness. Its name on the screens stays the hosted one's, which the
-    page checks below read."""
+    hosted leg (nightly and by hand, ``ARD_E2E_WITNESS=hosted``), keep the hosted witness. Its name on the screens
+    stays the hosted one's, which the page checks below read."""
     import buyer
     import party as pt
 
-    url, key = os.environ.get("ARD_E2E_WITNESS_URL", ""), os.environ.get("ARD_E2E_WITNESS_KEY", "")
-    if bool(url) != bool(key):
-        raise pytest.UsageError("set both ARD_E2E_WITNESS_URL and ARD_E2E_WITNESS_KEY, or neither")
-    if not url:
+    try:
+        local = _e2ewitness.choose(os.environ)
+    except _e2ewitness.Refused as exc:
+        raise pytest.UsageError(str(exc)) from None
+    if local is None:  # ARD_E2E_WITNESS=hosted: CI's hosted leg only
         return
+    url, key = local
     mp.setattr(pt, "WITNESS_URL", url)
     mp.setattr(pt, "WITNESS_KEY", key)
     mp.setitem(buyer.OPERATOR_FACTS, "witness", key)
@@ -618,12 +622,17 @@ def test_a_spending_limit_holds_an_order_before_the_seller_hears_of_it(world, mo
 
 def test_the_set_ups_witness_check_takes_a_real_stamp(monkeypatch, tmp_path):
     """The set-up's witness check (evidencebook-skills#359) against Action State's hosted witness: one throwaway log,
-    its stamp taken. The local check runs its own witness instead (``ARD_E2E_WITNESS_URL``, #375) and stamps nothing on
-    the hosted one, so there it is skipped; CI's runs on main and nightly use the hosted witness and run it."""
+    its stamp taken. It runs only in CI's hosted leg (``ARD_E2E_WITNESS=hosted``, nightly and by hand); a run on a local
+    witness (``ARD_E2E_WITNESS_URL``: scripts/check.sh, CI's local leg) skips it and stamps nothing on the hosted one
+    (#375, #453)."""
     import witness_check as wc
 
-    if os.environ.get("ARD_E2E_WITNESS_URL"):
-        pytest.skip("the local check's witness is local; this test is for Action State's hosted witness")
+    try:
+        local = _e2ewitness.choose(os.environ)
+    except _e2ewitness.Refused as exc:
+        raise pytest.UsageError(str(exc)) from None
+    if local is not None:
+        pytest.skip("this run's witness is local; this test is for Action State's hosted witness")
     monkeypatch.setenv("ARD_WITNESS", "public")
     r = wc.check(log=tmp_path / "check.log")
     assert r == wc.Result(True, "Action State's witness took a test stamp."), (tmp_path / "check.log").read_text()

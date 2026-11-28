@@ -169,7 +169,9 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          ARD_E2E=1 ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
+          # ARD_E2E_WITNESS=hosted: the one automated run that stamps on Action State's witness (capsule-anchor#109, #453)
+          ARD_E2E=1 ARD_E2E_WITNESS=hosted ARD_EVIDENCEBOOK="$GITHUB_WORKSPACE/.deps/evidencebook" \
+            CAPSULE_ENGINE="$RUNNER_TEMP/bin/capsule-engine" \
             CAPSULECTL_DEAL="$RUNNER_TEMP/bin/capsulectl-deal" CAPSULECTL="$RUNNER_TEMP/bin/capsulectl" \
             python -m pytest -v -rf demo/ard/tests/test_e2e.py | tee "$RUNNER_TEMP/hosted-e2e.txt"
       - name: report a failed hosted end-to-end test to its ci-red issue

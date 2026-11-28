@@ -6,6 +6,8 @@ home>`` runs it by hand. It keeps no keys and no records of its own: the sellers
 the files the parties hand each other, are files under ``<demo home>/stage``."""
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -124,12 +126,95 @@ def stage_up() -> bool:
                        "stage.py, say): stop it, or set ARD_STAGE_PORT to a free port")
 
 
+#: Under ``<home>/stage``: one file per process that started or reused a stage (:func:`ensure_stage`), named by its pid
+#: and holding its start time, so a pid the system gave to another process since is not taken for it. A stage started
+#: that way stops once none of them is alive (:func:`owned_wait`), so a run that ends or is interrupted (its windows quit
+#: or killed) leaves no stage behind (evidencebook-skills#453).
+OWNERS = "owners"
+#: Held while a process records itself and looks for a stage (:func:`ensure_stage`), and while an owned stage decides to
+#: stop and closes its listeners (:func:`owned_wait`): a window either is seen by the stage, or finds no stage and starts one.
+OWNERS_LOCK = ".owners.lock"
+#: How often an owned stage looks for a live owner; it stops after two looks in a row find none.
+OWNER_CHECK_S = 2.0
+
+
+def _owners(home: Path) -> Path:
+    return Path(home).expanduser() / "stage" / OWNERS
+
+
+@contextlib.contextmanager
+def _owners_locked(home: Path):
+    d = _owners(home)
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / OWNERS_LOCK, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _started(pid: int) -> str:
+    """The process's start time as ``ps`` gives it, or "" when no process has that pid."""
+    run = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    return run.stdout.strip() if run.returncode == 0 else ""
+
+
+def add_owner(home: Path, pid: int | None = None) -> None:
+    """Record ``pid`` (this process by default) as one the stage serves."""
+    pid = pid or os.getpid()
+    d = _owners(home)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / str(pid)).write_text(_started(pid))
+
+
+def live_owners(home: Path) -> set[int]:
+    """The recorded owners still alive (the same pid and start time); a gone owner's file is removed."""
+    alive = set()
+    d = _owners(home)
+    for f in d.iterdir() if d.is_dir() else ():
+        if not f.name.isdigit():
+            continue
+        try:
+            recorded = f.read_text()
+        except OSError:
+            continue
+        now = _started(int(f.name))
+        if now and now == recorded:
+            alive.add(int(f.name))
+        else:
+            f.unlink(missing_ok=True)
+    return alive
+
+
+def owned_wait(home: Path, close, every: float = OWNER_CHECK_S) -> None:
+    """Return once two looks in a row, ``every`` seconds apart, find no live owner, having called ``close`` (which
+    closes the stage's listeners) under the owners' lock, so no window records itself in between and then finds the
+    stage gone."""
+    empty = 0
+    while True:
+        with _owners_locked(home):
+            empty = 0 if live_owners(home) else empty + 1
+            if empty >= 2:
+                close()
+                return
+        time.sleep(every)
+
+
+def _spawn(argv: list[str]) -> None:
+    """Start ``argv`` in a session of its own, so it outlives the window that started it."""
+    subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
 def ensure_stage(home: Path) -> None:
-    """Start the stage as its own process if none listens, so it outlives any one window."""
-    if stage_up():
-        return
-    subprocess.Popen([sys.executable, str(HERE / "stage.py"), str(home)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL, start_new_session=True)
+    """Start the stage as its own process if none listens, so it outlives any one window; it stops once no process
+    that started or reused it is alive (:data:`OWNERS`). This process is recorded first, under the owners' lock."""
+    with _owners_locked(home):
+        add_owner(home)
+        if stage_up():
+            return
+        _spawn([sys.executable, str(HERE / "stage.py"), "--owned", str(home)])
     for _ in range(75):
         if stage_up():
             return
@@ -138,12 +223,21 @@ def ensure_stage(home: Path) -> None:
 
 
 def main(argv: list[str]) -> int:
-    home = Path(argv[1] if len(argv) > 1 else "~/.config/ard-commerce-demo").expanduser()
+    """``stage.py [--owned] [home]``. ``--owned`` (:func:`ensure_stage`): stop once no recorded owner is alive. By
+    hand, without it, the stage runs until stopped."""
+    args = argv[1:]
+    owned = "--owned" in args
+    args = [a for a in args if a != "--owned"]
+    home = Path(args[0] if args else "~/.config/ard-commerce-demo").expanduser()
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # so the stage closes its listeners on a stop
     stage = Stage(home)
     print(f"stage: registry {stage.url}, adjudicator rules {adj.rules_url()}", flush=True)
     try:
-        stage.serve_forever()
+        if owned:
+            owned_wait(home, stage.close)
+            print("stage: no process it serves is running; stopped", flush=True)
+        else:
+            stage.serve_forever()
     except KeyboardInterrupt:
         pass
     return 0
