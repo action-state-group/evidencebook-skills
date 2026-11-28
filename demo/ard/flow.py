@@ -252,7 +252,7 @@ class SellerAgent:
                 self.party.tick()
             publish_card(self.home, self.party, keep_stamped=not now)
         except pt.Refused as exc:
-            self.failed("publishing this seller's History card", exc)
+            self.failed("publishing your History card", exc)
 
     def routine_ticks(self) -> bool:
         """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S` since the last deal
@@ -273,7 +273,7 @@ class SellerAgent:
             for what, step in (("taking the buyer's offer", self._offers), ("keeping the buyer's agreement", self._agreements),
                                ("taking the payment and delivering", self._payments),
                                ("keeping the buyer's statement", self._statements), ("keeping the dispute", self._disputes),
-                               ("answering the adjudicator's request for this seller's books", self._requests),
+                               ("answering the adjudicator's request for your books", self._requests),
                                ("entering the adjudicator's ruling", self._rulings), ("keeping the buyer's copy of the ruling", self._named)):
                 try:
                     step()
@@ -283,7 +283,7 @@ class SellerAgent:
                 try:
                     self.republish()
                 except Exception as exc:  # never ends the seller's loop
-                    self.failed("publishing this seller's History card", exc)
+                    self.failed("publishing your History card", exc)
                 last_card = time.monotonic()
             self._stop.wait(0.5)
 
@@ -321,7 +321,7 @@ class SellerAgent:
         if body.get("observed"):
             out.append(("act", delivered_line(buyer_words(body["observed"]), _states_not_met(body))))
         if self._done(deal_id, "held"):
-            out.append(("held", "the delivery was held by this seller's own check"))
+            out.append(("held", "the delivery was held by your own check"))
         if self._done(deal_id, "dispute"):
             out.append(("dispute", dispute_line(deal_id)))
         if self._done(deal_id, "adjanswer") and wire.path(self.home, adj.ADJUDICATOR, deal_id, "answer-seller").is_file():
@@ -373,7 +373,7 @@ class SellerAgent:
             self._mark(deal_id, "offer")
             # its own log only: the event a seller is told is the deal agreed by both (_agreements, #336)
             self.party.log(f"a buyer offered {price:,} msat for {body['terms']['item']} (deal {deal_id}): agreed at the "
-                           "listed price, and this seller's agreement sent to the buyer")
+                           "listed price, and your agreement sent to the buyer")
 
     def _agreements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "agree"):
@@ -402,14 +402,14 @@ class SellerAgent:
             def deliver() -> str:
                 check = p.check(deal_id, "commit", SELLERS[self.name]["item"], ref["amount_msat"], "the buyer")
                 if not check.get("proceed"):
-                    raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
+                    raise pt.Refused(f"delivery held by your own check: {check.get('verdict')}")
                 return p.perform(deal_id, check["check_id"], info["observed"], info["states"])
             if self._done(deal_id, "held"):
                 continue  # this seller's own check held the delivery: it is not retried every round
             try:
                 act = self._step(deal_id, "act", deliver)
             except pt.Refused as exc:
-                if "held by this seller's own check" not in str(exc):
+                if "held by your own check" not in str(exc):
                     raise
                 self._mark(deal_id, "held")
                 self.say(str(exc))
@@ -437,7 +437,7 @@ class SellerAgent:
 
     def _requests(self) -> None:
         def say(line: str) -> None:  # the books going to the adjudicator is an event (#336)
-            (self.event if line.startswith("the adjudicator asked for this party's books") else self.say)(line)
+            (self.event if line.startswith("the adjudicator asked for your books") else self.say)(line)
         adj.answer_requests(self.home, self.party, self.name, "seller", say)
 
     def _rulings(self) -> None:
@@ -453,7 +453,7 @@ class SellerAgent:
 
 
 #: The line a reopened seller window adds after the lines rebuilt from its records (:meth:`SellerAgent.earlier`).
-REOPENED = ("window opened again: the lines above are read from this seller's own records, each at the time it was kept; "
+REOPENED = ("window opened again: the lines above are read from your own records, each at the time it was kept; "
             "the lines below are new")
 
 
@@ -481,21 +481,28 @@ def _record_body(f: Path) -> dict:
     return {}
 
 
+def deals_made(p: pt.Party) -> int:
+    """How many deals this seller agreed with a buyer in this run, from its own records: the buyer's agreement it kept (a
+    ``handled`` agree mark, as :meth:`SellerAgent.earlier` reads them), never the sample history ``demo.py seed`` made."""
+    handled = p.dir / "handled"
+    return len(list(handled.glob("*.agree"))) if handled.is_dir() else 0
+
+
 def paid_line(ref: dict) -> str:
     """The payment, in what this seller knows: the buyer's word; its own wallet is not read by this process (#337,
     Sherlock2: "if the rail can't show that, it says the buyer says paid")."""
     return (f"paid: the buyer says it paid {ref['amount_msat']:,} msat"
-            + (" (simulated rail: no money moved)" if ref.get("simulated") else "; this seller's own wallet is not checked here"))
+            + (" (simulated rail: no money moved)" if ref.get("simulated") else "; your own wallet is not checked here"))
 
 
 def delivered_line(shipped: str, not_met: bool) -> str:
     states = ", and states the delivery not met" if not_met else ""
-    return f"delivered to the buyer: {shipped} (this seller's delivery record says so{states})"
+    return f"delivered to the buyer: {shipped} (your delivery record says so{states})"
 
 
 def dispute_line(deal_id: str) -> str:
-    return (f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the adjudicator asks for this "
-            "seller's books, which this seller answers in full")
+    return (f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the adjudicator asks for your "
+            "books, which your selling process answers in full")
 
 
 def digest_of(offer: dict) -> str:
@@ -534,7 +541,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
             p.note(RULING_ENTERED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
             entered[deal_id] = when
             done.append(deal_id)
-            say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in this party's records"
+            say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in your records"
                 + (f" (time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)})" if when else ""))
         elif not entered[deal_id] and deal_id not in stamped and pt.witnessed():
             mark = p.dir / "handled" / f"{deal_id}.ruling-seen"
@@ -552,7 +559,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 mark.touch()
                 os.utime(mark, (arrived, arrived))
         if deal_id not in sent:
-            what = "sending this party's book, with the ruling entered, to the adjudicator"
+            what = "sending your book, with the ruling entered, to the adjudicator"
             try:
                 copy = adj.send_book(home, p, deal_id, side, say)
                 p.note(BOOK_SENT, {"deal_id": deal_id, "copy": str(copy)}, subject_ref=deal_id)
@@ -562,7 +569,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 continue
             sent[deal_id] = str(copy)
         elif deal_id not in proved and pt.witnessed():
-            what = "sending the adjudicator this party's book's time-stamp"
+            what = "sending the adjudicator your book's time-stamp"
             # the copy sent; a note from before evidencebook-skills#328 names none: the copy the adjudicator holds
             copy = Path(sent[deal_id] or wire.path(home, adj.ADJUDICATOR, deal_id, f"book-{side}"))
             try:

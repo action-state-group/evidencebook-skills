@@ -311,14 +311,14 @@ def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_not
     Party.dir = tmp_path / "kestrel"  # no delivery record kept: the ruling line names no count
     s.party = Party([(flow.RULING_ENTERED, {"deal_id": "deal-1111111111111111", "stamped_at": ""}),
                      (flow.RULING_ENTERED, {"deal_id": "deal-fedcba9876543210", "stamped_at": ""})])
-    s.say("the adjudicator's ruling on deal fedcba98 entered in this party's records")
+    s.say("the adjudicator's ruling on deal fedcba98 entered in your records")
     monkeypatch.setattr(ds, "seller", lambda: s)
     monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 11, "did_not_hold": 1}}, None, None))
     out = ds.ard_seller_activity()
     assert "ruling on deal 11111111: its report is not ready yet; ask again in a minute." in out
     assert ("ruling on deal fedcba98: The adjudicator ruled against you: delivery not met. Action State's witness "
             "has not time-stamped it yet. No refund: this deal was agreed as not refundable.") in out
-    assert "now: 11 deals, 1 didn't go as agreed." in out
+    assert "your History card: 11 deals, 1 didn't go as agreed." in out
     assert logged and "not ready" in logged[0]
     # Codex's PR review: a stamp that comes back after the entry shows on the next ask
     s.party._notes.append((flow.RULING_STAMPED, {"deal_id": "deal-fedcba9876543210", "stamped_at": STAMPED}))

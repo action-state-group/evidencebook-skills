@@ -40,7 +40,7 @@ def test_a_failure_reads_as_one_plain_line_and_never_carries_raw_output():
                                  pt.Refused('maya: no checkpoint in 29 s (last: {"cadence_log": []})'))
     assert slow == ("entering the adjudicator's ruling: waiting for Action State's witness, which is slow or not answering; "
                     "trying again")
-    assert other == ("entering the adjudicator's ruling: not done yet (the reason is in this party's log, agent.log); "
+    assert other == ("entering the adjudicator's ruling: not done yet (the reason is in agent.log); "
                      "trying again")
     assert "{" not in slow + other and "consent" not in slow + other
 
@@ -310,7 +310,7 @@ def test_a_changed_book_goes_again_with_a_time_stamped_copy_and_the_search_ends(
     clock[0] += adj.PROOF_GIVE_UP_S + 1
     said = []
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) == adj.GAVE_UP
-    assert said == ["this party's book of deal 01234567: its time-stamp could not be sent to the adjudicator in 15 "
+    assert said == ["your book of deal 01234567: its time-stamp could not be sent to the adjudicator in 15 "
                     "minutes; the ruling is entered. Reopening this window tries again."]
     clock[0] += adj.PROOF_EVERY_S
     assert adj.send_proof_once_witnessed(tmp_path, P(), DEAL, old, "seller", said.append) is None  # not this process
@@ -381,8 +381,8 @@ def test_a_proof_step_that_fails_is_named_as_itself_not_as_entering_the_ruling(t
     p.note(flow.RULING_ENTERED, {"deal_id": DEAL, "stamped_at": "2026-11-25T22:25:00Z"})
     p.note(flow.BOOK_SENT, {"deal_id": DEAL, "copy": str(tmp_path / "c.json")})
     flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
-    assert said == ["sending the adjudicator this party's book's time-stamp: not done yet (the reason is in this "
-                    "party's log, agent.log); trying again"]
+    assert said == ["sending the adjudicator your book's time-stamp: not done yet (the reason is in "
+                    "agent.log); trying again"]
     assert "disk full" in p.logged[0]
 
 
@@ -468,7 +468,7 @@ def test_a_seller_loop_keeps_running_after_a_step_fails(tmp_path):
     agent._loop()
     assert len(rounds) == 3 and all("{" not in line for line in agent.log)
     assert any("taking the buyer's offer: not done yet" in line for line in agent.log)
-    assert any("publishing this seller's History card: not done yet" in line for line in agent.log)
+    assert any("publishing your History card: not done yet" in line for line in agent.log)
 
 
 @pytest.mark.parametrize("text,plain", [('no checkpoint (last: {"a": 1})', True), ("Maya disputed this delivery", False)])
@@ -600,7 +600,7 @@ def test_giving_up_is_not_noted_as_sent_and_a_note_failure_is_the_proof_steps_ow
     real = p.note
     p.note = lambda kind, st, **kw: (_ for _ in ()).throw(OSError("store busy")) if kind == flow.PROOF_SENT else real(kind, st)
     flow.enter_rulings(tmp_path, p, "buyer", "kestrel", said.append)
-    assert said[-1].startswith("sending the adjudicator this party's book's time-stamp: not done yet")
+    assert said[-1].startswith("sending the adjudicator your book's time-stamp: not done yet")
 
 
 def test_a_wrapped_refusal_with_raw_output_is_plain_too(tmp_path, monkeypatch):
@@ -608,7 +608,7 @@ def test_a_wrapped_refusal_with_raw_output_is_plain_too(tmp_path, monkeypatch):
     ds = pytest.importorskip("desktop_server")
     monkeypatch.setenv("ARD_HOME", str(tmp_path))
     out = ds._refusal(RuntimeError('capsulectl refused the ruling: {"error": "x"}'))
-    assert out == "this step was refused (the reason is in this party's log, agent.log)"
+    assert out == "this step was refused (the reason is in agent.log)"
 
 
 def test_a_new_copy_is_made_once_not_every_round(tmp_path, monkeypatch):

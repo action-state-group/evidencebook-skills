@@ -685,8 +685,25 @@ def test_a_sellers_card_says_its_first_deals_are_sample_history():
         for line in (screens.signed_line(label, seller), screens.signed_line(label, seller, True)):
             assert line.endswith(f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before "
                                  "this run.")
-        assert pages.labels(card(), witnessed=True, sample=seller)[-1] == screens.sample_note(seller)
+        # the seller's own card page is read by its owner (#456): "your" first deals, and the deals made in this run
+        own = pages.labels(card(of=SAMPLE_DEALS[seller] + 1), witnessed=True, sample=seller, made=1)[-1]
+        assert own == screens.own_sample_note(seller, 1, False)
     assert not any("sample history" in x for x in pages.labels(card(), witnessed=True))  # a buyer's card has none
+
+
+@pytest.mark.parametrize("made,real,tail", [
+    (0, False, "; no deal has been made in this run yet."),
+    (1, False, "; after them came the only deal made in this run (simulated payment, no money moved)."),
+    (2, False, "; after them came 2 deals made in this run (simulated payment, no money moved)."),
+    # Codex's PR review: a real rail is no proof the deal was paid, so the note names the rail only
+    (1, True, "; after them came the only deal made in this run (on the real Lightning rail)."),
+])
+def test_a_sellers_own_note_names_the_deals_made_in_this_run(made, real, tail):
+    # Sherlock2 on #456: "the only deal made in this run (simulated payment, no money moved)", never "real deal"
+    from cast import SAMPLE_DEALS
+    n = SAMPLE_DEALS["kestrel"]
+    assert screens.own_sample_note("kestrel", made, real) == (
+        f"Your first {n} deals are sample history the operator made before this run{tail}")
 
 
 def test_the_sellers_sample_histories_differ_and_neither_falls_below_the_packs_band_minimum():
@@ -770,6 +787,7 @@ def test_the_history_page_is_written(monkeypatch, tmp_path):
 
     class P:
         name = "alder"
+        dir = tmp_path / "alder"  # its folder: no deal made in this run (flow.deals_made)
 
         def stamp(self):
             pass
@@ -826,11 +844,13 @@ def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeyp
     monkeypatch.setattr(ds, "ROLE", role)
     monkeypatch.setattr(ds, "_own", lambda: (P(), "Kestrel Print" if role == "kestrel" else "Maya"))
     monkeypatch.setattr(ds.flow, "read_card", lambda b: (card(of=13), {"anchor_time": "2026-11-25T18:16:32Z"}, None))
+    monkeypatch.setattr(ds.flow, "deals_made", lambda p: 3)  # from the seller's own records, not the card (#456)
     # the buyer's card reads this run's deals (#352); no seeded home is assumed, as on CI (#353)
     monkeypatch.setattr(ds, "session", lambda: type("S", (), {"deals": []})())
     out = ds.ard_show_card()
     if noted:
-        assert screens.sample_note("kestrel") in out, out  # this seller's own count, not the other's
+        assert screens.own_sample_note("kestrel", 3, False) in out, out  # this seller's own count, not the other's
+        assert out.startswith("Kestrel Print: your own History card"), out
     else:
         assert "sample history" not in out, out
 
