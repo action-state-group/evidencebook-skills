@@ -133,20 +133,32 @@ def stop(name: str) -> str:
     return name if name.endswith(".") else name + "."
 
 
-def card_line(card: dict) -> str:
+def card_line(card: dict, own: bool = False) -> str:
     """A card's counts in words: deals counted, how many did not hold, any still open, and the disputes others raised
-    about the holder (decided against it, of those decided; open)."""
+    about the holder (decided against it, of those decided; open).
+
+    ``own`` is the holder reading its own card, in its own window or on its own card page: the counts are worded as its
+    side (Sherlock2's ruling on evidencebook-skills#455, its open count in Sherlock2's words on #462: "2 deals · you fell
+    short on none · 2 still open to dispute", the receipt's own words), since AAC SH §11.3 counts whether the holder
+    came through, and its "not final yet" never stands beside a final ruling the holder's window shows under the card.
+    The open count stays deal-level: §11.3 makes a deal undecided when any row is open, the other side's included. A
+    card read about another party keeps the third-party words."""
     o = card["outcomes"]
     r = card.get("disputes", {}).get("received", {})
     b = r.get("by_outcome", {})
     decided = sum(b.get(k, 0) for k in ("for", "against", "split", "no_finding"))
-    # Steven's words (#272 item 4): "didn't go as agreed", "every one went as agreed"; never "failed" or "did not hold"
-    still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
-    went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
-            else f"{o['did_not_hold']} didn't go as agreed{still}")
+    if own:
+        short = o["did_not_hold"] or "none"
+        went = f"you fell short on {short}" + (f" · {o['undecided']} still open to dispute" if o.get("undecided") else "")
+    else:
+        # Steven's words (#272 item 4): "didn't go as agreed", "every one went as agreed"; never "failed" or "did not hold"
+        still = f", {o['undecided']} not final yet" if o.get("undecided") else ""
+        went = ("every one went as agreed" if not o["did_not_hold"] and not o.get("undecided")
+                else f"{o['did_not_hold']} didn't go as agreed{still}")
     # A /3 card leaves out a deal no named witness has timed and tallies it in not_counted.no_witness_time (AAC SH
     # §11.6; the shared copy carries it too); Sherlock2's words (evidencebook#979). A /4 card has no such member.
     waiting = card.get("not_counted", {}).get("no_witness_time", 0)
+    who = "you" if own else "it"
     if not o["of"]:  # Sherlock2 on #362: never "0 deals, every one went as agreed", nor "no disputes" over one
         # Sherlock2 on #394: none counted but some waiting reads "No deals counted yet: N deal(s) waiting for a
         # time-stamp", ending like #362's sentence when there is no dispute
@@ -158,15 +170,20 @@ def card_line(card: dict) -> str:
             return f"{counted}, and no disputes."
         left = ""
     else:
-        counted = f"{plural(o['of'], 'deal')}, {went}"
+        counted = f"{plural(o['of'], 'deal')}{' · ' if own else ', '}{went}"
         left = f" {plural(waiting, 'more deal')} not counted yet: waiting for a time-stamp." if waiting else ""
-    return (f"{counted}.{left} Disputes others raised about it: "
-            f"{b.get('against', 0)} decided against it, of {decided} decided; {b.get('open', 0)} open.")
+    return (f"{counted}.{left} Disputes others raised about {who}: "
+            f"{b.get('against', 0)} decided against {who}, of {decided} decided; {b.get('open', 0)} open.")
 
 
 #: The remedy a ruling against the seller carries here: none, since every deal is agreed as not refundable (each side's
 #: own sealed intent says ``recourse.refundable: false``: the buyer's in ``buyer.py``, the seller's in ``flow.py``).
 NO_REFUND = "No refund: this deal was agreed as not refundable."
+
+
+#: The row statuses that leave a deal undecided (AAC SH §11.3: a row ``in_disagreement``, ``in_dispute``,
+#: ``no_statement``, ``not_reached``, ``not_due``, ``waiting`` or ``agreed_so_far``): a deal with one is still open.
+OPEN_ROWS = frozenset({"in_disagreement", "in_dispute", "no_statement", "not_reached", "not_due", "waiting", "agreed_so_far"})
 
 
 def ruled_for_buyer(report: dict, seller: str, record=None) -> list[str]:
@@ -175,15 +192,24 @@ def ruled_for_buyer(report: dict, seller: str, record=None) -> list[str]:
     not refundable (``recourse.refundable: false`` in her intent). Only a ruled row the adjudicator found not met against
     the seller. ``record`` is the seller's own signed delivery record as her files hold it (:func:`flow.delivery_record`),
     or None. Sherlock2 on #457 (buzz 7e446929, 79366361): the line says who ruled, on what, and how many were delivered,
-    and names what was signed, not our reading of it; her agent had said the seller "didn't deliver", then "because"."""
+    and names what was signed, not our reading of it; her agent had said the seller "didn't deliver", then "because".
+    While another row of the deal is still open (:data:`OPEN_ROWS`), the line says which, so her card's "still open to
+    dispute" count reads with the ruling (Sherlock2 on #462): "Your payment is still open to dispute, so this deal is
+    too." The buyer owes the payment row and the seller the delivery row (``party.Party.offer``)."""
+    rows = report.get("rows", [])
+    term = {pt.DELIVERED: "delivery", pt.PAID: "payment"}
+    still = [("your " if row.get("id") == pt.PAID else "the ") + term.get(row.get("id"), row.get("id"))
+             for row in rows if row.get("status") in OPEN_ROWS]
+    open_ = (f" {' and '.join(still).capitalize()} {'is' if len(still) == 1 else 'are'} still open to dispute, so this "
+             "deal is too.") if still else ""
     out = []
-    for row in report.get("rows", []):
+    for row in rows:
         r = row.get("ruling") or {}
         if row.get("status") == "ruled" and r.get("against") == "seller" and r.get("value") == "not_met":
-            what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
+            what = term.get(row.get("id"), row.get("id"))
             ground = _ground(row, record, f"{seller}'s")
-            out.append(f"The adjudicator ruled for you {ground}{NO_REFUND}" if ground
-                       else f"The adjudicator ruled for you: {what} not met, against {stop(seller)} {NO_REFUND}")
+            out.append((f"The adjudicator ruled for you {ground}{NO_REFUND}" if ground
+                        else f"The adjudicator ruled for you: {what} not met, against {stop(seller)} {NO_REFUND}") + open_)
     return out
 
 

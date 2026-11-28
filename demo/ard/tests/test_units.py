@@ -58,6 +58,39 @@ def test_the_card_line_says_the_tally_in_words():
     assert "did not hold" not in screens.card_line(card(of=13, dnh=1)) and "failed" not in screens.card_line(card(dnh=1))
 
 
+def test_a_partys_own_card_says_its_own_side():
+    # Sherlock2's ruling on #455: "2 deals · you fell short on none · 2 still open to dispute"; the counts stay
+    # AAC SH §11.3's, and an own card never says "not final yet"
+    open_ = screens.card_line(card(of=2, held=0, undecided=2), own=True)
+    assert open_ == ("2 deals · you fell short on none · 2 still open to dispute. Disputes others raised about "
+                     "you: 0 decided against you, of 0 decided; 0 open.")
+    # a ruled deal the holder owed: Kestrel's own card after the ruling
+    assert screens.card_line(card(of=11, held=10, dnh=1, against=1), own=True) == (
+        "11 deals · you fell short on 1. Disputes others raised about you: 1 decided against you, of 1 decided; 0 open.")
+    # both: one ruled against the holder and one still open
+    both = screens.card_line(card(of=3, held=1, dnh=1, undecided=1, against=1), own=True)
+    assert both.startswith("3 deals · you fell short on 1 · 1 still open to dispute. ")
+    # every deal held
+    assert screens.card_line(card(), own=True).startswith("12 deals · you fell short on none. Disputes others raised "
+                                                          "about you:")
+    for c in (card(of=2, held=0, undecided=2), card(of=3, held=1, dnh=1, undecided=1), card()):
+        mine = screens.card_line(c, own=True)
+        assert "not final yet" not in mine and "went as agreed" not in mine and "about it" not in mine, mine
+    # none counted, and deals waiting for a time-stamp: the same sentences, the tally about "you"
+    assert screens.card_line(card(of=0, held=0), own=True) == "No deals yet, and no disputes."
+    assert screens.card_line(card3(1, of=1, held=0, undecided=1), own=True) == (
+        "1 deal · you fell short on none · 1 still open to dispute. 1 more deal not counted yet: waiting for a "
+        "time-stamp. Disputes others raised about you: 0 decided against you, of 0 decided; 0 open.")
+    assert screens.card_line(card3(2, of=0, held=0, open_=1), own=True) == (
+        "No deals counted yet: 2 deals waiting for a time-stamp. Disputes others raised about you: 0 decided against "
+        "you, of 0 decided; 1 open.")
+    four = card(of=2, held=0, undecided=2)  # a /4 card, which has no not_counted member (SH §12)
+    four["derivation"] = "standard_history/4"
+    assert screens.card_line(four, own=True) == open_
+    # a card read about another party keeps the third-party words
+    assert screens.card_line(card(of=2, held=0, undecided=2)).startswith("2 deals, 0 didn't go as agreed, 2 not final yet.")
+
+
 def test_a_card_with_no_deals_has_its_own_sentence():
     # Steven's 2fa6abe run (#362): never "0 deals, every one went as agreed"
     line = screens.card_line(card(of=0, held=0))
@@ -128,7 +161,7 @@ def test_the_shared_copy_a_buyer_fetches_shows_the_deals_waiting(tmp_path):
         "extensions": {"x-standard-history/v0": {"policy": "p" * 64, "as_of": {"anchor": "a" * 64}}}}))
     got, _, _ = flow.read_card(bundle)
     assert "1 more deal not counted yet: waiting for a time-stamp." in screens.card_line(got)
-    assert pages.labels(got, witnessed=False) == [screens.card_line(got)]
+    assert pages.labels(got, witnessed=False) == [screens.card_line(got, own=True)]  # a card page is its holder's own
 
 
 def test_deal_2_reads_no_from_her_own_ruling_and_the_card_is_not_a_second_strike():
@@ -172,7 +205,8 @@ def test_a_history_row_says_capsulectls_statuses_and_derives_no_outcome():
     assert row["asked"] == "Sold" and row["money"] == "from 1 sat (its value band)"
     assert row["outcome"] == "this party's row: ruled, not met; the other party's row: met"
     assert "held" not in row["outcome"] and row["witness"] == {"state": "none"}
-    assert pages.labels(card(of=13, dnh=1, against=1), witnessed=False) == [screens.card_line(card(of=13, dnh=1, against=1))]
+    assert pages.labels(card(of=13, dnh=1, against=1), witnessed=False) == [
+        screens.card_line(card(of=13, dnh=1, against=1), own=True)]
 
 
 @pytest.mark.skipif(not os.environ.get("CAPSULE_ENGINE"), reason="CAPSULE_ENGINE names the evaluator")

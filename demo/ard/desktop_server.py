@@ -1192,7 +1192,7 @@ def ard_seller_activity() -> None:
     card, as_of, _ = flow.read_card(sel.party.card_bundle(shared=True))
     at = (as_of or {}).get("anchor_time")
     when = f", as of your checkpoint at {screens.local_time(at, date=True)}" if at else ""
-    print(f"your History card{when}: {screens.card_line(card)}")
+    print(f"your History card{when}: {screens.card_line(card, own=True)}")
     print("  " + screens.own_sample_note(sel.name, flow.deals_made(sel.party), _real()))
 
 
@@ -1334,14 +1334,14 @@ def ard_show_card() -> None:
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
     its = "your" if ROLE in SELLERS else "its"  # a seller's owner types in its window (Sherlock2 on #456)
     print(f"{name}: {its} own History card, as of {its} checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
-    print("  " + screens.card_line(card))
+    print("  " + screens.card_line(card, own=True))
     if ROLE in SELLERS:
         print("  " + screens.own_sample_note(ROLE, flow.deals_made(p), _real()))
         return
     s = session()
     s.pack = s.pack or packs.starting()
     print("  " + screens.limit_line(limit, _ceilings(s.pack)))
-    for d in s.deals:  # a deal ruled for her says what that means, beside the card's "not final yet" count
+    for d in s.deals:  # a deal ruled for her says what that means, under her own card's counts (#455)
         try:
             rep = p.report(d.deal_id)
         except pt.Refused as exc:
