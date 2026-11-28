@@ -180,14 +180,15 @@ done
         real = self.dir / "seeded-home"
         real.mkdir()
         (real / "pages").mkdir()
-        env = {**self.env, "ARD_HOME": str(real), "ARD_RAIL": "lightning", "ARD_WITNESS": "public"}
+        # ARD_OPEN_PAGES=1 in the caller's shell never reaches a job, so no job opens a page in the browser (#465)
+        env = {**self.env, "ARD_HOME": str(real), "ARD_RAIL": "lightning", "ARD_WITNESS": "public", "ARD_OPEN_PAGES": "1"}
         run = subprocess.run([str(self.repo / "scripts" / "check.sh"), "--full"], cwd=self.repo, env=env,
                              capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         seen = {}
         for job in FAST + E2E:
             got = dict(line.split("=", 1) for line in (self.dir / f"{job}.env").read_text().splitlines())
-            self.assertEqual(sorted(got), sorted(self.VARS), job)  # ARD_RAIL and ARD_WITNESS were dropped
+            self.assertEqual(sorted(got), sorted(self.VARS), job)  # ARD_RAIL, ARD_WITNESS and ARD_OPEN_PAGES were dropped
             for var, value in got.items():
                 self.assertNotEqual(value, str(real))
                 self.assertNotIn(value, seen, f"{job} shares {var} with {seen.get(value)}")

@@ -49,6 +49,8 @@ VARS = (
         "witness ARD_WITNESS_URL and ARD_WITNESS_KEY name (testbed.py starts one on this Mac and sets all three); by "
         "default each checkpoint goes to Action State's hosted witness, witness.agentactioncapsule.org, which receives "
         "hashes only", "off", ()),
+    Var("ARD_OPEN_PAGES", "1 opens the card and receipt pages in the browser when an agent asks for them; open-windows.py "
+        "sets it in the Goose Desktop windows it opens unless this is 0, and nothing else opens a page (#465)", "0", ()),
 )
 
 
