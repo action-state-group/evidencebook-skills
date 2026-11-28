@@ -292,9 +292,9 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     # a reopened Kestrel window lists this deal's events from its own records (#457, re-entry)
     earlier = "\n".join(w["agents"]["kestrel"].earlier())
     for line in ("deal agreed: ", "paid: the buyer says it paid 1,000 msat",
-                 "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so, and states the "
+                 "delivered to the buyer: 150 of 200 badges (your delivery record says so, and states the "
                  "delivery not met)", f"dispute received: the buyer disputed the delivery of deal {deal.deal_id[5:13]}",
-                 f"the adjudicator asked for this party's books of deal {deal.deal_id[5:13]}: sent in full"):
+                 f"the adjudicator asked for your books of deal {deal.deal_id[5:13]}: sent in full"):
         assert line in earlier, earlier
     assert seller_line[0].endswith(screens.NO_REFUND)
 
