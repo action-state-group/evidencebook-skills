@@ -25,13 +25,16 @@ var HistoryView = (() => {
     HISTORY_VIEW: () => HISTORY_VIEW,
     HISTORY_VIEW_WORDING: () => HISTORY_VIEW_WORDING,
     HistoryViewRefused: () => HistoryViewRefused,
+    SEAL_SHAPES: () => SEAL_SHAPES,
+    amountText: () => amountText,
     buildHistoryView: () => buildHistoryView,
     historyElementToDom: () => historyElementToDom,
     historyViewDocument: () => historyViewDocument,
     historyViewHtml: () => historyViewHtml,
     historyViewStyles: () => historyViewStyles,
     renderHistoryView: () => renderHistoryView,
-    serializeHistoryElement: () => serializeHistoryElement
+    serializeHistoryElement: () => serializeHistoryElement,
+    sha256Hex: () => sha256Hex
   });
 
   // src/wording/history-view.en.json
@@ -193,7 +196,135 @@ var HistoryView = (() => {
       "check.line.unregistered": "{status}: {name}. Checkpoint {n} (cut {at}) is not registered with the witness yet.",
       "check.second_signature": "A second party signed this record",
       "check.deal_report": "Each deal was read with its own report, which writes nothing",
-      refused: "This page can't show this history: {reasons}"
+      refused: "This page can't show this history: {reasons}",
+      "card.title.owner": "Your History",
+      "card.title.recipient": "{name}'s History",
+      "card.tag.private": "Private: your copy",
+      "card.tag.shared": "Shared copy",
+      "card.download": "Download card",
+      "card.counts.none": "No deals yet.",
+      "card.counts.one": "1 deal",
+      "card.counts.other": "{n} deals",
+      "card.counts.all.one": ", and it went as agreed.",
+      "card.counts.all": ", every one went as agreed.",
+      "card.counts.didnt": ", {k} didn't go as agreed",
+      "card.counts.open": ", {u} not final yet",
+      "card.failed": `This card didn't verify, so its counts are not shown. See "Is this record intact?".`,
+      "card.reported.owner": "As your own records show.",
+      "card.reported": "As {name} reported.",
+      "card.waiting.one": "1 more deal not counted yet: waiting for a time-stamp.",
+      "card.waiting.other": "{n} more deals not counted yet: waiting for a time-stamp.",
+      "card.sample.one": "1 of these deals is sample history.",
+      "card.sample.other": "{n} of these deals are sample history.",
+      "card.as_of.before": "Counted as of ",
+      "card.as_of.after": ".",
+      "card.rows.heading": "Your deals, newest first",
+      "card.row.bought": "Bought",
+      "card.row.sold": "Sold",
+      "card.term.yours": "your side's term",
+      "card.term.theirs": "their side's term",
+      "card.term.yours.label": "Your side",
+      "card.term.theirs.label": "Their side",
+      "card.row.ruled": "Ruled: {term} not met",
+      "card.row.remedy.made": ", remedy made",
+      "card.row.remedy.due": ", remedy due",
+      "card.row.remedy.not_honoured": ", remedy not made in time",
+      "card.row.in_dispute": "In dispute before the adjudicator",
+      "card.row.in_disagreement": "The two sides' statements differ",
+      "card.row.went": "Went as agreed: both sides say every term was met",
+      "card.row.not_due": "Nothing is due yet",
+      "card.row.not_reached": "No term has come due",
+      "card.row.open": "Not final yet",
+      "card.row.outcome.held": "Went as agreed",
+      "card.row.outcome.did_not_hold": "Didn't go as agreed",
+      "card.row.outcome.undecided": "Not final yet",
+      "card.row.amount.band": "{amount} or more (value band)",
+      "card.row.agreed": "Agreed",
+      "card.row.both_halves": "Their signed agreement is in your records.",
+      "card.row.receipt": "Open this deal's receipt",
+      "card.status.not_reached": "never came due",
+      "card.status.not_due": "not due yet",
+      "card.status.no_statement": "no statement",
+      "card.status.waiting": "waiting for the other side",
+      "card.status.uncontested": "met, not contested",
+      "card.status.agreed_so_far": "both say the same so far",
+      "card.status.agreed": "both say the same",
+      "card.status.in_disagreement": "statements differ",
+      "card.status.in_dispute": "in dispute",
+      "card.status.ruled": "ruled",
+      "card.status.ruled.met": ", met",
+      "card.status.ruled.not_met": ", not met",
+      "card.seal.not_as_agreed": "Didn't go as agreed",
+      "card.stamp.recorded": "RECORDED",
+      "card.stamp.recorded.filled": "Checkpointed",
+      "card.stamp.recorded.partial": "Checkpointed through step {k} of {n}",
+      "card.stamp.recorded.open": "Not checkpointed yet",
+      "card.stamp.recorded.not_checked": "Not checked here",
+      "card.stamp.recorded.failed": "Didn't verify",
+      "card.stamp.time_stamped": "TIME-STAMPED",
+      "card.stamp.time_stamped.open": "Not time-stamped yet",
+      "card.stamp.time_stamped.not_checked": "Not checked here",
+      "card.stamp.time_stamped.failed": "Didn't verify",
+      "card.stamp.countersigned": "COUNTERSIGNED",
+      "card.stamp.countersigned.by": "{signer} signed this record too",
+      "card.stamp.countersigned.clock": ", by their clock",
+      "card.stamp.countersigned.open": "Not countersigned",
+      "card.stamp.countersigned.not_checked": "Not checked here",
+      "card.stamp.countersigned.failed": "Didn't verify",
+      "card.signed.heading": "Who signed this card",
+      "card.signed.by": "Signed by key {key}, the key you know as {name}",
+      "card.signed.note": "The signature shows who wrote this card and that it is unchanged since. It does not show that the deals happened.",
+      "card.proof.heading": "Is this record intact?",
+      "card.proof.lede.passed": "Yes. capsulectl verify passed every test when this page was made. The page shows its answer; it did not re-check by itself.",
+      "card.proof.lede.partial": "capsulectl verify passed every test it ran when this page was made; a test marked \u2013 was not run on this copy. The page shows its answer; it did not re-check by itself.",
+      "card.proof.lede.failed": "No. capsulectl verify reported a test that failed.",
+      "card.proof.status.pass": "passed",
+      "card.proof.status.fail": "failed",
+      "card.proof.status.withheld": "not run on this copy",
+      "card.proof.status.absent": "not in this copy",
+      "card.proof.producer_signatures": "Signed by the agent's device",
+      "card.proof.interval_coverage": "No step missing from first to last",
+      "card.proof.graph_closure": "Each step links to the one before",
+      "card.proof.per_record_membership": "Every step is in this card's log",
+      "card.proof.checkpoint": "The log's summary adds up",
+      "card.proof.witness.filled": "Witness time stamp: {witness} at",
+      "card.proof.witness.open": "Witness time stamp: not in this copy",
+      "card.proof.witness.failed": "Witness time stamp: didn't verify",
+      "card.check.title": "Check it yourself",
+      "card.check.download": "On the downloaded card:",
+      "card.check.expect": "Expect: {verdict}, fingerprint {fingerprint}.",
+      "card.not_proven.heading": "What this does not prove",
+      "card.not_proven.true.owner": "That what the agents said was true. Only that your records weren't changed after sealing.",
+      "card.not_proven.true": "That the deals went as {name} counted them. Only that {name} signed these counts and they weren't changed since.",
+      "card.not_proven.who.owner": "Who made the records. The signing key is on your agent's machine.",
+      "card.not_proven.who": "Who made the records. The signing key is on the machine of whoever holds that key.",
+      "card.not_proven.outside": "Anything outside these deals.",
+      "card.technical": "Technical details",
+      "card.technical.card": "Card",
+      "card.technical.key": "Signing key",
+      "card.technical.digest": "Proof fingerprint",
+      "card.technical.deals": "Deal ids",
+      "card.footer.utc": "Times are in UTC.",
+      "card.footer.local": "Times are in your time zone.",
+      "card.footer.private": "This page is your private copy, and so is the card it downloads: never send either. To show your History to someone, send them your counts-only card, made with capsulectl deal standard-history card --shared.",
+      "card.footer.shared": "This page shows the card {name} sent. Only its counts are here; {name} keeps its deals.",
+      "card.footer.built.before": "Page made ",
+      "card.footer.built.after": ".",
+      "card.row.not_met": "Not met: {term}",
+      "card.row.went.final": "Went as agreed: every term ended as met",
+      "card.status.uncontested.not_met": "not met, not contested",
+      "card.status.agreed.not_met": "both say it was not met",
+      "card.status.agreed_so_far.not_met": "both say it was not met, so far",
+      "card.stamp.time_stamped.partial": "Time-stamped through step {k} of {n}",
+      "card.stamp.countersigned.partial": "Countersigned through step {k} of {n}",
+      "card.signed.failed": "capsulectl verify reported that this card's signature didn't verify.",
+      "card.signed.unchecked": "capsulectl verify reported no signature check for this card.",
+      "card.signed.claimed": "This card names its signer as key {key}, the key you know as {name}",
+      "card.download.private": "Download your private card",
+      "card.signed.by.owner": "Signed by your key {key}",
+      "card.signed.claimed.owner": "This card names its signer as your key {key}",
+      "card.term.yours.label.n": "Your side, term {n}",
+      "card.term.theirs.label.n": "Their side, term {n}"
     }
   };
 
@@ -230,11 +361,12 @@ var HistoryView = (() => {
       this.reasons = reasons;
     }
   };
-  var TOKEN = /^[a-z0-9 _.-]*$/u;
+  var ATTR_NAME = /^[a-zA-Z][a-zA-Z0-9-]*$/u;
+  var ATTR_VALUE = /^[^<>"\u00a0]*$/u;
   function el(tag, attrs, ...children) {
     const pairs = Object.entries(attrs ?? {});
     for (const [name, value] of pairs)
-      if (!TOKEN.test(name) || !TOKEN.test(value))
+      if (!ATTR_NAME.test(name) || !ATTR_VALUE.test(value))
         throw new Error(
           `history-view: attribute ${name}=${value} is not a view token`
         );
@@ -254,12 +386,18 @@ var HistoryView = (() => {
   }
   function serializeHistoryElement(node) {
     if (typeof node === "string") return escapeText(node);
-    const attrs = node.attrs.map(([n, v]) => ` ${n}="${v}"`).join("");
+    const attrs = node.attrs.map(([n, v]) => ` ${n}="${v.replace(/&/gu, "&amp;")}"`).join("");
     return `<${node.tag}${attrs}>${node.children.map(serializeHistoryElement).join("")}</${node.tag}>`;
   }
+  var SVG_TAGS = /* @__PURE__ */ new Set([
+    "svg",
+    "path",
+    "circle",
+    "ellipse"
+  ]);
   function historyElementToDom(node, doc) {
     if (typeof node === "string") return doc.createTextNode(node);
-    const out = doc.createElement(node.tag);
+    const out = SVG_TAGS.has(node.tag) ? doc.createElementNS("http://www.w3.org/2000/svg", node.tag) : doc.createElement(node.tag);
     for (const [n, v] of node.attrs) out.setAttribute(n, v);
     for (const child of node.children)
       out.appendChild(historyElementToDom(child, doc));
@@ -553,6 +691,987 @@ var HistoryView = (() => {
       )
     };
   }
+  function sha256Hex(text) {
+    const K = [
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ];
+    const bytes = new TextEncoder().encode(text);
+    const len = bytes.length;
+    const padded = new Uint8Array(len + 9 + 63 >> 6 << 6);
+    padded.set(bytes);
+    padded[len] = 128;
+    const view = new DataView(padded.buffer);
+    view.setUint32(padded.length - 8, Math.floor(len / 536870912));
+    view.setUint32(padded.length - 4, len << 3 >>> 0);
+    const h = [
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ];
+    const w = new Array(64);
+    const rot = (x, n) => x >>> n | x << 32 - n;
+    for (let off = 0; off < padded.length; off += 64) {
+      for (let i = 0; i < 16; i++) w[i] = view.getUint32(off + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const a2 = w[i - 15] ?? 0;
+        const b2 = w[i - 2] ?? 0;
+        const s0 = rot(a2, 7) ^ rot(a2, 18) ^ a2 >>> 3;
+        const s1 = rot(b2, 17) ^ rot(b2, 19) ^ b2 >>> 10;
+        w[i] = (w[i - 16] ?? 0) + s0 + (w[i - 7] ?? 0) + s1 | 0;
+      }
+      let [a, b, c, d, e, f, g, k] = h;
+      for (let i = 0; i < 64; i++) {
+        const t1 = k + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + (e & f ^ ~e & g) + (K[i] ?? 0) + (w[i] ?? 0) | 0;
+        const t2 = (rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + (a & b ^ a & c ^ b & c) | 0;
+        k = g;
+        g = f;
+        f = e;
+        e = d + t1 | 0;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2 | 0;
+      }
+      const add = [a, b, c, d, e, f, g, k];
+      for (let i = 0; i < 8; i++) h[i] = (h[i] ?? 0) + (add[i] ?? 0) | 0;
+    }
+    return h.map((x) => (x >>> 0).toString(16).padStart(8, "0")).join("");
+  }
+  var ROW_STATUSES = [
+    "not_reached",
+    "not_due",
+    "no_statement",
+    "waiting",
+    "uncontested",
+    "agreed_so_far",
+    "agreed",
+    "in_disagreement",
+    "in_dispute",
+    "ruled"
+  ];
+  var PROOF_CHECKS = [
+    "producer_signatures",
+    "interval_coverage",
+    "graph_closure",
+    "per_record_membership",
+    "checkpoint"
+  ];
+  var FILE_JSON = /^[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.json$/u;
+  var FILE_HTML = /^[A-Za-z0-9][A-Za-z0-9._-]{0,150}\.html$/u;
+  var HEX64 = /^[0-9a-f]{64}$/u;
+  var DIGITS = /^(0|[1-9][0-9]{0,299})$/u;
+  var CURRENCY = /^(?:[A-Z]{3}|[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}\/[-a-z0-9]{3,8}:[-.%a-zA-Z0-9]{1,128})$/u;
+  function isObj(v) {
+    return typeof v === "object" && v !== null && !Array.isArray(v);
+  }
+  function count(v) {
+    return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : void 0;
+  }
+  function readAmount(r, v, path) {
+    const o = r.object(
+      v,
+      path,
+      ["value", "assetCode", "assetScale"],
+      ["value", "assetCode", "assetScale"]
+    );
+    if (!o) return void 0;
+    const value = typeof o["value"] === "string" ? o["value"] : "";
+    const code = typeof o["assetCode"] === "string" ? o["assetCode"] : "";
+    const scale = o["assetScale"];
+    if (!DIGITS.test(value) || !CURRENCY.test(code) || typeof scale !== "number" || !Number.isSafeInteger(scale) || scale < 0 || scale > 255) {
+      r.refuse(
+        path,
+        "is not an amount (an integer value, an ISO 4217 or CAIP-19 assetCode, assetScale 0 to 255)"
+      );
+      return void 0;
+    }
+    return { value, code, scale };
+  }
+  function grouped(digits) {
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+  }
+  function amountText(a) {
+    if (a.code === "BTC" && a.scale <= 11) {
+      const msat = a.value === "0" ? "0" : a.value + "0".repeat(11 - a.scale);
+      if (msat === "0") return "0 sat";
+      if (msat.length > 3 && msat.endsWith("000"))
+        return `${grouped(msat.slice(0, -3))} sat`;
+      return `${grouped(msat)} msat`;
+    }
+    if (a.scale === 0) return `${grouped(a.value)} ${a.code}`;
+    const padded = a.value.padStart(a.scale + 1, "0");
+    const whole = padded.slice(0, padded.length - a.scale);
+    return `${grouped(whole)}.${padded.slice(padded.length - a.scale)} ${a.code}`;
+  }
+  function readCardObject(r, text) {
+    let doc;
+    try {
+      doc = JSON.parse(text);
+    } catch {
+      r.refuse("input.machine.text", "is not JSON");
+      return void 0;
+    }
+    const bad = (why) => {
+      r.refuse("input.machine.text", why);
+      return void 0;
+    };
+    if (!isObj(doc)) return bad("is not a bundle");
+    const records = doc["records"];
+    const root = Array.isArray(records) ? records[0] : void 0;
+    if (!isObj(root)) return bad("has no root record");
+    const cid = root["capsule_id"];
+    const disclosures = doc["disclosures"];
+    const disclosed = typeof cid === "string" && isObj(disclosures) ? disclosures[cid] : void 0;
+    const card = isObj(disclosed) ? disclosed["agent_input"] : void 0;
+    if (!isObj(card)) return bad("discloses no card on its root record");
+    const derivation = card["derivation"];
+    if (typeof derivation !== "string" || !/^standard_history\/[1-4]$/u.test(derivation))
+      return bad("its card is not a standard_history card");
+    const oc = card["outcomes"];
+    if (isObj(oc) && Object.keys(oc).some(
+      (k) => !["of", "held", "did_not_hold", "undecided"].includes(k)
+    ))
+      return bad("its card's outcomes carry a member SH \xA74 does not have");
+    const of = isObj(oc) ? count(oc["of"]) : void 0;
+    const held = isObj(oc) ? count(oc["held"]) : void 0;
+    const didNotHold = isObj(oc) ? count(oc["did_not_hold"]) : void 0;
+    const undecided = isObj(oc) ? count(oc["undecided"]) : void 0;
+    if (of === void 0 || held === void 0 || didNotHold === void 0 || undecided === void 0 || held + didNotHold + undecided !== of)
+      return bad("its card's outcomes are not a tally");
+    const nc = card["not_counted"];
+    const waiting = isObj(nc) ? count(nc["no_witness_time"]) ?? 0 : 0;
+    const keyId = typeof root["key_id"] === "string" ? root["key_id"] : "";
+    const signedAt = typeof root["timestamp"] === "string" ? parseInstant(root["timestamp"]) : void 0;
+    const ext = isObj(doc["extensions"]) ? doc["extensions"]["x-standard-history/v0"] : void 0;
+    const asOf = isObj(ext) && isObj(ext["as_of"]) && typeof ext["as_of"]["anchor_time"] === "string" ? parseInstant(ext["as_of"]["anchor_time"]) : void 0;
+    let deals;
+    if (isObj(ext) && "deals" in ext) {
+      deals = [];
+      const list = ext["deals"];
+      if (!Array.isArray(list)) return bad("its deals are not a list");
+      for (const [i, d] of list.entries()) {
+        const path = `input.machine.text deals[${i}]`;
+        if (!isObj(d)) {
+          r.refuse(path, "is not a deal entry");
+          continue;
+        }
+        const id = typeof d["deal"] === "string" ? d["deal"] : "";
+        const agreed = typeof d["agreed_at"] === "string" ? parseInstant(d["agreed_at"]) : void 0;
+        const role = d["role"];
+        if (id === "" || id.length > 200 || agreed === void 0 || role !== "provided" && role !== "bought") {
+          r.refuse(path, "has no deal id, agreed time or role");
+          continue;
+        }
+        const amount = "amount" in d ? readAmount(r, d["amount"], `${path}.amount`) : void 0;
+        const outcome = d["outcome"];
+        let terms;
+        if (Array.isArray(d["rows"])) {
+          terms = [];
+          for (const row of d["rows"]) {
+            const status = isObj(row) ? row["status"] : void 0;
+            const value = isObj(row) ? row["value"] : void 0;
+            const remedy = isObj(row) ? row["remedy"] : void 0;
+            if (!isObj(row) || row["owed_by"] !== "holder" && row["owed_by"] !== "counterparty" || typeof status !== "string" || !ROW_STATUSES.includes(status) || value !== void 0 && value !== "met" && value !== "not_met" || remedy !== void 0 && typeof remedy !== "string") {
+              r.refuse(path, "has a row that is not an SH \xA711.2 row result");
+              continue;
+            }
+            terms.push({
+              holder: row["owed_by"] === "holder",
+              status,
+              value,
+              remedy
+            });
+          }
+        }
+        deals.push({
+          id,
+          agreed,
+          role,
+          amount,
+          outcome: outcome === "held" || outcome === "did_not_hold" || outcome === "undecided" ? outcome : void 0,
+          terms,
+          bothHalves: d["happened"] === "stamped_by_both"
+        });
+      }
+    }
+    return {
+      derivation,
+      keyId,
+      signedAt,
+      outcomes: { of, held, didNotHold, undecided },
+      waiting,
+      asOf,
+      deals
+    };
+  }
+  var CARD_TOP = [
+    "view",
+    "kind",
+    "surface",
+    "reader",
+    "holder",
+    "audience",
+    "built_at",
+    "checked",
+    "rows",
+    "checks",
+    "machine",
+    "deals",
+    "sample"
+  ];
+  function buildCardPage(r, o, overlay) {
+    for (const k of Object.keys(o))
+      if (!CARD_TOP.includes(k))
+        r.refuse(`input.${k}`, "is not a member of a card page");
+    if (o["kind"] !== "deal")
+      r.refuse("input.kind", "a card page is a deal page");
+    const surface = r.oneOf(o["surface"], "input.surface", ["neutral", "product"]) ?? "neutral";
+    const reader = r.oneOf(o["reader"], "input.reader", ["owner", "recipient"]) ?? "recipient";
+    let words = {};
+    if (overlay !== void 0) {
+      if (surface !== "product")
+        r.refuse("overlay", "a neutral page takes no overlay");
+      else words = readOverlay(r, overlay);
+    }
+    const ho = r.object(o["holder"], "input.holder", ["name"], ["name"]);
+    const name = ho ? r.string(ho["name"], "input.holder.name", 200) : void 0;
+    const au = r.object(o["audience"], "input.audience", ["kind"], ["kind"]);
+    const audience = au ? r.oneOf(au["kind"], "input.audience.kind", ["private", "shared"]) : void 0;
+    if (reader === "owner" && audience !== void 0 && audience !== "private")
+      r.refuse("input.audience.kind", "the holder's own page is private");
+    if (reader === "recipient" && audience !== void 0 && audience !== "shared")
+      r.refuse("input.audience.kind", "a card someone was sent is shared");
+    const built = r.time(o["built_at"], "input.built_at") ?? EPOCH;
+    const ck = r.object(
+      o["checked"],
+      "input.checked",
+      ["where", "by"],
+      ["where", "by"]
+    );
+    if (ck) {
+      r.oneOf(ck["where"], "input.checked.where", ["builder"]);
+      r.string(ck["by"], "input.checked.by", 200);
+    }
+    if (!Array.isArray(o["rows"]) || o["rows"].length > 0)
+      r.refuse(
+        "input.rows",
+        "must be empty: a card page reads its rows from its object"
+      );
+    if (!Array.isArray(o["checks"]) || o["checks"].length > 0)
+      r.refuse(
+        "input.checks",
+        "must be empty: a card page shows capsulectl verify's checks"
+      );
+    const sample = "sample" in o ? r.count(o["sample"], "input.sample") : void 0;
+    const mo = r.object(
+      o["machine"],
+      "input.machine",
+      ["file", "text", "verify"],
+      ["file", "text", "verify"]
+    );
+    const file = mo ? r.string(mo["file"], "input.machine.file", 160) : void 0;
+    if (file !== void 0 && !FILE_JSON.test(file))
+      r.refuse("input.machine.file", "is not a plain .json file name");
+    const text = mo ? r.string(mo["text"], "input.machine.text", 16e6) : void 0;
+    const vo = mo ? r.object(
+      mo["verify"],
+      "input.machine.verify",
+      ["verdict", "bundle_digest", "checks", "witness"],
+      ["verdict", "bundle_digest", "checks"]
+    ) : null;
+    const verdict = vo ? r.oneOf(vo["verdict"], "input.machine.verify.verdict", [
+      "VALID",
+      "INVALID"
+    ]) : void 0;
+    const digest = vo ? r.string(vo["bundle_digest"], "input.machine.verify.bundle_digest", 64) : void 0;
+    if (digest !== void 0 && !HEX64.test(digest))
+      r.refuse("input.machine.verify.bundle_digest", "is not 64 lowercase hex");
+    if (text !== void 0 && digest !== void 0 && sha256Hex(text) !== digest)
+      r.refuse(
+        "input.machine.text",
+        "is not the bundle capsulectl verify answered for (its SHA-256 is not the bundle_digest)"
+      );
+    const proof = {};
+    const cko = vo ? r.object(
+      vo["checks"],
+      "input.machine.verify.checks",
+      [...PROOF_CHECKS, "witnesses"],
+      []
+    ) : null;
+    if (cko)
+      for (const [k, v] of Object.entries(cko)) {
+        const s = r.oneOf(v, `input.machine.verify.checks.${k}`, [
+          "pass",
+          "fail",
+          "withheld"
+        ]);
+        if (s) proof[k] = s;
+      }
+    let witnessBy;
+    let witnessAt;
+    if (vo && "witness" in vo) {
+      const wo = r.object(
+        vo["witness"],
+        "input.machine.verify.witness",
+        ["by", "at"],
+        ["by", "at"]
+      );
+      witnessBy = wo ? r.string(wo["by"], "input.machine.verify.witness.by", 200) : void 0;
+      witnessAt = wo ? r.time(wo["at"], "input.machine.verify.witness.at") : void 0;
+    }
+    if (proof["witnesses"] === "pass" && witnessAt === void 0)
+      r.refuse(
+        "input.machine.verify.witness",
+        "is missing (a passed witness check names its witness and time)"
+      );
+    if (proof["witnesses"] !== "pass" && vo && "witness" in vo)
+      r.refuse(
+        "input.machine.verify.witness",
+        "is only for a passed witness check"
+      );
+    const obj = text !== void 0 ? readCardObject(r, text) : void 0;
+    if (obj && reader === "recipient" && obj.deals !== void 0)
+      r.refuse(
+        "input.machine.text",
+        "carries the holder's deal entries; a card someone was sent never does"
+      );
+    if (obj && reader === "owner" && obj.deals === void 0)
+      r.refuse(
+        "input.machine.text",
+        "carries no deal entries; the holder's own page is drawn from its own copy"
+      );
+    const extras = /* @__PURE__ */ new Map();
+    if ("deals" in o) {
+      if (reader !== "owner")
+        r.refuse("input.deals", "is only for the holder's own page");
+      const dm = r.object(
+        o["deals"],
+        "input.deals",
+        obj?.deals?.map((d) => d.id) ?? [],
+        []
+      );
+      if (dm)
+        for (const [id, v] of Object.entries(dm)) {
+          const path = `input.deals.${id}`;
+          const e = r.object(
+            v,
+            path,
+            [
+              "item",
+              "amount",
+              "recorded",
+              "time_stamped",
+              "countersigned",
+              "receipt"
+            ],
+            []
+          );
+          if (!e) continue;
+          const receipt = "receipt" in e ? r.string(e["receipt"], `${path}.receipt`, 160) : void 0;
+          if (receipt !== void 0 && !FILE_HTML.test(receipt))
+            r.refuse(`${path}.receipt`, "is not a plain .html file name");
+          extras.set(id, {
+            item: "item" in e ? r.string(e["item"], `${path}.item`, 300) : void 0,
+            amount: "amount" in e ? readAmount(r, e["amount"], `${path}.amount`) : void 0,
+            recorded: "recorded" in e ? readSlot(r, e["recorded"], `${path}.recorded`, false) : void 0,
+            witness: "time_stamped" in e ? readSlot(r, e["time_stamped"], `${path}.time_stamped`, true) : void 0,
+            countersigned: "countersigned" in e ? readSlot(r, e["countersigned"], `${path}.countersigned`, true) : void 0,
+            receipt
+          });
+        }
+    }
+    if (r.reasons.length > 0 || !obj || name === void 0)
+      return {
+        ok: false,
+        reasons: r.reasons.length > 0 ? r.reasons : ["input: no card"]
+      };
+    const say = (key, values = {}) => {
+      const t = words[key] ?? BASE[key];
+      if (t === void 0) throw new Error(`history-view: no words for ${key}`);
+      return t.replace(PLACEHOLDER, (_, p) => {
+        const v = values[p];
+        if (v === void 0) throw new Error(`history-view: ${key} needs {${p}}`);
+        return v;
+      });
+    };
+    const plural = (key, n, values = {}) => say(`${key}.${n === 1 ? "one" : "other"}`, {
+      n: grouped(String(n)),
+      ...values
+    });
+    const short = (id) => id.length > 16 ? `${id.slice(0, 8)}\u2026${id.slice(-4)}` : id;
+    const time = (t) => el(
+      "time",
+      { datetime: new Date(t.ms).toISOString(), "data-time": "minute" },
+      minuteOf(t)
+    );
+    const owner = reader === "owner";
+    const failed = verdict !== "VALID";
+    const download = el(
+      "a",
+      {
+        class: "cvh-button",
+        href: `data:application/json;charset=utf-8,${encodeURIComponent(text ?? "")}`,
+        download: file ?? "",
+        "data-history": "download"
+      },
+      say(owner ? "card.download.private" : "card.download")
+    );
+    const header = el(
+      "header",
+      { class: "cvh-header", "data-history": "header" },
+      el(
+        "h1",
+        { class: "cvh-title" },
+        owner ? say("card.title.owner") : say("card.title.recipient", { name })
+      ),
+      el(
+        "p",
+        { class: "cvh-tags" },
+        el(
+          "span",
+          { class: "cvh-tag", "data-audience": owner ? "private" : "shared" },
+          say(owner ? "card.tag.private" : "card.tag.shared")
+        ),
+        download
+      )
+    );
+    const oc = obj.outcomes;
+    const counts = oc.of === 0 ? say("card.counts.none") : plural("card.counts", oc.of) + (oc.didNotHold === 0 && oc.undecided === 0 ? say(oc.of === 1 ? "card.counts.all.one" : "card.counts.all") : say("card.counts.didnt", { k: grouped(String(oc.didNotHold)) }) + (oc.undecided > 0 ? say("card.counts.open", { u: grouped(String(oc.undecided)) }) : ""));
+    const heroLines = failed ? [
+      el(
+        "p",
+        { class: "cvh-hero-line", "data-history": "top-line" },
+        say("card.failed")
+      )
+    ] : [
+      el("p", { class: "cvh-hero-line", "data-history": "top-line" }, counts),
+      el(
+        "p",
+        { class: "cvh-hero-note" },
+        owner ? say("card.reported.owner") : say("card.reported", { name })
+      ),
+      obj.waiting > 0 ? el(
+        "p",
+        { class: "cvh-hero-note" },
+        plural("card.waiting", obj.waiting)
+      ) : null,
+      sample !== void 0 && sample > 0 ? el(
+        "p",
+        { class: "cvh-hero-note", "data-history": "sample" },
+        plural("card.sample", sample)
+      ) : null,
+      obj.asOf !== void 0 ? el(
+        "p",
+        { class: "cvh-hero-note" },
+        say("card.as_of.before"),
+        time(obj.asOf),
+        say("card.as_of.after")
+      ) : null
+    ];
+    const hero = el(
+      "section",
+      { class: "cvh-hero", "data-history": "hero" },
+      ...heroLines
+    );
+    let rowList = null;
+    if (owner && !failed && obj.deals !== void 0 && obj.deals.length > 0) {
+      const sorted = [...obj.deals].sort(
+        (a, b) => b.agreed.ms - a.agreed.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      );
+      const stamp = (nameKey, state, line) => el(
+        "li",
+        {
+          class: "cvh-stamp",
+          "data-filled": state === "filled" ? "yes" : "no",
+          "data-state": state
+        },
+        el("span", { class: "cvh-stamp-name" }, say(nameKey)),
+        el("span", { class: "cvh-stamp-line" }, ...line)
+      );
+      const slotState = (s) => s === void 0 || s.state === "not_checked" ? "not_checked" : s.state === "passed" ? s.through !== void 0 && s.through.k < s.through.n ? "partial" : "filled" : s.state === "failed" ? "failed" : "open";
+      const items = sorted.map((d) => {
+        const x = extras.get(d.id);
+        const title = say(
+          d.role === "bought" ? "card.row.bought" : "card.row.sold"
+        );
+        let line;
+        let seal = false;
+        const t = d.terms;
+        if (t !== void 0 && t.length > 0) {
+          const ruled = t.find(
+            (x2) => x2.status === "ruled" && x2.value === "not_met"
+          );
+          if (ruled) {
+            seal = true;
+            line = say("card.row.ruled", {
+              term: say(ruled.holder ? "card.term.yours" : "card.term.theirs")
+            });
+            if (ruled.remedy === "made" || ruled.remedy === "due" || ruled.remedy === "not_honoured")
+              line += say(`card.row.remedy.${ruled.remedy}`);
+          } else if (t.some((x2) => x2.status === "in_dispute"))
+            line = say("card.row.in_dispute");
+          else if (t.some((x2) => x2.status === "in_disagreement"))
+            line = say("card.row.in_disagreement");
+          else if (t.some(
+            (x2) => x2.value === "not_met" && (x2.status === "agreed" || x2.status === "agreed_so_far" || x2.status === "uncontested")
+          )) {
+            const stated = t.find(
+              (x2) => x2.value === "not_met" && (x2.status === "agreed" || x2.status === "agreed_so_far" || x2.status === "uncontested")
+            );
+            line = say("card.row.not_met", {
+              term: say(stated?.holder ? "card.term.yours" : "card.term.theirs")
+            });
+            if (stated?.remedy === "made") line += say("card.row.remedy.made");
+          } else if (t.every((x2) => x2.status === "agreed" && x2.value === "met"))
+            line = say("card.row.went");
+          else if (t.every(
+            (x2) => (x2.status === "agreed" || x2.status === "uncontested" || x2.status === "ruled") && x2.value === "met"
+          ))
+            line = say("card.row.went.final");
+          else if (t.every((x2) => x2.status === "not_due"))
+            line = say("card.row.not_due");
+          else if (t.every((x2) => x2.status === "not_reached"))
+            line = say("card.row.not_reached");
+          else line = say("card.row.open");
+        } else
+          line = say(
+            d.outcome === "held" ? "card.row.outcome.held" : d.outcome === "did_not_hold" ? "card.row.outcome.did_not_hold" : "card.row.outcome.undecided"
+          );
+        const amount = x?.amount ?? d.amount;
+        const facts = [];
+        const exact = x?.amount !== void 0 || d.terms === void 0;
+        if (amount !== void 0 && (exact || amount.value !== "0"))
+          facts.push(
+            exact ? amountText(amount) : say("card.row.amount.band", { amount: amountText(amount) }),
+            " \xB7 "
+          );
+        facts.push(say("card.row.agreed"), " ", time(d.agreed));
+        const sides = { yours: 0, theirs: 0 };
+        const many = (holder) => (t ?? []).filter((x2) => x2.holder === holder).length > 1;
+        const label = (holder) => {
+          const side = holder ? "yours" : "theirs";
+          sides[side] += 1;
+          return many(holder) ? say(`card.term.${side}.label.n`, { n: String(sides[side]) }) : say(`card.term.${side}.label`);
+        };
+        const termLine = t !== void 0 && t.length > 0 ? [...t].sort((a, b) => a.holder === b.holder ? 0 : a.holder ? -1 : 1).map(
+          (x2) => `${label(x2.holder)}: ${say(
+            x2.value === "not_met" && x2.status !== "ruled" && BASE[`card.status.${x2.status}.not_met`] !== void 0 ? `card.status.${x2.status}.not_met` : `card.status.${x2.status}`
+          )}${x2.status === "ruled" && x2.value !== void 0 ? say(`card.status.ruled.${x2.value}`) : ""}`
+        ).join("; ") : null;
+        const part = (key, s) => s?.through !== void 0 && s.at !== void 0 ? [
+          say(key, { k: String(s.through.k), n: String(s.through.n) }),
+          " \xB7 ",
+          time(s.at)
+        ] : [];
+        const rec = x?.recorded;
+        const recState = slotState(rec);
+        const recLine = recState === "partial" ? part("card.stamp.recorded.partial", rec) : recState === "filled" && rec?.at ? [say("card.stamp.recorded.filled"), " \xB7 ", time(rec.at)] : [say(`card.stamp.recorded.${recState}`)];
+        const ts = x?.witness;
+        const tsState = slotState(ts);
+        const tsLine = tsState === "partial" ? [
+          `${ts?.by ?? ""} \xB7 `,
+          ...part("card.stamp.time_stamped.partial", ts)
+        ] : tsState === "filled" && ts?.at ? [`${ts.by ?? ""} \xB7 `, time(ts.at)] : [say(`card.stamp.time_stamped.${tsState}`)];
+        const cs = x?.countersigned;
+        const csState = slotState(cs);
+        const csLine = csState === "partial" ? [
+          say("card.stamp.countersigned.by", { signer: cs?.by ?? "" }),
+          " \xB7 ",
+          ...part("card.stamp.countersigned.partial", cs)
+        ] : csState === "filled" && cs?.at ? [
+          say("card.stamp.countersigned.by", { signer: cs.by ?? "" }),
+          " \xB7 ",
+          time(cs.at),
+          say("card.stamp.countersigned.clock")
+        ] : [say(`card.stamp.countersigned.${csState}`)];
+        return el(
+          "li",
+          {
+            class: "cvh-row",
+            "data-history": "row",
+            "data-deal-state": seal ? "not_as_agreed" : "plain"
+          },
+          el(
+            "div",
+            { class: "cvh-row-head" },
+            seal ? sealSvg("not_as_agreed") : null,
+            el(
+              "div",
+              null,
+              el("p", { class: "cvh-row-title" }, title),
+              x?.item !== void 0 ? el("p", { class: "cvh-row-item" }, x.item) : null,
+              el(
+                "p",
+                { class: "cvh-row-line", "data-history": "row-line" },
+                line
+              ),
+              seal ? el("p", { class: "cvh-sr" }, say("card.seal.not_as_agreed")) : null
+            )
+          ),
+          el("p", { class: "cvh-row-detail" }, ...facts),
+          termLine !== null ? el("p", { class: "cvh-row-detail" }, termLine) : null,
+          d.bothHalves ? el(
+            "p",
+            { class: "cvh-row-detail", "data-history": "both-halves" },
+            say("card.row.both_halves")
+          ) : null,
+          el(
+            "ul",
+            { class: "cvh-stamps" },
+            stamp("card.stamp.recorded", recState, recLine),
+            stamp("card.stamp.time_stamped", tsState, tsLine),
+            stamp("card.stamp.countersigned", csState, csLine)
+          ),
+          x?.receipt !== void 0 ? el(
+            "p",
+            null,
+            el(
+              "a",
+              {
+                class: "cvh-link",
+                href: x.receipt,
+                "data-history": "receipt"
+              },
+              say("card.row.receipt")
+            )
+          ) : null
+        );
+      });
+      rowList = el(
+        "section",
+        { class: "cvh-rows-block" },
+        el("h2", null, say("card.rows.heading")),
+        el("ol", { class: "cvh-rows", "data-history": "rows" }, ...items)
+      );
+    }
+    const signed = el(
+      "section",
+      { class: "cvh-panel", "data-history": "signed" },
+      el("h2", null, say("card.signed.heading")),
+      el(
+        "p",
+        null,
+        // "Signed by" only when capsulectl verify reported the signature passed;
+        // otherwise the page names the signer the card claims.
+        // The signature proves the key, not the name: the name stays a label.
+        say(
+          (proof["producer_signatures"] === "pass" ? "card.signed.by" : "card.signed.claimed") + (owner ? ".owner" : ""),
+          { name, key: short(obj.keyId) }
+        ),
+        ...obj.signedAt !== void 0 ? [" \xB7 ", time(obj.signedAt)] : []
+      ),
+      // What the signature shows is said only when capsulectl verify reported
+      // the signature check passed.
+      el(
+        "p",
+        {
+          class: "cvh-note",
+          "data-signature": proof["producer_signatures"] ?? "absent"
+        },
+        say(
+          proof["producer_signatures"] === "pass" ? "card.signed.note" : proof["producer_signatures"] === "fail" ? "card.signed.failed" : "card.signed.unchecked"
+        )
+      )
+    );
+    const statuses = PROOF_CHECKS.map((c) => proof[c]);
+    const lede = failed ? "card.proof.lede.failed" : statuses.some((s) => s === "fail") || proof["witnesses"] === "fail" ? "card.proof.lede.failed" : statuses.every((s) => s === "pass") ? "card.proof.lede.passed" : "card.proof.lede.partial";
+    const proofRow = (code, status, label) => el(
+      "li",
+      {
+        class: "cvh-proof-row",
+        "data-check": code,
+        "data-check-status": status
+      },
+      el(
+        "span",
+        { class: "cvh-mark", "data-status": status },
+        status === "pass" ? "\u2713" : status === "fail" ? "\u2717" : "\u2013"
+      ),
+      el(
+        "span",
+        null,
+        el(
+          "span",
+          { class: "cvh-sr" },
+          `${say(`card.proof.status.${status}`)}: `
+        ),
+        el("span", null, ...label),
+        " ",
+        el("code", { class: "cvh-code" }, code.replace(/_/gu, " "))
+      )
+    );
+    const witnessStatus = proof["witnesses"] ?? "absent";
+    const proofRows = [
+      ...PROOF_CHECKS.map(
+        (c) => proofRow(c, proof[c] ?? "absent", [say(`card.proof.${c}`)])
+      ),
+      proofRow(
+        "witnesses",
+        witnessStatus,
+        witnessStatus === "pass" && witnessAt !== void 0 ? [
+          say("card.proof.witness.filled", { witness: witnessBy ?? "" }),
+          " ",
+          time(witnessAt)
+        ] : [
+          say(
+            witnessStatus === "fail" ? "card.proof.witness.failed" : "card.proof.witness.open"
+          )
+        ]
+      )
+    ];
+    const command = `capsulectl verify --bundle ${file ?? ""}`;
+    const proofPanel = el(
+      "section",
+      { class: "cvh-panel", "data-history": "proof" },
+      el("h2", null, say("card.proof.heading")),
+      el(
+        "p",
+        { class: "cvh-note", "data-proof": lede.split(".").pop() ?? "" },
+        say(lede)
+      ),
+      el("ul", { class: "cvh-proof-list" }, ...proofRows),
+      el(
+        "div",
+        { class: "cvh-check", "data-history": "check" },
+        el("p", { class: "cvh-check-title" }, say("card.check.title")),
+        el("p", { class: "cvh-note" }, say("card.check.download")),
+        el(
+          "pre",
+          { class: "cvh-command" },
+          el("code", { "data-verify-command": "download" }, command)
+        ),
+        el(
+          "p",
+          { class: "cvh-note", "data-expect": digest ?? "" },
+          say("card.check.expect", {
+            verdict: verdict ?? "",
+            fingerprint: short(digest ?? "")
+          })
+        )
+      )
+    );
+    const notProven = el(
+      "section",
+      { class: "cvh-panel cvh-callout", "data-history": "does-not-show" },
+      el("h2", null, say("card.not_proven.heading")),
+      el(
+        "ul",
+        null,
+        el(
+          "li",
+          null,
+          owner ? say("card.not_proven.true.owner") : say("card.not_proven.true", { name })
+        ),
+        el(
+          "li",
+          null,
+          owner ? say("card.not_proven.who.owner") : say("card.not_proven.who", { name })
+        ),
+        el("li", null, say("card.not_proven.outside"))
+      )
+    );
+    const technical = el(
+      "details",
+      { class: "cvh-technical", "data-history": "technical" },
+      el("summary", null, say("card.technical")),
+      el(
+        "dl",
+        null,
+        el("dt", null, say("card.technical.card")),
+        el("dd", null, el("code", null, obj.derivation)),
+        el("dt", null, say("card.technical.key")),
+        el("dd", null, el("code", null, obj.keyId)),
+        el("dt", null, say("card.technical.digest")),
+        el("dd", null, el("code", null, digest ?? "")),
+        ...owner && obj.deals !== void 0 ? [
+          el("dt", null, say("card.technical.deals")),
+          el(
+            "dd",
+            null,
+            ...obj.deals.map((d) => el("code", { class: "cvh-id" }, d.id))
+          )
+        ] : []
+      )
+    );
+    const footer = el(
+      "footer",
+      { class: "cvh-footer", "data-history": "footer" },
+      el("p", { "data-history": "times" }, say("card.footer.utc")),
+      el(
+        "p",
+        null,
+        owner ? say("card.footer.private") : say("card.footer.shared", { name })
+      ),
+      el(
+        "p",
+        null,
+        say("card.footer.built.before"),
+        time(built),
+        say("card.footer.built.after")
+      )
+    );
+    const tree = el(
+      "section",
+      {
+        class: "cv-history cvh-card",
+        "data-history": "view",
+        "data-kind": "deal",
+        "data-surface": surface,
+        "data-perspective": owner ? "yours" : "theirs",
+        "data-verdict": failed ? "failed" : "pass"
+      },
+      header,
+      el("div", { class: "cvh-main" }, hero, rowList, owner ? null : signed),
+      el(
+        "div",
+        { class: "cvh-side" },
+        proofPanel,
+        notProven,
+        owner ? signed : null
+      ),
+      el("div", { class: "cvh-wide" }, technical, footer)
+    );
+    return { ok: true, tree };
+  }
+  var SEAL_SHAPES = {
+    body: [
+      [
+        "path",
+        {
+          d: "M22 106 C18 70 34 44 60 42 C86 44 102 70 98 106 Z",
+          fill: "#7F96A8"
+        }
+      ],
+      ["ellipse", { cx: "60", cy: "88", rx: "24", ry: "19", fill: "#C9D5DE" }],
+      ["circle", { cx: "60", cy: "40", r: "26", fill: "#8FA5B6" }]
+    ],
+    moods: {
+      not_as_agreed: [
+        [
+          "path",
+          {
+            d: "M45 31 L54 34 M75 31 L66 34",
+            stroke: "#13202B",
+            "stroke-width": "1.8",
+            "stroke-linecap": "round"
+          }
+        ],
+        ["circle", { cx: "50", cy: "39", r: "3.4", fill: "#13202B" }],
+        ["circle", { cx: "70", cy: "39", r: "3.4", fill: "#13202B" }],
+        ["ellipse", { cx: "60", cy: "49", rx: "9", ry: "6", fill: "#C9D5DE" }],
+        [
+          "ellipse",
+          { cx: "60", cy: "46.5", rx: "3.2", ry: "2.2", fill: "#13202B" }
+        ],
+        [
+          "path",
+          {
+            d: "M56.5 53 Q60 50.5 63.5 53",
+            stroke: "#13202B",
+            "stroke-width": "1.6",
+            fill: "none",
+            "stroke-linecap": "round"
+          }
+        ],
+        ["path", { d: "M76 76 Q92 70 95 82 Q88 86 79 82 Z", fill: "#6E8597" }],
+        ["circle", { cx: "96", cy: "78", r: "14", fill: "#D97A1E" }],
+        [
+          "path",
+          {
+            d: "M96 71 L96 79",
+            stroke: "#FFFFFF",
+            "stroke-width": "2.8",
+            "stroke-linecap": "round"
+          }
+        ],
+        ["circle", { cx: "96", cy: "84.5", r: "1.7", fill: "#FFFFFF" }]
+      ]
+    }
+  };
+  function sealSvg(mood) {
+    const shapes = [...SEAL_SHAPES.body, ...SEAL_SHAPES.moods[mood] ?? []];
+    return el(
+      "svg",
+      {
+        viewBox: "0 0 120 120",
+        width: "48",
+        height: "48",
+        "aria-hidden": "true",
+        focusable: "false",
+        class: "cvh-seal-art",
+        "data-seal": mood
+      },
+      ...shapes.map(([tag, attrs]) => el(tag, attrs))
+    );
+  }
   var TOP = [
     "view",
     "kind",
@@ -573,6 +1692,11 @@ var HistoryView = (() => {
   ];
   function buildHistoryView(input, overlay) {
     const r = new Reader();
+    if (isObj(input) && "machine" in input) {
+      if (input["view"] !== HISTORY_VIEW)
+        r.refuse("input.view", `is not ${HISTORY_VIEW}`);
+      return buildCardPage(r, input, overlay);
+    }
     const o = r.object(input, "input", TOP, [
       "view",
       "kind",
@@ -1076,7 +2200,6 @@ var HistoryView = (() => {
           el(
             "ul",
             { class: "cvh-stamps" },
-            dealRecorded ? stamp("stamp.recorded", true, "passed", null) : null,
             ...slotStamps(x)
           )
         );
@@ -1314,7 +2437,7 @@ var HistoryView = (() => {
     if (!built.ok) throw new HistoryViewRefused(built.reasons);
     return serializeHistoryElement(built.tree);
   }
-  function renderHistoryView(input, container, overlay) {
+  function renderHistoryView(input, container, overlay, options = {}) {
     const doc = container.ownerDocument;
     const built = buildHistoryView(input, overlay);
     const node = built.ok ? historyElementToDom(built.tree, doc) : historyElementToDom(
@@ -1329,7 +2452,30 @@ var HistoryView = (() => {
       doc
     );
     container.replaceChildren(node);
+    if (built.ok && options.localTime !== false) localTimes(container, overlay);
     return built.ok;
+  }
+  function localTimes(container, overlay) {
+    const times = container.querySelectorAll("time[data-time]");
+    if (times.length === 0) return;
+    const view = container.ownerDocument.defaultView;
+    const I = view?.Intl ?? Intl;
+    const fmt = new I.DateTimeFormat(void 0, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short"
+    });
+    for (const t of times) {
+      const at = Date.parse(t.getAttribute("datetime") ?? "");
+      if (!Number.isNaN(at)) t.textContent = fmt.format(new Date(at));
+    }
+    const note = container.querySelector('[data-history="times"]');
+    const words = isObj(overlay) && isObj(overlay["entries"]) ? overlay["entries"]["card.footer.local"] : void 0;
+    if (note)
+      note.textContent = typeof words === "string" ? words : BASE["card.footer.local"] ?? "";
   }
   var historyViewStyles = `.cv-history{--cvh-ink:#1f2733;--cvh-slate:#6b7482;--cvh-line:#e3ded3;--cvh-cream:#f6f2ea;--cvh-navy:#232f42;--cvh-ok:#2e7d5b;--cvh-bad:#b5462f;font:16px/1.45 system-ui,sans-serif;color:var(--cvh-ink);max-width:1120px;margin:0 auto;padding:16px;display:grid;gap:16px}
 .cv-history h1{font-size:22px;margin:0}.cv-history h2{font-size:15px;margin:0 0 8px;color:var(--cvh-navy)}
@@ -1350,8 +2496,26 @@ var HistoryView = (() => {
 .cvh-seal-title{font-weight:700}.cvh-checked summary{cursor:pointer;font-weight:700;color:var(--cvh-navy)}
 .cvh-check[data-status=fail]{color:var(--cvh-bad)}.cvh-check[data-status=pass]{color:var(--cvh-ok)}
 .cvh-main,.cvh-side{display:grid;gap:16px;align-content:start}.cvh-refused{border:1px solid var(--cvh-bad);color:var(--cvh-bad);padding:8px 12px;border-radius:8px}
-@media screen and (prefers-color-scheme:dark){.cv-history{--cvh-ink:#e8eaee;--cvh-slate:#a3a9b3;--cvh-line:#33373e;--cvh-cream:#22262d;--cvh-navy:#c3d0e8;--cvh-ok:#5fcf90;--cvh-bad:#ff8f84;background:#16181c;color-scheme:dark}.cvh-badge[data-audience=private]{background:#3a2f1a;border-color:#e6b85c}}
-@media (min-width:900px){.cv-history{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}.cvh-header{grid-column:1/-1}}
+.cvh-card{--cvh-ink:#1b1f27;--cvh-slate:#4d5564;--cvh-line:#d3d7de;--cvh-cream:#f4f5f7;--cvh-navy:#2445a8;--cvh-ok:#17603a;--cvh-bad:#a31d1d}
+.cvh-card .cvh-header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}.cvh-tags{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0}
+.cvh-tag{border-radius:999px;padding:2px 10px;font-size:13px;background:#eceef2;color:#3d4452}.cvh-tag[data-audience=private]{background:#fcf1dc;color:#6f4700}
+.cvh-button{display:inline-block;border-radius:8px;padding:6px 12px;font-weight:600;text-decoration:none;background:#e7ecfb;color:#1f3c94}
+.cvh-card .cvh-hero,.cvh-panel,.cvh-card .cvh-row{background:#fff;border:1px solid var(--cvh-line);border-radius:16px;padding:14px 16px}
+.cvh-card .cvh-hero-line{font-size:24px;line-height:1.25}.cvh-card .cvh-row{border-radius:12px}.cvh-card .cvh-row[data-deal-state=not_as_agreed]{border-color:#d97a1e;border-width:2px}
+.cvh-row-head{display:flex;gap:12px;align-items:flex-start}.cvh-seal-art{flex:none}.cvh-row-item{font-weight:600}.cvh-row-line{font-size:17px}
+.cvh-card .cvh-stamp{border-radius:8px;border:1px dashed var(--cvh-line);padding:5px 10px;font-size:13px;color:var(--cvh-slate)}
+.cvh-card .cvh-stamp[data-filled=yes]{border:1px solid var(--cvh-ok);background:#e6f3eb;color:var(--cvh-ok)}.cvh-card .cvh-stamp[data-state=failed]{border:1px solid var(--cvh-bad);background:#fbe9e9;color:var(--cvh-bad)}
+.cvh-card .cvh-stamp-name{letter-spacing:.06em;display:block}.cvh-card .cvh-stamp-line{margin:0}
+.cvh-panel p{margin:0 0 8px}.cvh-panel ul{margin:0;padding-left:18px}.cvh-proof-list{list-style:none;padding:0!important;display:grid;gap:8px}
+.cvh-proof-row{display:grid;grid-template-columns:20px minmax(0,1fr);gap:8px}.cvh-proof-row span span{display:block}.cvh-mark{font-weight:700;text-align:center}
+.cvh-mark[data-status=pass]{color:var(--cvh-ok)}.cvh-mark[data-status=fail]{color:var(--cvh-bad)}.cvh-code{display:block;font-size:12px;color:var(--cvh-slate)}
+.cvh-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cvh-check{background:var(--cvh-cream);border-radius:8px;padding:10px 12px;margin-top:12px}.cvh-check-title{font-weight:700}
+.cvh-command{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px ui-monospace,Menlo,monospace}
+.cvh-wide{display:grid;gap:12px}.cvh-technical summary{cursor:pointer;font-weight:700;color:var(--cvh-navy)}.cvh-technical dd{margin:0 0 8px;overflow-wrap:anywhere}.cvh-id{display:block}
+.cvh-footer{font-size:13px;color:var(--cvh-slate)}.cvh-footer p{margin:0 0 4px}.cvh-link{color:var(--cvh-navy);font-weight:600}
+@media screen and (prefers-color-scheme:dark){.cv-history{--cvh-ink:#e8eaee;--cvh-slate:#a3a9b3;--cvh-line:#33373e;--cvh-cream:#22262d;--cvh-navy:#c3d0e8;--cvh-ok:#5fcf90;--cvh-bad:#ff8f84;background:#16181c;color-scheme:dark}.cvh-badge[data-audience=private]{background:#3a2f1a;border-color:#e6b85c}.cvh-card .cvh-hero,.cvh-panel,.cvh-card .cvh-row{background:#1d2026}.cvh-tag,.cvh-button{background:#2a2f38;color:#dfe5f2}.cvh-tag[data-audience=private]{background:#3a2f1a;color:#f2d8a7}.cvh-card .cvh-stamp[data-filled=yes]{background:#173325}.cvh-card .cvh-stamp[data-state=failed]{background:#3a1d1d}}
+@media (min-width:900px){.cv-history{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}.cvh-header{grid-column:1/-1}.cvh-wide{grid-column:1/-1}}
 @media print{.cv-history{max-width:none;grid-template-columns:1fr}.cvh-proof code{display:block}}
 `;
   function historyViewDocument(input, overlay, title = "History") {

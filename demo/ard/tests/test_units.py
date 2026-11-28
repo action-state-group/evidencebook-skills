@@ -1097,7 +1097,7 @@ def test_the_viewer_drift_check_fails_only_when_the_vendored_copy_is_behind():
     assert viewer_drift.behind("0.27.10", tags) is None
     assert viewer_drift.behind("0.25.0", ["refs/tags/ts/v0.25.0"]) is None
     assert viewer_drift.behind("0.25.0", []) is None
-    assert viewer_drift.vendored_version() == pages.VIEWER.removeprefix("capsule-viewer-") == "0.27.2"
+    assert viewer_drift.vendored_version() == pages.VIEWER.removeprefix("capsule-viewer-") == "0.28.0"
 
 
 @pytest.mark.parametrize("result,want,said", [
