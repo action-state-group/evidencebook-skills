@@ -688,7 +688,7 @@ def _refusal(exc: BaseException) -> str:
         return text
     if "{" in text or len(text) > 400:  # whatever wrapped it (a tool that wraps capsulectl's refusal in a RuntimeError)
         _log(f"a tool refused: {exc!r}")
-        return "this step was refused (the reason is in this party's log, agent.log)"
+        return "this step was refused (the reason is in your log, agent.log)"
     return text
 
 

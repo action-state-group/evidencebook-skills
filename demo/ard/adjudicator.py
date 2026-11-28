@@ -478,8 +478,8 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
             continue  # a record sealed since the stamp: stamped again on the next round
         if got.get("outcome") != "artifact":
             p.log(f"the adjudicator's request for deal {deal_id}: deal respond said {json.dumps(got)}")
-            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: this party's records refused it for this "
-                "party's books, so it is not tried again")
+            say(f"the adjudicator's request for deal {deal_id[5:13]} was not answered: your records refused it for your "
+                "books, so it is not tried again")
             mark.parent.mkdir(exist_ok=True)
             mark.touch()  # a refusal is final for that request: it is not tried again every round
             continue
@@ -493,8 +493,8 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
 
 def books_sent_line(deal_id: str) -> str:
     """A party's books going to the adjudicator, as its activity says it (an event, evidencebook-skills#336)."""
-    return (f"the adjudicator asked for this party's books of deal {deal_id[5:13]}: sent in full (its own book and the "
-            "copy it holds of the other side's)")
+    return (f"the adjudicator asked for your books of deal {deal_id[5:13]}: sent in full (your own book and the "
+            "copy you hold of the other side's)")
 
 
 def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> Path:
@@ -504,7 +504,7 @@ def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> Path:
     wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", copy)
     proof = p.proof(deal_id, copy)
     wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
-    say("this party's book, with the ruling entered, sent to the adjudicator"
+    say("your book, with the ruling entered, sent to the adjudicator"
         + ("" if _receipts(proof) or not pt.witnessed() else
            f"; its time-stamp follows once {pt.WITNESS_NAME} has taken it"))
     return copy
@@ -542,7 +542,7 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
         _PROOF_TRIES[key] = (None, now)
         p.log(f"deal {deal_id}: this party's time-stamped book not sent to the adjudicator in {PROOF_GIVE_UP_S} s; "
               "stopped trying")
-        say(f"this party's book of deal {deal_id[5:13]}: its time-stamp could not be sent to the adjudicator in "
+        say(f"your book of deal {deal_id[5:13]}: its time-stamp could not be sent to the adjudicator in "
             f"{PROOF_GIVE_UP_S // 60} minutes; the ruling is entered. Reopening this window tries again.")
         return GAVE_UP
     _PROOF_TRIES[key] = (first, now)
@@ -560,7 +560,7 @@ def send_proof_once_witnessed(home: Path, p: pt.Party, deal_id: str, copy: Path,
             # adjudicator one copy's proof beside another copy's book
             wire.send(home, ADJUDICATOR, deal_id, f"book-{side}", c)
             wire.send(home, ADJUDICATOR, deal_id, f"proof-{side}", proof)
-            say(f"this party's book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by "
+            say(f"your book of deal {deal_id[5:13]}, with the ruling entered, is now time-stamped by "
                 f"{pt.WITNESS_NAME}; sent to the adjudicator")
             return c
     return None

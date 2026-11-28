@@ -71,7 +71,7 @@ def trying_again(what: str, exc: BaseException) -> str:
     failure's own text goes to the party's log (:meth:`party.Party.log`), never into a chat."""
     if isinstance(exc, pt.WitnessSlow):
         return f"{what}: waiting for {pt.WITNESS_NAME}, which is slow or not answering; {TRYING_AGAIN}"
-    return f"{what}: not done yet (the reason is in this party's log, agent.log); {TRYING_AGAIN}"
+    return f"{what}: not done yet (the reason is in your log, agent.log); {TRYING_AGAIN}"
 
 
 #: How every :func:`trying_again` line ends: a party's log says it once until something else happens (once_per_failure).

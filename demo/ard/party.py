@@ -318,7 +318,7 @@ class Party:
                     raise failed
                 raise WitnessSlow(f"{WITNESS_NAME} took no stamp within {int(seconds)} s")
             if say:
-                say("this party's checkpoint did not go through; trying again")
+                say("your checkpoint did not go through; trying again")
                 say = None
 
     def card_bundle(self, shared: bool) -> Path:

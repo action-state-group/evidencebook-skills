@@ -125,6 +125,29 @@ def test_every_line_the_selling_process_says_speaks_to_its_owner():
     assert not clean(text), clean(text)
 
 
+def test_every_line_a_party_says_about_its_books_speaks_to_it():
+    # the shared steps a seller's window shows in its activity (Maya's too, where "your" is also hers): answering the
+    # adjudicator, entering a ruling, sending the book and its stamp, and a retried step's line
+    said = []
+    for file, names in (("adjudicator.py", ("answer_requests", "send_book", "send_proof_once_witnessed")),
+                        ("flow.py", ("enter_rulings",)), ("screens.py", ("trying_again",)), ("party.py", ("wait_checkpoint",))):
+        tree = ast.parse((HERE / file).read_text())
+        for fn in ast.walk(tree):
+            if not (isinstance(fn, ast.FunctionDef) and fn.name in names):
+                continue
+            for node in ast.walk(fn):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "say":
+                    said += [_said_text(a) for a in node.args]
+                if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "what" for t in node.targets):
+                    said.append(_said_text(node.value))
+                if isinstance(node, ast.Return) and fn.name == "trying_again":
+                    said.append(_said_text(node.value))
+    text = "\n".join(s for s in said if s)
+    assert "the adjudicator asked for your books" in text and "entered in your records" in text
+    assert "the reason is in your log" in text and "your checkpoint did not go through" in text
+    assert not clean(text) and "this party" not in text, text
+
+
 @pytest.mark.parametrize("deals,real", [(10, False), (11, False), (13, False), (11, True)])
 def test_a_sellers_own_lines_say_none_of_the_words(deals, real):
     lines = [screens.own_sample_note("kestrel", deals, real), screens.seller_credit_note(1000),

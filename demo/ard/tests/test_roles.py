@@ -311,7 +311,7 @@ def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_not
     Party.dir = tmp_path / "kestrel"  # no delivery record kept: the ruling line names no count
     s.party = Party([(flow.RULING_ENTERED, {"deal_id": "deal-1111111111111111", "stamped_at": ""}),
                      (flow.RULING_ENTERED, {"deal_id": "deal-fedcba9876543210", "stamped_at": ""})])
-    s.say("the adjudicator's ruling on deal fedcba98 entered in this party's records")
+    s.say("the adjudicator's ruling on deal fedcba98 entered in your records")
     monkeypatch.setattr(ds, "seller", lambda: s)
     monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 11, "did_not_hold": 1}}, None, None))
     out = ds.ard_seller_activity()

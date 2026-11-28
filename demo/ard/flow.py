@@ -437,7 +437,7 @@ class SellerAgent:
 
     def _requests(self) -> None:
         def say(line: str) -> None:  # the books going to the adjudicator is an event (#336)
-            (self.event if line.startswith("the adjudicator asked for this party's books") else self.say)(line)
+            (self.event if line.startswith("the adjudicator asked for your books") else self.say)(line)
         adj.answer_requests(self.home, self.party, self.name, "seller", say)
 
     def _rulings(self) -> None:
@@ -534,7 +534,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
             p.note(RULING_ENTERED, {"deal_id": deal_id, "stamped_at": when}, subject_ref=deal_id)
             entered[deal_id] = when
             done.append(deal_id)
-            say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in this party's records"
+            say(f"the adjudicator's ruling on deal {deal_id[5:13]} entered in your records"
                 + (f" (time-stamped by {pt.WITNESS_NAME} at {screens.local_time(when, date=True)})" if when else ""))
         elif not entered[deal_id] and deal_id not in stamped and pt.witnessed():
             mark = p.dir / "handled" / f"{deal_id}.ruling-seen"
@@ -552,7 +552,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 mark.touch()
                 os.utime(mark, (arrived, arrived))
         if deal_id not in sent:
-            what = "sending this party's book, with the ruling entered, to the adjudicator"
+            what = "sending your book, with the ruling entered, to the adjudicator"
             try:
                 copy = adj.send_book(home, p, deal_id, side, say)
                 p.note(BOOK_SENT, {"deal_id": deal_id, "copy": str(copy)}, subject_ref=deal_id)
@@ -562,7 +562,7 @@ def enter_rulings(home: Path, p: pt.Party, side: str, other: str | Callable[[str
                 continue
             sent[deal_id] = str(copy)
         elif deal_id not in proved and pt.witnessed():
-            what = "sending the adjudicator this party's book's time-stamp"
+            what = "sending the adjudicator your book's time-stamp"
             # the copy sent; a note from before evidencebook-skills#328 names none: the copy the adjudicator holds
             copy = Path(sent[deal_id] or wire.path(home, adj.ADJUDICATOR, deal_id, f"book-{side}"))
             try:

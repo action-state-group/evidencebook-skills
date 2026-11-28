@@ -321,7 +321,7 @@ def _held_pay(monkeypatch, how, hold=True):
 
 def test_dont_buy_on_a_held_order_tells_maya_the_holds_own_sentence(monkeypatch):
     """evidencebook-skills#412: Don't buy on an order over the limit reached Maya as "this step was refused (the reason
-    is in this party's log, agent.log)", since the refusal ran past the raw-output guard's 400 characters (#327). She
+    is in your log, agent.log)", since the refusal ran past the raw-output guard's 400 characters (#327). She
     reads the hold's own sentence whole: the rule, nothing paid, every reason with the limit; then what to offer
     next, never a limit change (#414)."""
     import desktop_server as ds
@@ -375,7 +375,7 @@ def test_a_refusal_the_demo_writes_stays_whole_and_raw_output_still_does_not(tmp
 
     long = "The Everyday Rules held this order for your OK, and nothing was paid: " + "a reason; " * 60
     assert ds._refusal(ds.Said(long)) == long
-    assert ds._refusal(RuntimeError(long)) == "this step was refused (the reason is in this party's log, agent.log)"
+    assert ds._refusal(RuntimeError(long)) == "this step was refused (the reason is in your log, agent.log)"
     assert ds._refusal(RuntimeError('capsulectl: {"error": "x"}')).startswith("this step was refused")
 
 
