@@ -1170,11 +1170,11 @@ def ard_dispute(seller: str, deal: str = "") -> None:
 
 @_tool("alder", "kestrel")
 def ard_seller_activity() -> None:
-    """What this seller's agent did on its own: its commitment, the deal asked of it, the payment, its delivery, a
-    dispute and a ruling, then each ruling it entered as its records hold it now (the outcome, when Action State's
-    witness stamped it, and any refund), and its own History card now."""
+    """What your owner's selling process did on its own, in their words: their commitment, the deal asked of them, the
+    payment, their delivery, a dispute and a ruling, then each ruling entered as their records hold it now (the
+    outcome, when Action State's witness stamped it, and any refund), and their own History card now."""
     sel = seller()
-    print(f"{sel.label}: its own profile, keys and records (this window only)")
+    print(f"{sel.label}: your own profile, keys and records (this window only)")
     for line in list(sel.log):
         print("  " + line)
     for deal_id, stamped_at in flow.rulings_entered(sel.party).items():  # read now, so a stamp that came late shows
@@ -1189,7 +1189,7 @@ def ard_seller_activity() -> None:
             print(f"  ruling on deal {deal_id[5:13]}: {line}")
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
-    print("  " + screens.sample_note(sel.name))
+    print("  " + screens.own_sample_note(sel.name, card["outcomes"]["of"], _real()))
 
 
 # -- the adjudicator ----------------------------------------------------------------------------------
@@ -1328,10 +1328,11 @@ def ard_show_card() -> None:
     except pt.Refused as exc:  # the card as of its last checkpoint still shows, and the time says which (#331)
         p.log(f"stamp for the card: {exc!r}")
     card, as_of, _ = flow.read_card(p.card_bundle(shared=True))
-    print(f"{name}: its own History card, as of its checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
+    its = "your" if ROLE in SELLERS else "its"  # a seller's owner types in its window (Sherlock2 on #456)
+    print(f"{name}: {its} own History card, as of {its} checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
     if ROLE in SELLERS:
-        print("  " + screens.sample_note(ROLE))
+        print("  " + screens.own_sample_note(ROLE, card["outcomes"]["of"], _real()))
         return
     s = session()
     s.pack = s.pack or packs.starting()
@@ -1373,7 +1374,7 @@ def ard_show_receipt() -> None:
 
 @_tool("maya", "alder", "kestrel")
 def ard_open_receipt_page() -> None:
-    """Open THIS window's own receipt for its latest deal as a page in the browser, for the audience: capsulectl's own
+    """Open THIS window's own receipt for its latest deal as a page in the browser: capsulectl's own
     page of its copy of the deal (deal report --html), with capsulectl's verify report, with nothing added. Its witness
     line is the same as ard_show_receipt's: it says a time only when capsulectl verify reported one."""
     import pages
@@ -1390,8 +1391,9 @@ def ard_open_receipt_page() -> None:
         print(f"{name}: no receipt page yet; ask again in a minute.")
         return
     opened = pages.open_page(path)
-    print(f"{name}: its receipt page " + ("opened in the browser on the presenter's screen; nothing else is needed "
-                                          "(do not copy or link the file)" if opened else "written (not opened)") + f": {path}")
+    its = "your" if ROLE in SELLERS else "its"
+    print(f"{name}: {its} receipt page " + ("opened in the browser; nothing else is needed (do not copy or link the "
+                                            "file)" if opened else "written (not opened)") + f": {path}")
     if ROLE not in SELLERS:  # what a ruled deal's page shows at its top, said here too (#411's hand run)
         d = session().latest()
         try:
@@ -1406,15 +1408,15 @@ def ard_open_receipt_page() -> None:
 
 @_tool("maya", "alder", "kestrel")
 def ard_open_card_page() -> None:
-    """Open THIS window's own History card as a page in the browser, for the audience."""
+    """Open THIS window's own History card as a page in the browser."""
     import pages
 
     p, name = _own()
     path = pages.card_page(p, name, rail=_rail_name(), seller=ROLE in SELLERS)
     opened = pages.open_page(path)
-    print(f"{name}: its History card page " + ("opened in the browser on the presenter's screen; nothing else is needed "
-                                               "(do not copy or link the file)" if opened else "written (not opened)")
-          + f": {path}")
+    its = "your" if ROLE in SELLERS else "its"
+    print(f"{name}: {its} History card page " + ("opened in the browser; nothing else is needed (do not copy or link "
+                                                 "the file)" if opened else "written (not opened)") + f": {path}")
 
 
 def main() -> None:

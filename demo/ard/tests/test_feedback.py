@@ -468,7 +468,7 @@ def test_a_seller_loop_keeps_running_after_a_step_fails(tmp_path):
     agent._loop()
     assert len(rounds) == 3 and all("{" not in line for line in agent.log)
     assert any("taking the buyer's offer: not done yet" in line for line in agent.log)
-    assert any("publishing this seller's History card: not done yet" in line for line in agent.log)
+    assert any("publishing your History card: not done yet" in line for line in agent.log)
 
 
 @pytest.mark.parametrize("text,plain", [('no checkpoint (last: {"a": 1})', True), ("Maya disputed this delivery", False)])

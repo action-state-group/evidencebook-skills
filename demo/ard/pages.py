@@ -104,10 +104,12 @@ WITNESS_NOTE = (f"Time-stamped by {pt.WITNESS_NAME}. Action State also runs ever
                 "independent of them.")
 
 
-def labels(card: dict, witnessed: bool, sample: str = "") -> list[str]:
+def labels(card: dict, witnessed: bool, sample: str = "", real: bool = False) -> list[str]:
     """The lines above the view: who time-stamped it, the card's counts with its dispute tally (the view has no member
-    for disputes), and, on a seller's card (``sample``: the seller), that its first deals are sample history."""
-    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + ([screens.sample_note(sample)] if sample else [])
+    for disputes), and, on a seller's own card (``sample``: the seller), which deals are sample history and which were
+    made in this run, in its owner's words (:func:`screens.own_sample_note`; ``real``: the run's rail moves money)."""
+    own = [screens.own_sample_note(sample, card["outcomes"]["of"], real)] if sample else []
+    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + own
 
 
 def _script_json(value: dict) -> str:
@@ -169,7 +171,8 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
     # capsulectl writes `deals: null` in the own copy of a card that counts no deal (#449): that is no deal, not an error
     view = history_input(ext.get("deals") or [], name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name if seller else ""),
+    return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name if seller else "",
+                                                            real=rail in ("lightning", "local")),
                                                      f"History · {label}"))
 
 

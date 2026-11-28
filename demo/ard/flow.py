@@ -252,7 +252,7 @@ class SellerAgent:
                 self.party.tick()
             publish_card(self.home, self.party, keep_stamped=not now)
         except pt.Refused as exc:
-            self.failed("publishing this seller's History card", exc)
+            self.failed("publishing your History card", exc)
 
     def routine_ticks(self) -> bool:
         """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S` since the last deal
@@ -273,7 +273,7 @@ class SellerAgent:
             for what, step in (("taking the buyer's offer", self._offers), ("keeping the buyer's agreement", self._agreements),
                                ("taking the payment and delivering", self._payments),
                                ("keeping the buyer's statement", self._statements), ("keeping the dispute", self._disputes),
-                               ("answering the adjudicator's request for this seller's books", self._requests),
+                               ("answering the adjudicator's request for your books", self._requests),
                                ("entering the adjudicator's ruling", self._rulings), ("keeping the buyer's copy of the ruling", self._named)):
                 try:
                     step()
@@ -283,7 +283,7 @@ class SellerAgent:
                 try:
                     self.republish()
                 except Exception as exc:  # never ends the seller's loop
-                    self.failed("publishing this seller's History card", exc)
+                    self.failed("publishing your History card", exc)
                 last_card = time.monotonic()
             self._stop.wait(0.5)
 
@@ -321,7 +321,7 @@ class SellerAgent:
         if body.get("observed"):
             out.append(("act", delivered_line(buyer_words(body["observed"]), _states_not_met(body))))
         if self._done(deal_id, "held"):
-            out.append(("held", "the delivery was held by this seller's own check"))
+            out.append(("held", "the delivery was held by your own check"))
         if self._done(deal_id, "dispute"):
             out.append(("dispute", dispute_line(deal_id)))
         if self._done(deal_id, "adjanswer") and wire.path(self.home, adj.ADJUDICATOR, deal_id, "answer-seller").is_file():
@@ -373,7 +373,7 @@ class SellerAgent:
             self._mark(deal_id, "offer")
             # its own log only: the event a seller is told is the deal agreed by both (_agreements, #336)
             self.party.log(f"a buyer offered {price:,} msat for {body['terms']['item']} (deal {deal_id}): agreed at the "
-                           "listed price, and this seller's agreement sent to the buyer")
+                           "listed price, and your agreement sent to the buyer")
 
     def _agreements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "agree"):
@@ -402,14 +402,14 @@ class SellerAgent:
             def deliver() -> str:
                 check = p.check(deal_id, "commit", SELLERS[self.name]["item"], ref["amount_msat"], "the buyer")
                 if not check.get("proceed"):
-                    raise pt.Refused(f"delivery held by this seller's own check: {check.get('verdict')}")
+                    raise pt.Refused(f"delivery held by your own check: {check.get('verdict')}")
                 return p.perform(deal_id, check["check_id"], info["observed"], info["states"])
             if self._done(deal_id, "held"):
                 continue  # this seller's own check held the delivery: it is not retried every round
             try:
                 act = self._step(deal_id, "act", deliver)
             except pt.Refused as exc:
-                if "held by this seller's own check" not in str(exc):
+                if "held by your own check" not in str(exc):
                     raise
                 self._mark(deal_id, "held")
                 self.say(str(exc))
@@ -485,17 +485,17 @@ def paid_line(ref: dict) -> str:
     """The payment, in what this seller knows: the buyer's word; its own wallet is not read by this process (#337,
     Sherlock2: "if the rail can't show that, it says the buyer says paid")."""
     return (f"paid: the buyer says it paid {ref['amount_msat']:,} msat"
-            + (" (simulated rail: no money moved)" if ref.get("simulated") else "; this seller's own wallet is not checked here"))
+            + (" (simulated rail: no money moved)" if ref.get("simulated") else "; your own wallet is not checked here"))
 
 
 def delivered_line(shipped: str, not_met: bool) -> str:
     states = ", and states the delivery not met" if not_met else ""
-    return f"delivered to the buyer: {shipped} (this seller's delivery record says so{states})"
+    return f"delivered to the buyer: {shipped} (your delivery record says so{states})"
 
 
 def dispute_line(deal_id: str) -> str:
-    return (f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the adjudicator asks for this "
-            "seller's books, which this seller answers in full")
+    return (f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the adjudicator asks for your "
+            "books, which your selling process answers in full")
 
 
 def digest_of(offer: dict) -> str:

@@ -35,15 +35,17 @@ class ReceiptError(RuntimeError):
 
 def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bool, counterparty: str = "") -> str:
     """The party's receipt for one deal in words: each row's status as capsulectl reports it now; on the buyer's, what
-    a ruling for her means (:func:`screens.ruled_for_buyer`, naming ``counterparty``, the seller)."""
+    a ruling for her means (:func:`screens.ruled_for_buyer`, naming ``counterparty``, the seller). A seller's receipt is
+    read by its owner, so it says "your" and "you" (Sherlock2 on evidencebook-skills#456)."""
+    its = "your" if seller else "its"
     try:
         rep = p.report(deal_id)
     except pt.Refused as exc:
         p.log(f"receipt of {deal_id}: {exc!r}")
-        return f"{name}: its receipt for deal {deal_id[5:13]} is not ready yet; ask again in a minute."
+        return f"{name}: {its} receipt for deal {deal_id[5:13]} is not ready yet; ask again in a minute."
     report = rep.get("report", rep)
-    lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
-    lines += ["  " + line for line in row_lines(report)]
+    lines = [f"{name}: {its} receipt for deal {deal_id[5:13]}, from {its} own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
+    lines += ["  " + line for line in row_lines(report, seller=seller)]
     if not seller:
         lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller", flow.delivery_record(p, deal_id))]
     lines += proof_lines(p, deal_id, name)
@@ -57,9 +59,10 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     return "\n".join(lines)
 
 
-def row_lines(report: dict) -> list[str]:
+def row_lines(report: dict, seller: bool = False) -> list[str]:
     """Each row's status as capsulectl's report says it, in the receipt's words: what the person's agent may say of the
-    deal's state (evidencebook-skills#457: "complete" for a deal still open to dispute)."""
+    deal's state (evidencebook-skills#457: "complete" for a deal still open to dispute). On a seller's own receipt
+    (``seller``), a ruling against it reads "against you" (#456)."""
     lines = []
     for row in report.get("rows", []):
         what = ROWS.get(row["id"], row["id"])
@@ -67,7 +70,8 @@ def row_lines(report: dict) -> list[str]:
         line = f"{what}: {status}"
         if row.get("status") == "ruled" and row.get("ruling"):
             r = row["ruling"]
-            line += f" ({'not met' if r.get('value') == 'not_met' else 'met'}, against the {r.get('against')})"
+            against = "you" if seller and r.get("against") == "seller" else f"the {r.get('against')}"
+            line += f" ({'not met' if r.get('value') == 'not_met' else 'met'}, against {against})"
         elif row.get("value"):
             line += f" ({'met' if row['value'] == 'met' else 'not met'})"
         lines.append(line)

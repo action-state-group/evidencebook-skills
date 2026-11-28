@@ -670,8 +670,24 @@ def test_a_sellers_card_says_its_first_deals_are_sample_history():
         for line in (screens.signed_line(label, seller), screens.signed_line(label, seller, True)):
             assert line.endswith(f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before "
                                  "this run.")
-        assert pages.labels(card(), witnessed=True, sample=seller)[-1] == screens.sample_note(seller)
+        # the seller's own card page is read by its owner (#456): "your" first deals, and the deals made in this run
+        own = pages.labels(card(of=SAMPLE_DEALS[seller] + 1), witnessed=True, sample=seller)[-1]
+        assert own == screens.own_sample_note(seller, SAMPLE_DEALS[seller] + 1, False)
     assert not any("sample history" in x for x in pages.labels(card(), witnessed=True))  # a buyer's card has none
+
+
+@pytest.mark.parametrize("made,real,tail", [
+    (0, False, "; no deal has been made in this run yet."),
+    (1, False, "; the other one is the only deal made in this run (simulated payment, no money moved)."),
+    (2, False, "; the other 2 were made in this run (simulated payment, no money moved)."),
+    (1, True, "; the other one is the only deal made in this run (paid on the real Lightning rail)."),
+])
+def test_a_sellers_own_note_names_the_deals_made_in_this_run(made, real, tail):
+    # Sherlock2 on #456: "the only deal made in this run (simulated payment, no money moved)", never "real deal"
+    from cast import SAMPLE_DEALS
+    n = SAMPLE_DEALS["kestrel"]
+    assert screens.own_sample_note("kestrel", n + made, real) == (
+        f"Your first {n} deals are sample history the operator made before this run{tail}")
 
 
 def test_the_sellers_sample_histories_differ_and_neither_falls_below_the_packs_band_minimum():
@@ -815,7 +831,8 @@ def test_a_sellers_card_in_words_says_its_first_deals_are_sample_history(monkeyp
     monkeypatch.setattr(ds, "session", lambda: type("S", (), {"deals": []})())
     out = ds.ard_show_card()
     if noted:
-        assert screens.sample_note("kestrel") in out, out  # this seller's own count, not the other's
+        assert screens.own_sample_note("kestrel", 13, False) in out, out  # this seller's own count, not the other's
+        assert out.startswith("Kestrel Print: your own History card"), out
     else:
         assert "sample history" not in out, out
 
