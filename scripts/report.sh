@@ -91,6 +91,10 @@
 # `capsulectl book report build --receipts FILE`, which owns every check on it;
 # report.sh reads nothing in it. A capsulectl whose `book report build --help`
 # does not list --receipts is refused before anything is written to the book.
+# On the evaluator path the same FILE also goes to the evaluator, which names
+# each deal's receipt as its claims' `subject_bundle` (agent-action-capsule
+# Evidence Result §4.5) before the Result is sealed, so the page refuses a
+# receipt filed under the wrong deal (capsule-viewer#353).
 # Without --receipts nothing is probed or passed and the page is unchanged
 # (default: not carried, capsule-viewer#228).
 #
@@ -236,6 +240,9 @@ elif [[ "$MODE" == "evaluator" ]]; then
   POLICY_ARGS=()
   if [[ -n "$PERIOD_POLICY" ]]; then POLICY_ARGS+=(--period-policy "$PERIOD_POLICY"); fi
   if [[ -n "$NOW" ]]; then POLICY_ARGS+=(--now "$NOW"); fi
+  # The same receipts the page will carry: the evaluator names each deal's as
+  # its claims' subject_bundle before the Result is sealed (capsule-viewer#353).
+  if [[ "$RECEIPTS_GIVEN" -eq 1 ]]; then POLICY_ARGS+=(--receipts "$RECEIPTS"); fi
   python3 "$REPO/scripts/evaluators/$EVALUATOR.py" --profile "$PROFILE" --spec "$SPEC" --capsulectl "$CAPSULECTL" \
     --date "$LAST_DATE" --generated-at "$GENERATED_AT" --out "$WORK/rollup" ${POLICY_ARGS[@]+"${POLICY_ARGS[@]}"} \
     || fail "evaluators/$EVALUATOR.py wrote no Result (its output above says why)"

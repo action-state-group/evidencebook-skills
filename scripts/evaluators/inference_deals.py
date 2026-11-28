@@ -10,7 +10,20 @@ tied to AAC #315 `period_policy` (ops f4f269eb).
 
     inference_deals.py --profile NAME --spec packs/inference-deals/compiled/compiled.json \\
         --date YYYY-MM-DD --generated-at TS --out DIR [--period-policy FILE] [--now TIME] \\
-        [--capsulectl PATH]
+        [--capsulectl PATH] [--receipts FILE]
+
+Subject bundles (capsule-viewer#353; agent-action-capsule Evidence Result
+§4.5, agent-action-capsule#674). With --receipts FILE, the list
+scripts/report.sh forwards to the page builder ({"exchange_capsule_id",
+"receipt": <bundle JSON text>} or {"exchange_capsule_id", "held": true}), every
+claim of a deal whose own exchange record's capsule id has a receipt carries
+`subject_bundle`: that receipt's bundle digest (SHA-256 of the RFC 8785 JCS
+form of the bundle with `countersignatures` left out), computed here, before
+the Result is sealed. The page then refuses to show a receipt filed under the
+deal that is not that one. A held entry carries no bundle to hash and names
+none; a deal whose exchange records have two different receipts names none
+(the evaluator never picks one). The member is display-only: no verdict, grade
+or count reads it. Without --receipts no claim carries it.
 
 writes DIR/result-v0-<from>_<to>.json (one Result v0 for the window) and
 DIR/summary.json, the file names scripts/report.sh's tail reads.
@@ -142,6 +155,8 @@ import json
 import pathlib
 import sys
 import tempfile
+
+import rfc8785
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from capsulectl_calls import (CapsuleDoesNotVerify, EvidenceUnavailable, UntrustedSigner,  # noqa: E402
@@ -629,13 +644,61 @@ def counterparty_class(deal):
     return None, len(values) > 1
 
 
-def build_result(records, compiled, date, generated_at, policy=None, unverified=None, leg_unverified=None):
+def bundle_digest(bundle):
+    """The Evidence Bundle draft's bundle digest, as Evidence Result §4.5's
+    `subject_bundle` names it: SHA-256 of the JCS form of the bundle with
+    `countersignatures` left out, 64 lowercase hex characters (agent-action-
+    capsule python/agent_action_capsule/bundle.py `bundle_digest`)."""
+    body = {k: v for k, v in bundle.items() if k != "countersignatures"}
+    return hashlib.sha256(rfc8785.dumps(body)).hexdigest()
+
+
+def receipt_digests(entries):
+    """{exchange record capsule id: bundle digest} from report.sh's receipts
+    list. A held entry carries no bundle and is skipped. An entry this cannot
+    read is a DealsError: the Result would otherwise name no bundle for a deal
+    whose receipt the page then carries."""
+    if not isinstance(entries, list):
+        raise DealsError("--receipts: not a JSON list")
+    out = {}
+    for i, entry in enumerate(entries):
+        xid = entry.get("exchange_capsule_id") if isinstance(entry, dict) else None
+        if not isinstance(xid, str) or not xid:
+            raise DealsError(f"--receipts: entry {i} has no exchange_capsule_id")
+        if entry.get("held") is True and "receipt" not in entry:
+            continue
+        text = entry.get("receipt")
+        try:
+            bundle = json.loads(text) if isinstance(text, str) else None
+        except ValueError:
+            bundle = None
+        if not isinstance(bundle, dict):
+            raise DealsError(f"--receipts: entry {i} ({xid}) has no receipt bundle JSON object")
+        digest = bundle_digest(bundle)
+        if out.get(xid, digest) != digest:
+            raise DealsError(f"--receipts: two different receipts for exchange record {xid}")
+        out[xid] = digest
+    return out
+
+
+def _subject_bundle(deal, receipts):
+    """The digest of the one receipt of the deal's own exchange records, or None."""
+    digests = {receipts[cid] for cid in (body.get("capsule_id") for _, body, _ in deal.exchanges)
+               if isinstance(cid, str) and cid in receipts}
+    return digests.pop() if len(digests) == 1 else None
+
+
+def build_result(records, compiled, date, generated_at, policy=None, unverified=None, leg_unverified=None,
+                 receipts=None):
     """Pure: the book's records -> (Result v0 document, summary). No I/O.
     `unverified` maps the book capsule ids that did not verify to UNVERIFIED or
     UNTRUSTED; those records are never read as evidence (see the module docstring).
     `leg_unverified` maps the book capsule ids of settlement legs whose OWN
     signature did not verify (the book record holding them did) to the same two
-    reasons; such a leg never makes a payment countersigned."""
+    reasons; such a leg never makes a payment countersigned.
+    `receipts` maps an exchange record's capsule id to its receipt's bundle
+    digest (receipt_digests); each claim of a deal with one is given
+    `subject_bundle` (see Subject bundles in the module docstring)."""
     unverified = unverified or {}
     leg_unverified = leg_unverified or {}
     bad = [(cid, body, unverified[cid]) for cid, body in records if cid in unverified]
@@ -656,7 +719,7 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
     _attribute_unverified(deals, bad)
 
     ordered = sorted(deals.values(), key=lambda d: (d.first, d.exchange_id))
-    rollups, sources, extras_by_case = [], {}, {}
+    rollups, sources, extras_by_case, subjects = [], {}, {}, {}
     counts = {"deals_counted": 0, "not_counted_shop_preauth": 0, "class_missing": 0,
               "class_conflicting": 0, "unmatched_settlements": 0, "adjudicated_deals": 0, "states": {},
               "leg_rows": {}}
@@ -681,6 +744,10 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
         tiers = {c: "recomputed" for c in verdicts}
         rollups.append((case_id, verdicts, {c: cited.get(c) for c in verdicts}, tiers))
         extras_by_case[case_id] = extras
+        if receipts:
+            subject = _subject_bundle(deal, receipts)
+            if subject is not None:
+                subjects[case_id] = subject
         sources[case_id] = {}
     counts["deals_counted"] = n
     if not rollups:
@@ -699,6 +766,13 @@ def build_result(records, compiled, date, generated_at, policy=None, unverified=
     except RollupError as e:
         raise DealsError(str(e)) from e
     doc["view"]["title"] = report_title(compiled, label)
+    # §4.5's `subject_bundle` is a defined claim member, not an `x-` one, so it
+    # is set here rather than through claim_extras; every claim of a deal gets
+    # the same value.
+    for claim in doc["claims"]:
+        subject = subjects.get(claim["id"].split("::", 1)[0])
+        if subject is not None:
+            claim["subject_bundle"] = {"digest_alg": "SHA-256", "digest": subject}
     doc["x-window"] = {
         "from": _iso(start), "to": _iso(to), "periods": periods, "months": window["months"],
         "period_policy_digest": policy_digest(policy),
@@ -777,6 +851,9 @@ def main(argv=None):
                     help="the node's own period_policy JSON, in place of the pack's default")
     ap.add_argument("--now", help="RFC 3339 UTC time the anchor may not pass (default: the wall clock); "
                                   "a test replaying recorded fixtures sets a later one")
+    ap.add_argument("--receipts", type=pathlib.Path,
+                    help="report.sh's receipts list: each claim of a deal with a receipt names it "
+                         "as subject_bundle (see Subject bundles above)")
     args = ap.parse_args(argv)
     compiled = json.loads(args.spec.read_text())
     try:
@@ -793,8 +870,10 @@ def main(argv=None):
         if anchor > now:
             raise DealsError(f"the window would end at {_iso(anchor)}, after now ({_iso(now)}): "
                              "that period has not closed")
+        receipts = receipt_digests(json.loads(args.receipts.read_text())) if args.receipts else None
         records, unverified, leg_unverified = read_book(args.capsulectl, args.profile)
-        doc, summary = build_result(records, compiled, date, args.generated_at, policy, unverified, leg_unverified)
+        doc, summary = build_result(records, compiled, date, args.generated_at, policy, unverified, leg_unverified,
+                                    receipts)
     except (DealsError, EvidenceUnavailable, ValueError) as e:
         print(json.dumps({"error": str(e)}, indent=2))
         return 2
