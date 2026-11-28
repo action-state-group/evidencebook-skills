@@ -3,17 +3,17 @@
 §3.6 item 11).
 
 The page is capsule-viewer's History view (``history-view/v0``, capsule-viewer
-``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.27.2/
+``docs/design/history-view.md``), drawn by the released script itself: ``vendor/capsule-viewer-0.28.0/
 history-view.iife.js`` is ``dist/history-view.iife.js`` of the npm package
-``@action-state-group/capsule-viewer@0.27.2``, copied unchanged with the package's own ``.sha256`` and
+``@action-state-group/capsule-viewer@0.28.0``, copied unchanged with the package's own ``.sha256`` and
 licences, and :data:`VIEWER_SHA256` pins it. The view draws and never verifies: the party builds the
 view model from its own ``standard_history/3`` card (``capsulectl deal standard-history card``, its own copy, which
 lists the deal entries the card counts), and the page inlines the script and the model, so it opens offline and
 fetches nothing (its Content-Security-Policy is ``default-src 'none'``).
 
 Each deal row says each of its rows' status as capsulectl computed it (``agreed``, ``ruled`` and the rest): the
-demo derives no outcome of its own. The view has no member for disputes (capsule-viewer 0.27.2 and main), so the
-card's dispute tally is one plain line above the view, in the words the chat uses. The page carries no demo banner
+demo derives no outcome of its own. The view's row input has no member for disputes (capsule-viewer 0.28.0; its
+card-page input, drawn from a signed card bundle, is not used here), so the card's dispute tally is one plain line above the view, in the words the chat uses. The page carries no demo banner
 (Ethan, 2026-11-17)."""
 from __future__ import annotations
 
@@ -29,11 +29,11 @@ import party as pt
 import screens
 
 HERE = Path(__file__).resolve().parent
-VIEWER = "capsule-viewer-0.27.2"
+VIEWER = "capsule-viewer-0.28.0"
 VIEWER_DIR = HERE / "vendor" / VIEWER
 VIEWER_SCRIPT = VIEWER_DIR / "history-view.iife.js"
 #: The package's own digest of the script (``dist/history-view.iife.js.sha256``).
-VIEWER_SHA256 = "b7dab1cfae794f42104d0cede6e9debda88f6af94ca8da5bffc31580b8d72d17"
+VIEWER_SHA256 = "32f3c349263e4e9cc56894461005481d89c97415a5f0379230fd970ed3139ea6"
 DEFAULT_HOME = "~/.config/ard-commerce-demo"
 
 
