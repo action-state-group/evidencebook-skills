@@ -108,6 +108,9 @@ def test_every_line_the_selling_process_says_speaks_to_its_owner():
     # shown and is left as it is
     tree = ast.parse((HERE / "flow.py").read_text())
     agent = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "SellerAgent")
+    # a line said by name (self.say(REOPENED)) is the module constant's text
+    consts = {t.id: _said_text(n.value) for n in tree.body if isinstance(n, ast.Assign)
+              for t in n.targets if isinstance(t, ast.Name)}
     said = []
     for call in ast.walk(agent):
         if not isinstance(call, ast.Call):
@@ -115,7 +118,7 @@ def test_every_line_the_selling_process_says_speaks_to_its_owner():
         f = call.func
         if (isinstance(f, ast.Attribute) and f.attr in ("say", "event", "failed")
                 and getattr(f.value, "id", "") == "self") or (isinstance(f, ast.Attribute) and f.attr == "Refused"):
-            said += [_said_text(a) for a in call.args]
+            said += [consts.get(a.id, "") if isinstance(a, ast.Name) else _said_text(a) for a in call.args]
     # the loop's step names, said through self.failed(what, ...), and a reopened window's lines rebuilt from its records
     # (_replay's (mark, line) pairs)
     for t in ast.walk(agent):
@@ -129,6 +132,7 @@ def test_every_line_the_selling_process_says_speaks_to_its_owner():
     text = "\n".join(s for s in said if s)
     assert "your delivery record says so" in text and "your History card" in text and "held by your own check" in text
     assert "your own wallet is not checked here" in text and "asks for your" in text
+    assert "window opened again: the lines above are read from your own records" in text
     assert not clean(text), clean(text)
 
 
@@ -184,7 +188,7 @@ class _Party:
 def test_a_sellers_receipt_says_you(monkeypatch, real):
     monkeypatch.setattr(receipt, "proof_lines", lambda p, deal_id, name="": [])
     monkeypatch.setattr(receipt, "_countersigned", lambda p, deal_id: None)
-    monkeypatch.setattr(flow, "shipped_of", lambda p, deal_id: "150 of 200 badges")
+    monkeypatch.setattr(flow, "delivery_record", lambda p, deal_id: None)
     out = receipt.receipt_text(_Party(), "Kestrel Print", "deal-fedcba9876543210", real=real, seller=True)
     assert out.startswith("Kestrel Print: your receipt for deal fedcba98, from your own records"), out
     assert "(not met, against you)" in out

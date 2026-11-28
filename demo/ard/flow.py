@@ -453,7 +453,7 @@ class SellerAgent:
 
 
 #: The line a reopened seller window adds after the lines rebuilt from its records (:meth:`SellerAgent.earlier`).
-REOPENED = ("window opened again: the lines above are read from this seller's own records, each at the time it was kept; "
+REOPENED = ("window opened again: the lines above are read from your own records, each at the time it was kept; "
             "the lines below are new")
 
 
