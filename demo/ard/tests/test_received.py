@@ -27,6 +27,13 @@ class FakeMaya:
     def notes(self, record_type=""):
         return [n for n in self._notes if not record_type or n["type"] == record_type]
 
+    def report(self, deal_id):  # both rows met so far, as her statement leaves them (#457)
+        return {"report": {"rows": [{"id": buyer.pt.PAID, "status": "agreed_so_far", "value": "met"},
+                                    {"id": buyer.pt.DELIVERED, "status": "agreed_so_far", "value": "met"}]}}
+
+    def log(self, line):
+        pass
+
 
 DEAL = buyer.Deal(deal_id="deal-0123456789abcdef", seller="alder", seller_key="k" * 64, price_msat=2000, offer="o",
                   rail="simulated", me="maya")
@@ -76,8 +83,13 @@ def test_no_yes_seals_no_received_statement(session, monkeypatch, sent, how, wor
 def test_her_yes_seals_it_once(session, monkeypatch, sent):
     asked = []
     monkeypatch.setattr(ds, "dialog_answer", lambda title, text, yes, no="Cancel": asked.append(text) or "yes")
-    assert "Maya's statement sent to Alder Print Co." in ds.ard_confirm_received("alder")
-    assert "already said she received it" in ds.ard_confirm_received("alder")  # a second ask seals nothing more
+    out = ds.ard_confirm_received("alder")
+    assert "Maya's statement sent to Alder Print Co." in out
+    # the deal's state in her receipt's words, never "complete" (#457 F10)
+    assert ("Her receipt for deal 01234567 now says: payment: met so far, as both sides said (still open to dispute) "
+            "(met); delivery: met so far, as both sides said (still open to dispute) (met).") in out
+    again = ds.ard_confirm_received("alder")
+    assert "already said she received it" in again and "still open to dispute" in again  # a second ask seals nothing more
     assert session.maya.statements == [(DEAL.deal_id, {buyer.pt.PAID: "met", buyer.pt.DELIVERED: "met"})]
     assert sent == [("alder", DEAL.deal_id, "statement")] and len(asked) == 1
     assert asked[0] == ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges "

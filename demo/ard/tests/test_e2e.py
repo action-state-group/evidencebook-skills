@@ -275,8 +275,21 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     entered = flow.rulings_entered(kestrel)
     assert list(entered) == [deal.deal_id]
     rep = kestrel.report(deal.deal_id)
-    seller_line = screens.ruled_for_seller(rep.get("report", rep), entered[deal.deal_id])
-    assert len(seller_line) == 1 and seller_line[0].startswith("Ruled against you: delivery not met. ")
+    # the delivered count from each side's own records, as the ruling lines name it (#457): Kestrel's sealed delivery
+    # record and the delivery record Maya kept
+    assert flow.shipped_of(kestrel, deal.deal_id) == "150 of 200 badges"
+    assert flow.shipped_of(w["maya"], deal.deal_id) == "150 of 200 badges"
+    seller_line = screens.ruled_for_seller(rep.get("report", rep), entered[deal.deal_id],
+                                           flow.shipped_of(kestrel, deal.deal_id))
+    assert len(seller_line) == 1 and seller_line[0].startswith(
+        "The adjudicator ruled against you: delivery not met (150 of 200 badges delivered). ")
+    # a reopened Kestrel window lists this deal's events from its own records (#457, re-entry)
+    earlier = "\n".join(w["agents"]["kestrel"].earlier())
+    for line in ("deal agreed: ", "paid: the buyer says it paid 1,000 msat",
+                 "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so, and states the "
+                 "delivery not met)", f"dispute received: the buyer disputed the delivery of deal {deal.deal_id[5:13]}",
+                 f"the adjudicator asked for this party's books of deal {deal.deal_id[5:13]}: sent in full"):
+        assert line in earlier, earlier
     assert seller_line[0].endswith(screens.NO_REFUND)
 
     # Kestrel's own card counts it once Kestrel stamps (on demand: no wait for the cadence), as its agent's

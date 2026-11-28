@@ -152,8 +152,10 @@ class SellerAgent:
         self.party = pt.Party(self.home, name)
         if not self.party.exists:
             raise pt.Refused("no sample history yet: run `python demo.py seed` first")
-        self.log: list[str] = []
         self._lock = threading.Lock()
+        # what this seller did before this window opened, from its own records: a reopened window shows its deals too
+        # (evidencebook-skills#457, Sherlock2: "after re-entry, seller activity rebuilds from the book, not from memory")
+        self.log: list[str] = self.earlier()
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
         self.active = time.monotonic()
@@ -170,7 +172,7 @@ class SellerAgent:
             # the trying-again lines said since the last other line (set here, so an agent made without __init__ has it)
             if not screens.once_per_failure(self.__dict__.setdefault("_failing", set()), line):
                 return
-            self.log.append(f"{datetime.now().astimezone().strftime('%H:%M:%S %Z')}  {line}")
+            self.log.append(f"{_clock(time.time())}  {line}")
 
     def event(self, line: str) -> None:
         """One of the events a seller is told of (evidencebook-skills#336, Sherlock2): deal agreed, paid, dispute
@@ -283,6 +285,47 @@ class SellerAgent:
                 last_card = time.monotonic()
             self._stop.wait(0.5)
 
+    def _agreed_line(self, deal_id: str) -> str:
+        return f"deal agreed: {self._terms(deal_id)}, signed by both (deal {deal_id[5:13]})"
+
+    def earlier(self) -> list[str]:
+        """This seller's activity lines for each deal of this run, rebuilt from its own records on disk, each at the time
+        that record was kept: the buyer's agreement it took, the payment the buyer says it made, its own sealed delivery
+        record, a delivery its own check held, a dispute it took and its books sent to the adjudicator. The ruling lines
+        come from its records when the activity is shown (``ard_seller_activity``). Only deals this seller's agent took
+        an offer for (a ``handled`` offer mark): never the sample history ``demo.py seed`` made."""
+        handled = self.party.dir / "handled"
+        if not handled.is_dir():
+            return []
+        events: list[tuple[float, str]] = []
+        for offer in handled.glob("*.offer"):
+            deal_id = offer.name.removesuffix(".offer")
+            for kind, line in self._replay(deal_id):
+                events.append(((handled / f"{deal_id}.{kind}").stat().st_mtime, line))
+        return [f"{_clock(at)}  {line}" for at, line in sorted(events, key=lambda e: e[0])]
+
+    def _replay(self, deal_id: str) -> list[tuple[str, str]]:
+        """One deal's activity lines from its own records, each with the ``handled`` mark that dates it."""
+        out = []
+        if self._done(deal_id, "agree"):
+            out.append(("agree", self._agreed_line(deal_id)))
+        ref = wire.path(self.home, self.name, deal_id, "ref")
+        if self._done(deal_id, "paid-kept") and ref.is_file():
+            out.append(("paid-kept", paid_line(json.loads(ref.read_text()))))
+        act = self.party.dir / "handled" / f"{deal_id}.act"
+        body = _record_body(Path(act.read_text())) if act.is_file() else {}
+        if body.get("observed"):
+            not_met = any(st.get("row") == pt.DELIVERED and st.get("value") == "not_met"
+                          for st in body.get("statements") or [] if isinstance(st, dict))
+            out.append(("act", delivered_line(buyer_words(body["observed"]), not_met)))
+        if self._done(deal_id, "held"):
+            out.append(("held", "the delivery was held by this seller's own check"))
+        if self._done(deal_id, "dispute"):
+            out.append(("dispute", dispute_line(deal_id)))
+        if self._done(deal_id, "adjanswer") and wire.path(self.home, adj.ADJUDICATOR, deal_id, "answer-seller").is_file():
+            out.append(("adjanswer", adj.books_sent_line(deal_id)))
+        return out
+
     def buyer_of(self, deal_id: str) -> str:
         """The buyer's folder on the wire for this deal, as its offer's sidecar names it."""
         f = wire.path(self.home, self.name, deal_id, "from")
@@ -336,7 +379,7 @@ class SellerAgent:
                 continue
             self.party.receive(f)
             self._mark(deal_id, "agree")
-            self.event(f"deal agreed: {self._terms(deal_id)}, signed by both (deal {deal_id[5:13]})")
+            self.event(self._agreed_line(deal_id))
 
     def _payments(self) -> None:
         p, info = self.party, SELLERS[self.name]
@@ -350,9 +393,7 @@ class SellerAgent:
                 self._mark(deal_id, "paid-kept")
                 # what this seller knows: the buyer's word; its own wallet is not read by this process (#337, Sherlock2:
                 # "if the rail can't show that, it says the buyer says paid")
-                self.event(f"paid: the buyer says it paid {ref['amount_msat']:,} msat"
-                         + (" (simulated rail: no money moved)" if ref.get("simulated")
-                            else "; this seller's own wallet is not checked here"))
+                self.event(paid_line(ref))
             leg = self._step(deal_id, "received", lambda: p.received_leg(deal_id, ref["amount_msat"], ref["payment_ref"]))
             wire.send(self.home, to, deal_id, "received", leg)
 
@@ -376,8 +417,7 @@ class SellerAgent:
                 st = self._step(deal_id, "statement-sent", lambda: p.statement(deal_id, {pt.PAID: "met", pt.DELIVERED: "met"}))
                 wire.send(self.home, to, deal_id, "statement", st)
             self._mark(deal_id, "paid")
-            states = (", and states the delivery not met" if info["states"].get(pt.DELIVERED) == "not_met" else "")
-            self.say(f"delivered to the buyer: {info['shipped']} (this seller's delivery record says so{states})")
+            self.say(delivered_line(info["shipped"], info["states"].get(pt.DELIVERED) == "not_met"))
 
     def _statements(self) -> None:
         for deal_id, f in wire.pending(self.home, self.name, "statement"):
@@ -391,8 +431,7 @@ class SellerAgent:
             if not self._done(deal_id, "dispute"):
                 self.party.receive(f)
                 self._mark(deal_id, "dispute")
-                self.event(f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the "
-                           "adjudicator asks for this seller's books, which this seller answers in full")
+                self.event(dispute_line(deal_id))
 
     def _requests(self) -> None:
         def say(line: str) -> None:  # the books going to the adjudicator is an event (#336)
@@ -409,6 +448,47 @@ class SellerAgent:
             if not self._done(deal_id, "named"):
                 self.party.receive(f)
                 self._mark(deal_id, "named")
+
+
+def _clock(at: float) -> str:
+    """An activity line's time, as the seller's window shows it."""
+    return datetime.fromtimestamp(at).astimezone().strftime('%H:%M:%S %Z')
+
+
+def _record_body(f: Path) -> dict:
+    """A sealed delivery record file's body: the object that holds its ``act`` and ``observed`` (the record travels
+    whole, as :func:`buyer._observed` reads it), or {} when the file is gone or holds none."""
+    try:
+        doc = json.loads(f.read_text())
+    except (OSError, ValueError):
+        return {}
+    todo = [doc]
+    while todo:
+        o = todo.pop()
+        if isinstance(o, dict):
+            if isinstance(o.get("observed"), str) and o.get("act"):
+                return o
+            todo.extend(o.values())
+        elif isinstance(o, list):
+            todo.extend(o)
+    return {}
+
+
+def paid_line(ref: dict) -> str:
+    """The payment, in what this seller knows: the buyer's word; its own wallet is not read by this process (#337,
+    Sherlock2: "if the rail can't show that, it says the buyer says paid")."""
+    return (f"paid: the buyer says it paid {ref['amount_msat']:,} msat"
+            + (" (simulated rail: no money moved)" if ref.get("simulated") else "; this seller's own wallet is not checked here"))
+
+
+def delivered_line(shipped: str, not_met: bool) -> str:
+    states = ", and states the delivery not met" if not_met else ""
+    return f"delivered to the buyer: {shipped} (this seller's delivery record says so{states})"
+
+
+def dispute_line(deal_id: str) -> str:
+    return (f"dispute received: the buyer disputed the delivery of deal {deal_id[5:13]}; the adjudicator asks for this "
+            "seller's books, which this seller answers in full")
 
 
 def digest_of(offer: dict) -> str:
@@ -526,6 +606,19 @@ def _records(book: dict) -> list[tuple[str, str, dict]]:
         return list((records or {}).items())
     return [("own", i, r) for i, r in each(book.get("records"))] + \
         [("held", i, r) for i, r in each((book.get("received") or {}).get("records"))]
+
+
+def shipped_of(p: pt.Party, deal_id: str) -> str | None:
+    """What the seller's own signed delivery record says it shipped ("150 of 200 badges"), from this party's own
+    records: a seller's own sealed delivery record (the file its ``handled`` act mark names), or the delivery record the
+    buyer kept (her :data:`DELIVERED_SEEN` note). None when it holds neither: a ruling line then names no count
+    (evidencebook-skills#457, Sherlock2: the ruling lines say how many were delivered)."""
+    act = p.dir / "handled" / f"{deal_id}.act"
+    body = _record_body(Path(act.read_text())) if act.is_file() else {}
+    if body.get("observed"):
+        return buyer_words(body["observed"])
+    seen = [n["statement"]["observed"] for n in p.notes(DELIVERED_SEEN) if n["statement"].get("deal_id") == deal_id]
+    return buyer_words(seen[0]) if seen else None
 
 
 def case_view(case: dict, names: dict[str, str]) -> Case:

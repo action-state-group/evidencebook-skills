@@ -487,9 +487,14 @@ def answer_requests(home: Path, p: pt.Party, me: str, side: str, say) -> list[st
         mark.parent.mkdir(exist_ok=True)
         mark.touch()
         done.append(deal_id)
-        say(f"the adjudicator asked for this party's books of deal {deal_id[5:13]}: sent in full (its own book and the "
-            "copy it holds of the other side's)")
+        say(books_sent_line(deal_id))
     return done
+
+
+def books_sent_line(deal_id: str) -> str:
+    """A party's books going to the adjudicator, as its activity says it (an event, evidencebook-skills#336)."""
+    return (f"the adjudicator asked for this party's books of deal {deal_id[5:13]}: sent in full (its own book and the "
+            "copy it holds of the other side's)")
 
 
 def send_book(home: Path, p: pt.Party, deal_id: str, side: str, say) -> Path:
