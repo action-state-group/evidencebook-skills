@@ -119,6 +119,17 @@ def test_a_ruling_for_her_says_the_outcome_and_no_refund():
     assert screens.ruled_for_buyer({"rows": [{"id": "delivered", "status": "agreed"}]}, "Kestrel Print") == []
 
 
+@pytest.mark.parametrize("status", ["waiting", "agreed_so_far"])
+def test_a_ruling_for_her_names_her_row_still_open(status):
+    # Sherlock2 on #462: her card counts the ruled deal "still open to dispute" while her own payment row is open, so
+    # the ruled line names it; once no row is open the sentence is gone
+    ruled = {"rows": [{"id": "paid_as_agreed", "status": status},
+                      {"id": "delivered", "status": "ruled", "ruling": {"value": "not_met", "against": "seller"}}]}
+    assert screens.ruled_for_buyer(ruled, "Kestrel Print") == [
+        "The adjudicator ruled for you: delivery not met, against Kestrel Print. No refund: this deal was agreed as not "
+        "refundable. Your payment is still open to dispute, so this deal is too."]
+
+
 class Seller:
     """A seller's agent with no binary: its log and its party's log."""
 
@@ -318,7 +329,7 @@ def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_not
     assert "ruling on deal 11111111: its report is not ready yet; ask again in a minute." in out
     assert ("ruling on deal fedcba98: The adjudicator ruled against you: delivery not met. Action State's witness "
             "has not time-stamped it yet. No refund: this deal was agreed as not refundable.") in out
-    assert "your History card: 11 deals, 1 didn't go as agreed." in out
+    assert "your History card: 11 deals · you fell short on 1. Disputes others raised about you:" in out  # #455, #462
     assert logged and "not ready" in logged[0]
     # Codex's PR review: a stamp that comes back after the entry shows on the next ask
     s.party._notes.append((flow.RULING_STAMPED, {"deal_id": "deal-fedcba9876543210", "stamped_at": STAMPED}))

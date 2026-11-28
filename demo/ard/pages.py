@@ -111,7 +111,7 @@ def labels(card: dict, witnessed: bool, sample: str = "", made: int = 0, real: b
     made in this run (``made``, from its own records), in its owner's words (:func:`screens.own_sample_note`; ``real``:
     the run's rail moves money)."""
     own = [screens.own_sample_note(sample, made, real)] if sample else []
-    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + own
+    return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card, own=True)] + own
 
 
 def _script_json(value: dict) -> str:

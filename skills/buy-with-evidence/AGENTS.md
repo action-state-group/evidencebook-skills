@@ -147,6 +147,9 @@ liar-catch checks are Mesh's own exception, not a second commerce card: this ski
   agreed"), "Good to buy" for GO, "Small orders only" for LIMIT and "Not from this seller" for NO; say why in the
   tool's own words (a dispute decided against it, a ruling you hold against it). Never name a tool to the person (say
   "the payment", never `ard_pay`).
+- The person's own card counts whether they came through: say its counts in the tool's words for it ("you fell short
+  on none", "2 still open to dispute"), never "didn't go as agreed" or "not final yet" for their own deals, and say any
+  ruling under it as the tool gives it, with the part it says is still open; never guess which part is open.
 - The assessment takes some inputs from the operator without checking them (which marketplace the seller is on,
   the list of sellers this pack accepts, who time-stamps a seller's card whose receipt is not checked, which key
   belongs to the witness, and who controls the seller's key); the screen says so. Do not present those as checked.

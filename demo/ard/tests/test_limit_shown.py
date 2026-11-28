@@ -441,3 +441,46 @@ def test_a_report_that_fails_after_the_page_opened_says_no_ruling_and_no_error(t
     out = ds.ard_open_receipt_page()
     assert "its receipt page opened in the browser" in out and "REFUSED" not in out
     assert "Ruled" not in out and "busy" not in out and any("busy" in line for line in logged)
+
+
+def test_the_buyers_own_card_beside_a_ruling_never_says_not_final_yet(monkeypatch, tmp_path):
+    """evidencebook-skills#455, Sherlock2's ruling: her own card's counts in her side's words, the ruled line kept under
+    it, and no "not final yet" beside a final ruling. Two deals, both still open (her payment rows wait),
+    one ruled against the seller; a buyer named outside the demo cast."""
+    import types
+
+    import desktop_server as ds
+    import flow
+    import pack as packs
+    import party as pt
+
+    class Buyer(Book):
+        dir = tmp_path / "rin"  # her own folder, holding no seller's delivery record (flow.delivery_record: None)
+
+        def stamp(self):
+            pass
+
+        def card_bundle(self, shared):
+            return "card.json"
+
+        def report(self, deal_id):
+            ruled = {"id": pt.DELIVERED, "status": "ruled", "ruling": {"against": "seller", "value": "not_met"}}
+            paid = {"id": pt.PAID, "status": "waiting"}  # her own row, which keeps the deal open (SH §11.3)
+            return {"report": {"rows": [paid, ruled] if deal_id == "deal-1111111111111111" else []}}
+
+        def log(self, line):
+            raise AssertionError(line)
+    deals = [types.SimpleNamespace(deal_id="deal-1111111111111111", seller="kestrel"),
+             types.SimpleNamespace(deal_id="deal-2222222222222222", seller="alder")]
+    monkeypatch.setattr(ds, "_own", lambda: (Buyer(), "Rin"))
+    monkeypatch.setattr(ds, "session", lambda: types.SimpleNamespace(deals=deals, pack=packs.starting()))
+    monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 2, "held": 0, "did_not_hold": 0, "undecided": 2}},
+                                                      {"anchor_time": "2026-11-25T22:00:00Z"}, "k"))
+    out = ds.ard_show_card()
+    lines = out.splitlines()
+    assert lines[1] == ("  2 deals · you fell short on none · 2 still open to dispute. Disputes others raised about "
+                        "you: 0 decided against you, of 0 decided; 0 open.")
+    assert lines[-1].startswith("  deal 11111111 with Kestrel Print: The adjudicator ruled for you: delivery not met, "
+                              "against Kestrel")
+    assert lines[-1].endswith("Your payment is still open to dispute, so this deal is too.")  # Sherlock2 on #462
+    assert "not final yet" not in out and "didn't go as agreed" not in out
