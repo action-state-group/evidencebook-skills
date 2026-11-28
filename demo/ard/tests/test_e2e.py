@@ -277,12 +277,14 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     rep = kestrel.report(deal.deal_id)
     # the delivered count from each side's own records, as the ruling lines name it (#457): Kestrel's sealed delivery
     # record and the delivery record Maya kept
-    assert flow.shipped_of(kestrel, deal.deal_id) == "150 of 200 badges"
-    assert flow.shipped_of(w["maya"], deal.deal_id) == "150 of 200 badges"
+    stated = flow.DeliveryRecord("150 of 200 badges", True)  # Kestrel's record states its delivery not met (#416)
+    assert flow.delivery_record(kestrel, deal.deal_id) == stated
+    assert flow.delivery_record(w["maya"], deal.deal_id) == stated
     seller_line = screens.ruled_for_seller(rep.get("report", rep), entered[deal.deal_id],
-                                           flow.shipped_of(kestrel, deal.deal_id))
+                                           flow.delivery_record(kestrel, deal.deal_id))
     assert len(seller_line) == 1 and seller_line[0].startswith(
-        "The adjudicator ruled against you: delivery not met (150 of 200 badges delivered). ")
+        "The adjudicator ruled against you on your own signed statement that the delivery was not met (150 of 200 "
+        "badges delivered). ")
     # a reopened Kestrel window lists this deal's events from its own records (#457, re-entry)
     earlier = "\n".join(w["agents"]["kestrel"].earlier())
     for line in ("deal agreed: ", "paid: the buyer says it paid 1,000 msat",

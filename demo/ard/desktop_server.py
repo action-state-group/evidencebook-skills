@@ -1183,7 +1183,7 @@ def ard_seller_activity() -> None:
             print(f"  ruling on deal {deal_id[5:13]}: its report is not ready yet; ask again in a minute.")
             continue
         for line in screens.ruled_for_seller(rep.get("report", rep), stamped_at,
-                                             flow.shipped_of(sel.party, deal_id)):
+                                             flow.delivery_record(sel.party, deal_id)):
             print(f"  ruling on deal {deal_id[5:13]}: {line}")
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
@@ -1341,7 +1341,7 @@ def ard_show_card() -> None:
             p.log(f"report of {d.deal_id} for the card: {exc!r}")
             continue
         for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"],
-                                            flow.shipped_of(p, d.deal_id)):
+                                            flow.delivery_record(p, d.deal_id)):
             print(f"  deal {d.deal_id[5:13]} with {SELLERS[d.seller]['label']}: {line}")
 
 
@@ -1398,7 +1398,7 @@ def ard_open_receipt_page() -> None:
             p.log(f"report of {deal_id} for the receipt page: {exc!r}")
         else:
             for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"],
-                                                flow.shipped_of(p, deal_id)):
+                                                flow.delivery_record(p, deal_id)):
                 print(f"deal {deal_id[5:13]}: {line}")
 
 

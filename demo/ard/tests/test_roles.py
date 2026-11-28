@@ -106,8 +106,13 @@ def test_a_ruling_for_her_says_the_outcome_and_no_refund():
         "The adjudicator ruled for you: delivery not met, against Kestrel Print. No refund: this deal was agreed as not "
         "refundable."]
     # Sherlock2 on #457: who ruled and how many were delivered, from her own records
-    assert screens.ruled_for_buyer(RULED, "Kestrel Print", "150 of 200 badges") == [
-        "The adjudicator ruled for you: delivery not met (150 of 200 badges delivered), against Kestrel Print. No "
+    stated = flow.DeliveryRecord("150 of 200 badges", True)
+    assert screens.ruled_for_buyer(RULED, "Kestrel Print", stated) == [
+        "The adjudicator ruled for you on Kestrel Print's own signed statement that the delivery was not met (150 of "
+        "200 badges delivered). No refund: this deal was agreed as not refundable."]
+    # a record that gives only the count: the line names the record, not our reading of it (Sherlock2, buzz 79366361)
+    assert screens.ruled_for_buyer(RULED, "Kestrel Print", flow.DeliveryRecord("150 of 200 badges", False)) == [
+        "The adjudicator ruled for you on Kestrel Print's own signed delivery record (150 of 200 badges delivered). No "
         "refund: this deal was agreed as not refundable."]
     against_her = {"rows": [{"id": "delivered", "status": "ruled", "ruling": {"value": "not_met", "against": "buyer"}}]}
     assert screens.ruled_for_buyer(against_her, "Kestrel Print") == []  # never "for you" when it is not
@@ -240,9 +245,16 @@ def test_a_ruling_against_the_seller_says_the_witness_time_and_no_refund():
         f"The adjudicator ruled against you: delivery not met. Action State's witness time-stamped it at {at}. No "
         "refund: this deal was agreed as not refundable."]
     # Sherlock2's form on #457, with the count from its own delivery record
-    assert screens.ruled_for_seller(AGAINST_SELLER, STAMPED, "150 of 200 badges") == [
-        f"The adjudicator ruled against you: delivery not met (150 of 200 badges delivered). Action State's witness "
-        f"time-stamped it at {at}. No refund: this deal was agreed as not refundable."]
+    assert screens.ruled_for_seller(AGAINST_SELLER, STAMPED, flow.DeliveryRecord("150 of 200 badges", True)) == [
+        f"The adjudicator ruled against you on your own signed statement that the delivery was not met (150 of 200 "
+        f"badges delivered). Action State's witness time-stamped it at {at}. No refund: this deal was agreed as not "
+        "refundable."]
+    assert screens.ruled_for_seller(AGAINST_SELLER, "", flow.DeliveryRecord("150 of 200 badges", False)) == [
+        "The adjudicator ruled against you on your own signed delivery record (150 of 200 badges delivered). Action "
+        "State's witness has not time-stamped it yet. No refund: this deal was agreed as not refundable."]
+    # a ruling for the seller names no ground of the buyer's: only the outcome
+    assert screens.ruled_for_seller(FOR_SELLER, "", flow.DeliveryRecord("200 of 200 badges", False)) == [
+        "The adjudicator ruled for you: delivery met. Action State's witness has not time-stamped it yet."]
     # the remedy is the one Maya's card shows for the same ruling
     assert screens.ruled_for_buyer(AGAINST_SELLER, "Kestrel Print")[0].endswith(screens.NO_REFUND)
 
@@ -296,7 +308,7 @@ def test_seller_activity_shows_each_ruling_line_and_one_report_failure_hides_not
         def card_bundle(self, shared):
             return "card.json"
     s = Seller(tmp_path).agent
-    Party.dir = tmp_path  # no delivery record kept: the ruling line names no count
+    Party.dir = tmp_path / "kestrel"  # no delivery record kept: the ruling line names no count
     s.party = Party([(flow.RULING_ENTERED, {"deal_id": "deal-1111111111111111", "stamped_at": ""}),
                      (flow.RULING_ENTERED, {"deal_id": "deal-fedcba9876543210", "stamped_at": ""})])
     s.say("the adjudicator's ruling on deal fedcba98 entered in this party's records")

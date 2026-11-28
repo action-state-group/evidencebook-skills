@@ -79,18 +79,26 @@ def _mark(party, deal_id, kind, at, value=""):
     os.utime(f, (at, at))
 
 
-def test_the_count_comes_from_her_kept_record_or_the_sellers_own(tmp_path):
+def test_the_delivery_record_from_the_sellers_own_file_or_her_copy(tmp_path):
     p = Party(tmp_path / "kestrel")
-    assert flow.shipped_of(p, KESTREL.deal_id) is None  # neither kept: no count
+    assert flow.delivery_record(p, KESTREL.deal_id) is None  # none held: no count, no ground
     act = tmp_path / "act.json"
     act.write_text(json.dumps(ACT))
     _mark(p, KESTREL.deal_id, "act", 1, str(act))
-    assert flow.shipped_of(p, KESTREL.deal_id) == "150 of 200 badges"
+    assert flow.delivery_record(p, KESTREL.deal_id) == flow.DeliveryRecord("150 of 200 badges", True)
     her = Party(tmp_path / "maya")
+    # her kept note alone gives the count, never a statement
     her._notes.append({"type": flow.DELIVERED_SEEN,
                        "statement": {"deal_id": KESTREL.deal_id, "observed": "partial:badges_150_of_200"}})
-    assert flow.shipped_of(her, KESTREL.deal_id) == "150 of 200 badges"
-    assert flow.shipped_of(her, "deal-1111111111111111") is None
+    assert flow.delivery_record(her, KESTREL.deal_id) == flow.DeliveryRecord("150 of 200 badges", False)
+    # the record itself, as it reached her: what it states too
+    wire.write_atomic(wire.path(tmp_path, "maya", KESTREL.deal_id, "act"), json.dumps(ACT).encode())
+    assert flow.delivery_record(her, KESTREL.deal_id) == flow.DeliveryRecord("150 of 200 badges", True)
+    full = {"record": {"payload": {"body": {"act": "delivered", "observed": "delivered:badges_200_of_200",
+                                            "statements": []}}}}
+    wire.write_atomic(wire.path(tmp_path, "maya", "deal-1111111111111111", "act"), json.dumps(full).encode())
+    assert flow.delivery_record(her, "deal-1111111111111111") == flow.DeliveryRecord("200 of 200 badges", False)
+    assert flow.delivery_record(her, "deal-2222222222222222") is None
 
 
 def test_a_reopened_seller_window_lists_its_deals_from_its_own_records(tmp_path):
@@ -171,6 +179,7 @@ def test_the_ruling_line_in_the_sellers_window_names_its_own_count(tmp_path, mon
     monkeypatch.setattr(ds, "seller", lambda: s)
     monkeypatch.setattr(flow, "read_card", lambda f: ({"outcomes": {"of": 11, "did_not_hold": 1}}, None, None))
     out = ds.ard_seller_activity()
-    assert (f"ruling on deal fedcba98: The adjudicator ruled against you: delivery not met (150 of 200 badges "
-            f"delivered). Action State's witness time-stamped it at {screens.local_time(STAMPED, date=True)}.") in out
+    assert (f"ruling on deal fedcba98: The adjudicator ruled against you on your own signed statement that the delivery "
+            f"was not met (150 of 200 badges delivered). Action State's witness time-stamped it at "
+            f"{screens.local_time(STAMPED, date=True)}.") in out
 

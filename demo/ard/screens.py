@@ -153,36 +153,44 @@ def card_line(card: dict) -> str:
 NO_REFUND = "No refund: this deal was agreed as not refundable."
 
 
-def ruled_for_buyer(report: dict, seller: str, shipped: str | None = None) -> list[str]:
+def ruled_for_buyer(report: dict, seller: str, record=None) -> list[str]:
     """What a ruling for the buyer means for her, from capsulectl's report of her deal (evidencebook-skills#334,
-    Sherlock2's words): who ruled, the outcome, how many the seller's delivery record says were delivered (``shipped``,
-    from her own records, :func:`flow.shipped_of`; left out when it is not to hand), and that no refund follows, since
-    every deal here is agreed as not refundable (``recourse.refundable: false`` in her intent). Only a ruled row the
-    adjudicator found not met against the seller. Sherlock2 on #457: the line says who ruled and how many were delivered,
-    so her agent never says the seller "didn't deliver"."""
+    Sherlock2's words): who ruled, on what, the outcome, and that no refund follows, since every deal here is agreed as
+    not refundable (``recourse.refundable: false`` in her intent). Only a ruled row the adjudicator found not met against
+    the seller. ``record`` is the seller's own signed delivery record as her files hold it (:func:`flow.delivery_record`),
+    or None. Sherlock2 on #457 (buzz 7e446929, 79366361): the line says who ruled, on what, and how many were delivered,
+    and names what was signed, not our reading of it; her agent had said the seller "didn't deliver", then "because"."""
     out = []
     for row in report.get("rows", []):
         r = row.get("ruling") or {}
         if row.get("status") == "ruled" and r.get("against") == "seller" and r.get("value") == "not_met":
             what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
-            out.append(f"The adjudicator ruled for you: {what} not met{_count(row, shipped)}, against {stop(seller)} "
-                       f"{NO_REFUND}")
+            ground = _ground(row, record, f"{seller}'s")
+            out.append(f"The adjudicator ruled for you {ground}{NO_REFUND}" if ground
+                       else f"The adjudicator ruled for you: {what} not met, against {stop(seller)} {NO_REFUND}")
     return out
 
 
-def _count(row: dict, shipped: str | None) -> str:
-    """The delivered count beside a ruling on the delivery row, as Sherlock2's form on #457 has it."""
-    return f" ({shipped} delivered)" if shipped and row.get("id") == pt.DELIVERED else ""
+def _ground(row: dict, record, whose: str) -> str:
+    """What a ruling against the seller on the delivery rests on, as its own signed delivery record says it: its own
+    statement that the delivery was not met when the record states that, else the record itself; "" when the line has
+    no record to name (another row, or none held)."""
+    if record is None or row.get("id") != pt.DELIVERED:
+        return ""
+    on = ("own signed statement that the delivery was not met" if record.states_not_met
+          else "own signed delivery record")
+    return f"on {whose} {on} ({record.shipped} delivered). "
 
 
-def ruled_for_seller(report: dict, stamped_at: str, shipped: str | None = None) -> list[str]:
+def ruled_for_seller(report: dict, stamped_at: str, record=None) -> list[str]:
     """What a ruling the seller entered says, from its own records (evidencebook-skills#360, Steven's run at 2fa6abe:
-    "the seller should see that line too"): who ruled and the outcome from its ``deal report`` row, how many its own
-    delivery record says were delivered (``shipped``, :func:`flow.shipped_of`), the time Action State's witness
-    stamped the ruling as the seller's agent noted it when it took the ruling (``stamped_at``, "" while it holds no
-    receipt), and, for a ruling against it, the remedy Maya's card shows (:data:`NO_REFUND`). Sherlock2's form on #457:
-    "The adjudicator ruled against you: delivery not met (150 of 200 badges delivered). Action State's witness
-    time-stamped it at ..." (its agent had said the witness ruled, for not delivering)."""
+    "the seller should see that line too"): who ruled and the outcome from its ``deal report`` row and, for a ruling
+    against it on the delivery, what it rests on as its own signed delivery record says it (``record``,
+    :func:`flow.delivery_record`); the time Action State's witness stamped the ruling as the seller's agent noted it when
+    it took the ruling (``stamped_at``, "" while it holds no receipt); and, for a ruling against it, the remedy Maya's card
+    shows (:data:`NO_REFUND`). Sherlock2 on #457 (buzz 7e446929, 79366361): "The adjudicator ruled against you on your
+    own signed statement that the delivery was not met (150 of 200 badges delivered). Action State's witness
+    time-stamped it at ..." (its agent had said the witness ruled, for not delivering, then "because")."""
     out = []
     for row in report.get("rows", []):
         r = row.get("ruling") or {}
@@ -190,12 +198,17 @@ def ruled_for_seller(report: dict, stamped_at: str, shipped: str | None = None) 
             continue
         what = {pt.DELIVERED: "delivery", pt.PAID: "payment"}.get(row.get("id"), row.get("id"))
         found = "not met" if r.get("value") == "not_met" else "met"
-        who = {"seller": "The adjudicator ruled against you", "buyer": "The adjudicator ruled for you"}.get(
-            r.get("against"), "The adjudicator ruled")
         when = (f"{pt.WITNESS_NAME} time-stamped it at {local_time(stamped_at, date=True)}." if stamped_at
                 else f"{pt.WITNESS_NAME} has not time-stamped it yet.")
-        line = f"{who}: {what} {found}{_count(row, shipped)}. {when}"
-        if r.get("against") == "seller" and r.get("value") == "not_met":
+        against_it = r.get("against") == "seller" and r.get("value") == "not_met"
+        ground = _ground(row, record, "your") if against_it else ""
+        if ground:
+            line = f"The adjudicator ruled against you {ground}{when}"
+        else:
+            who = {"seller": "The adjudicator ruled against you", "buyer": "The adjudicator ruled for you"}.get(
+                r.get("against"), "The adjudicator ruled")
+            line = f"{who}: {what} {found}. {when}"
+        if against_it:
             line += f" {NO_REFUND}"
         out.append(line)
     return out

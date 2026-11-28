@@ -45,7 +45,7 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
     lines += ["  " + line for line in row_lines(report)]
     if not seller:
-        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller", flow.shipped_of(p, deal_id))]
+        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller", flow.delivery_record(p, deal_id))]
     lines += proof_lines(p, deal_id, name)
     lines.append("  " + countersign_line(_countersigned(p, deal_id), name, counterparty or "the other side"))
     if seller and real:

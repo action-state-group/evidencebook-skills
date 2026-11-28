@@ -317,9 +317,7 @@ class SellerAgent:
         act = self.party.dir / "handled" / f"{deal_id}.act"
         body = _record_body(Path(act.read_text())) if act.is_file() else {}
         if body.get("observed"):
-            not_met = any(st.get("row") == pt.DELIVERED and st.get("value") == "not_met"
-                          for st in body.get("statements") or [] if isinstance(st, dict))
-            out.append(("act", delivered_line(buyer_words(body["observed"]), not_met)))
+            out.append(("act", delivered_line(buyer_words(body["observed"]), _states_not_met(body))))
         if self._done(deal_id, "held"):
             out.append(("held", "the delivery was held by this seller's own check"))
         if self._done(deal_id, "dispute"):
@@ -615,17 +613,34 @@ def _records(book: dict) -> list[tuple[str, str, dict]]:
         [("held", i, r) for i, r in each((book.get("received") or {}).get("records"))]
 
 
-def shipped_of(p: pt.Party, deal_id: str) -> str | None:
-    """What the seller's own signed delivery record says it shipped ("150 of 200 badges"), from this party's own
-    records: a seller's own sealed delivery record (the file its ``handled`` act mark names), or the delivery record the
-    buyer kept (her :data:`DELIVERED_SEEN` note). None when it holds neither: a ruling line then names no count
-    (evidencebook-skills#457, Sherlock2: the ruling lines say how many were delivered)."""
+@dataclass(frozen=True)
+class DeliveryRecord:
+    """What the seller's own signed delivery record says: what it shipped ("150 of 200 badges") and whether it states
+    the delivery not met in its own words (a statement on the delivered row in the same record)."""
+    shipped: str
+    states_not_met: bool
+
+
+def delivery_record(p: pt.Party, deal_id: str) -> DeliveryRecord | None:
+    """The seller's own signed delivery record of a deal, read from this party's own files: a seller's own sealed record
+    (the file its ``handled`` act mark names), or the copy the buyer took (the record travels whole, on her wire); a
+    buyer's kept note of what it shipped when neither file is there (it says nothing of a statement). None when it holds
+    none: a ruling line then names no count and no ground (evidencebook-skills#457, Sherlock2: the ruling lines say who
+    ruled, on what, and how many were delivered; "the line names what was signed, not our reading of it")."""
     act = p.dir / "handled" / f"{deal_id}.act"
-    body = _record_body(Path(act.read_text())) if act.is_file() else {}
-    if body.get("observed"):
-        return buyer_words(body["observed"])
+    files = [Path(act.read_text())] if act.is_file() else []
+    files.append(wire.path(p.dir.parent, p.dir.name, deal_id, "act"))  # a party folder is <home>/<name>
+    for f in files:
+        body = _record_body(f) if f.is_file() else {}
+        if body.get("observed"):
+            return DeliveryRecord(buyer_words(body["observed"]), _states_not_met(body))
     seen = [n["statement"]["observed"] for n in p.notes(DELIVERED_SEEN) if n["statement"].get("deal_id") == deal_id]
-    return buyer_words(seen[0]) if seen else None
+    return DeliveryRecord(buyer_words(seen[0]), False) if seen else None
+
+
+def _states_not_met(body: dict) -> bool:
+    return any(isinstance(st, dict) and st.get("row") == pt.DELIVERED and st.get("value") == "not_met"
+               for st in body.get("statements") or [])
 
 
 def case_view(case: dict, names: dict[str, str]) -> Case:
