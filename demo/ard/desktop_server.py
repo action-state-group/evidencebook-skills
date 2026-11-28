@@ -1187,8 +1187,12 @@ def ard_seller_activity() -> None:
         for line in screens.ruled_for_seller(rep.get("report", rep), stamped_at,
                                              flow.delivery_record(sel.party, deal_id)):
             print(f"  ruling on deal {deal_id[5:13]}: {line}")
-    card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
-    print(f"now: {screens.card_line(card)}")
+    # the card as of its last checkpoint, said with that time: it can lag the lines above by one stamp, and a line
+    # that read "now" beside a deal it does not count yet read as a contradiction (#456's hand run)
+    card, as_of, _ = flow.read_card(sel.party.card_bundle(shared=True))
+    at = (as_of or {}).get("anchor_time")
+    when = f", as of your checkpoint at {screens.local_time(at, date=True)}" if at else ""
+    print(f"your History card{when}: {screens.card_line(card)}")
     print("  " + screens.own_sample_note(sel.name, flow.deals_made(sel.party), _real()))
 
 

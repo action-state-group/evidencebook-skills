@@ -215,13 +215,17 @@ def test_the_seller_tools_return_lines_say_none_of_the_words(tmp_path, monkeypat
     monkeypatch.setattr(ds, "_own_deal", lambda: (agent.party, "Kestrel Print", "deal-fedcba9876543210"))
     # Codex's PR review: a card that has not counted the deal yet (it waits for a stamp) still leaves it made in this run
     monkeypatch.setattr(flow, "read_card", lambda b: ({"outcomes": {"of": 10, "held": 10, "did_not_hold": 0,
-                                                                    "undecided": 0}}, None, None))
+                                                                    "undecided": 0}}, {"anchor_time": "2026-11-27T21:15:00Z"},
+                                                      None))
     monkeypatch.setattr(pages, "card_page", lambda *a, **k: tmp_path / "history.html")
     monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "receipt.html")
     monkeypatch.setattr(pages, "open_page", lambda path: opened)
     outs = {"activity": ds.ard_seller_activity(), "card page": ds.ard_open_card_page(),
             "receipt page": ds.ard_open_receipt_page()}
     assert outs["activity"].startswith("Kestrel Print: your own profile, keys and records")
+    # the card line says which checkpoint it is as of, since it can lag the deal lines above it
+    assert f"your History card, as of your checkpoint at {screens.local_time('2026-11-27T21:15:00Z', date=True)}: " in (
+        outs["activity"])
     assert "the only deal made in this run (simulated payment, no money moved)" in outs["activity"]
     assert outs["card page"].startswith("Kestrel Print: your History card page")
     assert outs["receipt page"].startswith("Kestrel Print: your receipt page")
