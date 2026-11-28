@@ -174,8 +174,12 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
 
 
 def open_page(path: Path) -> bool:
-    """Open the page in the default browser (macOS ``open``); ``ARD_OPEN_PAGES=0`` skips it. True when opened."""
-    if os.environ.get("ARD_OPEN_PAGES", "1") == "0":
+    """Open the page in the default browser (macOS ``open``) only when ``ARD_OPEN_PAGES=1``; True when opened.
+
+    Only a person's run sets it: ``goose/open-windows.py`` puts it in the windows it opens in Goose Desktop. Agent runs,
+    tests, the goose command line and ``scripts/check.sh`` leave it unset, so they never open a browser on the host's
+    screen; the tool still writes the page and prints its path (#465)."""
+    if os.environ.get("ARD_OPEN_PAGES") != "1":
         return False
     try:
         return subprocess.run(["open", str(path)], stdin=subprocess.DEVNULL, capture_output=True, timeout=30).returncode == 0

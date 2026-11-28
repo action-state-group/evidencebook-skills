@@ -47,6 +47,10 @@ def demo_homes(env, make=lambda var: tempfile.mkdtemp(prefix=f"{var.lower()}-"))
     return {var: env.get(var) or make(var) for var in DEMO_HOMES}
 
 
+# No test opens a page in the host's browser, whatever the shell exported: pages.open_page opens only on
+# ARD_OPEN_PAGES=1, which only a person's Goose Desktop windows carry (#465).
+os.environ.pop("ARD_OPEN_PAGES", None)
+
 _made = [v for v in DEMO_HOMES if not os.environ.get(v)]
 os.environ.update(demo_homes(os.environ))
 for _var in _made:

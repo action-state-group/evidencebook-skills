@@ -46,9 +46,9 @@ def calls(monkeypatch, tmp_path):
 
     monkeypatch.setattr(ow.subprocess, "run", run)
     monkeypatch.setattr(ow.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ow, "link", lambda role, rail, placeholders=False: f"goose://recipe?config={role}")
+    monkeypatch.setattr(ow, "link", lambda role, rail, placeholders=False, open_pages=False: f"goose://recipe?config={role}")
     monkeypatch.setattr(ow.envhelp, "message", lambda *a, **k: None)
-    monkeypatch.setattr(ow, "recipe", lambda role, rail, placeholders=False: {"title": role})
+    monkeypatch.setattr(ow, "recipe", lambda role, rail, placeholders=False, open_pages=False: {"title": role, "open_pages": open_pages})
     monkeypatch.setattr(ow, "to_link", lambda r: f"goose://recipe?config={r['title']}")
     monkeypatch.setattr(ow.reset, "_hashes", lambda user=None: tmp_path / "recipe_hashes")  # nothing trusted yet
     monkeypatch.setattr(ow.reset, "note_trust", lambda recipes, root: made.append(["note", [r["title"] for r in recipes], str(root)]))
@@ -290,3 +290,17 @@ def test_a_read_back_that_times_out_asks_for_the_permission(calls, monkeypatch):
     monkeypatch.setattr(ow.subprocess, "run", run)
     msg = ow.tile(say=lambda line: None)
     assert msg.startswith("could not tile the windows (could not read the windows back: ") and "Accessibility" in msg
+
+
+@pytest.mark.parametrize("value, opens", [(None, True), ("1", True), ("0", False)])
+def test_the_desktop_windows_open_their_pages_unless_the_shell_says_0(calls, monkeypatch, value, opens):
+    # A person's Goose Desktop run opens the card and receipt pages; ARD_OPEN_PAGES=0 keeps them closed (#465).
+    if value is None:
+        monkeypatch.delenv("ARD_OPEN_PAGES", raising=False)
+    else:
+        monkeypatch.setenv("ARD_OPEN_PAGES", value)
+    made = []
+    monkeypatch.setattr(ow, "recipe", lambda role, rail, placeholders=False, open_pages=False:
+                        made.append(open_pages) or {"title": role})
+    assert ow.main(["--rail", "fake"]) == 0
+    assert made == [opens] * 4

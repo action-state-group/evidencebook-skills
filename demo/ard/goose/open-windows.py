@@ -11,8 +11,9 @@ Goose Desktop answers with one window each (it asks once per recipe: Trust and E
 adjudicator first and Maya last, then tiles them in quarters (:func:`tile`), Maya's in front.
 It starts Goose itself on the demo's own root (:data:`GOOSE_ROOT_DEFAULT`, or ``ARD_GOOSE_ROOT``), so the demo's
 provider and extension settings never touch your own Goose; ``--goose-only`` starts that Goose and opens no window.
-``--print`` prints the links instead of opening them. The environment it needs is listed at the end of
---help."""
+``--print`` prints the links instead of opening them. The windows it opens in Goose Desktop open their card and
+receipt pages in the browser (``ARD_OPEN_PAGES=0`` keeps them closed); the ``--print`` links only write them, unless
+``ARD_OPEN_PAGES=1`` (#465). The environment it needs is listed at the end of --help."""
 from __future__ import annotations
 
 import argparse
@@ -108,13 +109,24 @@ PLACEHOLDER = {"ARD_WALLET_BUYER": "<buyer wallet dir>", "ARD_WALLET_SELLER": "<
 TOOL_TIMEOUT_S = 1380
 
 
-def recipe(role: str, rail: str, placeholders: bool = False) -> dict:
+def opens_pages(desktop: bool) -> bool:
+    """Whether the windows' page tools open their pages in the browser (``ARD_OPEN_PAGES=1`` in each recipe, #465).
+    A person's Goose Desktop run opens them unless the shell sets ``ARD_OPEN_PAGES=0``; recipes printed with ``--print``
+    (the goose command line, an agent's run) open them only when the shell sets ``ARD_OPEN_PAGES=1``."""
+    value = os.environ.get("ARD_OPEN_PAGES")
+    return value != "0" if desktop else value == "1"
+
+
+def recipe(role: str, rail: str, placeholders: bool = False, open_pages: bool = False) -> dict:
     env = [f"ARD_ROLE={role}", f"ARD_RAIL={rail}", f"CAPSULE_ENGINE={os.environ['CAPSULE_ENGINE']}",
            f"ARD_EVIDENCEBOOK={os.environ['ARD_EVIDENCEBOOK']}", f"CAPSULECTL_DEAL={os.environ['CAPSULECTL_DEAL']}"]
     # the testbed's own witness (ARD_WITNESS=local): its address, its key, and the certificate capsulectl trusts it by
     for var in ("ARD_HOME", "ARD_STAGE_PORT", "ARD_WITNESS", "ARD_WITNESS_URL", "ARD_WITNESS_KEY", "SSL_CERT_FILE"):
         if os.environ.get(var):
             env.append(f"{var}={os.environ[var]}")
+    # the page tools open their pages in the browser in a person's run only (opens_pages, #465); 0 is written too, so a
+    # window started from a process that carries ARD_OPEN_PAGES=1 (env adds to what it inherits) still opens nothing
+    env.append(f"ARD_OPEN_PAGES={1 if open_pages else 0}")
     if role == "maya":  # a dialog answered by typed reply is read from this Goose's own record of the chat (#418)
         env.append(f"ARD_GOOSE_DB={goose_root() / 'data' / 'sessions' / 'sessions.db'}")
     if role == "maya":  # the countersign upgrade (ard_countersign): capsule-cli's own capsulectl and the countersigner's folder
@@ -142,8 +154,8 @@ def to_link(recipe: dict) -> str:
     return "goose://recipe?config=" + base64.urlsafe_b64encode(json.dumps(recipe).encode()).decode().rstrip("=")
 
 
-def link(role: str, rail: str, placeholders: bool = False) -> str:
-    return to_link(recipe(role, rail, placeholders))
+def link(role: str, rail: str, placeholders: bool = False, open_pages: bool = False) -> str:
+    return to_link(recipe(role, rail, placeholders, open_pages))
 
 
 #: Goose Desktop 1.59.2 ignores a window position or size set from outside, and every window is titled "Goose", so the
@@ -491,9 +503,9 @@ def main(argv: list[str] | None = None) -> int:
     roles = [args.only] if args.only else ["alder", "kestrel", "adjudicator", "maya"]  # Maya last: hers is the front window
     if args.show:
         for role in roles:
-            print(link(role, args.rail, placeholders=True))
+            print(link(role, args.rail, placeholders=True, open_pages=opens_pages(desktop=False)))
     else:
-        recipes = [recipe(role, args.rail) for role in roles]
+        recipes = [recipe(role, args.rail, open_pages=opens_pages(desktop=True)) for role in roles]
         try:  # before any window can be trusted: reset deletes exactly these trust files
             reset.note_trust(recipes, root)
         except ValueError as e:  # a recipe reset could not clear again: open nothing rather than leave trust behind
