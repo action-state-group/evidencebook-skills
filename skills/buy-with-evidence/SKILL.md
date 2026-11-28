@@ -160,8 +160,8 @@ liar-catch checks are Mesh's own exception, not a second commerce card: this ski
 - Repeat a limit as the tool gives it, never shortened ("at or over", "under").
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
-- To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
-  page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
+- To show the receipt as a page, call `ard_open_receipt_page` once there is a deal. It opens the page the
+  same way; if it says there is no receipt page yet, say so and do not retry in the same turn.
 - `ard_pick` seals the pick. Never call `ard_pay` in the same message as `ard_pick`.
 - Before every `ard_pay`, a repeat order to a seller already paid included, stop and ask the person to
   confirm in one sentence that names the seller and the amount and says whether real money moves (the

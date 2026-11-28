@@ -395,12 +395,15 @@ def test_maya_s_receipt_page_answer_says_the_ruling_the_page_shows(tmp_path, mon
 
     import buyer
     import desktop_server as ds
+    import flow
     import pages
     import receipt
 
     deal = buyer.Deal("deal-0123456789abcdef", "kestrel", "k", 1000, "o", "fake", "maya")
     ruled = {"rows": [{"id": "delivered", "status": "ruled", "ruling": {"value": "not_met", "against": "seller"}}]}
-    p = types.SimpleNamespace(report=lambda deal_id: {"report": ruled}, log=lambda line: None)
+    seen = [{"type": flow.DELIVERED_SEEN, "statement": {"deal_id": deal.deal_id, "observed": "partial:badges_150_of_200"}}]
+    p = types.SimpleNamespace(report=lambda deal_id: {"report": ruled}, log=lambda line: None, dir=tmp_path,
+                              notes=lambda kind="": [n for n in seen if n["type"] == kind])
     monkeypatch.setattr(ds, "ROLE", "maya")
     monkeypatch.setattr(ds, "_own_deal", lambda: (p, "Maya", deal.deal_id))
     monkeypatch.setattr(ds, "session", lambda: types.SimpleNamespace(latest=lambda: deal, log=[]))
@@ -408,7 +411,8 @@ def test_maya_s_receipt_page_answer_says_the_ruling_the_page_shows(tmp_path, mon
     monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "page.html")
     monkeypatch.setattr(pages, "open_page", lambda path: True)
     out = ds.ard_open_receipt_page()
-    assert out.endswith("deal 01234567: " + screens.ruled_for_buyer(ruled, "Kestrel Print")[0])
+    assert out.endswith("deal 01234567: The adjudicator ruled for you on Kestrel Print's own signed delivery record (150 "
+                        "of 200 badges delivered). No refund: this deal was agreed as not refundable."), out
 
 
 def test_a_report_that_fails_after_the_page_opened_says_no_ruling_and_no_error(tmp_path, monkeypatch):

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import flow
 import pages
 import party as pt
 import screens
@@ -42,18 +43,9 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
         return f"{name}: its receipt for deal {deal_id[5:13]} is not ready yet; ask again in a minute."
     report = rep.get("report", rep)
     lines = [f"{name}: its receipt for deal {deal_id[5:13]}, from its own records (capsulectl's report, as of {screens.local_time(report.get('as_of', ''), date=True)})"]
-    for row in report.get("rows", []):
-        what = ROWS.get(row["id"], row["id"])
-        status = STATUS.get(row.get("status", ""), row.get("status", ""))
-        line = f"  {what}: {status}"
-        if row.get("status") == "ruled" and row.get("ruling"):
-            r = row["ruling"]
-            line += f" ({'not met' if r.get('value') == 'not_met' else 'met'}, against the {r.get('against')})"
-        elif row.get("value"):
-            line += f" ({'met' if row['value'] == 'met' else 'not met'})"
-        lines.append(line)
+    lines += ["  " + line for line in row_lines(report)]
     if not seller:
-        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller")]
+        lines += ["  " + x for x in screens.ruled_for_buyer(report, counterparty or "the seller", flow.delivery_record(p, deal_id))]
     lines += proof_lines(p, deal_id, name)
     lines.append("  " + countersign_line(_countersigned(p, deal_id), name, counterparty or "the other side"))
     if seller and real:
@@ -63,6 +55,23 @@ def receipt_text(p: pt.Party, name: str, deal_id: str, *, real: bool, seller: bo
     if not real:
         lines.append("  Test money: this deal's payment was on a simulated rail. No real money moved.")
     return "\n".join(lines)
+
+
+def row_lines(report: dict) -> list[str]:
+    """Each row's status as capsulectl's report says it, in the receipt's words: what the person's agent may say of the
+    deal's state (evidencebook-skills#457: "complete" for a deal still open to dispute)."""
+    lines = []
+    for row in report.get("rows", []):
+        what = ROWS.get(row["id"], row["id"])
+        status = STATUS.get(row.get("status", ""), row.get("status", ""))
+        line = f"{what}: {status}"
+        if row.get("status") == "ruled" and row.get("ruling"):
+            r = row["ruling"]
+            line += f" ({'not met' if r.get('value') == 'not_met' else 'met'}, against the {r.get('against')})"
+        elif row.get("value"):
+            line += f" ({'met' if row['value'] == 'met' else 'not met'})"
+        lines.append(line)
+    return lines
 
 
 def proof_lines(p: pt.Party, deal_id: str, name: str = "this party") -> list[str]:

@@ -89,8 +89,8 @@ liar-catch checks are Mesh's own exception, not a second commerce card: this ski
   independent of them: say so when you speak of it.
 - To show a History card as a page, call `ard_open_card_page`: it opens the page in the browser on the
   presenter's screen, and that is all the page needs. Never copy, move or link the page's file.
-- To show the receipt as a page, call `ard_open_receipt_page` after the deal has closed. It opens the
-  page the same way; if it says the deal is not closed yet, say so and do not retry in the same turn.
+- To show the receipt as a page, call `ard_open_receipt_page` once there is a deal. It opens the page the
+  same way; if it says there is no receipt page yet, say so and do not retry in the same turn.
 - A buyer may dispute a delivery. When the deal's adjudicator, which the operator runs, asks for this seller's books,
   the seller process answers in full, and it enters any ruling in this seller's own records. Say what the ruling found in its
   own words ("ruled against this seller on the delivery"), never that the seller was dishonest or failed.

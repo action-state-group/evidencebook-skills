@@ -27,6 +27,17 @@ class FakeMaya:
     def notes(self, record_type=""):
         return [n for n in self._notes if not record_type or n["type"] == record_type]
 
+    def report(self, deal_id):  # both rows met so far, as her statement leaves them (#457)
+        return {"report": {"rows": [{"id": buyer.pt.PAID, "status": "agreed_so_far", "value": "met"},
+                                    {"id": buyer.pt.DELIVERED, "status": "agreed_so_far", "value": "met"}]}}
+
+    def log(self, line):
+        pass
+
+    def stamp(self):  # the checkpoint her statement's report rests on
+        self.stamped = getattr(self, "stamped", 0) + 1
+        return {}
+
 
 DEAL = buyer.Deal(deal_id="deal-0123456789abcdef", seller="alder", seller_key="k" * 64, price_msat=2000, offer="o",
                   rail="simulated", me="maya")
@@ -76,8 +87,14 @@ def test_no_yes_seals_no_received_statement(session, monkeypatch, sent, how, wor
 def test_her_yes_seals_it_once(session, monkeypatch, sent):
     asked = []
     monkeypatch.setattr(ds, "dialog_answer", lambda title, text, yes, no="Cancel": asked.append(text) or "yes")
-    assert "Maya's statement sent to Alder Print Co." in ds.ard_confirm_received("alder")
-    assert "already said she received it" in ds.ard_confirm_received("alder")  # a second ask seals nothing more
+    out = ds.ard_confirm_received("alder")
+    assert "Maya's statement sent to Alder Print Co." in out
+    # the deal's state in her receipt's words, never "complete" (#457 F10)
+    assert ("Her receipt for deal 01234567 now says: payment: met so far, as both sides said (still open to dispute) "
+            "(met); delivery: met so far, as both sides said (still open to dispute) (met).") in out
+    assert session.maya.stamped == 1  # a checkpoint first: her statement came after the last one
+    again = ds.ard_confirm_received("alder")
+    assert "already said she received it" in again and "still open to dispute" in again  # a second ask seals nothing more
     assert session.maya.statements == [(DEAL.deal_id, {buyer.pt.PAID: "met", buyer.pt.DELIVERED: "met"})]
     assert sent == [("alder", DEAL.deal_id, "statement")] and len(asked) == 1
     assert asked[0] == ("Did you receive what you paid for from Alder Print Co.? Its delivery record says 200 of 200 badges "
@@ -157,3 +174,15 @@ def test_the_pick_result_names_no_tool(monkeypatch):
     out = ds.ard_pick("alder")
     assert "REFUSED" not in out and s.picked == {"alder": ""}, out
     assert "ard_" not in out and "is within its limit. Ask Maya whether to pay it; nothing is paid until she says yes." in out, out
+
+
+def test_a_receipt_not_ready_after_her_statement_says_so(session, monkeypatch, sent):
+    """The hand run of #457 at 6741ce2: the report refused a book with her statement after its last checkpoint, and
+    the answer said nothing of the deal's state, so her agent called the deal done."""
+    def refused(deal_id):
+        raise buyer.pt.Refused("your deal book has records after its last checkpoint")
+    monkeypatch.setattr(session.maya, "report", refused)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: "yes")
+    out = ds.ard_confirm_received("alder")
+    assert ("Her receipt for deal 01234567 is not ready yet, so its state is not shown here; ask for the receipt in a "
+            "minute.") in out, out

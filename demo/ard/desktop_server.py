@@ -743,6 +743,10 @@ LIMIT_FIRST = ("No spending limit is set yet. Before anything else, ask Maya in 
 #: hand run: "Your 7-day total only allows one of these", of 1,000 and 2,000 msat under a 3,000 msat limit).
 NO_SUMS = ("Never add up prices or payments against the limit yourself: say only what these lines and the payment check "
            "say.")
+#: Beside the History cards: they say nothing of her limit; the assessment says whether a price fits it (#457 F13: "Both
+#: prices are within your 3,000 msat limit", said at this step from no tool line).
+CARDS_NO_LIMIT = ("These cards say nothing about your spending limit: the assessment says whether each price fits it. "
+                  + NO_SUMS)
 #: After the limit dialog: one yes sets the limit and nothing more (#413).
 LIMIT_SET_THEN = "Tell Maya what the limit is now, and end your turn: wait for her next request."
 
@@ -783,6 +787,8 @@ def ard_show_history() -> None:
         if ev.card:
             print(f"  History card: {screens.card_line(ev.card)}")
             print(f"  {screens.signed_line(e['name'], e['id'], ev.read is not None and ev.read.witness_status == 'pass')}")
+    if limits.sealed(s.maya) is not None:  # her agent said both prices fit her limit at this step (#457 F13)
+        print(f"\n{CARDS_NO_LIMIT}")
 
 
 @_tool("maya")
@@ -1002,6 +1008,7 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
         target = open_[0] if open_ else mine[-1]
     if buyer.received_said(s.maya, target):
         print(f"Maya already said she received it: {name} has her statement for deal {target.deal_id[5:13]}.")
+        _deal_state(s.maya, target.deal_id)
         return
     if buyer.disputed(s.maya, target):
         raise RuntimeError(f"Maya disputed her delivery from {name} (deal {target.deal_id[5:13]}): her dispute stands, "
@@ -1019,6 +1026,28 @@ def ard_confirm_received(seller: str, deal: str = "") -> None:
     with s.pay_lock:
         buyer.close_received(s.home, s.maya, target)
     print(f"Maya's statement sent to {name}: she received what she paid for.")
+    _deal_state(s.maya, target.deal_id)
+
+
+def _deal_state(p: pt.Party, deal_id: str) -> None:
+    """The deal's rows as her receipt says them now, so the deal's state is the receipt's, never the agent's own word
+    ("complete" for a deal still open to dispute, evidencebook-skills#457). A report rests on a checkpoint and her
+    statement was sealed after the last one, so a checkpoint is taken first (as ard_show_card does); a report still not
+    ready says so."""
+    import receipt
+
+    try:
+        p.stamp()
+    except pt.Refused as exc:
+        p.log(f"stamp for the deal's state after her statement: {exc!r}")
+    try:
+        rep = p.report(deal_id)
+    except pt.Refused as exc:
+        p.log(f"report of {deal_id} after her statement: {exc!r}")
+        print(f"Her receipt for deal {deal_id[5:13]} is not ready yet, so its state is not shown here; ask for the "
+              "receipt in a minute.")
+        return
+    print(f"Her receipt for deal {deal_id[5:13]} now says: " + "; ".join(receipt.row_lines(rep.get("report", rep))) + ".")
 
 
 @_tool("maya")
@@ -1132,6 +1161,9 @@ def ard_dispute(seller: str, deal: str = "") -> None:
                            "Maya.")
     buyer.dispute(s.home, s.maya, target, print)
     print(screens.DISPUTE_RAISED.format(seller=name))
+    with s.pay_lock:  # read again: a delivery record can arrive while the dialog waits (Codex on #464)
+        observed = buyer.take_delivery(s.home, s.maya, target)
+    print(screens.dispute_stated(name, buyer.shipped(observed) if observed is not None else None))
 
 
 # -- the sellers --------------------------------------------------------------------------------------
@@ -1152,7 +1184,8 @@ def ard_seller_activity() -> None:
             sel.party.log(f"report of {deal_id} for the ruling line: {exc!r}")
             print(f"  ruling on deal {deal_id[5:13]}: its report is not ready yet; ask again in a minute.")
             continue
-        for line in screens.ruled_for_seller(rep.get("report", rep), stamped_at):
+        for line in screens.ruled_for_seller(rep.get("report", rep), stamped_at,
+                                             flow.delivery_record(sel.party, deal_id)):
             print(f"  ruling on deal {deal_id[5:13]}: {line}")
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
@@ -1309,7 +1342,8 @@ def ard_show_card() -> None:
         except pt.Refused as exc:
             p.log(f"report of {d.deal_id} for the card: {exc!r}")
             continue
-        for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
+        for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"],
+                                            flow.delivery_record(p, d.deal_id)):
             print(f"  deal {d.deal_id[5:13]} with {SELLERS[d.seller]['label']}: {line}")
 
 
@@ -1365,7 +1399,8 @@ def ard_open_receipt_page() -> None:
         except pt.Refused as exc:
             p.log(f"report of {deal_id} for the receipt page: {exc!r}")
         else:
-            for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"]):
+            for line in screens.ruled_for_buyer(rep.get("report", rep), SELLERS[d.seller]["label"],
+                                                flow.delivery_record(p, deal_id)):
                 print(f"deal {deal_id[5:13]}: {line}")
 
 
