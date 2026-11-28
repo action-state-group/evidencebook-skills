@@ -1,8 +1,8 @@
 """Results built by scripts/result_v0.py validate against AAC's evidence-result-v0 schema.
 
 tests/fixtures/evidence-result-v0.json is a byte copy of agent-action-capsule's
-`schemas/evidence-result-v0.json` at commit `5c8f6f8ccd7ed9b6b74a3b7d94e937761f9cc4f7` (the claim member `reason`, section 4.4),
-SHA-256 `a6a9d9780daea831567974208642c97c99cd3af75865ae828a2eeb2e1ac3b6d8`. Section 8a
+`schemas/evidence-result-v0.json` at commit `4ed9a4c65c34a9d5f6eaa30c0aeeda7a77ca92a8` (the claim members `reason`,
+section 4.4, and `subject_bundle`, section 4.5), SHA-256 `d15ea64525e71f3e4d21fe90c0db76184590b1449aa5b62a42eff544a17cb7c8`. Section 8a
 admits a claim member outside the schema's own set only when its name begins with `x-`;
 the judge pin and rule id ride in `x-judge-pin` (producer-private content).
 """
@@ -21,7 +21,7 @@ from result_v0 import build_result_v0  # noqa: E402
 from rollup import all_criteria_from_clauses  # noqa: E402
 
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "fixtures" / "evidence-result-v0.json"
-SCHEMA_SHA256 = "a6a9d9780daea831567974208642c97c99cd3af75865ae828a2eeb2e1ac3b6d8"
+SCHEMA_SHA256 = "d15ea64525e71f3e4d21fe90c0db76184590b1449aa5b62a42eff544a17cb7c8"
 GENERATED_AT = "2026-10-26T00:00:00Z"
 PIN = {"model_id": "example-judge-1", "model_hosting": "hosted", "input_refs": ["amount_minor"],
        "prompt_template_hash": "bf" * 32, "schema_hash": "df" * 32}

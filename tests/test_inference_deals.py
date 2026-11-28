@@ -267,6 +267,131 @@ class Goldens(unittest.TestCase):
         self.assertEqual(json.dumps(a, sort_keys=True), json.dumps(b, sort_keys=True))
 
 
+class SubjectBundles(unittest.TestCase):
+    """capsule-viewer#353: with report.sh's receipts list, each deal's claims
+    name that deal's receipt as `subject_bundle` (agent-action-capsule
+    Evidence Result section 4.5), computed before the Result is sealed."""
+
+    VECTORS = FIXTURES / "aac-subject-bundle-vectors.json"
+
+    @staticmethod
+    def exchange_ids(capsules):
+        """{exchange_id: the payer's own exchange record's capsule id}"""
+        out = {}
+        for c in capsules:
+            member = deals._attestation(c).get(deals.EXCHANGE)
+            if member:
+                out[member["serving_provenance"]["exchange_id"]] = c["capsule_id"]
+        return out
+
+    @staticmethod
+    def receipt(seed):
+        return {"bundle_kind": "evidence-bundle/v2", "bundle_version": "2", "root": seed, "records": []}
+
+    def run_with(self, entries):
+        payer = load("payer")
+        receipts = deals.receipt_digests(entries)
+        return deals.build_result(records(payer), compiled(), DATE, GENERATED_AT, None, receipts=receipts)[0]
+
+    def test_the_bundle_digest_is_agent_action_capsules(self):
+        # agent-action-capsule vectors/evidence-result/binding/subject-bundle.json at 4ed9a4c6, copied unchanged.
+        vectors = json.loads(self.VECTORS.read_text())
+        checked = 0
+        for case in vectors["cases"]:
+            if case.get("bundle_text") and "bundle_digest" in case:
+                self.assertEqual(deals.bundle_digest(json.loads(case["bundle_text"])), case["bundle_digest"],
+                                 case["name"])
+                checked += 1
+        self.assertGreaterEqual(checked, 7)
+
+    def test_each_deal_names_its_own_receipt_and_no_other_claim_carries_one(self):
+        ids = self.exchange_ids(load("payer"))
+        settled, short = self.receipt("settled"), self.receipt("short")
+        doc = self.run_with([
+            {"exchange_capsule_id": ids["deal-settled"], "receipt": json.dumps(settled)},
+            {"exchange_capsule_id": ids["deal-short"], "receipt": json.dumps(short)},
+            {"exchange_capsule_id": ids["deal-terms"], "held": True},
+        ])
+        named = {cid: c["subject_bundle"] for cid, c in claims(doc).items() if "subject_bundle" in c}
+        self.assertEqual(named, {
+            f"d1::{PAID}": {"digest_alg": "SHA-256", "digest": deals.bundle_digest(settled)},
+            f"d2::{PAID}": {"digest_alg": "SHA-256", "digest": deals.bundle_digest(short)},
+        })
+
+    def test_the_digest_is_of_the_receipt_the_list_gives_for_the_exchange(self):
+        # The list is the node's own answer per exchange record; the evaluator
+        # names exactly that bundle, so the page catches a builder that files
+        # it under another deal. A wrong list is not caught here (the bundle
+        # carries no exchange id to check it against).
+        ids = self.exchange_ids(load("payer"))
+        settled, short = self.receipt("settled"), self.receipt("short")
+        doc = self.run_with([{"exchange_capsule_id": ids["deal-settled"], "receipt": json.dumps(short)}])
+        digest = claims(doc)[f"d1::{PAID}"]["subject_bundle"]["digest"]
+        self.assertEqual(digest, deals.bundle_digest(short))
+        self.assertNotEqual(digest, deals.bundle_digest(settled))
+
+    def test_it_keys_on_the_mesh_capsules_own_id_not_the_book_records(self):
+        payer = load("payer")
+        ids = self.exchange_ids(payer)
+        booked = [("book-" + c["capsule_id"], c) for c in payer]
+        receipts = deals.receipt_digests(
+            [{"exchange_capsule_id": ids["deal-settled"], "receipt": json.dumps(self.receipt("s"))}])
+        doc = deals.build_result(booked, compiled(), DATE, GENERATED_AT, None, receipts=receipts)[0]
+        self.assertIn("subject_bundle", claims(doc)[f"d1::{PAID}"])
+
+    def test_a_deal_whose_exchange_records_have_different_receipts_is_refused(self):
+        payer = load("payer")
+        settled = next(c for c in payer if (deals._attestation(c).get(deals.EXCHANGE) or {})
+                       .get("serving_provenance", {}).get("exchange_id") == "deal-settled")
+        twin = copy.deepcopy(settled)
+        twin["capsule_id"] = "ee" * 32
+        receipts = deals.receipt_digests([
+            {"exchange_capsule_id": settled["capsule_id"], "receipt": json.dumps(self.receipt("a"))},
+            {"exchange_capsule_id": twin["capsule_id"], "receipt": json.dumps(self.receipt("b"))}])
+        with self.assertRaisesRegex(deals.DealsError, "exchange records have different receipts"):
+            deals.build_result(records(payer + [twin]), compiled(), DATE, GENERATED_AT, None, receipts=receipts)
+
+    def test_whitespace_key_order_and_countersignatures_do_not_change_it(self):
+        bundle = self.receipt("settled")
+        respaced = json.dumps(dict(reversed(list(bundle.items()))), indent=3)
+        signed = dict(bundle, countersignatures=[{"kid": "k"}])
+        digests = {deals.bundle_digest(json.loads(t)) for t in (json.dumps(bundle), respaced, json.dumps(signed))}
+        self.assertEqual(len(digests), 1)
+
+    def test_without_receipts_the_result_is_unchanged(self):
+        self.assertEqual(self.run_with([]), run(load("payer"))[0])
+
+    def test_the_result_with_subject_bundles_validates(self):
+        import jsonschema
+        schema = json.loads((ROOT / "tests" / "fixtures" / "evidence-result-v0.json").read_text())
+        ids = self.exchange_ids(load("payer"))
+        jsonschema.validate(self.run_with(
+            [{"exchange_capsule_id": ids["deal-settled"], "receipt": json.dumps(self.receipt("s"))}]), schema)
+
+    def test_the_same_entry_twice_is_not_a_conflict(self):
+        xid = self.exchange_ids(load("payer"))["deal-settled"]
+        entry = {"exchange_capsule_id": xid, "receipt": json.dumps(self.receipt("a"))}
+        self.assertEqual(deals.receipt_digests([entry, dict(entry)]), deals.receipt_digests([entry]))
+        held = {"exchange_capsule_id": xid, "held": True}
+        self.assertEqual(deals.receipt_digests([held, dict(held)]), {})
+
+    def test_an_unreadable_or_conflicting_receipts_list_is_refused(self):
+        xid = self.exchange_ids(load("payer"))["deal-settled"]
+        for entries in ("not a list",
+                        [{"receipt": "{}"}],
+                        [{"exchange_capsule_id": xid, "receipt": "not json"}],
+                        [{"exchange_capsule_id": xid, "receipt": "[1]"}],
+                        [{"exchange_capsule_id": xid, "receipt": json.dumps(self.receipt("a"))},
+                         {"exchange_capsule_id": xid, "receipt": json.dumps(self.receipt("b"))}],
+                        [{"exchange_capsule_id": xid, "held": True, "receipt": json.dumps(self.receipt("a"))}],
+                        [{"exchange_capsule_id": xid, "held": True},
+                         {"exchange_capsule_id": xid, "receipt": json.dumps(self.receipt("a"))}],
+                        [{"exchange_capsule_id": xid, "receipt": json.dumps(self.receipt("a"))},
+                         {"exchange_capsule_id": xid, "held": True}]):
+            with self.assertRaises(deals.DealsError, msg=repr(entries)[:60]):
+                deals.receipt_digests(entries)
+
+
 class Negatives(unittest.TestCase):
     """Issue #71 acceptance 3: each of these must fail."""
 

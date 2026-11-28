@@ -4,8 +4,10 @@ report.sh forwards the receipts file the plugin's settlement-report.sh writes to
 `capsulectl book report build --receipts FILE`, unchanged, and refuses it before
 anything is written to the book when the capsulectl in use does not list the
 flag. Without --receipts the build call is the one it was, and no help probe is
-made. The builder, not report.sh, checks the file; what the page then shows is
-the builder's and capsule-viewer's to test.
+made. On the evaluator path the evaluator gets the same file, to name each
+deal's receipt as its claims' subject_bundle (capsule-viewer#353). The builder,
+not report.sh, checks the file; what the page then shows is the builder's and
+capsule-viewer's to test.
 """
 import json
 import os
@@ -78,6 +80,25 @@ class ReportShReceipts(unittest.TestCase):
         self.assertEqual(argv[argv.index("--receipts") + 1], str(self.receipts))
         self.assertEqual(argv.count("--receipts"), 1)
         self.assertEqual(self.receipts.read_bytes(), before)
+
+    def test_the_evaluator_gets_the_same_file_before_the_result_is_sealed(self):
+        # capsule-viewer#353: the evaluator names each deal's receipt as its
+        # claims' subject_bundle, so it reads the very file the page builder gets.
+        stub = tw.STUB_EVALUATOR.replace(
+            "argv = sys.argv[1:]\n",
+            "argv = sys.argv[1:]\nimport os\n"
+            "(pathlib.Path(os.environ['STUB_CAPTURE']) / 'eval-argv.json').write_text(json.dumps(argv))\n", 1)
+        tw._exe(self.tmp / "scripts" / "evaluators" / "stub_eval.py", stub)
+        proc = self.run_report("--receipts", str(self.receipts))
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        argv = json.loads((self.capture / "eval-argv.json").read_text())
+        self.assertEqual(argv[argv.index("--receipts") + 1], str(self.receipts))
+        result_builds = [i for i, c in enumerate(self.calls()) if c[:3] == ["book", "result", "build"]]
+        self.assertTrue(result_builds, "the Result is sealed after the evaluator ran")
+        shutil.rmtree(self.capture)
+        self.capture.mkdir()
+        self.assertEqual(self.run_report(has_flag=False).returncode, 0)
+        self.assertNotIn("--receipts", json.loads((self.capture / "eval-argv.json").read_text()))
 
     def test_seal_wording_and_receipts_reach_the_same_build(self):
         proc = self.run_report("--seal", "--receipts", str(self.receipts), "--wording", str(tw.PACK),

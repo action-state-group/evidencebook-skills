@@ -19,6 +19,11 @@ Mesh payer node and a Mesh provider node sealed for one scripted two-node run.
   2026-11-01` (tests/test_inference_deals.py).
 - `vector-provider-countersigned.json`: a vector, not a golden from a real book
   (below).
+- `aac-subject-bundle-vectors.json`: agent-action-capsule's
+  `vectors/evidence-result/binding/subject-bundle.json` at `4ed9a4c6`, copied
+  unchanged. `tests/test_inference_deals.py` checks the evaluator's bundle
+  digest (`subject_bundle`, Evidence Result §4.5) against its cases
+  (capsule-viewer#353).
 
 What is real and what is scripted: the producer, the records, the keys, the
 signatures and the legs are the plugin's (capsules-plugin 0.1.5). The host
