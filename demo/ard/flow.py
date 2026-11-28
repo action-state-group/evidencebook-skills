@@ -73,6 +73,13 @@ def read_card(bundle: Path) -> tuple[dict, dict, str]:
 
 #: How long an on-demand publish waits for the witness to take its stamp, so the card carries its receipt (#350).
 CARD_STAMP_WAIT_S = 12
+#: How long after a seller's agent starts its loop keeps cutting the cadence's routine checkpoints (evidencebook-skills
+#: #453). A window left open stamped Action State's witness about once a minute per seller for as long as it ran (2,596
+#: stamps in 22 h from one stack left running). Past this, the loop still publishes the card as of its newest checkpoint
+#: and a deal's own steps still stamp on demand (Party.stamp), so only the routine ticks end. The bound counts from the
+#: start, never from the last deal: a cadence that stopped some time after the last deal would tell the witness when
+#: deals happen, which the cadence exists to hide (capsulectl deal_cadence.go, dealWitnessSees). A run takes well under it.
+ROUTINE_TICKS_S = 2 * 3600
 
 
 def stamped(bundle: Path) -> bool:
@@ -147,6 +154,7 @@ class SellerAgent:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self.threads: list[threading.Thread] = []
+        self.started = time.monotonic()
         self.advertise()
         self.wait_sample_held()
         self.republish(now=True)
@@ -232,11 +240,22 @@ class SellerAgent:
                     self.party.wait_checkpoint(CARD_STAMP_WAIT_S)
                 except pt.WitnessSlow:
                     pass  # published without its receipt; a later round publishes it once the witness takes it
-            else:
+            elif self.routine_ticks():
                 self.party.tick()
             publish_card(self.home, self.party, keep_stamped=not now)
         except pt.Refused as exc:
             self.failed("publishing this seller's History card", exc)
+
+    def routine_ticks(self) -> bool:
+        """Whether the loop still cuts the cadence's routine checkpoints (:data:`ROUTINE_TICKS_S`); says once when it
+        stops."""
+        if time.monotonic() - self.__dict__.setdefault("started", time.monotonic()) < ROUTINE_TICKS_S:
+            return True
+        if not self.__dict__.get("_ticks_ended"):
+            self._ticks_ended = True
+            self.say(f"routine time-stamps stopped {ROUTINE_TICKS_S // 3600} hours after this window opened; a deal's "
+                     "own steps still time-stamp it. Reopen the window to start them again.")
+        return False
 
     def _loop(self) -> None:
         last_card = 0.0
