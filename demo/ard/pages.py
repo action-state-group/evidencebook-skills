@@ -166,7 +166,8 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
     if out.get("verdict") != "VALID":
         raise pt.Refused(pt.not_verified("Your History card", out.get("verdict")))
     witnessed = {"by": pt.WITNESS_NAME, "at": ext["as_of"]["anchor_time"]} if stamp == "pass" else None
-    view = history_input(ext.get("deals", []), name=label, witnessed=witnessed,
+    # capsulectl writes `deals: null` in the own copy of a card that counts no deal (#449): that is no deal, not an error
+    view = history_input(ext.get("deals") or [], name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name if seller else ""),
                                                      f"History · {label}"))
