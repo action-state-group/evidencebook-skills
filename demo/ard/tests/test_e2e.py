@@ -262,7 +262,11 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     kestrel_page = receipt.receipt_page(w["maya"], "Maya", deal.deal_id, rail="simulated", seller=False)
     shown = _drawn(kestrel_page)
     assert 'data-seal="not_as_agreed"' in shown, "the receipt page draws no Didn't-go-as-agreed seal"
-    assert "Didn't go as agreed" in shown and "Ruled: Delivery not met" in shown
+    # read as text: the page wraps each value in an element naming its source (capsule-viewer's receipt view-model,
+    # "Ruled: <span data-src=...>Delivery</span> not met"), so the line is not one string in the markup
+    import html
+    text = " ".join(html.unescape(re.sub(r"<[^>]*>", "", re.sub(r"(?s)<(script|style)\b.*?</\1>", "", shown))).split())
+    assert "Didn't go as agreed" in text and "Ruled: Delivery not met" in text
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
     import buyer as b
