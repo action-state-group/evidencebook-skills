@@ -19,8 +19,9 @@ starting ``REFUSED:`` and changes nothing.
 ``alder`` / ``kestrel``   a seller, its own profile and keys; its agent answers on its own:
     ard_seller_activity  ->  what its agent did: the deal, the delivery, a dispute, a ruling, its card now
 ``adjudicator``   the demo's adjudicator (its own capsulectl-deal profile, run by the demo operator):
-    ard_case          ->  the cases sent to it: what each side's books show, and what the adjudicator ruled and why
+    ard_case          ->  the cases sent to it: what the adjudicator ruled and why, and what each side's books show
                           (it rules on its own, with no person: evidencebook-skills#416)
+    ard_ruling        ->  what the adjudicator ruled and why, under the line that it is not independent (#446)
     ard_case_activity ->  whether each party entered the ruling in its own book
 Every party's window also has ard_show_card, ard_open_card_page, ard_show_receipt and ard_open_receipt_page: its own
 History card and its own receipt (the adjudicator holds no deal of its own, so not those).
@@ -635,9 +636,11 @@ def _until_paused_or_done(job: _Job) -> str:
     return job.take().strip()
 
 
-def _tool(*roles: str, description: str | None = None):
+def _tool(*roles: str, description: str | None = None, plain: bool = False):
     """Register a tool for these roles. A tool returns the text it printed; a refusal is a line starting
-    ``REFUSED:`` and changes nothing."""
+    ``REFUSED:`` and changes nothing. ``plain``: the result is the printed text alone, with no structured copy
+    (``{"result": ...}``), so Goose shows the tool's own lines as printed rather than as one line of JSON
+    (evidencebook-skills#446)."""
     def deco(fn):
         @functools.wraps(fn)
         def run(*args, ard_request: Context | None = None, **kwargs) -> str:
@@ -664,7 +667,7 @@ def _tool(*roles: str, description: str | None = None):
         run.__annotations__ = {**fn.__annotations__, "ard_request": Context, "return": str}
         del run.__wrapped__
         if ROLE in roles:
-            return server.tool(description=description)(run)
+            return server.tool(description=description, structured_output=False if plain else None)(run)
         return run
     return deco
 
@@ -1177,32 +1180,65 @@ def _ask_on_arrival() -> None:
         time.sleep(ASK_EVERY_S)
 
 
-@_tool("adjudicator")
+@_tool("adjudicator", plain=True)
 def ard_case() -> None:
-    """Show the disputes sent to this adjudicator: who answered its request for their books (each side's agent answers
-    on its own, with its own book and the copy it holds of the other side's), what the books show (the seller's own
-    signed delivery record, each side's statement on the row), and what the adjudicator ruled and why, or why it has
-    not. The adjudicator rules on its own, with no person; this tool decides nothing and records nothing."""
+    """Show the disputes sent to this adjudicator: what the adjudicator ruled and why, or why it has not; who answered
+    its request for their books (each side's agent answers on its own, with its own book and the copy it holds of the
+    other side's); and what the books show (the seller's own signed delivery record, each side's statement on the row).
+    The adjudicator rules on its own, with no person; this tool decides nothing and records nothing. Its output is the
+    whole answer: the person reads it as printed."""
     a = _adjudicator()
-    cases = a.gather(30)
+    cases = _settle(a, a.gather(30))
     if not cases:
         print("no case yet: a party has sent no dispute to this adjudicator")
         return
-    stop = time.monotonic() + CASE_WAIT_S  # both answers in: the window's loop checks and rules within a round or two
-    while time.monotonic() < stop and any(len(c["answers"]) == 2 and not c["ruling"] and not _settled(c)
-                                          for c in cases):
-        time.sleep(1)
-        cases = a.cases()
     print(screens.ADJUDICATOR_INDEPENDENCE)
     for raw in cases:
         print()
         print("\n".join(flow.case_lines(flow.case_view(raw, flow.case_names(raw)), flow.case_names(raw))))
-        r = raw["ruling"]
-        if r and pt.witnessed() and not adj.stamped(_home(), raw["deal_id"]):
-            print(f"Its stamp is not taken yet: this window keeps asking {pt.WITNESS_NAME} and sends the ruling to "
-                  "both parties again with its stamp. Keep this window open until then.")
-        elif r:
-            print("Sent to both parties; each enters it in its own records.")
+        _sent_line(raw)
+
+
+@_tool("adjudicator", plain=True)
+def ard_ruling() -> None:
+    """Show what this adjudicator ruled on each case and why, or why it has not, in the adjudicator's own lines, under
+    the line that it is not independent of the parties. Call it whenever the person asks about the ruling, its reason or
+    the adjudicator's independence. It reads only: it asks no one, decides nothing and records nothing. Its output is
+    the whole answer: the person reads it as printed."""
+    a = _adjudicator()
+    cases = _settle(a, a.cases())
+    if not cases:
+        print("no case yet: a party has sent no dispute to this adjudicator")
+        return
+    print(screens.ADJUDICATOR_INDEPENDENCE)
+    for raw in cases:
+        names = flow.case_names(raw)
+        c = flow.case_view(raw, names)
+        print()
+        print(flow.case_header(c, names))
+        print("\n".join(f"  {line}" for line in flow.ruling_lines(c, names)))
+        _sent_line(raw)
+
+
+def _settle(a: adj.Adjudicator, cases: list[dict]) -> list[dict]:
+    """``cases`` once each case whose answers are both in is ruled or settled: the window's loop checks and rules within
+    a round or two, so a view waits up to :data:`CASE_WAIT_S` for it."""
+    stop = time.monotonic() + CASE_WAIT_S
+    while time.monotonic() < stop and any(len(c["answers"]) == 2 and not c["ruling"] and not _settled(c)
+                                          for c in cases):
+        time.sleep(1)
+        cases = a.cases()
+    return cases
+
+
+def _sent_line(raw: dict) -> None:
+    """Whether the ruling went to both parties, or its stamp is still being asked for."""
+    r = raw["ruling"]
+    if r and pt.witnessed() and not adj.stamped(_home(), raw["deal_id"]):
+        print(f"Its stamp is not taken yet: this window keeps asking {pt.WITNESS_NAME} and sends the ruling to "
+              "both parties again with its stamp. Keep this window open until then.")
+    elif r:
+        print("Sent to both parties; each enters it in its own records.")
 
 
 #: How long ard_case waits for the window's loop to rule a case whose answers are both in.
@@ -1215,7 +1251,7 @@ def _settled(case: dict) -> bool:
     return adj.needs_person(case.get("decision"), case["answers"])
 
 
-@_tool("adjudicator")
+@_tool("adjudicator", plain=True)
 def ard_case_activity() -> None:
     """Whether each party entered this adjudicator's ruling in its own records, read from the books they sent back:
     the ruling's own time-stamp, then each party's entry and whether it is time-stamped. A book or a stamp that has not

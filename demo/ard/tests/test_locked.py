@@ -84,3 +84,139 @@ def test_without_the_demos_environment_the_adapter_refuses_to_start():
     run = subprocess.run([str(LOCKED / "claude-agent-acp")], env={"PATH": os.environ["PATH"]}, capture_output=True,
                          text=True, timeout=30, stdin=subprocess.DEVNULL)
     assert run.returncode != 0 and "open-windows.py" in run.stderr
+
+
+# -- the adjudicator's window: its answers are its tools' output alone (#446) ------------------------------------------
+
+def adjudicator_args() -> list[str]:
+    return lock.locked_args(["--mcp-config", json.dumps({"mcpServers": {"ard_adjudicator": {}, "developer": {}}})])
+
+
+def test_only_the_adjudicators_window_is_quiet():
+    args = adjudicator_args()
+    assert args[-7:-2] == lock.LOCKED and args[-2] == "--settings" and lock.is_quiet(args)
+    hooks = json.loads(args[-1])["hooks"]
+    assert hooks["PostToolUse"][0]["matcher"] == "mcp__ard_adjudicator__.*"
+    for role in ("maya", "alder", "kestrel"):
+        args = lock.locked_args(["--mcp-config", json.dumps({"mcpServers": {f"ard_{role}": {}}})])
+        assert args[-5:] == lock.LOCKED and not lock.is_quiet(args), role
+
+
+def _hook(cmd: str, event: dict) -> dict:
+    run = subprocess.run(cmd, shell=True, input=json.dumps(event), capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, run.stderr
+    return json.loads(run.stdout)
+
+
+def test_each_tool_ends_the_turn_and_a_turn_with_no_tool_is_sent_back_once():
+    hooks = json.loads(adjudicator_args()[-1])["hooks"]
+    assert _hook(hooks["PostToolUse"][0]["hooks"][0]["command"], {}) == {"continue": False, "stopReason": ""}
+    stop = hooks["Stop"][0]["hooks"][0]["command"]
+    assert _hook(stop, {"stop_hook_active": False}) == {"decision": "block", "reason": lock.STOP_REASON}
+    assert _hook(stop, {"stop_hook_active": True}) == {}  # never a loop
+    assert "ard_ruling" in lock.STOP_REASON and "independence" in lock.STOP_REASON
+
+
+def _line(msg: dict) -> bytes:
+    return (json.dumps(msg) + "\n").encode()
+
+
+def test_the_agents_own_text_never_reaches_the_adapter_and_everything_else_does():
+    delta = {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                               "delta": {"type": "text_delta", "text": "Both sides agree"}}}
+    assert lock.quiet(_line(delta)) is None
+    start = {"type": "stream_event", "event": {"type": "content_block_start", "index": 0,
+                                               "content_block": {"type": "text", "text": "It doesn't matter"}}}
+    assert json.loads(lock.quiet(_line(start)))["event"]["content_block"] == {"type": "text", "text": ""}
+    whole = {"type": "assistant", "message": {"content": [
+        {"type": "text", "text": "That doesn't change the outcome"},
+        {"type": "tool_use", "id": "t1", "name": "mcp__ard_adjudicator__ard_ruling", "input": {}}]}}
+    content = json.loads(lock.quiet(_line(whole)))["message"]["content"]
+    assert content[0] == {"type": "text", "text": ""} and content[1] == whole["message"]["content"][1]  # indexes kept
+    result = {"type": "result", "subtype": "success", "result": "Both sides agree"}
+    assert json.loads(lock.quiet(_line(result))) == {**result, "result": ""}
+    for same in ({"type": "stream_event", "event": {"type": "content_block_delta", "index": 1,
+                                                    "delta": {"type": "input_json_delta", "partial_json": "{}"}}},
+                 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1",
+                                                           "content": "This adjudicator is run by the operator"}]}},
+                 {"type": "system", "subtype": "init"}):
+        assert lock.quiet(_line(same)) == _line(same)
+    assert lock.quiet(b"not json\n") == b"not json\n"
+
+
+def test_the_adjudicators_cli_runs_through_the_filter(tmp_path):
+    """claude-locked runs the adjudicator's CLI with its output filtered: the tool's result passes, the agent's text
+    does not, and the CLI's exit status is the lock's."""
+    lines = [{"type": "assistant", "message": {"content": [{"type": "text", "text": "SECRET-REASON"}]}},
+             {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                                "delta": {"type": "text_delta", "text": "SECRET-REASON"}}},
+             {"type": "user", "message": {"content": [{"type": "tool_result", "content": "Ruled without a person"}]}}]
+    cli = tmp_path / "node_modules" / "@anthropic-ai" / "claude-agent-sdk-darwin-arm64" / "claude"
+    cli.parent.mkdir(parents=True)
+    cli.write_text(f"#!{sys.executable}\nimport json, sys\n"
+                   + "".join(f"print(json.dumps({m!r}), flush=True)\n" for m in lines) + "sys.exit(3)\n")
+    cli.chmod(0o755)
+    env = {"PATH": os.environ["PATH"], "ARD_ACP_PREFIX": str(tmp_path), "ARD_PYTHON": sys.executable}
+    cfg = json.dumps({"mcpServers": {"ard_adjudicator": {}}})
+    run = subprocess.run([str(LOCKED / "claude-locked"), "--mcp-config", cfg], env=env, capture_output=True, text=True,
+                         timeout=30, stdin=subprocess.DEVNULL)
+    assert run.returncode == 3, run.stderr
+    assert "SECRET-REASON" not in run.stdout and "Ruled without a person" in run.stdout
+    assert len(run.stdout.splitlines()) == 2
+
+
+def test_an_adapters_own_settings_do_not_make_a_window_quiet():
+    args = lock.locked_args(["--settings", "{}", "--mcp-config", json.dumps({"mcpServers": {"ard_maya": {}}})])
+    assert not lock.is_quiet(args)
+
+
+def test_the_agents_thinking_never_reaches_the_adapter_either():
+    """Codex's round 1: the adapter sends thinking as thought chunks, which Goose can show."""
+    delta = {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                               "delta": {"type": "thinking_delta", "thinking": "Maya agrees, so"}}}
+    assert lock.quiet(_line(delta)) is None
+    start = {"type": "stream_event", "event": {"type": "content_block_start", "index": 0,
+                                               "content_block": {"type": "thinking", "thinking": "it hardly matters"}}}
+    assert json.loads(lock.quiet(_line(start)))["event"]["content_block"]["thinking"] == ""
+    whole = {"type": "assistant", "message": {"content": [
+        {"type": "thinking", "thinking": "it hardly matters", "signature": "sig"}]}}
+    assert json.loads(lock.quiet(_line(whole)))["message"]["content"] == [
+        {"type": "thinking", "thinking": "", "signature": "sig"}]
+    sig = {"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                             "delta": {"type": "signature_delta", "signature": "sig"}}}
+    assert lock.quiet(_line(sig)) == _line(sig)
+
+
+def test_when_the_adapter_stops_reading_the_cli_is_ended(tmp_path):
+    """Codex's round 1: a closed output pipe ends the CLI too, so no session runs on with no one to answer."""
+    pid = tmp_path / "pid"
+    cli = tmp_path / "node_modules" / "@anthropic-ai" / "claude-agent-sdk-darwin-arm64" / "claude"
+    cli.parent.mkdir(parents=True)
+    cli.write_text(f"#!{sys.executable}\nimport json, os, signal, sys, time\n"
+                   f"open({str(pid)!r}, 'w').write(str(os.getpid()))\n"
+                   "signal.signal(signal.SIGPIPE, signal.SIG_IGN)\n"
+                   "while True:\n"
+                   "    try:\n"
+                   "        print(json.dumps({'type': 'system', 'subtype': 'tick'}), flush=True)\n"
+                   "    except BrokenPipeError:\n"
+                   "        pass\n"
+                   "    time.sleep(0.05)\n")
+    cli.chmod(0o755)
+    env = {"PATH": os.environ["PATH"], "ARD_ACP_PREFIX": str(tmp_path), "ARD_PYTHON": sys.executable}
+    cfg = json.dumps({"mcpServers": {"ard_adjudicator": {}}})
+    proc = subprocess.Popen([str(LOCKED / "claude-locked"), "--mcp-config", cfg], env=env, stdout=subprocess.PIPE,
+                            stdin=subprocess.DEVNULL)
+    assert proc.stdout.readline()
+    proc.stdout.close()
+    assert proc.wait(timeout=30) != 0
+    child = int(pid.read_text())
+    import time
+    for _ in range(100):
+        try:
+            os.kill(child, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(child, 9)
+        pytest.fail("the CLI was left running")

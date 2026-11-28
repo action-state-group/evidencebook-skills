@@ -13,6 +13,7 @@ import pytest
 
 import adjudicator as adj
 import flow
+import screens
 import wire
 from cast import ADJUDICATOR
 
@@ -318,3 +319,71 @@ def test_the_adjudicator_window_has_no_ruling_tool_and_its_case_tool_seals_nothi
     out = ds.ard_case()
     assert "REFUSED" not in out and "not independent of the parties" in out and "Not ruled yet" in out, out
     assert not p.calls  # it neither checked nor sealed anything
+
+
+RULED = ("Ruled without a person: Kestrel Print stated in its own signed record that the delivery was not met (its record "
+         "says 150 of 200 badges). Against Kestrel Print. Either side may challenge it within 7 days. A challenge is "
+         "recorded beside the ruling and never replaces it.")
+BOOKS = ["Maya's statement on the row: not met", "Kestrel Print's own signed delivery record: 150 of 200 badges",
+         "Kestrel Print's statement on the row: not met"]
+
+
+def view(home, monkeypatch, check: dict, rule: bool = True, answers=("buyer", "seller")):
+    """The adjudicator window's server on one case, its books read as the hand run's (#446)."""
+    ds = pytest.importorskip("desktop_server")
+    monkeypatch.setenv("ARD_HOME", str(home))
+    setup_case(home, answers=answers)
+    a, p = adjudicator(home, monkeypatch, check)
+    if rule:
+        a.rule_decided()
+    monkeypatch.setattr(ds, "_adjudicator", lambda: a)
+    monkeypatch.setattr(ds, "CASE_WAIT_S", 0)
+    monkeypatch.setattr(adj.Adjudicator, "gather", lambda self, seconds=30: self.cases())
+    monkeypatch.setattr(flow, "case_view", lambda raw, names: flow.Case(
+        DEAL, "delivered", ruling=raw["ruling"], decision=raw["decision"], deciding=list(BOOKS),
+        observed={"rec-1": "150 of 200 badges"}, answered={s: "2026-11-27T00:00:00Z" for s in raw["answers"]}))
+    asked = []
+    monkeypatch.setattr(adj.Adjudicator, "ask", lambda self: asked.append(1) or [])
+    return ds, p, asked
+
+
+def test_the_ruling_tool_prints_the_two_lines_as_the_adjudicator_wrote_them_and_nothing_from_the_books(home, monkeypatch):
+    """#446: the not-independent line and the ruling line reach the person from the tool's own output; the tool reads
+    only: it asks no one, checks nothing and seals nothing."""
+    ds, p, asked = view(home, monkeypatch, DECISIVE)
+    calls = len(p.calls)
+    lines = ds.ard_ruling().splitlines()
+    assert lines[0] == screens.ADJUDICATOR_INDEPENDENCE and lines[1] == ""
+    assert lines[2] == "deal 01234567, row delivered: disputed by Maya"
+    assert lines[3] == f"  {RULED}" and lines[4].startswith("  ruling ")
+    assert lines[5] == "Sent to both parties; each enters it in its own records." and len(lines) == 6
+    assert not [x for x in lines if any(b in x for b in BOOKS)]
+    assert len(p.calls) == calls and not asked
+
+
+@pytest.mark.parametrize("check,rule,answers,line", [
+    (NEEDS, True, ("buyer", "seller"), "  This case needs a person: "),
+    (DECISIVE, False, ("buyer",), "  Not ruled yet: "),
+])
+def test_the_ruling_tool_says_why_a_case_is_not_ruled(home, monkeypatch, check, rule, answers, line):
+    ds, p, _ = view(home, monkeypatch, check, rule=rule, answers=answers)
+    lines = ds.ard_ruling().splitlines()
+    assert lines[0] == screens.ADJUDICATOR_INDEPENDENCE and lines[3].startswith(line), lines
+    assert not p.rulings()
+
+
+def test_the_ruling_tool_with_no_case_says_so(home, monkeypatch):
+    ds = pytest.importorskip("desktop_server")
+    monkeypatch.setenv("ARD_HOME", str(home))
+    a, _ = adjudicator(home, monkeypatch, DECISIVE)
+    monkeypatch.setattr(ds, "_adjudicator", lambda: a)
+    assert ds.ard_ruling().strip() == "no case yet: a party has sent no dispute to this adjudicator"
+
+
+def test_the_case_tool_puts_the_ruling_where_goose_shows_it(home, monkeypatch):
+    """goose CLI 1.59.2 shows a tool's first and last 10 lines once it has more than 20 (crates/goose-cli/src/session/
+    output.rs, print_tool_output): the not-independent line and the ruling line come before the books (#446)."""
+    ds, _, _ = view(home, monkeypatch, DECISIVE)
+    lines = ds.ard_case().splitlines()
+    assert lines[0] == screens.ADJUDICATOR_INDEPENDENCE and f"  {RULED}" in lines[:10], lines
+    assert lines.index(f"  {RULED}") < min(lines.index(f"  {b}") for b in BOOKS)

@@ -20,17 +20,16 @@ suggest one, or record one.
    when (each answer is that side's own book and the copy it holds of the other side's); what those books show, in
    the records' own words (a seller's own signed delivery record, each side's statement on the row). Say which side
    did not answer.
-2. **Show the ruling.** Answer with the ruling line word for word ("Ruled without a person: ..."), then at most one
-   sentence: the adjudicator ruled, not you, and it is not independent of the parties. Its reason is the ruled-against
-   side's own signed statement that the row was not met, and nothing else: add no other record, no word of the other
-   side and no agreement between them as a reason. If the case needs a person, say why, and that nothing was ruled.
-   If it is not ruled yet, a side has not answered: say so.
+2. **Show the ruling.** Show what the adjudicator ruled and why, or why it has not, under the line that it is not
+   independent of the parties. These lines are the adjudicator's own: the person reads them as the tool printed them.
+   If you write anything, give no reason for the ruling but the ruled-against side's own signed statement that the
+   row was not met: no other record, no word of the other side, no agreement between them.
 3. **Report the entries.** Whether each party entered the ruling in its own records, as the books they sent show.
 
 ## Rules
 
-- Say it plainly: this adjudicator is run by the operator, who also runs every party here, so it is not
-  independent of them.
+- The adjudicator is run by the operator, who also runs every party here, so it is not independent of them. Never
+  say or suggest that this does not matter.
 - A ruling against a side rests only on records that side signed itself (Steven, ops u211). A side that did not
   answer is read from the records it signed that the other side holds; when none of its records was read, the ruling
   cannot go against it, and capsulectl refuses one that would.
@@ -48,12 +47,16 @@ step, to the demo host's tool and to the capsule host's existing command.
 |---|---|---|---|
 | ask | 1 Ask each side for its books | `ard_case`: the request to each side, their `deal respond` answers | the hosted adjudicator's intake (evidencebook#861 PR 3) |
 | show | 1 Show the case | `ard_case` | the hosted adjudicator's intake (evidencebook#861 PR 3) |
+| show | 2 Show the ruling | `ard_ruling` | `deal ruling` (the ruling file it writes) |
 | check | 2 Decide whether the books settle the row | the adjudicator's own window, with no person: `deal ruling check` | `deal ruling check` |
 | record | 2 Record the ruling | the adjudicator's own window: `deal ruling --decided-by --answer` and the stamp; `ard_case` shows it | `deal ruling --decided-by --answer` |
 | show | 3 Report the entries | `ard_case_activity` | `deal ruling entries` |
 
 ## On the demo host
 
-- Call one tool per message from the person, and only the one they ask for. After it returns, say in at most two
-  short plain sentences what it showed. Do not repeat its output, except the ruling line step 2 quotes: the audience reads it in the tool call.
+- Every answer in this window is a tool's output, which the person reads as the tool printed it. For each message
+  from the person, call one tool and write nothing of your own: the case for the case (step 1), the ruling for the
+  ruling, its reason or the adjudicator's independence (step 2), at any point and in a reopened session too, and the
+  entries for the entries (step 3). Never answer from an earlier output or in your own words. With Claude Code, the
+  demo's window enforces this: each tool ends your turn, and your own text is not shown.
 - Never name a tool to the person.
