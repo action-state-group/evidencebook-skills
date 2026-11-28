@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 #: capsule-anchor main at capsule-anchor#123: v0.1.4 (the release Action State's hosted witness runs) refuses the
@@ -162,16 +163,55 @@ def _keys(d: Path) -> tuple[str, str]:
     return seed, public
 
 
+#: The start of a SubjectPublicKeyInfo for a P-256 key named by its curve (id-ecPublicKey, prime256v1). Go's
+#: crypto/x509, which capsulectl connects with, refuses an EC key given by explicit curve parameters instead
+#: ("x509: invalid ECDSA parameters"), as macOS's own openssl (LibreSSL 3.3.6) writes one (evidencebook-skills#473).
+P256_NAMED_SPKI = bytes.fromhex("3059301306072a8648ce3d020106082a8648ce3d030107034200")
+
+
+def _certificate_ok(d: Path) -> bool:
+    """Whether the folder holds a certificate and key capsulectl can use: a P-256 key named by its curve."""
+    try:
+        der = ssl.PEM_cert_to_DER_cert((d / "tls.crt").read_text())
+    except (OSError, ValueError):
+        return False
+    return (d / "tls.key").is_file() and P256_NAMED_SPKI in der
+
+
 def _certificate(d: Path) -> None:
-    """A self-signed certificate for localhost (Go reads the name from the SAN), made once per folder."""
-    if (d / "tls.crt").exists() and (d / "tls.key").exists():
+    """A self-signed certificate for localhost (Go reads the name from the SAN), made once per folder, here rather
+    than by whichever openssl the PATH finds (#473). One made before that fix, on explicit curve parameters, is
+    replaced; the signing key is separate (:func:`_keys`), so countersignatures made before still resolve."""
+    if _certificate_ok(d):
         return
-    done = subprocess.run(["openssl", "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
-                           "-nodes", "-days", "365", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost",
-                           "-keyout", str(d / "tls.key"), "-out", str(d / "tls.crt")], capture_output=True, text=True)
-    if done.returncode != 0:
-        raise CountersignerError(f"could not make the countersigner's certificate: {done.stderr.strip()}")
-    os.chmod(d / "tls.key", 0o600)
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+    now = datetime.now(timezone.utc)
+    ski = x509.SubjectKeyIdentifier.from_public_key(key.public_key())
+    # The extensions `openssl req -x509` gave it, so Python's ssl (which checks /health) trusts it as before.
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=365))
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost")]), critical=False)
+            .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            .add_extension(ski, critical=False)
+            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(ski), critical=False)
+            .sign(key, hashes.SHA256()))
+    key_pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                serialization.NoEncryption())
+    for path, data, mode in ((d / "tls.key", key_pem, 0o600),
+                             (d / "tls.crt", cert.public_bytes(serialization.Encoding.PEM), 0o644)):
+        tmp = path.with_suffix(".tmp")
+        tmp.unlink(missing_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, path)
 
 
 def _ca_bundle(d: Path, ca_bundle: str | Path | None) -> None:
@@ -209,13 +249,14 @@ def _kill(d: Path, pid: int, wait_s: float = 5.0) -> None:
 def start(d: str | Path, parties, ca_bundle: str | Path | None = None, say=lambda *_: None) -> dict[str, str]:
     """Start the countersigner of folder ``d`` admitting ``parties`` (each a :class:`party.Party` already made), name
     the demo's directory in each party's profile, and return :func:`env`. A countersigner already running is restarted
-    when the parties it admits changed, else kept."""
+    when the parties it admits changed or its certificate must be remade (:func:`_certificate`), else kept."""
     d = Path(d).expanduser()
     d.mkdir(parents=True, exist_ok=True, mode=0o700)
     d = d.resolve()
     allow = issuers(parties)
     st = running(d)
-    if st is not None and st.get("issuers") == allow:
+    # A service serving a certificate capsulectl refuses (one made before #473) is restarted on a new one.
+    if st is not None and st.get("issuers") == allow and _certificate_ok(d):
         _name_directory(d, parties)
         return env(d)
     stop(d)
