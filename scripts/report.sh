@@ -88,13 +88,15 @@
 # FILE is what the plugin's settlement-report.sh writes: a JSON list of
 # {"exchange_capsule_id", "receipt": <bundle JSON text>} or
 # {"exchange_capsule_id", "held": true}. It is forwarded unchanged to
-# `capsulectl book report build --receipts FILE`, which owns every check on it;
-# report.sh reads nothing in it. A capsulectl whose `book report build --help`
+# `capsulectl book report build --receipts FILE`, which owns every check on the
+# page side; report.sh itself reads nothing in it. A capsulectl whose `book report build --help`
 # does not list --receipts is refused before anything is written to the book.
 # On the evaluator path the same FILE also goes to the evaluator, which names
 # each deal's receipt as its claims' `subject_bundle` (agent-action-capsule
 # Evidence Result §4.5) before the Result is sealed, so the page refuses a
-# receipt filed under the wrong deal (capsule-viewer#353).
+# receipt filed under the wrong deal (capsule-viewer#353). The evaluator refuses
+# a list it cannot read or whose entries disagree, so such a run stops before
+# the Result is sealed.
 # Without --receipts nothing is probed or passed and the page is unchanged
 # (default: not carried, capsule-viewer#228).
 #

@@ -19,11 +19,17 @@ scripts/report.sh forwards to the page builder ({"exchange_capsule_id",
 claim of a deal whose own exchange record's capsule id has a receipt carries
 `subject_bundle`: that receipt's bundle digest (SHA-256 of the RFC 8785 JCS
 form of the bundle with `countersignatures` left out), computed here, before
-the Result is sealed. The page then refuses to show a receipt filed under the
-deal that is not that one. A held entry carries no bundle to hash and names
-none; a deal whose exchange records have two different receipts names none
-(the evaluator never picks one). The member is display-only: no verdict, grade
-or count reads it. Without --receipts no claim carries it.
+the Result is sealed. The page then refuses a receipt the page builder filed
+under the deal that is not that one. What ties a receipt to its exchange is the
+list itself: each entry is the node's own `deal-receipt-bundle` answer for that
+exchange record (capsules-plugin deal_receipt.rs, from the node's deal links),
+and the receipt bundle carries no id of the exchange to check it against, so a
+wrong list is not caught here. A held entry names none. An entry that is held
+and also carries a receipt, two entries for one exchange record that disagree
+(two receipts, or held and a receipt), and a deal whose own exchange records
+have different receipts are refused: the evaluator never picks one. The member
+is display-only: no verdict, grade or count reads it. Without --receipts no
+claim carries it.
 
 writes DIR/result-v0-<from>_<to>.json (one Result v0 for the window) and
 DIR/summary.json, the file names scripts/report.sh's tail reads.
@@ -660,32 +666,40 @@ def receipt_digests(entries):
     whose receipt the page then carries."""
     if not isinstance(entries, list):
         raise DealsError("--receipts: not a JSON list")
-    out = {}
+    states = {}  # exchange record capsule id -> its digest, or None when held
     for i, entry in enumerate(entries):
         xid = entry.get("exchange_capsule_id") if isinstance(entry, dict) else None
         if not isinstance(xid, str) or not xid:
             raise DealsError(f"--receipts: entry {i} has no exchange_capsule_id")
-        if entry.get("held") is True and "receipt" not in entry:
-            continue
-        text = entry.get("receipt")
-        try:
-            bundle = json.loads(text) if isinstance(text, str) else None
-        except ValueError:
-            bundle = None
-        if not isinstance(bundle, dict):
-            raise DealsError(f"--receipts: entry {i} ({xid}) has no receipt bundle JSON object")
-        digest = bundle_digest(bundle)
-        if out.get(xid, digest) != digest:
-            raise DealsError(f"--receipts: two different receipts for exchange record {xid}")
-        out[xid] = digest
-    return out
+        held = entry.get("held") is True
+        if held and "receipt" in entry:
+            raise DealsError(f"--receipts: entry {i} ({xid}) is held and also carries a receipt")
+        if held:
+            state = None
+        else:
+            text = entry.get("receipt")
+            try:
+                bundle = json.loads(text) if isinstance(text, str) else None
+            except ValueError:
+                bundle = None
+            if not isinstance(bundle, dict):
+                raise DealsError(f"--receipts: entry {i} ({xid}) has no receipt bundle JSON object")
+            state = bundle_digest(bundle)
+        if xid in states and states[xid] != state:
+            raise DealsError(f"--receipts: entries for exchange record {xid} disagree")
+        states[xid] = state
+    return {xid: digest for xid, digest in states.items() if digest is not None}
 
 
 def _subject_bundle(deal, receipts):
-    """The digest of the one receipt of the deal's own exchange records, or None."""
+    """The digest of the receipt of the deal's own exchange records, or None
+    when none has one. The key is the Mesh capsule's own `capsule_id` (the id
+    the node's receipt route takes), not the book record's id."""
     digests = {receipts[cid] for cid in (body.get("capsule_id") for _, body, _ in deal.exchanges)
                if isinstance(cid, str) and cid in receipts}
-    return digests.pop() if len(digests) == 1 else None
+    if len(digests) > 1:
+        raise DealsError(f"--receipts: deal {deal.exchange_id}'s exchange records have different receipts")
+    return digests.pop() if digests else None
 
 
 def build_result(records, compiled, date, generated_at, policy=None, unverified=None, leg_unverified=None,
