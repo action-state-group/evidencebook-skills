@@ -63,7 +63,7 @@ def test_the_seller_skill_files_say_none_of_the_words():
     for name in ("SKILL.md", "AGENTS.md"):
         text = (ROOT / "skills" / "sell-with-evidence" / name).read_text()
         assert not clean(text), (name, clean(text))
-    assert "the only deal made in this run (simulated payment, no money moved)" in text
+    assert "the only deal made in this run (simulated payment, no money moved)" in " ".join(text.split())
 
 
 def seller_tools() -> list[str]:
@@ -116,12 +116,19 @@ def test_every_line_the_selling_process_says_speaks_to_its_owner():
         if (isinstance(f, ast.Attribute) and f.attr in ("say", "event", "failed")
                 and getattr(f.value, "id", "") == "self") or (isinstance(f, ast.Attribute) and f.attr == "Refused"):
             said += [_said_text(a) for a in call.args]
-    # the loop's step names, said through self.failed(what, ...)
+    # the loop's step names, said through self.failed(what, ...), and a reopened window's lines rebuilt from its records
+    # (_replay's (mark, line) pairs)
     for t in ast.walk(agent):
         if isinstance(t, ast.Tuple) and len(t.elts) == 2 and isinstance(t.elts[0], ast.Constant):
-            said.append(_said_text(t.elts[0]))
+            said += [_said_text(t.elts[0]), _said_text(t.elts[1])]
+    # the event lines it says through flow's helpers, which a reopened window rebuilds with too
+    for fn in tree.body:
+        if isinstance(fn, ast.FunctionDef) and fn.name in ("paid_line", "delivered_line", "dispute_line"):
+            said += [_said_text(n.value) for n in ast.walk(fn) if isinstance(n, ast.Return)]
+            said += [_said_text(n.value) for n in ast.walk(fn) if isinstance(n, ast.Assign)]
     text = "\n".join(s for s in said if s)
-    assert "your delivery record says so" in text and "your History card" in text
+    assert "your delivery record says so" in text and "your History card" in text and "held by your own check" in text
+    assert "your own wallet is not checked here" in text and "asks for your" in text
     assert not clean(text), clean(text)
 
 
@@ -129,7 +136,7 @@ def test_every_line_a_party_says_about_its_books_speaks_to_it():
     # the shared steps a seller's window shows in its activity (Maya's too, where "your" is also hers): answering the
     # adjudicator, entering a ruling, sending the book and its stamp, and a retried step's line
     said = []
-    for file, names in (("adjudicator.py", ("answer_requests", "send_book", "send_proof_once_witnessed")),
+    for file, names in (("adjudicator.py", ("answer_requests", "books_sent_line", "send_book", "send_proof_once_witnessed")),
                         ("flow.py", ("enter_rulings",)), ("screens.py", ("trying_again",)), ("party.py", ("wait_checkpoint",))):
         tree = ast.parse((HERE / file).read_text())
         for fn in ast.walk(tree):
@@ -140,7 +147,7 @@ def test_every_line_a_party_says_about_its_books_speaks_to_it():
                     said += [_said_text(a) for a in node.args]
                 if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "what" for t in node.targets):
                     said.append(_said_text(node.value))
-                if isinstance(node, ast.Return) and fn.name == "trying_again":
+                if isinstance(node, ast.Return) and fn.name in ("trying_again", "books_sent_line"):
                     said.append(_said_text(node.value))
     text = "\n".join(s for s in said if s)
     assert "the adjudicator asked for your books" in text and "entered in your records" in text
@@ -177,6 +184,7 @@ class _Party:
 def test_a_sellers_receipt_says_you(monkeypatch, real):
     monkeypatch.setattr(receipt, "proof_lines", lambda p, deal_id, name="": [])
     monkeypatch.setattr(receipt, "_countersigned", lambda p, deal_id: None)
+    monkeypatch.setattr(flow, "shipped_of", lambda p, deal_id: "150 of 200 badges")
     out = receipt.receipt_text(_Party(), "Kestrel Print", "deal-fedcba9876543210", real=real, seller=True)
     assert out.startswith("Kestrel Print: your receipt for deal fedcba98, from your own records"), out
     assert "(not met, against you)" in out

@@ -140,15 +140,14 @@ def test_a_reopened_seller_window_lists_its_deals_from_its_own_records(tmp_path)
     assert words == [
         "deal agreed: 1,000 msat for 200 conference badges, signed by both (deal fedcba98)",
         "paid: the buyer says it paid 1,000 msat (simulated rail: no money moved)",
-        "delivered to the buyer: 150 of 200 badges (this seller's delivery record says so, and states the delivery "
-        "not met)",
-        "dispute received: the buyer disputed the delivery of deal fedcba98; the adjudicator asks for this seller's "
-        "books, which this seller answers in full",
-        "the adjudicator asked for this party's books of deal fedcba98: sent in full (its own book and the copy it holds "
-        "of the other side's)",
+        "delivered to the buyer: 150 of 200 badges (your delivery record says so, and states the delivery not met)",
+        "dispute received: the buyer disputed the delivery of deal fedcba98; the adjudicator asks for your books, "
+        "which your selling process answers in full",
+        "the adjudicator asked for your books of deal fedcba98: sent in full (your own book and the copy you hold of "
+        "the other side's)",
         "deal agreed: 1,000 msat for 200 conference badges, signed by both (deal 33333333)",
         "paid: the buyer says it paid 1,000 msat (simulated rail: no money moved)",
-        "the delivery was held by this seller's own check",
+        "the delivery was held by your own check",
     ], lines
     assert lines[0].startswith(flow._clock(101))
 
