@@ -1161,6 +1161,8 @@ def ard_dispute(seller: str, deal: str = "") -> None:
                            "Maya.")
     buyer.dispute(s.home, s.maya, target, print)
     print(screens.DISPUTE_RAISED.format(seller=name))
+    with s.pay_lock:  # read again: a delivery record can arrive while the dialog waits (Codex on #464)
+        observed = buyer.take_delivery(s.home, s.maya, target)
     print(screens.dispute_stated(name, buyer.shipped(observed) if observed is not None else None))
 
 

@@ -27,6 +27,16 @@ def test_her_dispute_says_not_met_and_the_count_is_the_sellers_record(maya, monk
             "shipped, is Kestrel Print's own delivery record.") in out, out
 
 
+def test_a_record_that_arrives_while_the_dialog_waits_is_named(maya, monkeypatch, sent):  # noqa: F811
+    """Codex on #464: the count is read again after her answer, not from before the dialog."""
+    records = iter([None, "partial:badges_150_of_200"])
+    monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: next(records))
+    monkeypatch.setattr(buyer, "dispute", lambda *a: None)
+    monkeypatch.setattr(ds, "dialog_answer", lambda *a, **k: "yes")
+    out = ds.ard_dispute("kestrel")
+    assert "The count, 150 of 200 badges shipped, is Kestrel Print's own delivery record." in out, out
+
+
 def test_a_dispute_with_no_delivery_record_names_no_count(maya, monkeypatch, sent):  # noqa: F811
     """Codex's plan review: a dispute before any delivery record is allowed, and its answer invents no count."""
     monkeypatch.setattr(buyer, "take_delivery", lambda home, m, deal: None)
@@ -118,6 +128,8 @@ def test_a_reopened_seller_window_lists_its_deals_from_its_own_records(tmp_path)
         ref = json.dumps({"amount_msat": 1000, "simulated": True}).encode()
         wire.write_atomic(wire.path(home, "kestrel", deal_id, "ref"), ref)
     _mark(s.party, ruled, "act", 103, str(act))
+    wire.write_atomic(wire.path(home, "maya", ruled, "act"), b"{}")  # the record reached her wire
+    _mark(s.party, held, "act", 302, str(act))  # sealed, but never sent: no delivered line (Codex on #464)
     _mark(s.party, ruled, "dispute", 104)
     _mark(s.party, ruled, "adjanswer", 105)
     wire.write_atomic(wire.path(home, flow.adj.ADJUDICATOR, ruled, "answer-seller"), b"{}")

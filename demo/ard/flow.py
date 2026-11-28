@@ -315,7 +315,9 @@ class SellerAgent:
         if self._done(deal_id, "paid-kept") and ref.is_file():
             out.append(("paid-kept", paid_line(json.loads(ref.read_text()))))
         act = self.party.dir / "handled" / f"{deal_id}.act"
-        body = _record_body(Path(act.read_text())) if act.is_file() else {}
+        # sealed is not delivered: only a record that reached the buyer's wire (Codex on #464)
+        sent = wire.path(self.home, self.buyer_of(deal_id), deal_id, "act").is_file()
+        body = _record_body(Path(act.read_text())) if act.is_file() and sent else {}
         if body.get("observed"):
             out.append(("act", delivered_line(buyer_words(body["observed"]), _states_not_met(body))))
         if self._done(deal_id, "held"):
