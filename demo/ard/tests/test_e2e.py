@@ -267,6 +267,13 @@ def test_two_deals_a_ruled_dispute_limits_the_seller_in_deal_2(world):
     import html
     text = " ".join(html.unescape(re.sub(r"<[^>]*>", "", re.sub(r"(?s)<(script|style)\b.*?</\1>", "", shown))).split())
     assert "Didn't go as agreed" in text and "Ruled: Delivery not met" in text
+    # #479 (Steven's u655): the page's witness line names the run's witness and draws no "not listed as independent"
+    # sentence (capsule-viewer#513's two witness sentences; the ladder's static rung text says "independent" too), since
+    # the directory marks it as the reader's own. The text above leaves out the page's script, which carries every
+    # wording, those sentences included.
+    assert f"Time-stamped by {pt.WITNESS_NAME} at " in text, text
+    assert f"The directory entry for {pt.WITNESS_NAME} does not list it as independent" not in text, text
+    assert not re.search(rf"Witness time stamp: {re.escape(pt.WITNESS_NAME)}[^.]*\. Its directory entry does not list", text), text
 
     # a reopened window remembers Maya's deals from her own records, and routes the ruling to that deal's seller
     import buyer as b

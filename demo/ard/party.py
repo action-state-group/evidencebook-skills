@@ -135,8 +135,13 @@ class StampWait:
 
 
 def witness_directory() -> dict:
-    """The witness directory ``verify --bundle --witness-directory`` and the adjudicator take: the one hosted witness."""
-    return {"witnesses": [{"name": WITNESS_NAME, "endpoint": WITNESS_URL, "key_ids": [WITNESS_KEY]}]}
+    """The witness directory ``verify --bundle --witness-directory`` and the adjudicator take: the run's one witness,
+    marked ``own_witness`` (Steven's u655: a page draws no "not listed as independent" line for a witness the reader's
+    directory marks as its own; capsule-viewer#513, evidencebook ``deal_witnessed_row.go``). Both are the reader's own:
+    the hosted one is Action State's, and the local test witness is run by the operator who runs every party here.
+    ``independent_of`` stays unset: that list names party keys, a different claim (#479)."""
+    return {"witnesses": [{"name": WITNESS_NAME, "endpoint": WITNESS_URL, "key_ids": [WITNESS_KEY],
+                           "own_witness": True}]}
 
 
 def _iso(at: datetime) -> str:

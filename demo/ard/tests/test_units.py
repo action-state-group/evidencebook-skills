@@ -518,6 +518,21 @@ def test_add_witness_names_the_hosted_witness_once(tmp_path, monkeypatch):
         p.add_witness()
 
 
+def test_the_witness_directory_marks_the_runs_witness_as_its_own(monkeypatch):
+    """#479, Steven's u655: the directory every page and verify takes marks the run's witness ``own_witness``, so a
+    receipt page draws no "not listed as independent" line for it; ``independent_of`` stays unset. The hosted witness
+    and the local test witness alike, since the operator reads the page in both."""
+    import party as pt
+
+    for url, key, name in ((pt.HOSTED_WITNESS_URL, pt.HOSTED_WITNESS_KEY, "Action State's witness"),
+                           ("https://localhost:8443", "ab" * 32, "the local test witness")):
+        monkeypatch.setattr(pt, "WITNESS_URL", url)
+        monkeypatch.setattr(pt, "WITNESS_KEY", key)
+        monkeypatch.setattr(pt, "WITNESS_NAME", name)
+        assert pt.witness_directory() == {"witnesses": [
+            {"name": name, "endpoint": url, "key_ids": [key], "own_witness": True}]}
+
+
 def test_the_e2e_names_a_local_witness_only_where_a_party_asked_for_one(tmp_path, monkeypatch):
     """#371: with ARD_E2E_WITNESS_URL and _KEY, test_e2e names that witness, and the demo's own code (#382) makes a
     witnessed profile with --no-witness and then names it; one made without a witness (seed's sellers and sample
