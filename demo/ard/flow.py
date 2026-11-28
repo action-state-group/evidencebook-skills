@@ -481,6 +481,13 @@ def _record_body(f: Path) -> dict:
     return {}
 
 
+def deals_made(p: pt.Party) -> int:
+    """How many deals this seller agreed with a buyer in this run, from its own records: the buyer's agreement it kept (a
+    ``handled`` agree mark, as :meth:`SellerAgent.earlier` reads them), never the sample history ``demo.py seed`` made."""
+    handled = p.dir / "handled"
+    return len(list(handled.glob("*.agree"))) if handled.is_dir() else 0
+
+
 def paid_line(ref: dict) -> str:
     """The payment, in what this seller knows: the buyer's word; its own wallet is not read by this process (#337,
     Sherlock2: "if the rail can't show that, it says the buyer says paid")."""

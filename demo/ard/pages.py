@@ -25,6 +25,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+import flow
 import party as pt
 import screens
 
@@ -104,11 +105,12 @@ WITNESS_NOTE = (f"Time-stamped by {pt.WITNESS_NAME}. Action State also runs ever
                 "independent of them.")
 
 
-def labels(card: dict, witnessed: bool, sample: str = "", real: bool = False) -> list[str]:
+def labels(card: dict, witnessed: bool, sample: str = "", made: int = 0, real: bool = False) -> list[str]:
     """The lines above the view: who time-stamped it, the card's counts with its dispute tally (the view has no member
     for disputes), and, on a seller's own card (``sample``: the seller), which deals are sample history and which were
-    made in this run, in its owner's words (:func:`screens.own_sample_note`; ``real``: the run's rail moves money)."""
-    own = [screens.own_sample_note(sample, card["outcomes"]["of"], real)] if sample else []
+    made in this run (``made``, from its own records), in its owner's words (:func:`screens.own_sample_note`; ``real``:
+    the run's rail moves money)."""
+    own = [screens.own_sample_note(sample, made, real)] if sample else []
     return ([WITNESS_NOTE] if witnessed else []) + [screens.card_line(card)] + own
 
 
@@ -172,6 +174,7 @@ def card_page(p: pt.Party, label: str, *, rail: str, seller: bool) -> Path:
     view = history_input(ext.get("deals") or [], name=label, witnessed=witnessed,
                          built_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     return write(p.name, "history", history_page(view, labels(card, witnessed is not None, sample=p.name if seller else "",
+                                                            made=flow.deals_made(p) if seller else 0,
                                                             real=rail in ("lightning", "local")),
                                                      f"History · {label}"))
 

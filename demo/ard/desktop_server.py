@@ -1189,7 +1189,7 @@ def ard_seller_activity() -> None:
             print(f"  ruling on deal {deal_id[5:13]}: {line}")
     card, _, _ = flow.read_card(sel.party.card_bundle(shared=True))
     print(f"now: {screens.card_line(card)}")
-    print("  " + screens.own_sample_note(sel.name, card["outcomes"]["of"], _real()))
+    print("  " + screens.own_sample_note(sel.name, flow.deals_made(sel.party), _real()))
 
 
 # -- the adjudicator ----------------------------------------------------------------------------------
@@ -1332,7 +1332,7 @@ def ard_show_card() -> None:
     print(f"{name}: {its} own History card, as of {its} checkpoint at {screens.local_time(as_of['anchor_time'], date=True)}")
     print("  " + screens.card_line(card))
     if ROLE in SELLERS:
-        print("  " + screens.own_sample_note(ROLE, card["outcomes"]["of"], _real()))
+        print("  " + screens.own_sample_note(ROLE, flow.deals_made(p), _real()))
         return
     s = session()
     s.pack = s.pack or packs.starting()

@@ -43,26 +43,27 @@ ASSESSMENT_NOTE = ("the agent's assessment of each seller; the presenter's pick 
 def sample_note(seller: str) -> str:
     """Said wherever a seller's card is shown: how many of its deals are the sample history ``demo.py seed`` made."""
     return f"Its first {SAMPLE_DEALS[seller]} deals are sample history the operator made before this run."
-
-
-def own_sample_note(seller: str, deals: int, real: bool) -> str:
-    """:func:`sample_note` as the seller's owner reads it in their own window (Sherlock2 on evidencebook-skills#456):
-    "your" first deals, then the deals made in this run, counted from the card (``deals``, its ``outcomes.of``), with
-    what their payment was: "the only deal made in this run (simulated payment, no money moved)", never "real"."""
-    n = SAMPLE_DEALS[seller]
-    line = f"Your first {n} deals are sample history the operator made before this run"
-    made = deals - n
-    paid = "paid on the real Lightning rail" if real else "simulated payment, no money moved"
-    if made <= 0:
-        return line + "; no deal has been made in this run yet."
-    if made == 1:
-        return line + f"; the other one is the only deal made in this run ({paid})."
-    return line + f"; the other {made} were made in this run ({paid})."
 WITNESS_LINE = (f"time-stamped by {pt.WITNESS_NAME}. The operator, Action State, also runs every party here, so the "
                 "witness is not independent of the parties.")
 #: The adjudicator's conflict determination, as the ruling records it and the dialog shows it.
 ADJUDICATOR_INDEPENDENCE = ("This adjudicator is run by the operator, who also runs every party here: it is not "
                             "independent of the parties.")
+
+
+def own_sample_note(seller: str, made: int, real: bool) -> str:
+    """:func:`sample_note` as the seller's owner reads it in their own window (Sherlock2 on evidencebook-skills#456):
+    "your" first deals, then the deals made in this run, counted from the seller's own records (``made``:
+    :func:`flow.deals_made`, never the card, whose counts can lag a stamp), on this run's rail: "the only deal made in
+    this run (simulated payment, no money moved)", never "real". On a real rail it names the rail only, not a payment,
+    which the deal's own lines report."""
+    n = SAMPLE_DEALS[seller]
+    line = f"Your first {n} deals are sample history the operator made before this run"
+    rail = "on the real Lightning rail" if real else "simulated payment, no money moved"
+    if made <= 0:
+        return line + "; no deal has been made in this run yet."
+    if made == 1:
+        return line + f"; the other one is the only deal made in this run ({rail})."
+    return line + f"; {made} deals were made in this run ({rail})."
 
 
 def trying_again(what: str, exc: BaseException) -> str:

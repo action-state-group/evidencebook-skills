@@ -135,6 +135,7 @@ class OwnCard:
 
     def __init__(self, tmp_path, out: dict, deals=SAMPLE_DEALS):
         self.tmp_path, self.out, self.deals = tmp_path, out, deals
+        self.dir = tmp_path / "alder"  # its folder: no deal made in this run (flow.deals_made)
 
     def stamp(self):
         pass

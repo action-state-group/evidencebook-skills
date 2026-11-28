@@ -155,11 +155,11 @@ def test_every_line_a_party_says_about_its_books_speaks_to_it():
     assert not clean(text) and "this party" not in text, text
 
 
-@pytest.mark.parametrize("deals,real", [(10, False), (11, False), (13, False), (11, True)])
-def test_a_sellers_own_lines_say_none_of_the_words(deals, real):
-    lines = [screens.own_sample_note("kestrel", deals, real), screens.seller_credit_note(1000),
-             *pages.labels({"outcomes": {"of": deals, "held": deals, "did_not_hold": 0, "undecided": 0}}, True,
-                           sample="kestrel", real=real)]
+@pytest.mark.parametrize("made,real", [(0, False), (1, False), (3, False), (1, True)])
+def test_a_sellers_own_lines_say_none_of_the_words(made, real):
+    lines = [screens.own_sample_note("kestrel", made, real), screens.seller_credit_note(1000),
+             *pages.labels({"outcomes": {"of": 10 + made, "held": 10, "did_not_hold": 0, "undecided": made}}, True,
+                           sample="kestrel", made=made, real=real)]
     for line in lines:
         assert not clean(line), clean(line)
     assert "your wallet" in screens.seller_credit_note(1000)
@@ -200,18 +200,21 @@ class _Agent(flow.SellerAgent):
     def __init__(self, tmp_path):  # no binary: its log and its party only
         self.log, self._lock, self.label, self.name, self.home = [], threading.Lock(), "Kestrel Print", "kestrel", tmp_path
         self.party = type("P", (), {"log": lambda self, line: None, "notes": lambda self, kind: [],
-                                    "card_bundle": lambda self, shared: "card.json"})()
+                                    "card_bundle": lambda self, shared: "card.json", "dir": tmp_path / "kestrel"})()
 
 
 @pytest.mark.parametrize("opened", [True, False])
 def test_the_seller_tools_return_lines_say_none_of_the_words(tmp_path, monkeypatch, opened):
     agent = _Agent(tmp_path)
     agent.say("delivered to the buyer: 150 of 200 badges (your delivery record says so)")
+    (tmp_path / "kestrel").mkdir()
+    agent._mark("deal-fedcba9876543210", "agree")  # the buyer's agreement it kept: one deal made in this run
     monkeypatch.setattr(ds, "ROLE", "kestrel")
     monkeypatch.setattr(ds, "seller", lambda: agent)
     monkeypatch.setattr(ds, "_own", lambda: (agent.party, "Kestrel Print"))
     monkeypatch.setattr(ds, "_own_deal", lambda: (agent.party, "Kestrel Print", "deal-fedcba9876543210"))
-    monkeypatch.setattr(flow, "read_card", lambda b: ({"outcomes": {"of": 11, "held": 10, "did_not_hold": 1,
+    # Codex's PR review: a card that has not counted the deal yet (it waits for a stamp) still leaves it made in this run
+    monkeypatch.setattr(flow, "read_card", lambda b: ({"outcomes": {"of": 10, "held": 10, "did_not_hold": 0,
                                                                     "undecided": 0}}, None, None))
     monkeypatch.setattr(pages, "card_page", lambda *a, **k: tmp_path / "history.html")
     monkeypatch.setattr(receipt, "receipt_page", lambda *a, **k: tmp_path / "receipt.html")
