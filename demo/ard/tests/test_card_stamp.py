@@ -124,11 +124,16 @@ def test_the_operator_note_names_the_witness_only_for_cards_whose_receipt_is_not
         "this pack accepts, which key belongs to the witness, and who controls the seller's key.")
 
 
+SAMPLE_DEALS = [{"deal": "deal-0123456789abcdef", "role": "provided", "agreed_at": "2026-11-25T17:00:00Z",
+                 "amount": {"value": "10.00", "currency": "USD"}, "rows": [], "happened": "stamped_by_both"}]
+ABSENT = object()
+
+
 class OwnCard:
     name = "alder"
 
-    def __init__(self, tmp_path, out: dict):
-        self.tmp_path, self.out = tmp_path, out
+    def __init__(self, tmp_path, out: dict, deals=SAMPLE_DEALS):
+        self.tmp_path, self.out, self.deals = tmp_path, out, deals
 
     def stamp(self):
         pass
@@ -136,9 +141,9 @@ class OwnCard:
     def card_bundle(self, shared):
         card = {"outcomes": {"of": 1, "held": 1, "did_not_hold": 0, "undecided": 0}}
         doc = {"records": [{"capsule_id": "c1"}], "disclosures": {"c1": {"agent_input": card}},
-               "extensions": {"x-standard-history/v0": {"as_of": {"anchor_time": "2026-11-25T18:00:00Z"}, "deals": [
-                   {"deal": "deal-0123456789abcdef", "role": "provided", "agreed_at": "2026-11-25T17:00:00Z",
-                    "amount": {"value": "10.00", "currency": "USD"}, "rows": [], "happened": "stamped_by_both"}]}}}
+               "extensions": {"x-standard-history/v0": {"as_of": {"anchor_time": "2026-11-25T18:00:00Z"}}}}
+        if self.deals is not ABSENT:
+            doc["extensions"]["x-standard-history/v0"]["deals"] = self.deals
         path = self.tmp_path / "card.json"
         path.write_text(json.dumps(doc))
         return path
@@ -162,6 +167,19 @@ def test_a_partys_own_card_page_never_draws_a_failed_receipt_as_not_run(monkeypa
         pages.card_page(OwnCard(tmp_path, report("fail", verdict="INVALID")), "Alder Print Co.", rail="simulated",
                         seller=True)
     assert str(exc.value) == "Your History card does not verify: its time-stamp receipt does not check out."
+
+
+@pytest.mark.parametrize("deals", [None, ABSENT, []], ids=["null", "absent", "empty"])
+def test_a_partys_own_card_page_before_its_first_deal_is_an_empty_history(monkeypatch, tmp_path, deals):
+    # #449: capsulectl writes `deals: null` in the own copy of a card that counts no deal; the buyer who opens her
+    # History card before her first deal gets an empty History page, not a refusal
+    monkeypatch.setattr(pages, "home", lambda: tmp_path)
+    card = OwnCard(tmp_path, report("pass"), deals=deals)
+    card.name = "maya"
+    text = pages.card_page(card, "Maya", rail="simulated", seller=False).read_text()
+    assert '"rows": []' in text
+    assert '{"id": "second_signature", "status": "not_run"}' in text
+    assert '{"id": "witness", "status": "not_run"}' in text
 
 
 class Seller:
