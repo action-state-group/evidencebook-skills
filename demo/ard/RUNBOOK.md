@@ -214,7 +214,7 @@ The testbed (evidencebook-skills#382) brings up every role of the deal, each on 
 
    **Expect:** four windows, each with a Trust prompt (Maya's may not have one: see step 7). If tiling fails while macOS asks, the script tries again every 10 s, twice; if they come up stacked, see step 6.
 
-   These windows open each card and receipt page in your default browser when you ask for one. To keep pages closed and only see where each was written, open the windows with `ARD_OPEN_PAGES=0` in front of the command. A page opens only in windows this command opened in Goose Desktop, or with `ARD_OPEN_PAGES=1`: `--print`, `demo.py` and the tests write the page and print its path (evidencebook-skills#465).
+   These windows open each card and receipt page in your default browser when you ask for one. To keep pages closed and only see where each was written, open the windows with `ARD_OPEN_PAGES=0` in front of the command. A page opens only in windows this command opened in Goose Desktop, or with `ARD_OPEN_PAGES=1`: windows from `--print` recipes write the page and print its path (evidencebook-skills#465).
 
 5. [Simulated] Or, simulated: the same, and no money moves.
 
