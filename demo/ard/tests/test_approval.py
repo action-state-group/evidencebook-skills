@@ -236,7 +236,7 @@ def test_the_request_context_is_no_input_of_any_tool():
 #: A new tool fails this test until it is added here, after checking that it answers no dialog.
 TOOLS = {
     "maya": {"ard_find_sellers": ["ask"], "ard_set_limit": ["limit_msat"], "ard_show_listing": ["seller"],
-             "ard_show_history": [], "ard_assess": [], "ard_pick": ["seller"], "ard_pay": ["seller"],
+             "ard_show_history": [], "ard_assess": [], "ard_pick": ["said", "seller"], "ard_pay": ["seller"],
              "ard_confirm_received": ["seller", "deal"], "ard_countersign": ["seller", "deal"],
              "ard_dispute": ["seller", "deal"], "ard_show_card": [], "ard_open_card_page": [],
              "ard_show_receipt": [], "ard_open_receipt_page": [], "ard_confirm": []},

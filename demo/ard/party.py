@@ -387,7 +387,7 @@ class Party:
         ``terms.item``, so capsulectl counts it as theirs, never as the agent's pick. Their limit and actions stay as
         the opening sealed them."""
         said = {"verbatim": words, "asked": {"item": item}}
-        return self.run("note", "--deal", deal_id, "--kind", "intent", "--input", self.write("picked.json", said))["intent"]
+        return self.run("note", "--deal", deal_id, "--kind", "intent", "--input", self.write("picked.json", said))["capsule_id"]
 
     def agree(self, offer_digest: str, intent: str = "") -> dict:
         out = self.tmp("agree.json")
