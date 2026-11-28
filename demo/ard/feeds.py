@@ -34,20 +34,22 @@ def _append(home: Path, role: str, event: dict) -> None:
         pass
 
 
-def stamp(home: Path, party: str, witness: str, tick: dict, kind: str = "routine") -> None:
+def stamp(home: Path, party: str, witness: str, tick: dict, kind: str = "routine", every: str = "") -> None:
     """One ``deal tick`` a party ran, as capsulectl reports it: the stamp it cut, if any, and each stamp it delivered to
     the witness or still has waiting, each by its checkpoint's size and, where capsulectl names it, its number.
-    ``kind`` is why the tick ran: ``routine`` for the cadence's poll, ``deal`` for a stamp a deal step asked for. A tick
-    with nothing due and nothing delivered says nothing the witness saw, so it is left out."""
+    ``kind`` is why the tick ran: ``routine`` for the cadence's poll, ``deal`` for a stamp a deal step asked for;
+    ``every`` is the cadence's interval (``1m``), for the routine line. A tick that cut nothing, delivered nothing and
+    has nothing waiting says nothing about the witness, so it is left out; one with stamps waiting is kept, since it can
+    be the first report of a stamp cut inside ``deal agree`` or ``deal ruling``, or the first try at sending one."""
     if tick.get("witness") == "not_configured" or "error" in tick:
         return
     delivered, pending = tick.get("delivered") or [], tick.get("pending") or []
     ticked = tick.get("state") == "ticked"
-    if not ticked and not delivered:
+    if not ticked and not delivered and not pending:
         return
     numbers = _numbers(tick)
     _append(home, "witness", {
-        "party": party, "witness": witness, "kind": kind,
+        "party": party, "witness": witness, "kind": kind, "every": every,
         "cut": {"no": tick.get("tick"), "size": tick.get("checkpoint")} if ticked else None,
         "delivered": [{"size": s, "no": numbers.get(s)} for s in delivered if isinstance(s, int)],
         "pending": [{"size": p["checkpoint"], "no": numbers.get(p["checkpoint"]), "tried": not p.get("not_tried_this_run")}
@@ -104,6 +106,7 @@ class Hash:
     seen: str = ""  # when the feed first reported it
     taken: str = ""  # when the witness time-stamped it, "" while it has not
     tried: bool = False  # sent at least once while it waits
+    every: str = ""  # the cadence's interval, as the party reported it
 
 
 def witness_hashes(events: list[dict]) -> list[Hash]:
@@ -122,6 +125,7 @@ def witness_hashes(events: list[dict]) -> list[Hash]:
             if h is None:
                 h = seen[size] = Hash(e["party"], e["witness"], size, seen=e["at"])
             h.seen = min(h.seen, e["at"])
+            h.every = e.get("every") or h.every
             if no is not None:
                 h.no = no
             return h
@@ -141,41 +145,80 @@ def _clock(at: str) -> str:
     return datetime.fromisoformat(at).astimezone().strftime("%H:%M:%S")
 
 
-def witness_screen(events: list[dict], label: Callable[[str], str]) -> tuple[list[str], list[str]]:
-    """The witness's screen (Sherlock2's ruling on #458): a line for each deal's stamp, in Sherlock2's words once the
-    witness has time-stamped it, and one line for each party's routine stamps, folded."""
-    hashes = witness_hashes(events)
-    lines: list[tuple[str, str]] = []
+@dataclass
+class Line:
+    """One line of the witness's screen about one stamp: ``key`` names the stamp (its party and checkpoint size) and
+    ``state`` how far it got, so a screen that follows the feed prints it again only when it gets further."""
+    key: tuple[str, int]
+    state: str  # "waiting" (not sent this run), "sent" (no time-stamp back yet) or "taken"
+    at: str
+    text: str
+
+
+def _every(interval: str) -> str:
+    """The cadence's interval in words: ``1m`` is "one a minute", ``5m`` "one every 5 minutes"."""
+    n = interval[:-1] if interval.endswith("m") else ""
+    if n == "1":
+        return "one a minute"
+    if n.isdigit():
+        return f"one every {n} minutes"
+    return f"one every {interval}" if interval else "on the cadence"
+
+
+def _nos(hs: list[Hash]) -> str:
+    """Stamp numbers as a reader scans them: "no. 22", "no. 22 to 23", or listed when not one run."""
+    nos = [h.no for h in hs]
+    if None in nos:
+        return ""
+    if len(nos) == 1:
+        return f"no. {nos[0]}"
+    if nos == list(range(nos[0], nos[0] + len(nos))):
+        return f"no. {nos[0]} to {nos[-1]}"
+    return "no. " + ", ".join(str(n) for n in nos)
+
+
+def witness_lines(events: list[dict], label: Callable[[str], str]) -> tuple[list[Line], list[str]]:
+    """The witness's screen (Sherlock2's ruling and wording on #458 and #461): a line for each stamp a deal step asked
+    for, and one line for each party's routine stamps, folded. Every line says only what the party's book knows: what
+    it sent, and whether a time-stamp came back."""
+    lines: list[Line] = []
     routine: dict[str, list[Hash]] = {}
-    for h in hashes:
+    for h in witness_hashes(events):
         if h.kind == "routine":
             routine.setdefault(h.party, []).append(h)
             continue
-        who, name = label(h.party), f"hash no. {h.no}" if h.no is not None else "an earlier hash"
-        if h.taken:
-            lines.append((h.taken, f"{_clock(h.taken)}  {who}'s book sent {name}; {h.witness} time-stamped it."))
-        elif h.tried:
-            lines.append((h.seen, f"{_clock(h.seen)}  {who}'s book sent {name}; {h.witness} has not time-stamped it yet."))
+        who, key = label(h.party), (h.party, h.size)
+        if h.no is None:
+            sent, waits = f"{who}'s book sent a hash for this deal step", f"{who}'s book has a hash for this deal step"
         else:
-            lines.append((h.seen, f"{_clock(h.seen)}  {who}'s book has {name} to send; {h.witness} has not received it yet."))
+            sent, waits = f"{who}'s book sent hash no. {h.no}", f"{who}'s book has hash no. {h.no}"
+        if h.taken:
+            lines.append(Line(key, "taken", h.taken, f"{_clock(h.taken)}  {sent}; {h.witness} time-stamped it."))
+        elif h.tried:
+            lines.append(Line(key, "sent", h.seen, f"{_clock(h.seen)}  {sent}; no time-stamp back from {h.witness} yet."))
+        else:
+            lines.append(Line(key, "waiting", h.seen, f"{_clock(h.seen)}  {waits} waiting to send to {h.witness}."))
     folded = []
     for party, hs in routine.items():
-        who, witness = label(party), hs[-1].witness
-        taken = [h for h in hs if h.taken]
-        last = taken[-1] if taken else None  # the newest: a party's hashes are in the order they were cut
-        line = f"{who}'s routine stamps, one a minute: "
-        if last is not None:
-            line += (f"its book sent {len(taken)} hash{'es' if len(taken) != 1 else ''}, the last "
-                     f"{'no. ' + str(last.no) if last.no is not None else 'one'} at {_clock(last.taken)}; "
-                     f"{witness} time-stamped {'each' if len(taken) != 1 else 'it'}")
+        witness, every = hs[-1].witness, next((h.every for h in reversed(hs) if h.every), "")
+        taken, waiting = [h for h in hs if h.taken], [h for h in hs if not h.taken]
+        line = f"{label(party)}'s routine stamps, {_every(every)}: {witness} time-stamped "
+        if taken:
+            last = taken[-1]  # the newest: a party's hashes are in the order they were cut
+            line += f"{len(taken)}, the last {'no. ' + str(last.no) if last.no is not None else 'one'} at {_clock(last.taken)}"
         else:
-            line += f"{witness} has time-stamped none yet"
-        waiting = [h for h in hs if not h.taken]
+            line += "none yet"
         if waiting:
-            nos = ", ".join(f"no. {h.no}" if h.no is not None else "one" for h in waiting)
-            line += f"; {nos} {'is' if len(waiting) == 1 else 'are'} waiting for {witness}"
+            nos = _nos(waiting)
+            line += f"; {len(waiting)} waiting" + (f" ({nos})" if nos else "")
         folded.append(line + ".")
-    return [text for _, text in sorted(lines, key=lambda x: x[0])], folded
+    return sorted(lines, key=lambda x: (x.at, x.key)), folded
+
+
+def witness_screen(events: list[dict], label: Callable[[str], str]) -> tuple[list[str], list[str]]:
+    """:func:`witness_lines` as the text a screen prints: the deal steps' lines, then the routine lines."""
+    lines, folded = witness_lines(events, label)
+    return [x.text for x in lines], folded
 
 
 def words(role: str, event: dict, label: Callable[[str], str]) -> str:
@@ -208,8 +251,8 @@ def words(role: str, event: dict, label: Callable[[str], str]) -> str:
 HEADINGS = {
     "witness": "The witness, as each party's book reports it: each party sends it a hash over its own book (never a "
                "record), and it signs back the time it saw that hash. The names are this demo's labels: the witness "
-               "sees only each book's key and log id. Each deal's stamps have a line each; each party's routine stamps, "
-               "one a minute, share one line at the bottom.",
+               "sees only each book's key and log id. A stamp a deal step asks for gets its own line; each party's "
+               "routine stamps share one line per party at the bottom.",
     "rail": "The payment rail, as the buyer's agent reports each invoice and payment.",
     "countersigner": "The countersigner, as each party's book reports it: a party sends it its own records of one deal "
                      "as digests with their seal times, and for each of its own payments whether it sent or received "

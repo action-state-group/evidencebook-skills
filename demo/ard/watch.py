@@ -71,22 +71,22 @@ def witness(home: Path, out, poll_s: float = 0.5) -> None:
     """The witness's screen as its feed grows: each deal's stamp line once, as it comes, so the terminal keeps them
     all in its scrollback, and below them each party's folded routine line, written over in place on a terminal (on
     anything else, again each time it changes). A deal stamp's line is printed again when it changes (sent, then
-    time-stamped). Never ends."""
+    time-stamped), never because another stamp's line reads the same. Never ends."""
     events: list[dict] = []
-    printed: set[str] = set()
+    printed: set[tuple[tuple[str, int], str]] = set()  # each stamp's line, by the stamp and how far it got
     footer: list[str] = []
     tty = out.isatty()
     for batch in feeds.batches(home, "witness", poll_s):
         events += batch
-        deals, routine = feeds.witness_screen(events, label)
-        new = [line for line in deals if line not in printed]
+        deals, routine = feeds.witness_lines(events, label)
+        new = [line for line in deals if (line.key, line.state) not in printed]
         if not new and routine == footer:
             continue
         if tty and footer:
             out.write(f"\x1b[{_rows(footer)}A\x1b[J")  # up over the old footer, and clear to the end of the screen
         for line in new:
-            out.write(line + "\n")
-        printed.update(new)
+            out.write(line.text + "\n")
+        printed.update((line.key, line.state) for line in new)
         if tty or routine != footer:
             for line in routine:
                 out.write(line + "\n")

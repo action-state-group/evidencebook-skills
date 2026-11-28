@@ -40,7 +40,7 @@ def _not_due(delivered=(), numbered=True, pending=()):
 def _run(home, numbered=True):
     """A run's ticks as each party's book reports them, with a stamp cut inside ``deal agree`` (Kestrel's no. 20) and
     one inside ``deal ruling`` (the adjudicator's no. 7), each delivered by a later tick."""
-    st = lambda party, tick, kind: feeds.stamp(home, party, W, tick, kind)  # noqa: E731
+    st = lambda party, tick, kind: feeds.stamp(home, party, W, tick, kind, "1m")  # noqa: E731
     st("kestrel", _ticked(18, 100, [(100, 18)], numbered), "routine")
     st("kestrel", _ticked(19, 110, [(110, 19)], numbered), "routine")
     # `deal agree` cut no. 20 at size 125 and wrote nothing to the feed; the cadence's next poll delivers it
@@ -63,18 +63,20 @@ def test_stamps_cut_inside_agree_and_ruling_reach_the_screen_numbered_with_their
         assert re.fullmatch(r"\d\d:\d\d:\d\d  (Kestrel Print|the adjudicator)'s book sent hash no\. \d+; "
                             r"Action State's witness time-stamped it\.", line), line
     # no number skipped: Kestrel's 18 to 21 and the adjudicator's 7 and 8 are all on the screen
-    nos = {(h.party, h.no) for h in feeds.witness_hashes(_run(tmp_path / "again"))}
+    events = _run(tmp_path / "again")
+    nos = {(h.party, h.no) for h in feeds.witness_hashes(events)}
     assert nos == {("kestrel", n) for n in (18, 19, 20, 21)} | {("adjudicator", 7), ("adjudicator", 8)}
-    assert routine == ["Kestrel Print's routine stamps, one a minute: its book sent 3 hashes, the last no. 21 at "
-                       f"{feeds._clock(_run(tmp_path / 'third')[-2]['at'])}; Action State's witness time-stamped each."]
+    last = feeds._clock(events[3]["at"])  # Kestrel's no. 21, from the same run the screen is drawn from
+    assert feeds.witness_screen(events, label)[1] == [
+        f"Kestrel Print's routine stamps, one a minute: Action State's witness time-stamped 3, the last no. 21 at {last}."]
 
 
-def test_a_capsulectl_that_does_not_number_what_it_delivers_says_an_earlier_hash(tmp_path):
+def test_a_capsulectl_that_does_not_number_what_it_delivers_names_the_deal_step(tmp_path):
     # capsulectl v0.1.1 names a delivered checkpoint only by its size: the demo never works its number out from sizes
     deals, _ = feeds.witness_screen(_run(tmp_path, numbered=False), label)
-    assert any(line.endswith("Kestrel Print's book sent an earlier hash; Action State's witness time-stamped it.")
+    assert any(line.endswith("Kestrel Print's book sent a hash for this deal step; Action State's witness time-stamped it.")
                for line in deals)
-    assert any(line.endswith("the adjudicator's book sent an earlier hash; Action State's witness time-stamped it.")
+    assert any(line.endswith("the adjudicator's book sent a hash for this deal step; Action State's witness time-stamped it.")
                for line in deals)
     assert not any("no. 20" in line or "no. 7" in line for line in deals)
     assert any(line.endswith("the adjudicator's book sent hash no. 8; Action State's witness time-stamped it.")
@@ -97,8 +99,8 @@ def test_a_stamp_still_waiting_never_reads_as_time_stamped(tmp_path):
     events = [json.loads(x) for x in feeds.path(tmp_path, "witness").read_text().splitlines()]
     deals, _ = feeds.witness_screen(events, label)
     assert [d[10:] for d in deals] == [
-        "Alder Print Co.'s book sent hash no. 30; Action State's witness has not time-stamped it yet.",
-        "Alder Print Co.'s book has hash no. 31 to send; Action State's witness has not received it yet."]
+        "Alder Print Co.'s book sent hash no. 30; no time-stamp back from Action State's witness yet.",
+        "Alder Print Co.'s book has hash no. 31 waiting to send to Action State's witness."]
     feeds.stamp(tmp_path, "alder", W, _not_due([(200, 30), (210, 31)]), "routine")
     events = [json.loads(x) for x in feeds.path(tmp_path, "witness").read_text().splitlines()]
     deals, _ = feeds.witness_screen(events, label)
@@ -109,18 +111,34 @@ def test_a_stamp_still_waiting_never_reads_as_time_stamped(tmp_path):
 
 def test_routine_stamps_fold_into_one_line_per_party_with_any_still_waiting(tmp_path):
     for n in range(1, 6):
-        feeds.stamp(tmp_path, "alder", W, _ticked(n, 10 * n, [(10 * n, n)]), "routine")
-    feeds.stamp(tmp_path, "kestrel", W, _ticked(1, 10, [(10, 1)]), "routine")
-    feeds.stamp(tmp_path, "kestrel", W, _ticked(2, 20, pending=[{"checkpoint": 20, "tick": 2}]), "routine")
+        feeds.stamp(tmp_path, "alder", W, _ticked(n, 10 * n, [(10 * n, n)]), "routine", "1m")
+    feeds.stamp(tmp_path, "kestrel", W, _ticked(1, 10, [(10, 1)]), "routine", "5m")
+    feeds.stamp(tmp_path, "kestrel", W, _ticked(2, 20, pending=[{"checkpoint": 20, "tick": 2}]), "routine", "5m")
+    feeds.stamp(tmp_path, "kestrel", W, _ticked(3, 30, pending=[{"checkpoint": 20, "tick": 2},
+                                                               {"checkpoint": 30, "tick": 3}]), "routine", "5m")
     events = [json.loads(x) for x in feeds.path(tmp_path, "witness").read_text().splitlines()]
     deals, routine = feeds.witness_screen(events, label)
     assert deals == []
+    assert re.fullmatch(r"Alder Print Co\.'s routine stamps, one a minute: Action State's witness time-stamped 5, the "
+                        r"last no\. 5 at \d\d:\d\d:\d\d\.", routine[0]), routine[0]
+    # the cadence's interval as the party reports it, never a literal; the waiting ones counted, sent too
+    assert re.fullmatch(r"Kestrel Print's routine stamps, one every 5 minutes: Action State's witness time-stamped 1, "
+                        r"the last no\. 1 at \d\d:\d\d:\d\d; 2 waiting \(no\. 2 to 3\)\.", routine[1]), routine[1]
     assert len(routine) == 2
-    assert re.fullmatch(r"Alder Print Co\.'s routine stamps, one a minute: its book sent 5 hashes, the last no\. 5 at "
-                        r"\d\d:\d\d:\d\d; Action State's witness time-stamped each\.", routine[0]), routine[0]
-    assert re.fullmatch(r"Kestrel Print's routine stamps, one a minute: its book sent 1 hash, the last no\. 1 at "
-                        r"\d\d:\d\d:\d\d; Action State's witness time-stamped it; no\. 2 is waiting for Action State's "
-                        r"witness\.", routine[1]), routine[1]
+    assert feeds._every("1m") == "one a minute" and feeds._every("") == "on the cadence"
+
+
+def test_a_poll_with_only_stamps_waiting_is_kept(tmp_path):
+    # `deal agree` cut no. 40; the next poll is not due and could not send it: that poll is its first report
+    feeds.stamp(tmp_path, "maya", W, {"state": "not_due", "delivered": [], "pending": [
+        {"checkpoint": 400, "tick": 40, "reason": "waiting", "not_tried_this_run": True}]}, "routine", "1m")
+    read = lambda: feeds.witness_screen(  # noqa: E731
+        [json.loads(x) for x in feeds.path(tmp_path, "witness").read_text().splitlines()], label)[0]
+    assert [d[10:] for d in read()] == ["Maya's book has hash no. 40 waiting to send to Action State's witness."]
+    # a later poll tried it and got no time-stamp back: the line says so, without a time-stamp
+    feeds.stamp(tmp_path, "maya", W, {"state": "not_due", "delivered": [], "pending": [
+        {"checkpoint": 400, "tick": 40, "reason": "slow"}]}, "routine", "1m")
+    assert [d[10:] for d in read()] == ["Maya's book sent hash no. 40; no time-stamp back from Action State's witness yet."]
 
 
 def test_the_feed_never_holds_a_record_and_skips_what_the_witness_never_saw(tmp_path):
@@ -130,7 +148,7 @@ def test_the_feed_never_holds_a_record_and_skips_what_the_witness_never_saw(tmp_
     feeds.stamp(tmp_path, "kestrel", W, {"error": "refused"})
     lines = feeds.path(tmp_path, "witness").read_text().splitlines()
     assert len(lines) == 1  # nothing due, no witness, and an error are no event the witness saw
-    assert set(json.loads(lines[0])) == {"at", "party", "witness", "kind", "cut", "delivered", "pending"}
+    assert set(json.loads(lines[0])) == {"at", "party", "witness", "kind", "every", "cut", "delivered", "pending"}
 
 
 def test_a_feed_line_of_the_earlier_shape_is_left_out(tmp_path):
@@ -173,3 +191,15 @@ def test_follow_off_a_terminal_writes_the_routine_line_again_only_when_it_change
     out = io.StringIO()
     watch.witness(tmp_path, out)
     assert "\x1b" not in out.getvalue() and out.getvalue().count("routine stamps, one a minute:") == 1
+
+
+def test_follow_prints_two_stamps_whose_lines_read_the_same(tmp_path, monkeypatch):
+    # two stamps of Kestrel's, neither numbered (capsulectl v0.1.1), time-stamped in the same second: two lines
+    at = "2026-11-27T20:27:36+00:00"
+    one = {"at": at, "party": "kestrel", "witness": W, "kind": "routine", "every": "1m", "cut": None,
+           "delivered": [{"size": 131, "no": None}], "pending": []}
+    two = {**one, "delivered": [{"size": 133, "no": None}]}
+    monkeypatch.setattr(watch.feeds, "batches", lambda home, role, poll_s=0.5: iter([[one], [two]]))
+    out = io.StringIO()
+    watch.witness(tmp_path, out)
+    assert out.getvalue().count("Kestrel Print's book sent a hash for this deal step;") == 2

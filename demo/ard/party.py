@@ -63,7 +63,8 @@ def _witness() -> tuple[str, str, str]:
 WITNESS_URL, WITNESS_KEY, WITNESS_NAME = _witness()
 #: The demo's cadence: one checkpoint a minute (capsulectl's shortest, ``cadence.go``), no jitter. A step that needs its
 #: records stamped does not wait for it: it stamps on demand (:meth:`Party.stamp`).
-CADENCE = "cadence:\n  interval: 1m\n  jitter: 0s\n"
+CADENCE_INTERVAL = "1m"
+CADENCE = f"cadence:\n  interval: {CADENCE_INTERVAL}\n  jitter: 0s\n"
 #: The History card's derivation every party makes and every buyer accepts: the one constant a move to
 #: ``standard_history/4`` changes (AAC standard-history §12: /3 with one rule changed).
 #: How long one stamp takes the hosted witness to take, at most, when it is well (measured 3 to 6 s): a stamp is tried
@@ -293,7 +294,7 @@ class Party:
     def _fed(self, tick: dict, kind: str) -> dict:
         """A tick, also written to the witness's screen (:func:`feeds.stamp`): a ``routine`` stamp of the cadence's, or
         a ``deal`` stamp a step asked for."""
-        feeds.stamp(self.dir.parent, self.name, WITNESS_NAME, tick, kind)
+        feeds.stamp(self.dir.parent, self.name, WITNESS_NAME, tick, kind, CADENCE_INTERVAL)
         return tick
 
     def wait_checkpoint(self, seconds: float = 30, say=None) -> dict:
